@@ -58,7 +58,9 @@ void clear_audio_production_native_bindings() noexcept {
     g_executable = nullptr;
 }
 
-bool audio_production_set_available() noexcept { return g_set || g_executable; }
+bool audio_production_set_available() noexcept {
+    return g_set || (g_executable && rva::BgmSlotSet != 0);
+}
 bool audio_production_play_available() noexcept { return g_play != nullptr; }
 bool audio_production_stop_available() noexcept { return g_stop != nullptr; }
 bool audio_production_play_setup_available() noexcept { return g_play_setup != nullptr; }
@@ -66,7 +68,7 @@ bool audio_production_play_setup_available() noexcept { return g_play_setup != n
 BgmPlaybackNativeSetCallOutcome invoke_audio_production_set(
     void* controller, void* sound) {
     const auto target = select_bgm_playback_native_set_target(
-        g_set != nullptr, g_executable != nullptr);
+        g_set != nullptr, g_executable != nullptr && rva::BgmSlotSet != 0);
     volatile bool call_started = false;
     __try {
         return invoke_bgm_playback_native_set_exactly_once(target,

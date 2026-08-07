@@ -3554,8 +3554,12 @@ void* ensure_alias_music(void* source_sound)
 
     auto* const exe_base = reinterpret_cast<uint8_t*>(g_exe_module);
     auto* const fname_ctor = reinterpret_cast<FNameCtorFn>(exe_base + rva::FNameCtor);
-    auto* const create_package = reinterpret_cast<CreatePackageFn>(exe_base + rva::CreatePackage);
-    auto* const construct_object = reinterpret_cast<StaticConstructObjectFn>(exe_base + rva::StaticConstructObject);
+    auto* const create_package = rva::CreatePackage
+        ? reinterpret_cast<CreatePackageFn>(exe_base + rva::CreatePackage)
+        : nullptr;
+    auto* const construct_object = rva::StaticConstructObject
+        ? reinterpret_cast<StaticConstructObjectFn>(exe_base + rva::StaticConstructObject)
+        : nullptr;
 
     FNameValue alias_name{};
     if (!construct_fname(fname_ctor, L"bgm_piano_09", 0, alias_name)

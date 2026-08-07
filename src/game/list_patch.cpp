@@ -103,7 +103,9 @@ bool apply_custom_rank_text(void* item_widget, const SongDescriptor& song,
 
     auto* const exe_base = reinterpret_cast<uint8_t*>(g_exe_module);
     auto* const find_child = reinterpret_cast<FindChildWidgetFn>(exe_base + rva::FindChildWidget);
-    auto* const set_text = reinterpret_cast<SetTextFn>(exe_base + rva::EndTextBlockSetText);
+    auto* const set_text = rva::EndTextBlockSetText
+        ? reinterpret_cast<SetTextFn>(exe_base + rva::EndTextBlockSetText)
+        : nullptr;
     void* rank_widget = nullptr;
     const char* source = "missing";
 
