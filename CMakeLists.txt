@@ -4,10 +4,45 @@ project(FF7RPianoSongs LANGUAGES CXX)
 
 set(FF7RP_FIRST_PARTY_CXX_FEATURE cxx_std_23)
 
+set(FF7RP_RVA_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/src/game/rva_catalog.json")
+set(FF7RP_RVA_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rva_catalog.py")
+file(READ "${FF7RP_RVA_CATALOG}" FF7RP_RVA_CATALOG_TEXT)
+string(JSON FF7RP_CATALOG_DEFAULT_BUILD ERROR_VARIABLE catalog_error
+    GET "${FF7RP_RVA_CATALOG_TEXT}" "default_build")
+if(catalog_error)
+    message(FATAL_ERROR "rva_catalog.json field 'default_build' is missing or invalid: ${catalog_error}")
+endif()
+set(FF7RP_GAME_BUILD "${FF7RP_CATALOG_DEFAULT_BUILD}" CACHE STRING
+    "FF7 Rebirth executable build this ASI is compiled against")
+string(JSON FF7RP_CATALOG_BUILD_COUNT ERROR_VARIABLE catalog_error
+    LENGTH "${FF7RP_RVA_CATALOG_TEXT}" "builds")
+if(catalog_error)
+    message(FATAL_ERROR "rva_catalog.json field 'builds' is missing or invalid: ${catalog_error}")
+endif()
+set(FF7RP_CATALOG_BUILD_IDS "")
+set(FF7RP_GAME_BUILD_VERSION "")
+if(FF7RP_CATALOG_BUILD_COUNT GREATER 0)
+    math(EXPR FF7RP_CATALOG_BUILD_LAST "${FF7RP_CATALOG_BUILD_COUNT} - 1")
+    foreach(index RANGE ${FF7RP_CATALOG_BUILD_LAST})
+        string(JSON build_id GET "${FF7RP_RVA_CATALOG_TEXT}" "builds" ${index} "id")
+        list(APPEND FF7RP_CATALOG_BUILD_IDS "${build_id}")
+        if(build_id STREQUAL "${FF7RP_GAME_BUILD}")
+            string(JSON FF7RP_GAME_BUILD_VERSION
+                GET "${FF7RP_RVA_CATALOG_TEXT}" "builds" ${index} "game_version")
+        endif()
+    endforeach()
+endif()
+if(NOT FF7RP_GAME_BUILD IN_LIST FF7RP_CATALOG_BUILD_IDS)
+    message(FATAL_ERROR
+        "FF7RP_GAME_BUILD='${FF7RP_GAME_BUILD}' is not declared in src/game/rva_catalog.json; "
+        "declared builds: ${FF7RP_CATALOG_BUILD_IDS}")
+endif()
+set_property(CACHE FF7RP_GAME_BUILD PROPERTY STRINGS ${FF7RP_CATALOG_BUILD_IDS})
+
 set(FF7RP_RELEASE_JSON "${CMAKE_CURRENT_SOURCE_DIR}/release.json")
 set(FF7RP_RELEASE_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/release_identity.generated.h.in")
 file(READ "${FF7RP_RELEASE_JSON}" FF7RP_RELEASE_JSON_TEXT)
-foreach(field product version platform license supported_executable_catalog_id archive_basename)
+foreach(field product version platform license)
     string(JSON FF7RP_RELEASE_${field} ERROR_VARIABLE release_error GET "${FF7RP_RELEASE_JSON_TEXT}" "${field}")
     if(release_error)
         message(FATAL_ERROR "release.json field '${field}' is missing or invalid: ${release_error}")
@@ -17,14 +52,47 @@ set(FF7RP_RELEASE_PRODUCT "${FF7RP_RELEASE_product}")
 set(FF7RP_RELEASE_VERSION "${FF7RP_RELEASE_version}")
 set(FF7RP_RELEASE_PLATFORM "${FF7RP_RELEASE_platform}")
 set(FF7RP_RELEASE_LICENSE "${FF7RP_RELEASE_license}")
-set(FF7RP_RELEASE_CATALOG "${FF7RP_RELEASE_supported_executable_catalog_id}")
-set(FF7RP_RELEASE_ARCHIVE_BASENAME "${FF7RP_RELEASE_archive_basename}")
 if(NOT FF7RP_RELEASE_PRODUCT STREQUAL "FF7RPianoSongs" OR
    NOT FF7RP_RELEASE_PLATFORM STREQUAL "win64" OR NOT FF7RP_RELEASE_LICENSE STREQUAL "MIT" OR
-   NOT FF7RP_RELEASE_VERSION MATCHES "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$" OR
-   NOT FF7RP_RELEASE_ARCHIVE_BASENAME STREQUAL
-       "${FF7RP_RELEASE_PRODUCT}-${FF7RP_RELEASE_VERSION}-${FF7RP_RELEASE_PLATFORM}")
+   NOT FF7RP_RELEASE_VERSION MATCHES "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$")
     message(FATAL_ERROR "release.json contains an unsupported release identity")
+endif()
+
+# One ASI ships per game build, so the release target is selected by the resolved catalog id.
+string(JSON FF7RP_RELEASE_TARGET_COUNT ERROR_VARIABLE release_error
+    LENGTH "${FF7RP_RELEASE_JSON_TEXT}" "targets")
+if(release_error)
+    message(FATAL_ERROR "release.json field 'targets' is missing or invalid: ${release_error}")
+endif()
+set(FF7RP_RELEASE_CATALOG "")
+set(FF7RP_RELEASE_ARCHIVE_BASENAME "")
+set(FF7RP_RELEASE_TARGET_CATALOG_IDS "")
+if(FF7RP_RELEASE_TARGET_COUNT GREATER 0)
+    math(EXPR FF7RP_RELEASE_TARGET_LAST "${FF7RP_RELEASE_TARGET_COUNT} - 1")
+    foreach(index RANGE ${FF7RP_RELEASE_TARGET_LAST})
+        string(JSON target_catalog_id
+            GET "${FF7RP_RELEASE_JSON_TEXT}" "targets" ${index} "supported_executable_catalog_id")
+        list(APPEND FF7RP_RELEASE_TARGET_CATALOG_IDS "${target_catalog_id}")
+        if(target_catalog_id STREQUAL "${FF7RP_GAME_BUILD}")
+            set(FF7RP_RELEASE_CATALOG "${target_catalog_id}")
+            string(JSON FF7RP_RELEASE_ARCHIVE_BASENAME
+                GET "${FF7RP_RELEASE_JSON_TEXT}" "targets" ${index} "archive_basename")
+        endif()
+    endforeach()
+endif()
+if(NOT FF7RP_RELEASE_CATALOG)
+    message(FATAL_ERROR
+        "release.json declares no target for FF7RP_GAME_BUILD='${FF7RP_GAME_BUILD}'; "
+        "release targets: ${FF7RP_RELEASE_TARGET_CATALOG_IDS}")
+endif()
+# Checking the basename against the catalog's game version also binds release.json's notion
+# of the shipped game build to the catalog build the ASI is actually compiled against.
+if(NOT FF7RP_RELEASE_ARCHIVE_BASENAME STREQUAL
+   "${FF7RP_RELEASE_PRODUCT}-${FF7RP_RELEASE_VERSION}-${FF7RP_RELEASE_PLATFORM}-ff7r${FF7RP_GAME_BUILD_VERSION}")
+    message(FATAL_ERROR
+        "release.json target '${FF7RP_RELEASE_CATALOG}' declares archive_basename "
+        "'${FF7RP_RELEASE_ARCHIVE_BASENAME}', which does not name game build "
+        "'${FF7RP_GAME_BUILD_VERSION}' from src/game/rva_catalog.json")
 endif()
 set(FF7RP_RELEASE_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${FF7RP_RELEASE_GENERATED_DIR}")
@@ -54,15 +122,24 @@ endfunction()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(FF7RP_PWSH_EXECUTABLE NAMES pwsh REQUIRED)
 
-set(FF7RP_RVA_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/src/game/rva_catalog.json")
-set(FF7RP_RVA_GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rva_catalog.py")
+set(FF7RP_GENERATED_CATALOG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/generated/${FF7RP_GAME_BUILD}")
 set(FF7RP_RVA_GENERATED_FILES
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/game/generated/rvas.generated.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/game/generated/hook_specs.generated.inc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/game/generated/rva_signatures.generated.inc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/game/generated/runtime_locator_specs.generated.inc"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/core/generated/build_identity.generated.h"
+    "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/rvas.generated.h"
+    "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/hook_specs.generated.inc"
+    "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/rva_signatures.generated.inc"
+    "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/runtime_locator_specs.generated.inc"
+    "${FF7RP_GENERATED_CATALOG_DIR}/core/generated/build_identity.generated.h"
 )
+add_library(ff7rp_generated_catalog INTERFACE)
+target_include_directories(ff7rp_generated_catalog INTERFACE "${FF7RP_GENERATED_CATALOG_DIR}")
+
+# Usage requirements are appended after a target's own include directories, so the
+# BEFORE entry pins the selected build's tree ahead of "src". CMake keeps the first
+# occurrence of a duplicated include directory, so the path is still emitted once.
+function(ff7rp_use_generated_catalog target)
+    target_link_libraries(${target} PRIVATE ff7rp_generated_catalog)
+    target_include_directories(${target} BEFORE PRIVATE "${FF7RP_GENERATED_CATALOG_DIR}")
+endfunction()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${FF7RP_RVA_CATALOG}"
     "${FF7RP_RVA_GENERATOR}"
@@ -149,6 +226,7 @@ target_compile_definitions(FF7RPianoSongs PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(FF7RPianoSongs PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}"
     "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_pipeline minhook midifile user32 hid)
+ff7rp_use_generated_catalog(FF7RPianoSongs)
 
 if(MSVC)
     target_link_options(FF7RPianoSongs PRIVATE /INCREMENTAL:NO)
@@ -178,6 +256,7 @@ target_compile_definitions(pipeline_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMA
     FF7RPIANOSONGS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(pipeline_selftest PRIVATE "src")
 target_link_libraries(pipeline_selftest PRIVATE ff7rp_pipeline)
+ff7rp_use_generated_catalog(pipeline_selftest)
 
 add_executable(hca_encoder_selftest
     src/tests/hca_encoder_selftest.cpp
@@ -235,6 +314,7 @@ target_compile_definitions(catalog_adoption_selftest PRIVATE WIN32_LEAN_AND_MEAN
     FF7RP_CATALOG_ADOPTION_SELFTEST=1)
 target_include_directories(catalog_adoption_selftest PRIVATE "src")
 target_link_libraries(catalog_adoption_selftest PRIVATE minhook)
+ff7rp_use_generated_catalog(catalog_adoption_selftest)
 
 add_executable(release_hook_empty_catalog_selftest
     src/tests/release_hook_empty_catalog_selftest.cpp
@@ -256,6 +336,7 @@ ff7rp_apply_cpp_policy(piano_page_selection_guard_selftest)
 target_compile_definitions(piano_page_selection_guard_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
     FF7RP_PIANO_PAGE_SELECTION_GUARD_SELFTEST=1)
 target_include_directories(piano_page_selection_guard_selftest PRIVATE "src")
+ff7rp_use_generated_catalog(piano_page_selection_guard_selftest)
 
 add_executable(list_catalog_transaction_selftest
     src/tests/list_catalog_transaction_selftest.cpp
@@ -271,6 +352,7 @@ target_compile_definitions(list_catalog_transaction_selftest PRIVATE WIN32_LEAN_
     FF7RP_LIST_CATALOG_SELFTEST=1)
 target_include_directories(list_catalog_transaction_selftest PRIVATE "src")
 target_link_libraries(list_catalog_transaction_selftest PRIVATE minhook)
+ff7rp_use_generated_catalog(list_catalog_transaction_selftest)
 
 add_executable(profile_list_coordinator_selftest
     src/tests/profile_list_coordinator_selftest.cpp
@@ -304,6 +386,7 @@ ff7rp_apply_cpp_policy(release_audit_tool OMIT_FP_PRECISE)
 target_compile_definitions(release_audit_tool PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
     FF7RPIANOSONGS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(release_audit_tool PRIVATE "src")
+ff7rp_use_generated_catalog(release_audit_tool)
 add_executable(song_descriptor_builder_selftest
     src/tests/song_descriptor_builder_selftest.cpp
     src/song_descriptor_builder.cpp
@@ -339,6 +422,7 @@ ff7rp_apply_cpp_policy(startup_cache_overlay_selftest)
 target_compile_definitions(startup_cache_overlay_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(startup_cache_overlay_selftest PRIVATE "src")
 target_link_libraries(startup_cache_overlay_selftest PRIVATE minhook)
+ff7rp_use_generated_catalog(startup_cache_overlay_selftest)
 add_executable(song_cache_tool
     tools/song_cache_tool.cpp
 )
@@ -407,6 +491,7 @@ ff7rp_apply_cpp_policy(extended_chart_selftest OMIT_FP_PRECISE)
 target_compile_definitions(extended_chart_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
     FF7RP_EXTENDED_CHART_FIXTURE_LIBRARY)
 target_include_directories(extended_chart_selftest PRIVATE "src")
+ff7rp_use_generated_catalog(extended_chart_selftest)
 add_executable(runtime_lifecycle_selftest
     src/tests/runtime_lifecycle_selftest.cpp
     src/tests/runtime_lifecycle_foundation_tests.cpp
@@ -440,6 +525,7 @@ ff7rp_apply_cpp_policy(audio_production_wiring_selftest OMIT_FP_PRECISE)
 target_compile_definitions(audio_production_wiring_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(audio_production_wiring_selftest PRIVATE "src")
 target_link_libraries(audio_production_wiring_selftest PRIVATE minhook)
+ff7rp_use_generated_catalog(audio_production_wiring_selftest)
 add_executable(audio_memory_read_policy_selftest
     src/tests/audio_memory_read_policy_selftest.cpp
 )

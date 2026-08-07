@@ -17,17 +17,26 @@ struct DocumentationRegistry {
     std::vector<CanonicalDocument> documents;
 };
 
+// One shipped artifact: the game build it supports, the RVA-catalog build identity it is
+// compiled against, and the archive that carries it. One ASI is built per game build.
+struct ReleaseTarget {
+    std::string game_build;
+    std::string supported_executable_catalog_id;
+    std::string archive_basename;
+};
+
 struct ReleaseAuthority {
     std::string product;
     std::string version;
     std::string platform;
     std::string license;
-    std::string supported_executable_catalog_id;
-    std::string archive_basename;
+    std::vector<ReleaseTarget> targets;
 };
 
 struct ReleaseMetadata {
     ReleaseAuthority release;
+    // The target selected by the build identity this translation unit was compiled for.
+    ReleaseTarget target;
     std::string pipeline_cache_version;
     std::string runtime_cache_magic;
     unsigned int runtime_cache_format = 0;
@@ -44,6 +53,9 @@ bool load_release_authority(
     const std::filesystem::path& source_root,
     ReleaseAuthority* release,
     std::string* error_message);
+const ReleaseTarget* find_release_target(
+    const ReleaseAuthority& release,
+    const std::string& catalog_id);
 
 bool parse_documentation_registry(
     const std::string& json,

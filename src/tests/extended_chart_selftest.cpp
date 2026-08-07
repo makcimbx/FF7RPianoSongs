@@ -262,13 +262,24 @@ bool test_shipping_specs()
     using namespace ff7r::piano::game;
     // These checks exercise only a synthetic transaction algorithm. They prove no native ABI,
     // native ownership, runtime event construction, or playable >512 readiness.
+    // `persistent_chart_expand_caller` and `piano_score_expand` are release entries, so the
+    // catalog requires them in every build and they must never render the absent sentinel.
     if (rva::PersistentChartExpandCaller == 0
+        || rva::PianoScoreExpand == 0
         || kPersistentChartOwnerOffset == 0
         || kExtendedChartCanonicalSpecs.size() != 6u) {
         return false;
     }
+    // The remaining canonical specs are research entries. A build that does not catalog one
+    // renders `0x0` and emits no signature line at all, which is what
+    // `configure_extended_chart_experiment` already degrades on. Require that absence to be
+    // consistent on both sides instead of asserting presence unconditionally.
     for (const ExtendedChartCanonicalSpec& canonical : kExtendedChartCanonicalSpecs) {
         const RvaSignatureSpec* spec = find_rva_signature(canonical.signature_id);
+        if (canonical.rva == 0) {
+            if (spec) return false;
+            continue;
+        }
         if (!spec || spec->rva != canonical.rva || spec->expected_prologue.empty()) {
             return false;
         }

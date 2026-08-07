@@ -61,7 +61,7 @@ function New-ProvenanceFixture {
     $cmakePath = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source
     $recordPath = Join-Path $Root "FF7RPianoSongs.provenance.json"
     $record = [pscustomobject][ordered]@{
-        schema = "ff7rpianosongs.build-provenance.v2"
+        schema = "ff7rpianosongs.build-provenance.v3"
         configuration = "Release"
         dll = [pscustomobject][ordered]@{
             path = "bin/Release/FF7RPianoSongs.dll"
@@ -86,6 +86,7 @@ function New-ProvenanceFixture {
         releaseIdentity = [pscustomobject][ordered]@{
             authorityPath = "release.json"
             authoritySha256 = Get-FileSha256 (Join-Path $Root "release.json")
+            catalogId = "ff7rebirth-steam-win64-6a16ced2"
             generatedHeaderPath = "generated/release_identity.generated.h"
             generatedHeaderSha256 = Get-FileSha256 (Join-Path $Root "build/generated/release_identity.generated.h")
         }
@@ -152,6 +153,26 @@ $adverseCases = @(
     [pscustomobject]@{
         Name = "generated release header hash drift"; ExpectedMessage = "release authority or generated header"
         Mutate = { param($fixture, $record) $record.releaseIdentity.generatedHeaderSha256 = "0" * 64 }
+    },
+    [pscustomobject]@{
+        Name = "missing release identity game build"
+        ExpectedMessage = "Build provenance release identity fields must be exactly"
+        Mutate = { param($fixture, $record) $record.releaseIdentity.PSObject.Properties.Remove("catalogId") }
+    },
+    [pscustomobject]@{
+        Name = "extra release identity field"
+        ExpectedMessage = "Build provenance release identity fields must be exactly"
+        Mutate = { param($fixture, $record) $record.releaseIdentity | Add-Member unexpected $true }
+    },
+    [pscustomobject]@{
+        Name = "malformed release identity game build"
+        ExpectedMessage = "does not name a well-formed game build"
+        Mutate = { param($fixture, $record) $record.releaseIdentity.catalogId = "FF7Rebirth Steam" }
+    },
+    [pscustomobject]@{
+        Name = "non-string release identity game build"
+        ExpectedMessage = "does not name a well-formed game build"
+        Mutate = { param($fixture, $record) $record.releaseIdentity.catalogId = 39 }
     },
     [pscustomobject]@{
         Name = "extra production input field"; ExpectedMessage = "Production input fields must be exactly"

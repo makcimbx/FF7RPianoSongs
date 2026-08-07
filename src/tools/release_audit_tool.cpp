@@ -33,8 +33,11 @@ int main(int argc, char** argv)
         std::cerr << "documentation registry failed: " << error << '\n';
         return 1;
     }
+    // Hook inventory and archive identity are per game build, so the audited build is part of
+    // the result rather than an implied constant.
     std::cout << "release audit ok version=" << metadata.release.version
-              << " archive=" << metadata.release.archive_basename
+              << " build=" << metadata.target.supported_executable_catalog_id
+              << " archive=" << metadata.target.archive_basename
               << " pipeline=" << metadata.pipeline_cache_version
               << " runtime_magic=" << metadata.runtime_cache_magic
               << " runtime_format=" << metadata.runtime_cache_format

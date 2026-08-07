@@ -5,6 +5,9 @@ param(
     [ValidatePattern('^[A-Za-z0-9_.+-]+$')]
     [string[]]$Target = @(),
 
+    [ValidatePattern('^[a-z0-9][a-z0-9-]+$')]
+    [string]$CatalogBuildId,
+
     [ValidateRange(1, 64)]
     [int]$Parallel = [Environment]::ProcessorCount
 )
@@ -95,6 +98,8 @@ function Write-BuildProvenance {
     if (!(Test-Path -LiteralPath $generatedReleaseHeader -PathType Leaf)) {
         throw "Generated release identity header is missing"
     }
+    $catalogId = Get-CMakeCacheValue "FF7RP_GAME_BUILD"
+    if (!$catalogId) { throw "CMake cache does not record the selected FF7 Rebirth game build" }
     $inputs = @()
     foreach ($relative in Get-ProductionInputPaths) {
         $absolute = Join-Path $Root $relative
@@ -105,7 +110,7 @@ function Write-BuildProvenance {
     }
     $inputIdentity = (($inputs | ForEach-Object { "$($_.path)`t$($_.sha256)`n" }) -join "")
     $record = [ordered]@{
-        schema = "ff7rpianosongs.build-provenance.v2"
+        schema = "ff7rpianosongs.build-provenance.v3"
         configuration = $Configuration
         dll = [ordered]@{
             path = "bin/$Configuration/FF7RPianoSongs.dll"
@@ -128,6 +133,7 @@ function Write-BuildProvenance {
             cacheSha256 = Get-FileSha256 $CachePath
         }
         releaseIdentity = [ordered]@{
+            catalogId = $catalogId
             authorityPath = "release.json"
             authoritySha256 = Get-FileSha256 (Join-Path $Root "release.json")
             generatedHeaderPath = "generated/release_identity.generated.h"
@@ -142,14 +148,12 @@ function Write-BuildProvenance {
         (($record | ConvertTo-Json -Depth 8) + "`n"),
         [System.Text.UTF8Encoding]::new($false))
 }
-$ConfigureCommands = if (Test-Path -LiteralPath $CachePath -PathType Leaf) {
-    "rem Reusing existing CMake configuration; ZERO_CHECK preserves regeneration."
-} else {
-    @"
-cmake -S "$Root" -B "$BuildDir" -G "Visual Studio 17 2022" -A x64
+# A stale cache would silently keep the previously selected build, so configure always runs.
+$CatalogBuildArgument = if ($CatalogBuildId) { " -D FF7RP_GAME_BUILD=$CatalogBuildId" } else { "" }
+$ConfigureCommands = @"
+cmake -S "$Root" -B "$BuildDir" -G "Visual Studio 17 2022" -A x64$CatalogBuildArgument
 if errorlevel 1 exit /b %errorlevel%
 "@
-}
 $TargetArguments = if ($Target.Count -gt 0) { " --target " + ($Target -join " ") } else { "" }
 $BuildsArtifact = $Target.Count -eq 0 -or $Target -contains "FF7RPianoSongs"
 $CopyCommands = if ($BuildsArtifact) {

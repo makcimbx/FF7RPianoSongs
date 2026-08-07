@@ -12,7 +12,7 @@ by Square Enix.
 
 ## Requirements
 
-- Final Fantasy VII Rebirth on Windows x64, using the supported game build.
+- Final Fantasy VII Rebirth on Windows x64. Each download supports one game build and the game version is part of its file name, so pick the download that matches your installed game. A download built for a different game version refuses to run rather than guessing.
 - An x64 ASI loader. The recommended setup is [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader), which provides the proxy that loads `.asi` files. Download its `xinput1_3-x64.zip` build and put `xinput1_3.dll` in `End/Binaries/Win64/`. The loader selects its behaviour from its own filename and upstream ships a separate build per supported name, so use that build rather than renaming another one. Without an ASI loader, `FF7RPianoSongs.asi` will not load. If a compatible x64 ASI loader is already installed, keep it and do not add a second proxy DLL.
 
 ## Install
@@ -60,7 +60,7 @@ To rebuild one song, exit the game and delete only that song's `.cache/` directo
 
 ## Update, Roll Back, or Remove
 
-- **Update:** exit the game, replace the ASI, compare the new INI with yours, and keep your `Music/` folders. Delete caches only when the changelog asks for it.
+- **Update:** exit the game, replace the ASI, compare the new INI with yours, and keep your `Music/` folders. Delete caches only when the changelog asks for it. After the game itself updates, take the download for the new game version.
 - **Roll back:** with the game stopped, restore the previous ASI and matching INI, then delete generated song caches.
 - **Remove:** with the game stopped, delete `FF7RPianoSongs.asi`. Optionally remove its INI, log, score INI, and only the custom song folders you no longer want. Do not remove the ASI loader if another mod uses it.
 
@@ -70,7 +70,7 @@ To rebuild one song, exit the game and delete only that song's `.cache/` directo
 
 - Confirm Ultimate ASI Loader or another compatible x64 ASI loader is installed. A working layout normally includes a proxy DLL such as `End/Binaries/Win64/xinput1_3.dll`.
 - Confirm `FF7RPianoSongs.asi` is directly in `End/Binaries/Win64/` and `General.Enabled` is nonzero.
-- Check `FF7RPianoSongs.log`. An unsupported game build fails closed instead of guessing addresses.
+- Check `FF7RPianoSongs.log`. A game build this download was not built for fails closed instead of guessing addresses, and the log reports the executable identity it expected next to the one it found. Install the download that matches your game version, or wait for one to be published.
 
 **A song is missing or changed after an edit**
 
@@ -83,7 +83,7 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 
 ## Compatibility and Limitations
 
-- Only the cataloged Windows x64 game build is supported.
+- Each download supports exactly one cataloged Windows x64 game build. Updating or rolling back the game can require a different download.
 - Playable charts are limited to 512 rows.
 - Replace, remove, or update the ASI only while the game is stopped. Live unload/reload is unsupported.
 - Looped HCA and arbitrary CRI encoder profiles are unsupported.

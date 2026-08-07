@@ -9,6 +9,8 @@
 - Added deterministic release archives, checksums, release identity, immutable
   dependency pins, and transactional package staging.
 - Declared the first-party MIT license and removed bundled music examples.
+- Cataloged supported game builds explicitly and published one archive per
+  supported game build, named after the game version it supports.
 
 Compatibility and remaining limitations are documented in the
 [player guide](README.md#compatibility-and-limitations).

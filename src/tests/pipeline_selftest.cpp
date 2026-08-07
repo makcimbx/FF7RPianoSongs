@@ -1,3 +1,4 @@
+#include "core/generated/build_identity.generated.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/cache.h"
 #include "pipeline/pipeline_limits.h"
@@ -180,9 +181,30 @@ bool test_release_authority_parser(std::string* error_message)
     const std::string canonical = buffer.str();
     ff7rp::tests::ReleaseAuthority release;
     if (!ff7rp::tests::parse_release_authority(canonical, &release, error_message)) return false;
-    if (release.version != "0.1.0" || release.archive_basename != "FF7RPianoSongs-0.1.0-win64") {
-        *error_message = "release authority did not expose the canonical public identity";
+    if (release.version != "0.1.0") {
+        *error_message = "release authority did not expose the canonical public version";
         return false;
+    }
+    const std::string build_id{ff7r::piano::core::generated::kBuildId};
+    const ff7rp::tests::ReleaseTarget* target = ff7rp::tests::find_release_target(release, build_id);
+    if (!target) {
+        *error_message = "release.json declares no target for build identity " + build_id;
+        return false;
+    }
+    {
+        // The archive basename is derived from the target's game build, not free text.
+        std::string fixture = canonical;
+        if (!replace_once(&fixture, '"' + target->archive_basename + '"',
+                '"' + release.product + '-' + release.version + '-' + release.platform + '"')) {
+            *error_message = "could not construct malformed release target fixture";
+            return false;
+        }
+        ff7rp::tests::ReleaseAuthority rejected;
+        std::string parse_error;
+        if (ff7rp::tests::parse_release_authority(fixture, &rejected, &parse_error)) {
+            *error_message = "release archive basename was accepted without its game build";
+            return false;
+        }
     }
     for (const std::string& bad : {"39", "v39", "01.0.0", "0.1", "0.1.0-beta"}) {
         std::string fixture = canonical;

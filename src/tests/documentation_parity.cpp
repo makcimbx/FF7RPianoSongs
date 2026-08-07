@@ -58,35 +58,88 @@ class ReleaseJsonParser {
 public:
     explicit ReleaseJsonParser(const std::string& input) : input_(input) {}
 
-    bool parse(std::map<std::string, std::string>* fields, std::string* error)
+    bool parse(
+        std::map<std::string, std::string>* scalars, std::vector<ReleaseTarget>* targets,
+        std::string* error)
     {
         skip_ws();
         if (!consume('{')) return set_error(error, "expected top-level object");
         skip_ws();
         if (consume('}')) return set_error(error, "top-level object is empty");
+        std::set<std::string> keys;
         while (true) {
             std::string key;
-            std::string value;
             if (!parse_string(&key, error)) return false;
-            if (!fields->emplace(key, std::string{}).second) {
-                return set_error(error, "duplicate key '" + key + "'");
-            }
+            if (!keys.insert(key).second) return set_error(error, "duplicate key '" + key + "'");
             skip_ws();
             if (!consume(':')) return set_error(error, "expected ':' after key");
-            if (!parse_string(&value, error)) return false;
-            (*fields)[key] = std::move(value);
+            if (key == "targets") {
+                if (!parse_targets(targets, error)) return false;
+            } else {
+                std::string value;
+                if (!parse_string(&value, error)) return false;
+                (*scalars)[key] = std::move(value);
+            }
             skip_ws();
             if (consume('}')) break;
             if (!consume(',')) return set_error(error, "expected ',' or '}'");
             skip_ws();
         }
         skip_ws();
-        return position_ == input_.size() || set_error(error, "unexpected trailing data");
+        if (position_ != input_.size()) return set_error(error, "unexpected trailing data");
+        return keys.count("targets") != 0u || set_error(error, "release.json requires a targets array");
     }
 
 private:
     const std::string& input_;
     std::size_t position_ = 0;
+
+    bool parse_targets(std::vector<ReleaseTarget>* targets, std::string* error)
+    {
+        skip_ws();
+        if (!consume('[')) return set_error(error, "targets must be an array");
+        skip_ws();
+        if (consume(']')) return set_error(error, "targets must not be empty");
+        while (true) {
+            ReleaseTarget target;
+            if (!parse_target(&target, error)) return false;
+            targets->push_back(std::move(target));
+            skip_ws();
+            if (consume(']')) return true;
+            if (!consume(',')) return set_error(error, "expected ',' or ']' in targets");
+            skip_ws();
+        }
+    }
+
+    bool parse_target(ReleaseTarget* target, std::string* error)
+    {
+        skip_ws();
+        if (!consume('{')) return set_error(error, "release target must be an object");
+        std::set<std::string> keys;
+        skip_ws();
+        if (consume('}')) return set_error(error, "release target object is empty");
+        while (true) {
+            std::string key;
+            std::string value;
+            if (!parse_string(&key, error)) return false;
+            if (!keys.insert(key).second) return set_error(error, "duplicate target key '" + key + "'");
+            skip_ws();
+            if (!consume(':')) return set_error(error, "expected ':' after target key");
+            if (!parse_string(&value, error)) return false;
+            if (key == "game_build") target->game_build = std::move(value);
+            else if (key == "supported_executable_catalog_id") {
+                target->supported_executable_catalog_id = std::move(value);
+            } else if (key == "archive_basename") target->archive_basename = std::move(value);
+            else return set_error(error, "unknown release target key '" + key + "'");
+            skip_ws();
+            if (consume('}')) break;
+            if (!consume(',')) return set_error(error, "expected ',' or '}' in release target");
+            skip_ws();
+        }
+        const std::set<std::string> required{
+            "game_build", "supported_executable_catalog_id", "archive_basename"};
+        return keys == required || set_error(error, "release target does not match the closed field set");
+    }
 
     void skip_ws()
     {
@@ -567,12 +620,25 @@ bool validate_release_document_parity(
         || top_entry[1].str() != release.version) {
         return fail(error_message, "CHANGELOG.md top release entry does not match release.json");
     }
-    std::string catalog_id;
-    if (!contains_once(catalog,
-            std::regex(R"metadata("id"\s*:\s*"([a-z0-9-]+)")metadata"),
-            &catalog_id, "RVA catalog build ID", error_message)) return false;
-    return catalog_id == release.supported_executable_catalog_id
-        || fail(error_message, "release.json executable catalog ID does not match rva_catalog.json");
+    // Only build identities carry the `ff7rebirth-` prefix under an `"id"` key. The per-address
+    // `"builds"` maps repeat the same identities as object keys, so anchoring on `"id"` collects
+    // exactly the entries declared in the catalog's `builds` array.
+    const std::vector<std::string> declared = regex_captures(catalog,
+        std::regex(R"metadata("id"\s*:\s*"(ff7rebirth-[a-z0-9-]+)")metadata"));
+    const std::set<std::string> cataloged_builds(declared.begin(), declared.end());
+    if (cataloged_builds.empty()) {
+        return fail(error_message, "rva_catalog.json declares no build identity");
+    }
+    if (cataloged_builds.size() != declared.size()) {
+        return fail(error_message, "rva_catalog.json declares a duplicate build identity");
+    }
+    std::set<std::string> released_builds;
+    for (const ReleaseTarget& target : release.targets) {
+        released_builds.insert(target.supported_executable_catalog_id);
+    }
+    return cataloged_builds == released_builds
+        || fail(error_message,
+            "release.json targets do not cover exactly the rva_catalog.json build identities");
 }
 
 bool validate_ini_documentation(const fs::path& source_root, std::string* error_message)
@@ -610,15 +676,14 @@ bool parse_release_authority(
 {
     if (!release) return fail(error_message, "release authority output is null");
     std::map<std::string, std::string> fields;
+    std::vector<ReleaseTarget> targets;
     ReleaseJsonParser parser(json);
-    if (!parser.parse(&fields, error_message)) return false;
-    const std::set<std::string> expected{
-        "schema", "product", "version", "platform", "license",
-        "supported_executable_catalog_id", "archive_basename"};
+    if (!parser.parse(&fields, &targets, error_message)) return false;
+    const std::set<std::string> expected{"schema", "product", "version", "platform", "license"};
     std::set<std::string> actual;
     for (const auto& [key, value] : fields) actual.insert(key);
     if (actual != expected) return fail(error_message, "release.json does not match the closed field set");
-    if (fields["schema"] != "ff7rpianosongs.release.v1"
+    if (fields["schema"] != "ff7rpianosongs.release.v2"
         || fields["product"] != "FF7RPianoSongs" || fields["platform"] != "win64"
         || fields["license"] != "MIT") {
         return fail(error_message, "release schema/product/platform/license is unsupported");
@@ -627,19 +692,35 @@ bool parse_release_authority(
     if (!std::regex_match(fields["version"], semver)) {
         return fail(error_message, "release version is not canonical three-part semantic versioning");
     }
-    if (!std::regex_match(fields["supported_executable_catalog_id"], std::regex(R"([a-z0-9][a-z0-9-]+)"))) {
-        return fail(error_message, "release executable catalog ID is malformed");
-    }
-    const std::string expected_basename = fields["product"] + '-' + fields["version"] + '-' + fields["platform"];
-    if (fields["archive_basename"] != expected_basename) {
-        return fail(error_message, "release archive basename is not derived from product/version/platform");
+    // Game builds stay two-part (1.004, 1.005) so archive names never introduce a second
+    // three-part version into release-facing documentation.
+    const std::regex game_version(R"([0-9]+\.[0-9]+)");
+    const std::regex catalog_identity(R"(ff7rebirth-[a-z0-9-]+)");
+    std::set<std::string> game_builds;
+    std::set<std::string> catalog_ids;
+    for (const ReleaseTarget& target : targets) {
+        if (!std::regex_match(target.game_build, game_version)) {
+            return fail(error_message, "release target game build is not a two-part game version");
+        }
+        if (!std::regex_match(target.supported_executable_catalog_id, catalog_identity)) {
+            return fail(error_message, "release executable catalog ID is malformed");
+        }
+        const std::string expected_basename = fields["product"] + '-' + fields["version"] + '-'
+            + fields["platform"] + "-ff7r" + target.game_build;
+        if (target.archive_basename != expected_basename) {
+            return fail(error_message,
+                "release archive basename is not derived from product/version/platform/game build");
+        }
+        if (!game_builds.insert(target.game_build).second
+            || !catalog_ids.insert(target.supported_executable_catalog_id).second) {
+            return fail(error_message, "release targets do not declare distinct builds");
+        }
     }
     release->product = fields["product"];
     release->version = fields["version"];
     release->platform = fields["platform"];
     release->license = fields["license"];
-    release->supported_executable_catalog_id = fields["supported_executable_catalog_id"];
-    release->archive_basename = fields["archive_basename"];
+    release->targets = std::move(targets);
     return true;
 }
 
@@ -651,6 +732,16 @@ bool load_release_authority(
         return fail(error_message, "release.json is unreadable");
     }
     return parse_release_authority(json, release, error_message);
+}
+
+const ReleaseTarget* find_release_target(
+    const ReleaseAuthority& release, const std::string& catalog_id)
+{
+    const auto found = std::find_if(release.targets.begin(), release.targets.end(),
+        [&](const ReleaseTarget& target) {
+            return target.supported_executable_catalog_id == catalog_id;
+        });
+    return found == release.targets.end() ? nullptr : &*found;
 }
 
 bool parse_documentation_registry(
@@ -689,6 +780,10 @@ bool load_release_metadata(
     const fs::path& source_root, ReleaseMetadata* metadata, std::string* error_message)
 {
     if (!metadata) return fail(error_message, "release metadata output is null");
+    // The audit describes the artifact this translation unit was compiled for, so hook inventory
+    // and release target are both selected by that build identity rather than by the catalog
+    // default. Catalog-wide invariants across every build belong to the catalog generator check.
+    const std::string build_id{ff7r::piano::core::generated::kBuildId};
     std::string cache_header;
     std::string repository_source;
     std::string cmake;
@@ -696,12 +791,18 @@ bool load_release_metadata(
     if (!read_bytes(source_root / "src/pipeline/cache.h", &cache_header)
         || !read_bytes(source_root / "src/pipeline/song_repository.cpp", &repository_source)
         || !read_bytes(source_root / "CMakeLists.txt", &cmake)
-        || !read_bytes(source_root / "src/game/generated/hook_specs.generated.inc", &generated_hook_specs)) {
+        || !read_bytes(source_root / "src/generated" / build_id / "game/generated/hook_specs.generated.inc",
+            &generated_hook_specs)) {
         return fail(error_message, "could not read canonical release metadata sources");
     }
 
     ReleaseMetadata parsed;
     if (!load_release_authority(source_root, &parsed.release, error_message)) return false;
+    const ReleaseTarget* target = find_release_target(parsed.release, build_id);
+    if (!target) {
+        return fail(error_message, "release.json declares no target for build identity " + build_id);
+    }
+    parsed.target = *target;
     if (!contains_once(cache_header,
             std::regex(R"metadata(kPipelineCacheVersion\s*=\s*"([^"]+)")metadata"),
             &parsed.pipeline_cache_version, "pipeline cache version source constant", error_message)) {

@@ -5,7 +5,9 @@ param(
     [ValidateRange(1, 64)]
     [int]$Parallel = [Environment]::ProcessorCount,
 
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+
+    [string]$GameBuild = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,7 +44,20 @@ $RequiredDocumentRoles = [ordered]@{
 
 . (Join-Path $Root "tools/release_package.ps1")
 . (Join-Path $Root "tools/two_surface_publication.ps1")
-$ReleaseAuthority = Get-ReleaseAuthority $Root
+$ReleaseTargets = @((Get-ReleaseDocument $Root).targets)
+$SelectedTarget = if ($GameBuild) {
+    $matchedTargets = @($ReleaseTargets | Where-Object { $_.game_build -ceq $GameBuild })
+    if ($matchedTargets.Count -ne 1) {
+        throw "release.json does not declare exactly one target for game build '$GameBuild'"
+    }
+    $matchedTargets[0]
+} elseif ($ReleaseTargets.Count -eq 1) {
+    $ReleaseTargets[0]
+} else {
+    throw "-GameBuild is required because release.json declares more than one game build"
+}
+$ReleaseCatalogId = [string]$SelectedTarget.supported_executable_catalog_id
+$ReleaseAuthority = Get-ReleaseAuthority $Root $ReleaseCatalogId
 
 function Assert-ExactProperties {
     param([object]$Value, [string[]]$Expected, [string]$Description)
@@ -458,10 +473,10 @@ $SourceCommit = Get-CleanSourceCommit $Root
 
 if ($SkipBuild) {
     & (Join-Path $Root "build.ps1") -Configuration $Configuration `
-        -Target "release_audit_tool" -Parallel $Parallel
+        -Target "release_audit_tool" -Parallel $Parallel -CatalogBuildId $ReleaseCatalogId
 } else {
     & (Join-Path $Root "build.ps1") -Configuration $Configuration `
-        -Target @("FF7RPianoSongs", "release_audit_tool") -Parallel $Parallel
+        -Target @("FF7RPianoSongs", "release_audit_tool") -Parallel $Parallel -CatalogBuildId $ReleaseCatalogId
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Build script failed with exit code $LASTEXITCODE"
@@ -507,7 +522,7 @@ function Assert-BuildProvenanceAdversePathSelfTests {
         $dll = Join-Path $testRoot "dll.bin"
         $recordPath = Join-Path $testRoot "provenance.json"
         $record = [ordered]@{
-            schema = "ff7rpianosongs.build-provenance.v2"; configuration = "Release"
+            schema = "ff7rpianosongs.build-provenance.v3"; configuration = "Release"
             dll = [ordered]@{ path = "bin/Release/FF7RPianoSongs.dll"; sha256 = Get-FileSha256 $dll }
             toolchain = [ordered]@{
                 visualStudioInstallationPath = "fixture"; compilerPath = $compiler
@@ -521,6 +536,7 @@ function Assert-BuildProvenanceAdversePathSelfTests {
             }
             releaseIdentity = [ordered]@{
                 authorityPath = "release.json"; authoritySha256 = Get-FileSha256 (Join-Path $testRoot "release.json")
+                catalogId = "fixture-build"
                 generatedHeaderPath = "generated/release_identity.generated.h"
                 generatedHeaderSha256 = Get-FileSha256 (Join-Path $testRoot "generated/release_identity.generated.h")
             }
@@ -564,6 +580,11 @@ function Assert-BuildProvenanceAdversePathSelfTests {
 
 Assert-BuildProvenance $Root $BuiltDll $ProvenancePath $Configuration `
     (Get-ProductionInputRelativePaths $Root) (Join-Path $Root "build")
+$BuiltCatalogId = [string](Get-Content -LiteralPath $ProvenancePath -Raw |
+    ConvertFrom-Json).releaseIdentity.catalogId
+if ($BuiltCatalogId -cne $ReleaseCatalogId) {
+    throw "The built artifact targets game build '$BuiltCatalogId', but '$ReleaseCatalogId' is being packaged"
+}
 Assert-BuildProvenanceAdversePathSelfTests
 Assert-FilesEqual -Source $BuiltDll -Destination $Artifact
 
@@ -626,6 +647,16 @@ function Assert-ReleaseTree {
     }
 }
 
+function Assert-ReleaseSurface {
+    param([string]$Candidate, [string]$PackageCandidate = $PackagePath)
+    $expected = @($ReleaseAuthority.archive_basename)
+    $actual = @(Get-ChildItem -LiteralPath $Candidate -Force | ForEach-Object { $_.Name } | Sort-Object)
+    if (@(Compare-Object -ReferenceObject $expected -DifferenceObject $actual).Count -ne 0) {
+        throw "Release surface must contain exactly the packaged game-build directory"
+    }
+    Assert-ReleaseTree (Join-Path $Candidate $ReleaseAuthority.archive_basename) $PackageCandidate
+}
+
 $publicationToken = "$PID-$([Guid]::NewGuid().ToString('N'))"
 $packageStaging = Join-Path $Root ".package.staging-$publicationToken"
 $releaseStaging = Join-Path $Root ".release.staging-$publicationToken"
@@ -637,17 +668,18 @@ foreach ($mapping in $DocumentMappings) {
     Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $packageStaging $mapping.Destination)
 }
 Assert-PackageTree $packageStaging
-$null = New-ReleaseArtifacts $Root $packageStaging $releaseStaging $Artifact $ProvenancePath `
-    (Join-Path $BuildDir "generated/release_identity.generated.h") $SourceCommit
-Assert-ReleaseTree $releaseStaging $packageStaging
+$null = New-ReleaseArtifacts $Root $packageStaging `
+    (Join-Path $releaseStaging $ReleaseAuthority.archive_basename) $Artifact $ProvenancePath `
+    (Join-Path $BuildDir "generated/release_identity.generated.h") $SourceCommit $ReleaseCatalogId
+Assert-ReleaseSurface $releaseStaging $packageStaging
 $publicationResult = Invoke-TwoSurfacePublication $PackagePath $ReleasePath $packageStaging $releaseStaging `
     { param($packageCandidate, $releaseCandidate)
         Assert-PackageTree $packageCandidate
-        Assert-ReleaseTree $releaseCandidate $packageCandidate
+        Assert-ReleaseSurface $releaseCandidate $packageCandidate
     } `
     { param($packageCandidate, $releaseCandidate)
         Assert-PackageTree $packageCandidate
-        Assert-ReleaseTree $releaseCandidate $packageCandidate
+        Assert-ReleaseSurface $releaseCandidate $packageCandidate
     }
 if (!$publicationResult.Committed) { throw "Two-surface publication returned without a committed pair" }
 foreach ($debt in $publicationResult.CleanupDebt) {
@@ -656,5 +688,5 @@ foreach ($debt in $publicationResult.CleanupDebt) {
 
 Get-ChildItem -LiteralPath $PackagePath -File -Recurse | Sort-Object FullName |
     Select-Object FullName, Length
-Get-ChildItem -LiteralPath $ReleasePath -File | Sort-Object FullName |
+Get-ChildItem -LiteralPath $ReleasePath -File -Recurse | Sort-Object FullName |
     Select-Object FullName, Length

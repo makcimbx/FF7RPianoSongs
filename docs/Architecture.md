@@ -17,7 +17,7 @@ The offline pipeline completes validation before a descriptor is visible to runt
 - `src/core/` owns generic logging, configuration, memory/PE helpers, and hook infrastructure. It does not own song semantics.
 - `src/pipeline/` owns user-file discovery, strict schema validation, audio/chart generation, cache identity, and publication of validated descriptors. It does not read or write game memory.
 - `src/game/` owns executable-version gating, addresses, hook installation, native object identity, UI/list/selection/chart integration, and audio lifecycle interaction.
-- Generated directories under `src/` contain derived source inputs. Generated files are outputs, not a second hand-edited source of truth.
+- `src/generated/<build-id>/` holds one derived source tree per supported game build, and a build selects exactly one of them. Generated files are outputs, not a second hand-edited source of truth.
 - `src/tests/` owns offline validation and release-audit enforcement; tests do not establish in-game proof.
 
 ## Address Ownership
@@ -25,6 +25,64 @@ The offline pipeline completes validation before a descriptor is visible to runt
 [rva_catalog.json](../src/game/rva_catalog.json) is the machine-readable source of supported executable identity, RVAs, signatures, hook declarations, and required/optional classification. Generated hook/address source is derived from that catalog. Documentation must not duplicate its current counts.
 
 Any required timestamp, signature, or prologue mismatch fails closed. Optional behavior may be omitted only when its owning feature explicitly supports safe degradation.
+
+### Catalog Schema
+
+The catalog is `schema_version` 3. It declares the supported game builds once and records every address against those builds:
+
+```jsonc
+{
+  "schema_version": 3,
+  "catalog_id": "ff7rpianosongs-rva-catalog",
+  "cataloged_on": "<date>",
+  "default_build": "<build-id>",
+  "builds": [
+    { "id": "ff7rebirth-steam-win64-<pe-timestamp>", "game_version": "1.005",
+      "pe_timestamp": "0x...", "size_of_image": "0x...", "pe_checksum": "0x...",
+      "file_size": 0, "sha256": "..." }
+  ],
+  "addresses": [
+    { "id": "<snake_case_id>", "cpp_symbol": "<CppSymbol>", "kind": "function",
+      "subsystem": "...", "requirement": "release | optional | research",
+      "validation": { "policy": "signature" }, "install_policy": "...",
+      "status": "...", "hook_owner": "...", "consumers": ["src/game/..."],
+      "hook_spec": { "name": "...", "order": 0, "required_for_release_startup": true },
+      "builds": {
+        "<build-id>": {
+          "rva": "0x...",
+          "signature": { "bytes": "...", "mask": "..." },
+          "evidence": [ { "type": "...", "path": "analysis/...", "detail": "..." } ]
+        }
+      } }
+  ],
+  "locators": [ "... build-independent masked patterns ..." ]
+}
+```
+
+Shared metadata is written once per address. Only `rva`, `signature`, and `evidence` are per build, because a signature and the analysis that derived it are facts about one binary while a validation policy is not. Build identities carry the `ff7rebirth-` prefix; the release audit compares that set against the targets declared in `release.json`.
+
+An address that a build does not catalog omits that build's key. The literal `"0x0"` remains forbidden in the catalog: zero is the generator's absence sentinel and must never be authored by hand.
+
+| generated file | entry present | entry absent |
+| --- | --- | --- |
+| `rvas.generated.h` | `inline constexpr uintptr_t X = 0x...;` | `= 0x0;` with a comment |
+| `hook_specs.generated.inc` | one spec line | no line at all |
+| `rva_signatures.generated.inc` | one signature line | no line at all |
+
+The omitted `.inc` lines carry the behavior: `find_hook_spec` and `find_rva_signature` return `nullptr`, and consumers already fail closed on a null spec. The zero in the header exists only so the tree compiles. A consumer that forms `exe_base + rva` without a spec lookup must test the RVA for zero, because `exe_base + 0` is a non-null pointer that would pass an ordinary pointer check.
+
+The generator enforces the invariants that make the sentinel safe: a `release` address must be present in every declared build; every address must be present in at least one build; RVAs are unique within a build and satisfy `0 < rva < size_of_image` of that same build; and hook `order` values stay globally contiguous, with each build installing the sorted subset it declares.
+
+### Per-Build Generated Trees
+
+Each build owns its generated tree:
+
+```text
+src/generated/<build-id>/game/generated/{rvas.generated.h, *.generated.inc}
+src/generated/<build-id>/core/generated/build_identity.generated.h
+```
+
+The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on the include path, so existing `#include "game/generated/rvas.generated.h"` directives resolve to the chosen build without source changes. The runtime stays single-build and its RVAs stay `constexpr`; one ASI is produced per game build. The generator is total over builds — it writes and checks every tree — so catalog validation does not depend on which build was selected for compilation. Adding a game build is a data change plus regeneration; the procedure is in [Build And Release](BuildAndRelease.md).
 
 ## Publication Invariants
 

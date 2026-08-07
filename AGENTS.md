@@ -11,7 +11,7 @@
 
 - Documentation index: `docs/README.md`.
 - Mutable implementation status and blockers: `docs/CurrentStatus.md`.
-- Exact game addresses and executable identity: `src/game/rva_catalog.json`.
+- Supported game builds, exact game addresses, and executable identity: `src/game/rva_catalog.json`. Its schema, the absence sentinel, and the per-build generated trees under `src/generated/<build-id>/` are described in `docs/Architecture.md`; the procedure for adding a game build is in `docs/BuildAndRelease.md`. Never hand-edit generated source.
 - Build, test, package, install, and rollback commands: `docs/BuildAndRelease.md`.
 - Song authoring and source contract: `docs/SongFormat.md`.
 - Focused manual scenarios and evidence requirements: `docs/InGameValidation.md`.

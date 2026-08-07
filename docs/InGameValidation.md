@@ -1,10 +1,10 @@
 # In-Game Validation
 
-Use this matrix only for focused manual qualification on the supported executable. Automated agents must not launch the game. After explicit human authorization they may use the repository runtime-gate tool for transactional ASI installation, evidence collection, keep, and rollback. A human tester controls saves, launch, input, and game state.
+Use this matrix only for focused manual qualification on a supported executable. One ASI supports one game build, so every scenario is qualified per game build with the artifact compiled for it. Evidence collected on one game build does not carry to another; a newly cataloged build inherits no qualification. Automated agents must not launch the game. After explicit human authorization they may use the repository runtime-gate tool for transactional ASI installation, evidence collection, keep, and rollback. A human tester controls saves, launch, input, and game state.
 
 ## Preconditions
 
-- Checks required by the selected work mode have passed: targeted checks in Debug, a Release build plus affected tests and generated/catalog checks in Integration, or the complete CTest and release-audit pipeline in Release. Every runtime-gate `Prepare` validates exact Release provenance, production inputs, `dist` artifact identity, and executable identity. Its default `Packaged` mode additionally validates `package/`; focused Debug and Integration sessions may use `-Mode Development` without package or staged-document qualification.
+- Checks required by the selected work mode have passed: targeted checks in Debug, a Release build plus affected tests and generated/catalog checks in Integration, or the complete CTest and release-audit pipeline in Release. Every runtime-gate `Prepare` validates exact Release provenance, production inputs, `dist` artifact identity, and executable identity. Identity is checked against the one build recorded in the artifact's provenance, not against the set of supported builds, so an artifact built for another game build is refused before installation. Its default `Packaged` mode additionally validates `package/`; focused Debug and Integration sessions may use `-Mode Development` without package or staged-document qualification.
 - The tester has backed up relevant saves. The runtime-gate receipt retains and hashes the previous ASI until the session is finalized.
 - Use only the song/input fixtures required by the focused scenario. The complete Release matrix uses an explicit chart, a MIDI-generated multi-profile song, a cache-rebuild case, and an intentionally invalid song; individual Debug and Integration runs do not need unrelated fixtures.
 - Debug logging is enabled only for the focused run and restored afterward.
@@ -52,7 +52,7 @@ Run only the row or bounded sequence that exercises the changed mechanic during 
 
 | Scenario | Action | Acceptance |
 | --- | --- | --- |
-| Loader and fail-closed gate | Start the supported game build, then repeat with a deliberately incompatible test condition only if a safe harness exists. | Supported build initializes once; mismatches disable affected behavior without a crash or guessed address use. |
+| Loader and fail-closed gate | Start the game build this artifact was compiled for. Where a second supported build is installed, repeat with the artifact built for the other build; otherwise use a deliberately incompatible test condition only if a safe harness exists. | The matching build initializes once. A mismatch disables affected behavior without a crash or guessed address use, and the log reports the expected executable identity beside the observed one so the wrong download is identifiable without further tooling. |
 | Discovery and rejection | Open the piano list with valid and intentionally invalid song folders. | Every valid descriptor appears once; invalid input is absent with an actionable log reason. |
 | List and navigation | Move between native and custom rows, enter/leave details, and reopen the list. | Ordering, title, focus, and native rows remain stable with no stale custom identity. |
 | Negative page selection guard | With Find the Flame profile 3/difficulty 4/238 notes present, repeatedly enter/leave its details and move immediately among native and custom rows so list rebuilds include both immediate selection and a transient no-selection state; then reopen the list. | Native `-1` no-selection transitions do not fault in the selected visibility setter, no page/list entry is substituted, and subsequent nonnegative selections retain normal focus and visibility. Any `unexpected_negative_bypassed` marker is retained for analysis. No tester delay is required. |
@@ -71,7 +71,7 @@ Run only the row or bounded sequence that exercises the changed mechanic during 
 
 ## Evidence To Capture
 
-- Exact executable identity and artifact hash.
+- Exact executable identity, the game build the artifact was compiled for, and the artifact hash.
 - Scenario name, song/profile, starting state, actions, expected result, and observed result.
 - Relevant bounded log excerpts with secrets or personal paths removed.
 - Whether the cache was cold, warm, invalidated, or rebuilt.

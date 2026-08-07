@@ -18,13 +18,24 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
 
+    # One ASI supports one game build, so every supported build is validated end to end.
+    # `catalog_id` selects the generated tree (build.ps1 -CatalogBuildId); `game_build`
+    # selects the release.json target (package_dist.ps1). Supporting another build is a
+    # data-only edit here once rva_catalog.json and release.json declare it.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - catalog_id: ff7rebirth-steam-win64-6a16ced2
+            game_build: "1.005"
+
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
       - name: Build Release
         shell: pwsh
-        run: ./build.ps1 -Configuration Release
+        run: ./build.ps1 -Configuration Release -CatalogBuildId ${{ matrix.catalog_id }}
 
       - name: Validate RVA catalog
         shell: pwsh
@@ -40,7 +51,7 @@ jobs:
 
       - name: Stage deterministic package
         shell: pwsh
-        run: ./package_dist.ps1 -Configuration Release -SkipBuild
+        run: ./package_dist.ps1 -Configuration Release -SkipBuild -GameBuild ${{ matrix.game_build }}
 
       - name: Audit staged documentation
         shell: pwsh

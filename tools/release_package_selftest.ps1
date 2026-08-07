@@ -9,15 +9,21 @@ try {
         New-Item -ItemType Directory -Path (Join-Path $fixture $directory) -Force | Out-Null
     }
     $releaseJson = @{
-        schema = "ff7rpianosongs.release.v1"; product = "FF7RPianoSongs"; version = "0.1.0"
+        schema = "ff7rpianosongs.release.v2"; product = "FF7RPianoSongs"; version = "0.1.0"
         platform = "win64"; license = "MIT"
-        supported_executable_catalog_id = "ff7rebirth-steam-win64-6a16ced2"
-        archive_basename = "FF7RPianoSongs-0.1.0-win64"
-    } | ConvertTo-Json
+        targets = @(
+            [ordered]@{
+                game_build = "1.005"
+                supported_executable_catalog_id = "ff7rebirth-steam-win64-6a16ced2"
+                archive_basename = "FF7RPianoSongs-0.1.0-win64-ff7r1.005"
+            }
+        )
+    } | ConvertTo-Json -Depth 5
     [IO.File]::WriteAllText((Join-Path $fixture "release.json"), $releaseJson)
     [IO.File]::WriteAllText((Join-Path $fixture "package/release.json"), $releaseJson)
     [IO.File]::WriteAllText((Join-Path $fixture "src/game/rva_catalog.json"),
-        '{"build":{"id":"ff7rebirth-steam-win64-6a16ced2"}}')
+        '{"schema_version":3,"default_build":"ff7rebirth-steam-win64-6a16ced2",' +
+        '"builds":[{"id":"ff7rebirth-steam-win64-6a16ced2"}],"addresses":[]}')
     $publicDocuments = @(
         "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md",
         "docs/SongFormat.md"
@@ -136,8 +142,8 @@ try {
     foreach ($badVersion in @("39", "v39", "01.0.0", "0.1", "0.1.0-beta")) {
         $bad = $releaseJson | ConvertFrom-Json
         $bad.version = $badVersion
-        $bad.archive_basename = "FF7RPianoSongs-$badVersion-win64"
-        [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json))
+        $bad.targets[0].archive_basename = "FF7RPianoSongs-$badVersion-win64-ff7r1.005"
+        [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json -Depth 5))
         $accepted = $false
         try { $null = Get-ReleaseAuthority $fixture; $accepted = $true } catch {}
         if ($accepted) { throw "Malformed public version was accepted: $badVersion" }
@@ -145,26 +151,54 @@ try {
     foreach ($mutation in @(
         "extra-field", "wrong-license", "wrong-catalog", "wrong-archive",
         "nonstring-schema", "nonstring-product", "nonstring-version", "nonstring-platform",
-        "nonstring-license", "nonstring-catalog", "nonstring-archive")) {
+        "nonstring-license", "nonstring-catalog", "nonstring-archive",
+        "wrong-schema", "targets-scalar", "targets-empty", "extra-target-field",
+        "missing-target-field", "nonstring-game-build", "malformed-game-build",
+        "malformed-catalog", "duplicate-target", "undeclared-build")) {
         $bad = $releaseJson | ConvertFrom-Json
         switch ($mutation) {
             "extra-field" { $bad | Add-Member -NotePropertyName pipeline_version -NotePropertyValue 39 }
             "wrong-license" { $bad.license = "GPL-3.0-only" }
-            "wrong-catalog" { $bad.supported_executable_catalog_id = "other-build" }
-            "wrong-archive" { $bad.archive_basename = "FF7RPianoSongs-latest-win64" }
+            "wrong-catalog" { $bad.targets[0].supported_executable_catalog_id = "other-build" }
+            "wrong-archive" { $bad.targets[0].archive_basename = "FF7RPianoSongs-latest-win64" }
             "nonstring-schema" { $bad.schema = $true }
             "nonstring-product" { $bad.product = $true }
             "nonstring-version" { $bad.version = $true }
             "nonstring-platform" { $bad.platform = $true }
             "nonstring-license" { $bad.license = $true }
-            "nonstring-catalog" { $bad.supported_executable_catalog_id = $true }
-            "nonstring-archive" { $bad.archive_basename = $true }
+            "nonstring-catalog" { $bad.targets[0].supported_executable_catalog_id = $true }
+            "nonstring-archive" { $bad.targets[0].archive_basename = $true }
+            "wrong-schema" { $bad.schema = "ff7rpianosongs.release.v1" }
+            "targets-scalar" { $bad.targets = "ff7rebirth-steam-win64-6a16ced2" }
+            "targets-empty" { $bad.targets = @() }
+            "extra-target-field" {
+                $bad.targets[0] | Add-Member -NotePropertyName notes -NotePropertyValue "extra"
+            }
+            "missing-target-field" { $bad.targets[0].PSObject.Properties.Remove("game_build") }
+            "nonstring-game-build" { $bad.targets[0].game_build = $true }
+            "malformed-game-build" { $bad.targets[0].game_build = "1" }
+            "malformed-catalog" { $bad.targets[0].supported_executable_catalog_id = "FF7Rebirth-Steam" }
+            "duplicate-target" {
+                $bad.targets = @($bad.targets[0], ($releaseJson | ConvertFrom-Json).targets[0])
+            }
+            "undeclared-build" {
+                $bad.targets[0].supported_executable_catalog_id = "ff7rebirth-steam-win64-68fd6fde"
+            }
         }
-        [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json))
+        [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json -Depth 5))
         $accepted = $false
         try { $null = Get-ReleaseAuthority $fixture; $accepted = $true } catch {}
         if ($accepted) { throw "Malformed release metadata was accepted: $mutation" }
     }
+    [IO.File]::WriteAllText((Join-Path $fixture "release.json"), $releaseJson)
+    $selected = Get-ReleaseAuthority $fixture "ff7rebirth-steam-win64-6a16ced2"
+    if ($selected.game_build -cne "1.005" -or
+        $selected.archive_basename -cne "FF7RPianoSongs-0.1.0-win64-ff7r1.005") {
+        throw "Named release target selection returned the wrong authority"
+    }
+    $accepted = $false
+    try { $null = Get-ReleaseAuthority $fixture "ff7rebirth-steam-win64-68fd6fde"; $accepted = $true } catch {}
+    if ($accepted) { throw "Release authority for an undeclared executable catalog ID was accepted" }
     Write-Output "Release package self-test passed: exact minimal deterministic ZIP/checksum/identity and malformed metadata."
 } finally {
     if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }

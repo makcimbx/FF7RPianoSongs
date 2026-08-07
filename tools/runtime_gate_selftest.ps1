@@ -103,15 +103,26 @@ function New-Fixture([string]$Root) {
     New-FakePe $exe
     $exeBytes = [System.IO.File]::ReadAllBytes($exe)
     $catalog = [ordered]@{
-        schema_version = 1
-        build = [ordered]@{
-            id = "fixture-build"
-            pe_timestamp = "0x6a16ced2"
-            size_of_image = "0x099d9000"
-            pe_checksum = "0x0769ea6e"
-            file_size = $exeBytes.Length
-            sha256 = Get-TestHash $exe
-        }
+        schema_version = 3
+        default_build = "fixture-build"
+        builds = @(
+            [ordered]@{
+                id = "fixture-build"
+                pe_timestamp = "0x6a16ced2"
+                size_of_image = "0x099d9000"
+                pe_checksum = "0x0769ea6e"
+                file_size = $exeBytes.Length
+                sha256 = Get-TestHash $exe
+            },
+            [ordered]@{
+                id = "fixture-other-build"
+                pe_timestamp = "0x68fd6fde"
+                size_of_image = "0x09800000"
+                pe_checksum = "0x01020304"
+                file_size = $exeBytes.Length + 4096
+                sha256 = "0" * 64
+            }
+        )
         addresses = @()
     }
     $catalog | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (
@@ -144,7 +155,7 @@ function New-Fixture([string]$Root) {
     $compiler = (Get-Command pwsh -ErrorAction Stop).Source
     $cmake = (Get-Command cmake -ErrorAction Stop).Source
     $provenance = [ordered]@{
-        schema = "ff7rpianosongs.build-provenance.v2"
+        schema = "ff7rpianosongs.build-provenance.v3"
         configuration = "Release"
         dll = [ordered]@{ path = "bin/Release/FF7RPianoSongs.dll"; sha256 = $newHash }
         toolchain = [ordered]@{
@@ -166,6 +177,7 @@ function New-Fixture([string]$Root) {
         releaseIdentity = [ordered]@{
             authorityPath = "release.json"
             authoritySha256 = Get-TestHash (Join-Path $repo "release.json")
+            catalogId = "fixture-build"
             generatedHeaderPath = "generated/release_identity.generated.h"
             generatedHeaderSha256 = Get-TestHash (Join-Path $repo "build/generated/release_identity.generated.h")
         }
@@ -511,6 +523,26 @@ try {
     } -ExpectFailure
     Assert-True ((Get-TestHash $fixture.oldAsi) -eq $fixture.oldHash) "development artifact rejection mutated ASI"
     Assert-True ((Get-TestHash $fixture.log) -eq $fixture.logHash) "development artifact rejection mutated log"
+
+    # The artifact declares which game build it was compiled for, and the gate verifies exactly
+    # that build instead of accepting any catalogued executable that happens to match.
+    foreach ($buildCase in @(
+        @{ Name = "wrong-game-build"; CatalogId = "fixture-other-build" },
+        @{ Name = "undeclared-game-build"; CatalogId = "fixture-unknown-build" })) {
+        $fixture = New-Fixture (Join-Path $temp $buildCase.Name)
+        $provenancePath = Join-Path $fixture.repo "build/bin/Release/FF7RPianoSongs.provenance.json"
+        $record = Get-Content -LiteralPath $provenancePath -Raw | ConvertFrom-Json
+        $record.releaseIdentity.catalogId = $buildCase.CatalogId
+        $record | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $provenancePath -Encoding utf8
+        Invoke-Gate @{
+            Action = "Prepare"; GameRoot = $fixture.game; RepositoryRoot = $fixture.repo
+            PackageRoot = (Join-Path $fixture.repo "package"); StateDirectory = $fixture.state
+        } -ExpectFailure
+        Assert-True ((Get-TestHash $fixture.oldAsi) -eq $fixture.oldHash) `
+            "$($buildCase.Name) rejection mutated the ASI"
+        Assert-True ((Get-TestHash $fixture.log) -eq $fixture.logHash) `
+            "$($buildCase.Name) rejection mutated the log"
+    }
 
     # The fixed receipt is durable before the first ASI/log mutation. A hard exit at that exact
     # boundary blocks every other state root and leaves the session recoverable.

@@ -32,7 +32,7 @@ $AsiName = "FF7RPianoSongs.asi"
 $LogName = "FF7RPianoSongs.log"
 $ManifestName = "session.json"
 $ManifestSchema = "ff7rpianosongs.runtime-gate.v1"
-$ProvenanceSchema = "ff7rpianosongs.build-provenance.v2"
+$ProvenanceSchema = "ff7rpianosongs.build-provenance.v3"
 $TerminalStates = @("Accepted", "RolledBack", "Uninstalled", "Recovered")
 $GlobalLockName = "Global\FF7RPianoSongs.RuntimeGate.v1"
 $MaxExcerptLines = 240
@@ -267,22 +267,30 @@ function Assert-ArtifactIdentity(
         productionInputSetSha256 = [string]$provenance.productionInputSetSha256
         releaseAuthoritySha256 = [string]$provenance.releaseIdentity.authoritySha256
         generatedReleaseHeaderSha256 = [string]$provenance.releaseIdentity.generatedHeaderSha256
+        catalogId = [string]$provenance.releaseIdentity.catalogId
     }
 }
 
-function Assert-ExecutableIdentity([string]$RepoRoot, [string]$ExecutablePath) {
+function Assert-ExecutableIdentity([string]$RepoRoot, [string]$ExecutablePath, [string]$CatalogId) {
+    if ([string]::IsNullOrWhiteSpace($CatalogId)) {
+        throw "Build provenance does not name the game build this artifact was built for."
+    }
     $catalogPath = Join-Path $RepoRoot "src/game/rva_catalog.json"
     $catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
+    $candidates = @(@($catalog.builds) | Where-Object { [string]$_.id -ceq $CatalogId })
+    if ($candidates.Count -ne 1) {
+        throw "The RVA catalog does not declare exactly one build for the artifact's game build: $CatalogId"
+    }
     $actual = Get-PeIdentity $ExecutablePath
-    $expected = $catalog.build
+    $expected = $candidates[0]
     if ($actual.length -ne [int64]$expected.file_size -or
         $actual.sha256 -ne ([string]$expected.sha256).ToLowerInvariant() -or
         $actual.peTimestamp -ne ([string]$expected.pe_timestamp).ToLowerInvariant() -or
         $actual.sizeOfImage -ne ([string]$expected.size_of_image).ToLowerInvariant() -or
         $actual.peChecksum -ne ([string]$expected.pe_checksum).ToLowerInvariant()) {
-        throw "Game executable does not match the supported RVA catalog identity."
+        throw "Game executable does not match the game build this artifact was built for: $CatalogId"
     }
-    $actual.catalogId = [string]$catalog.build.id
+    $actual.catalogId = $CatalogId
     return $actual
 }
 
@@ -683,7 +691,7 @@ function Invoke-Prepare {
 
     Assert-GameStopped $context
     $artifact = Assert-ArtifactIdentity $repo $package $Mode
-    $executableIdentity = Assert-ExecutableIdentity $repo $executable
+    $executableIdentity = Assert-ExecutableIdentity $repo $executable ([string]$artifact.catalogId)
     $ownershipPath = Get-OwnershipPath $context ([string]$executableIdentity.sha256)
 
     if (!$PSCmdlet.ShouldProcess($target, "Install reviewed FF7RPianoSongs ASI transactionally")) {

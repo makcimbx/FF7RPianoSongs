@@ -70,7 +70,7 @@ function Assert-BuildProvenance {
     Assert-ExactProperties $record `
         @("schema", "configuration", "dll", "toolchain", "cmake", "releaseIdentity", "productionInputs", "productionInputSetSha256") `
         "Build provenance"
-    if ($record.schema -ne "ff7rpianosongs.build-provenance.v2" -or
+    if ($record.schema -ne "ff7rpianosongs.build-provenance.v3" -or
         $record.configuration -ne $ExpectedConfiguration) {
         throw "Build provenance schema or configuration does not match the requested artifact"
     }
@@ -106,11 +106,15 @@ function Assert-BuildProvenance {
         throw "Current CMake cache does not match build provenance"
     }
     Assert-ExactProperties $record.releaseIdentity `
-        @("authorityPath", "authoritySha256", "generatedHeaderPath", "generatedHeaderSha256") `
+        @("authorityPath", "authoritySha256", "catalogId", "generatedHeaderPath", "generatedHeaderSha256") `
         "Build provenance release identity"
     if ($record.releaseIdentity.authorityPath -ne "release.json" -or
         $record.releaseIdentity.generatedHeaderPath -ne "generated/release_identity.generated.h") {
         throw "Build provenance release identity paths are not canonical"
+    }
+    if ($record.releaseIdentity.catalogId -isnot [string] -or
+        $record.releaseIdentity.catalogId -notmatch '^[a-z0-9][a-z0-9-]+$') {
+        throw "Build provenance release identity does not name a well-formed game build"
     }
     $authority = Join-Path $InputRoot $record.releaseIdentity.authorityPath
     $generatedHeader = Join-Path $CacheRoot $record.releaseIdentity.generatedHeaderPath

@@ -13,11 +13,11 @@ This index is for the repository source tree. The binary package intentionally c
 
 ## Maintainers And Release Reviewers
 
-- [Build And Release](BuildAndRelease.md) is the canonical build, test, audit, and package workflow.
+- [Build And Release](BuildAndRelease.md) is the canonical build, test, audit, and package workflow, including the procedure for adding a supported game build.
 - [Current Status](CurrentStatus.md) records supported behavior, blockers, latest verification, and artifact disposition.
 - [In-Game Validation](InGameValidation.md) defines stable manual scenarios, acceptance criteria, and stop conditions.
 - [Architecture](Architecture.md) records durable ownership and lifecycle invariants.
-- [RVA catalog](../src/game/rva_catalog.json) is the machine-readable address and hook inventory.
+- [RVA catalog](../src/game/rva_catalog.json) is the machine-readable inventory of supported game builds, addresses, and hooks. [Architecture](Architecture.md) documents its schema and the per-build generated trees.
 
 ## Reverse Engineering Evidence
 

@@ -16,19 +16,18 @@ function Assert-ReleaseString {
     return [string]$Value
 }
 
-function Get-ReleaseAuthority {
+function Get-ReleaseDocument {
     param([string]$Root)
     $path = Join-Path $Root "release.json"
     if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "release.json is missing" }
     try { $release = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json }
     catch { throw "release.json is malformed: $($_.Exception.Message)" }
     Assert-ReleaseExactProperties $release @(
-        "schema", "product", "version", "platform", "license",
-        "supported_executable_catalog_id", "archive_basename") "Release authority"
-    foreach ($field in @("schema", "product", "version", "platform", "license", "supported_executable_catalog_id", "archive_basename")) {
+        "schema", "product", "version", "platform", "license", "targets") "Release authority"
+    foreach ($field in @("schema", "product", "version", "platform", "license")) {
         $release.$field = Assert-ReleaseString $release.$field "Release authority $field"
     }
-    if ($release.schema -cne "ff7rpianosongs.release.v1") { throw "Unsupported release schema" }
+    if ($release.schema -cne "ff7rpianosongs.release.v2") { throw "Unsupported release schema" }
     if ($release.product -cne "FF7RPianoSongs") { throw "Release product must be FF7RPianoSongs" }
     if ($release.version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') {
         throw "Release version must be a canonical three-part semantic version"
@@ -36,21 +35,78 @@ function Get-ReleaseAuthority {
     if ($release.platform -cne "win64" -or $release.license -cne "MIT") {
         throw "Release platform/license must be win64/MIT"
     }
-    if ($release.supported_executable_catalog_id -notmatch '^[a-z0-9][a-z0-9-]+$') {
-        throw "Release supported executable catalog ID is malformed"
-    }
-    $expectedBasename = "$($release.product)-$($release.version)-$($release.platform)"
-    if ($release.archive_basename -cne $expectedBasename) {
-        throw "Release archive basename must derive from product, version, and platform"
+    if ($release.targets -isnot [System.Object[]]) { throw "Release targets must be an array" }
+    $targets = @($release.targets)
+    if ($targets.Count -eq 0) { throw "Release targets must declare at least one game build" }
+    $seenBuilds = @{}
+    $seenCatalogIds = @{}
+    $seenBasenames = @{}
+    foreach ($target in $targets) {
+        Assert-ReleaseExactProperties $target @(
+            "game_build", "supported_executable_catalog_id", "archive_basename") "Release target"
+        foreach ($field in @("game_build", "supported_executable_catalog_id", "archive_basename")) {
+            $target.$field = Assert-ReleaseString $target.$field "Release target $field"
+        }
+        if ($target.game_build -notmatch '^(0|[1-9][0-9]*)\.[0-9]+$') {
+            throw "Release target game build must be a canonical two-part game version"
+        }
+        if ($target.supported_executable_catalog_id -notmatch '^[a-z0-9][a-z0-9-]+$') {
+            throw "Release supported executable catalog ID is malformed"
+        }
+        $expectedBasename = "$($release.product)-$($release.version)-$($release.platform)-ff7r$($target.game_build)"
+        if ($target.archive_basename -cne $expectedBasename) {
+            throw "Release archive basename must derive from product, version, platform, and game build"
+        }
+        foreach ($unique in @(
+            [pscustomobject]@{ Seen = $seenBuilds; Key = $target.game_build; Description = "game build" },
+            [pscustomobject]@{ Seen = $seenCatalogIds; Key = $target.supported_executable_catalog_id; Description = "executable catalog ID" },
+            [pscustomobject]@{ Seen = $seenBasenames; Key = $target.archive_basename; Description = "archive basename" })) {
+            if ($unique.Seen.ContainsKey($unique.Key)) {
+                throw "Duplicate release target $($unique.Description): $($unique.Key)"
+            }
+            $unique.Seen[$unique.Key] = $true
+        }
     }
     $catalogPath = Join-Path $Root "src/game/rva_catalog.json"
     if (Test-Path -LiteralPath $catalogPath -PathType Leaf) {
         $catalog = Get-Content -LiteralPath $catalogPath -Raw | ConvertFrom-Json
-        if ($catalog.build.id -isnot [string] -or $catalog.build.id -cne $release.supported_executable_catalog_id) {
-            throw "release.json supported executable catalog ID does not match rva_catalog.json"
+        $declared = @(@($catalog.builds) | ForEach-Object { $_.id })
+        foreach ($target in $targets) {
+            if ($declared -cnotcontains $target.supported_executable_catalog_id) {
+                throw "release.json target names a build rva_catalog.json does not declare: $($target.supported_executable_catalog_id)"
+            }
         }
     }
     return $release
+}
+
+function Get-ReleaseAuthority {
+    param([string]$Root, [string]$CatalogId = "")
+    $release = Get-ReleaseDocument $Root
+    $targets = @($release.targets)
+    $selected = if ([string]::IsNullOrEmpty($CatalogId)) {
+        if ($targets.Count -ne 1) {
+            throw "release.json declares $($targets.Count) targets; the packaged executable catalog ID must be named"
+        }
+        $targets[0]
+    }
+    else {
+        $matched = @($targets | Where-Object { $_.supported_executable_catalog_id -ceq $CatalogId })
+        if ($matched.Count -ne 1) {
+            throw "release.json does not declare exactly one target for executable catalog ID: $CatalogId"
+        }
+        $matched[0]
+    }
+    return [pscustomobject][ordered]@{
+        schema = $release.schema
+        product = $release.product
+        version = $release.version
+        platform = $release.platform
+        license = $release.license
+        game_build = $selected.game_build
+        supported_executable_catalog_id = $selected.supported_executable_catalog_id
+        archive_basename = $selected.archive_basename
+    }
 }
 
 function Get-CleanSourceCommit {
@@ -164,9 +220,10 @@ function New-ReleaseArtifacts {
         [string]$AsiPath,
         [string]$ProvenancePath,
         [string]$GeneratedReleaseHeaderPath,
-        [string]$SourceCommit
+        [string]$SourceCommit,
+        [string]$CatalogId = ""
     )
-    $release = Get-ReleaseAuthority $Root
+    $release = Get-ReleaseAuthority $Root $CatalogId
     if ($SourceCommit -notmatch '^[0-9a-f]{40}$') { throw "Release source commit must be a lowercase full Git SHA" }
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
     $archiveName = "$($release.archive_basename).zip"
