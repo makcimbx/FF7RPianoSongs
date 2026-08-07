@@ -18,6 +18,9 @@
 /.release.recovery-validation-*/
 /Music/
 
+# Third-party binaries staged for Nexus upload are not source artifacts.
+/nexus/upload/
+
 # User-authored local songs and their derived caches are not source artifacts.
 /examples/*/
 /examples/**/.cache/

@@ -551,13 +551,13 @@ bool validate_release_document_parity(
             }
         }
     }
-    if (readme.find("https://www.nexusmods.com/finalfantasy7rebirth/mods/4") == std::string::npos
-        || readme.find("FFVIIHook - INI and dev console unlocker") == std::string::npos
+    if (readme.find("https://github.com/ThirteenAG/Ultimate-ASI-Loader") == std::string::npos
+        || readme.find("Ultimate ASI Loader") == std::string::npos
         || readme.find("xinput1_3.dll") == std::string::npos
         || readme.find("Without an ASI loader") == std::string::npos
         || readme.find("If no compatible x64 ASI loader is installed") == std::string::npos
         || readme.find("do not add a second proxy DLL") == std::string::npos) {
-        return fail(error_message, "README omits the required FFVIIHook/ASI-loader dependency");
+        return fail(error_message, "README omits the required Ultimate ASI Loader dependency");
     }
     std::string changelog;
     if (!read_bytes(source_root / "CHANGELOG.md", &changelog)) return fail(error_message, "CHANGELOG.md is unreadable");
