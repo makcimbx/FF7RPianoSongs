@@ -1,488 +1,2697 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "catalog_id": "ff7rpianosongs-rva-catalog",
   "cataloged_on": "2026-08-03",
-  "build": {
-    "id": "ff7rebirth-steam-win64-6a16ced2",
-    "pe_timestamp": "0x6a16ced2",
-    "size_of_image": "0x099d9000",
-    "pe_checksum": "0x0769ea6e",
-    "file_size": 124317952,
-    "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc"
-  },
+  "default_build": "ff7rebirth-steam-win64-6a16ced2",
+  "builds": [
+    {
+      "id": "ff7rebirth-steam-win64-6a16ced2",
+      "game_version": "1.005",
+      "pe_timestamp": "0x6a16ced2",
+      "size_of_image": "0x099d9000",
+      "pe_checksum": "0x0769ea6e",
+      "file_size": 124317952,
+      "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc"
+    }
+  ],
   "addresses": [
     {
-      "id": "piano_menu_list_open", "cpp_symbol": "PianoMenuListOpen", "rva": "0x039b8bf4", "kind": "function", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 77 2f 7b fe", "mask": "xxxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "menu_session_authority", "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "Matching-build evidence establishes the unique complete-instruction open signature, ABI, native state writer, and exact state-5 update return-site filter."}],
-      "hook_spec": {"name": "piano_menu_list_open", "order": 32, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_menu_list_cancel_close", "cpp_symbol": "PianoMenuListCancelClose", "rva": "0x039a1af4", "kind": "function", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 30 00 00 00 e8 80 a0 7c fe", "mask": "xxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "menu_session_authority", "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "Matching-build evidence establishes the unique close signature, ABI, active-to-closing writer, and filtered shared list-close return site."}],
-      "hook_spec": {"name": "piano_menu_list_cancel_close", "order": 33, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_menu_state5_exit", "cpp_symbol": "PianoMenuState5Exit", "rva": "0x039a6254", "kind": "function", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 57 b8 60 00 00 00 e8 1c 59 7c fe", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "menu_session_authority", "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "Matching-build evidence establishes the unique complete-instruction state-5 exit signature and controller ABI."}],
-      "hook_spec": {"name": "piano_menu_state5_exit", "order": 34, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_menu_controller_destructor", "cpp_symbol": "PianoMenuControllerDestructor", "rva": "0x039886cc", "kind": "function", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 20 55 56 57 41 56 41 57 48 8d 6c 24 c9 b8 a0 00 00 00 e8 99 34 7e fe", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "menu_session_authority", "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "Matching-build evidence establishes the unique complete-instruction controller-destructor signature, ABI, and teardown fallback role."}],
-      "hook_spec": {"name": "piano_menu_controller_destructor", "order": 35, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_menu_list_open_call", "cpp_symbol": "PianoMenuListOpenCall", "rva": "0x0399ef1e", "kind": "call_site", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": {"bytes": "e8 d1 9c 01 00", "mask": "xxxxx"}}, "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "The unique matching-build call decodes to the canonical open helper and returns at RVA 0x0399ef23."}], "hook_spec": null
-    },
-    {
-      "id": "piano_menu_list_cancel_close_call", "cpp_symbol": "PianoMenuListCancelCloseCall", "rva": "0x0399f480", "kind": "call_site", "subsystem": "menu_session", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": {"bytes": "e8 6f 26 00 00 84", "mask": "xxxxxx"}}, "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/menu_session_authority.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuSessionEvidence-20260729.md", "detail": "The unique matching-build shared activation/cancel close call decodes to the canonical close helper and returns at RVA 0x0399f485; other close callers remain unowned."}], "hook_spec": null
-    },
-    {
-      "id": "piano_on_setup_item_body", "cpp_symbol": "OnSetupItemBody", "rva": "0x039a8c18", "kind": "function", "subsystem": "list", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 85 d2 0f 84 7c 03 00 00 48 89 5c 24 08 48 89", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "list_patch", "consumers": ["src/game/list_patch.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_on_setup_item_body", "order": 0, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_on_menu_selected_index_changed_body", "cpp_symbol": "OnMenuSelectedIndexChangedBody", "rva": "0x039a84e4", "kind": "function", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "selection", "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_on_menu_selected_index_changed_body", "order": 1, "required_for_release_startup": true}
-    },
-    {
-      "id": "select_index_helper", "cpp_symbol": "SelectIndexHelper", "rva": "0x0398a068", "kind": "function", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "85 d2 0f 88 ee 01 00 00 48 89 5c 24 08 48 89 6c", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "selection", "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "select_index_helper", "order": 2, "required_for_release_startup": true}
-    },
-    {
-      "id": "selected_entry_use", "cpp_symbol": "SelectedEntryUse", "rva": "0x0399e25c", "kind": "function", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 4c 89 44 24 18 55 56 57 48 8b ec", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "selection", "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "selected_entry_use", "order": 3, "required_for_release_startup": true}
-    },
-    {
-      "id": "selected_entry_getter", "cpp_symbol": "SelectedEntryGetter", "rva": "0x039a1208", "kind": "function", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 63 81 80 04 00 00 4c 8b c1 85 c0 78 1c 3b 81", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "selection", "consumers": ["src/game/selection.cpp", "src/game/chart_patch.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "selected_entry_getter", "order": 4, "required_for_release_startup": true}
-    },
-    {
-      "id": "action_state_query", "cpp_symbol": "ActionStateQuery", "rva": "0x010d813c", "kind": "function", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 57 b8 40 00 00 00 e8 34 3a 09 01", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "selection", "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/selection.cpp", "detail": "Matching-build static analysis established bool __fastcall(ActionRef*) ownership semantics and exact primary activation return-site filtering; every detour path calls the original exactly once."}],
-      "hook_spec": {"name": "action_state_query", "order": 31, "required_for_release_startup": true}
-    },
-    {
-      "id": "action_state_query_primary_return", "cpp_symbol": "ActionStateQueryPrimaryReturn", "rva": "0x0399f3f9", "kind": "call_site", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/selection.cpp", "detail": "Matching-build activation analysis identified the primary action-state query return address after the call at RVA 0x0399f3f4; secondary and all unrelated callers remain native."}], "hook_spec": null
-    },
-    {
-      "id": "selected_entry_getter_activation_return", "cpp_symbol": "SelectedEntryGetterActivationReturn", "rva": "0x0399f420", "kind": "call_site", "subsystem": "selection", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/selection.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/selection.cpp", "detail": "Matching-build activation caller has the selected-entry getter call instruction at RVA 0x0399f41b and return address RVA 0x0399f420; only this publication may confirm the primary action reservation generation handoff."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_resolver", "cpp_symbol": "ScoreInfoResolver", "rva": "0x03951d5c", "kind": "function", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 18 9e 81 fe", "mask": "xxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "scoreinfo_overlay", "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "scoreinfo_resolver", "order": 5, "required_for_release_startup": true}
-    },
-    {
-      "id": "note_count", "cpp_symbol": "NoteCount", "rva": "0x039a0744", "kind": "function", "subsystem": "chart", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 55 48 8d ac 24 40 ff ff ff b8 c0", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "note_count", "consumers": ["src/game/note_count.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "note_count", "order": 6, "required_for_release_startup": true}
-    },
-    {
-      "id": "duration_seconds", "cpp_symbol": "DurationSeconds", "rva": "0x00d934e8", "kind": "function", "subsystem": "duration", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8 8e 86 3d 01 48 2b", "mask": "xxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "duration", "consumers": ["src/game/duration.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "duration_seconds", "order": 7, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_score_mode_setup", "cpp_symbol": "PianoScoreModeSetup", "rva": "0x03998360", "kind": "function", "subsystem": "completion", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "duration", "consumers": ["src/game/duration.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_score_mode_setup", "order": 8, "required_for_release_startup": false}
-    },
-    {
-      "id": "piano_completion_timing_init", "cpp_symbol": "PianoCompletionTimingInit", "rva": "0x03999a98", "kind": "function", "subsystem": "completion", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 30 00 00 00 e8 dc 20 7d fe 48 2b e0 48", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "duration", "consumers": ["src/game/duration.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_completion_timing_init", "order": 9, "required_for_release_startup": false}
-    },
-    {
-      "id": "piano_detail_update", "cpp_symbol": "PianoDetailUpdate", "rva": "0x0399a334", "kind": "function", "subsystem": "title", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 10 48 89 70 18 48", "mask": "xxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "title", "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_detail_update", "order": 10, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_title_population", "cpp_symbol": "PianoTitlePopulation", "rva": "0x03966a6c", "kind": "function", "subsystem": "title", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57", "mask": "xxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "title", "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_title_population", "order": 11, "required_for_release_startup": true}
-    },
-    {
-      "id": "title_view_converter", "cpp_symbol": "TitleViewConverter", "rva": "0x00c2d3e4", "kind": "function", "subsystem": "title", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8 92 e7 53 01 48 2b e0 4c 8b ca", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "title", "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "title_view_converter", "order": 12, "required_for_release_startup": false}
-    },
-    {
-      "id": "title_view_converter_activation_return", "cpp_symbol": "TitleViewConverterActivationReturn", "rva": "0x03999ce1", "kind": "call_site", "subsystem": "title", "requirement": "optional",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/title.cpp", "detail": "Matching-build static analysis established this exact title-view converter return address in the active-performance setup caller; the native caller copies the converted out-view synchronously before playback publication."}], "hook_spec": null
-    },
-    {
-      "id": "player_input_input_key", "cpp_symbol": "PlayerInputInputKey", "rva": "0x00e94fc4", "kind": "function", "subsystem": "title", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 6c 24 10 56 57 41 54 41 56", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "title", "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "player_input_input_key", "order": 13, "required_for_release_startup": false}
-    },
-    {
-      "id": "piano_score_expand", "cpp_symbol": "PianoScoreExpand", "rva": "0x039b9104", "kind": "function", "subsystem": "chart", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8 72 2a 7b fe 48 2b e0 8a 02 45", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "note_count", "consumers": ["src/game/note_count.cpp", "src/game/chart_patch.cpp", "src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_score_expand", "order": 14, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_chart_update", "cpp_symbol": "PianoChartUpdate", "rva": "0x039ba628", "kind": "function", "subsystem": "chart", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 50", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "note_count", "consumers": ["src/game/note_count.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_chart_update", "order": 15, "required_for_release_startup": true}
-    },
-    {
-      "id": "score_calculate", "cpp_symbol": "ScoreCalculate", "rva": "0x039917f4", "kind": "function", "subsystem": "progress", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "progress", "consumers": ["src/game/progress.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "score_calculate", "order": 16, "required_for_release_startup": true}
-    },
-    {
-      "id": "end_text_block_set_text", "cpp_symbol": "EndTextBlockSetText", "rva": "0x00afbef8", "kind": "function", "subsystem": "list", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 57 b8 50 00 00 00 e8 78 fc 66 01", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "signature_only", "status": "diagnostic", "hook_owner": null, "consumers": ["src/game/list_patch.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "text_set_text", "order": 17, "required_for_release_startup": false}
-    },
-    {
-      "id": "sqexsead_play_setup", "cpp_symbol": "SeadPlaySetup", "rva": "0x01249a44", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50", "mask": "xxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "sqexsead_play_setup", "order": 18, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_slot_stop", "cpp_symbol": "BgmSlotStop", "rva": "0x012499c0", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes record the Ghidra-confirmed slot Stop RVA; no verification date is asserted."}],
-      "hook_spec": {"name": "bgm_slot_stop", "order": 19, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_playback_transfer", "cpp_symbol": "BgmPlaybackTransfer", "rva": "0x012496ac", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "Supported-build read-only Ghidra and retained runtime evidence establish void __fastcall(dst, src), exact moved-handle adoption into retired playback, source handle zeroing, conditional optional-token transfer, and bounded observation-only lineage correlation; no verification date is asserted."}],
-      "hook_spec": {"name": "bgm_playback_transfer", "order": 30, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_slot_set", "cpp_symbol": "BgmSlotSet", "rva": "0x01249ce0", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8", "mask": "xxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp", "src/game/audio_production_wiring.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "bgm_slot_set", "order": 20, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_slot_play", "cpp_symbol": "BgmSlotPlay", "rva": "0x01249dd8", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 57 b8", "mask": "xxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "bgm_slot_play", "order": 21, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_prepare", "cpp_symbol": "BgmPrepare", "rva": "0x0124848c", "kind": "function", "subsystem": "audio", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes record the Ghidra-confirmed BGM prepare RVA; no verification date is asserted."}],
-      "hook_spec": {"name": "bgm_prepare", "order": 22, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_controller_lookup", "cpp_symbol": "BgmControllerLookup", "rva": "0x01249c84", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8", "mask": "xxxxxx"}},
-      "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The runtime safety contract records this signature-gated current-controller lookup; no verification date is asserted."}],
-      "hook_spec": {"name": "bgm_controller_lookup", "order": 23, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_manager_pause", "cpp_symbol": "BgmManagerPause", "rva": "0x02a78014", "kind": "function", "subsystem": "audio", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 30 00 00 00", "mask": "xxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes classify this as observation-only until matching-slot evidence exists."}],
-      "hook_spec": {"name": "bgm_manager_pause", "order": 24, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_slot_pause_transition", "cpp_symbol": "BgmSlotPauseTransition", "rva": "0x02a78078", "kind": "function", "subsystem": "audio", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 20 00 00 00", "mask": "xxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes classify this pause-like seam as optional and observation-only."}],
-      "hook_spec": {"name": "bgm_slot_pause_transition", "order": 25, "required_for_release_startup": false}
-    },
-    {
-      "id": "bgm_slot_resume_transition", "cpp_symbol": "BgmSlotResumeTransition", "rva": "0x02a77658", "kind": "function", "subsystem": "audio", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 20 00 00 00", "mask": "xxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes classify this resume-like seam as optional and observation-only."}],
-      "hook_spec": {"name": "bgm_slot_resume_transition", "order": 26, "required_for_release_startup": false}
-    },
-    {
-      "id": "piano_audio_state_tick", "cpp_symbol": "PianoAudioStateTick", "rva": "0x00824c64", "kind": "function", "subsystem": "audio", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "diagnostic", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The current runtime safety notes classify this state-machine tick as observation-only after unsafe mutation experiments."}],
-      "hook_spec": {"name": "piano_audio_state_tick", "order": 27, "required_for_release_startup": false}
-    },
-    {
-      "id": "piano_adaptive_judgment", "cpp_symbol": "PianoAdaptiveJudgment", "rva": "0x039a896c", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "audio_sead", "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/hook_specs.cpp", "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."}],
-      "hook_spec": {"name": "piano_adaptive_judgment", "order": 28, "required_for_release_startup": false}
-    },
-    {
-      "id": "progress_lookup", "cpp_symbol": "ProgressLookup", "rva": "0x039a1114", "kind": "function", "subsystem": "progress", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 48 00 00 00 e8 62 aa 7c fe 48 2b e0", "mask": "xxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "progress", "consumers": ["src/game/progress.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/progress.cpp", "detail": "The release progress module already installs this hook with the recorded prologue; no separate verification date is asserted."}],
-      "hook_spec": {"name": "progress_lookup", "order": 29, "required_for_release_startup": true}
-    },
-    {
-      "id": "bgm_slot_setup", "cpp_symbol": "BgmSlotSetup", "rva": "0x0142260c", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 57 b8 30 00 00 00", "mask": "xxxxxxxxxxx"}},
-      "install_policy": "callable", "status": "diagnostic", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "The audio diagnostics signature-gate this helper before use; no separate verification date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "piano_audio_request", "cpp_symbol": "PianoAudioRequest", "rva": "0x00c92160", "kind": "function", "subsystem": "audio", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 54 24 10 b8 68 00 00 00", "mask": "xxxxxxxxxx"}},
-      "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "AGENTS.md", "detail": "The runtime safety contract requires this signature-gated owner request wrapper for same-route replay."}], "hook_spec": null
-    },
-    {
-      "id": "bgm_controller_key_global", "cpp_symbol": "BgmControllerKeyGlobal", "rva": "0x0901b3f0", "kind": "global", "subsystem": "audio", "requirement": "release",
-      "validation": {"policy": "data_reference", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/rvas.h", "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."}], "hook_spec": null
-    },
-    {
-      "id": "piano_audio_global", "cpp_symbol": "PianoAudioGlobal", "rva": "0x08f325b8", "kind": "global", "subsystem": "audio", "requirement": "release",
-      "validation": {"policy": "data_reference", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/rvas.h", "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."}], "hook_spec": null
-    },
-    {
-      "id": "fname_ctor", "cpp_symbol": "FNameCtor", "rva": "0x00b517c4", "kind": "function", "subsystem": "unreal", "requirement": "release",
-      "validation": {"policy": "build_identity", "signature": null}, "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/title.cpp", "src/game/audio_sead.cpp", "src/game/chart_patch.cpp", "src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/rvas.h", "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."}], "hook_spec": null
-    },
-    {
-      "id": "static_construct_object", "cpp_symbol": "StaticConstructObject", "rva": "0x00b1eb58", "kind": "function", "subsystem": "unreal", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 48 89 74", "mask": "xxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "The fail-closed audio diagnostic records this signature and an unresolved lifetime/rollback gap."}], "hook_spec": null
-    },
-    {
-      "id": "create_package", "cpp_symbol": "CreatePackage", "rva": "0x045330d4", "kind": "function", "subsystem": "unreal", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 55 53 56 57 41 54 41", "mask": "xxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "The fail-closed audio diagnostic records this signature and an unresolved construction-detour gap."}], "hook_spec": null
-    },
-    {
-      "id": "sead_descriptor_build", "cpp_symbol": "SeadDescriptorBuild", "rva": "0x007c04fc", "kind": "function", "subsystem": "audio", "requirement": "release",
-      "validation": {"policy": "build_identity", "signature": null}, "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/rvas.h", "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."}], "hook_spec": null
-    },
-    {
-      "id": "sead_onmemory_bank_kind_lookup", "cpp_symbol": "SeadOnMemoryBankKindLookup", "rva": "0x0552cba8", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 cc ef c3 fc 48 2b e0 48", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "callable", "status": "diagnostic", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "Supported-build static Ghidra evidence identifies this self-locking wrapper as a read-only token lookup returning the registry entry kind; runtime use remains optional and exact-signature gated."}], "hook_spec": null
-    },
-    {
-      "id": "sead_onmemory_bank_release", "cpp_symbol": "SeadOnMemoryBankRelease", "rva": "0x007bad3c", "kind": "function", "subsystem": "audio", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 2f 0e 9b 01 48 2b e0 48 8b f9 48 8d 35 ea 88", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}, "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/audio_sead.cpp", "detail": "Static Ghidra provenance and the retained 2026-07-17 runtime session establish copied-token asynchronous release with byte 1 after exact request retirement; runtime use is exact-signature gated and never releases the canonical owner token."}], "hook_spec": null
-    },
-    {
-      "id": "find_child_widget", "cpp_symbol": "FindChildWidget", "rva": "0x0088d34c", "kind": "function", "subsystem": "list", "requirement": "release",
-      "validation": {"policy": "build_identity", "signature": null}, "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/list_patch.cpp"],
-      "evidence": [{"type": "migration_record", "path": "src/game/rvas.h", "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."}], "hook_spec": null
-    },
-    {
-      "id": "set_string_text", "cpp_symbol": "SetStringText", "rva": "0x00e8b948", "kind": "function", "subsystem": "title", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/title.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/title.cpp", "detail": "The title module signature-gates this direct text setter before use; no separate verification date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "rank_text_widget_name_global", "cpp_symbol": "RankTextWidgetNameGlobal", "rva": "0x09010db8", "kind": "global", "subsystem": "list", "requirement": "release",
-      "validation": {"policy": "data_reference", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/list_patch.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/list_patch.cpp", "detail": "The release list item setup uses this executable global to resolve the rank text widget name."}], "hook_spec": null
-    },
-    {
-      "id": "persistent_chart_expand_caller", "cpp_symbol": "PersistentChartExpandCaller", "rva": "0x03999f53", "kind": "call_site", "subsystem": "chart", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/audio_sead.cpp", "src/game/chart_patch.cpp", "src/game/note_count.cpp"],
-      "evidence": [{"type": "repository_documentation", "path": "analysis/ChartRowLimitEvidence.md", "detail": "Documents the parser's 512-row source boundary, dynamic downstream arrays, recovered event ABI and ownership hazards, and the bounded 2026-07-15 diagnostic result; it does not demonstrate a playable bypass."}], "hook_spec": null
-    },
-    {
-      "id": "piano_score_parser", "cpp_symbol": "PianoScoreParser", "rva": "0x039b3608", "kind": "function", "subsystem": "extended_chart", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "ghidra_artifact", "path": "analysis/ChartEventAbiGhidra.txt", "detail": "The retained Ghidra export contains the parser decompilation and references; no analysis date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "piano_event_deep_copy", "cpp_symbol": "PianoEventDeepCopy", "rva": "0x03987624", "kind": "function", "subsystem": "extended_chart", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "ghidra_artifact", "path": "analysis/ChartEventAbiGhidra.txt", "detail": "The retained Ghidra export contains the event deep-copy decompilation and references; no analysis date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "piano_event_construct", "cpp_symbol": "PianoEventConstruct", "rva": "0x03987734", "kind": "function", "subsystem": "extended_chart", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "ghidra_artifact", "path": "analysis/ChartEventAbiGhidra.txt", "detail": "The retained Ghidra export contains the event constructor decompilation and references; no analysis date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "piano_event_link", "cpp_symbol": "PianoEventLink", "rva": "0x0398db4c", "kind": "function", "subsystem": "extended_chart", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 85 d2 74 15 48 89 4a 10 48 8b 41 18 48 89 51", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "ghidra_artifact", "path": "analysis/ChartEventAbiGhidra.txt", "detail": "The retained Ghidra export contains the event-link helper decompilation and references; no analysis date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "piano_event_destruct", "cpp_symbol": "PianoEventDestruct", "rva": "0x03988a04", "kind": "function", "subsystem": "extended_chart", "requirement": "research",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 70 31 7e fe 48 2b e0 48", "mask": "xxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "consumers": ["src/game/extended_chart_runtime_specs.h"],
-      "evidence": [{"type": "ghidra_artifact", "path": "analysis/ChartEventAbiGhidra.txt", "detail": "The retained Ghidra export contains the event destructor decompilation and references; no analysis date is asserted."}], "hook_spec": null
-    },
-    {
-      "id": "progress_lookup_display_caller_0", "cpp_symbol": "ProgressLookupDisplayCaller0", "rva": "0x039670bc", "kind": "call_site", "subsystem": "progress", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/progress.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/progress.cpp", "detail": "The progress detour allowlists this return site for display-only lookup behavior."}], "hook_spec": null
-    },
-    {
-      "id": "progress_lookup_display_caller_1", "cpp_symbol": "ProgressLookupDisplayCaller1", "rva": "0x0398a151", "kind": "call_site", "subsystem": "progress", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/progress.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/progress.cpp", "detail": "The progress detour allowlists this return site for display-only lookup behavior."}], "hook_spec": null
-    },
-    {
-      "id": "progress_lookup_display_caller_2", "cpp_symbol": "ProgressLookupDisplayCaller2", "rva": "0x0399a393", "kind": "call_site", "subsystem": "progress", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/progress.cpp"],
-      "evidence": [{"type": "repository_source", "path": "src/game/progress.cpp", "detail": "The progress detour allowlists this return site for display-only lookup behavior."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_style_setup_return", "cpp_symbol": "ScoreInfoStyleSetupReturn", "rva": "0x039983c9", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/scoreinfo_overlay.cpp", "detail": "Matching-build static analysis established this resolver return in style setup; it publishes the first custom result row and captures immutable result authority."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_detail_return", "cpp_symbol": "ScoreInfoDetailReturn", "rva": "0x0399a384", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/scoreinfo_overlay.cpp", "detail": "Matching-build static analysis established this piano-detail resolver return; it publishes a fresh row and establishes the consumer thread."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_progress_source_return", "cpp_symbol": "ScoreInfoProgressSourceReturn", "rva": "0x039a113b", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/scoreinfo_overlay.cpp", "detail": "Matching-build static analysis established this generic progress-source resolver return inside piano_detail_update; it validates ordering and source authority without publishing a row."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_rank_text_return", "cpp_symbol": "ScoreInfoRankTextReturn", "rva": "0x039a0c79", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/scoreinfo_overlay.cpp", "detail": "Matching-build static analysis established this generic rank-text resolver return inside piano_detail_update; it publishes a fresh immutable row after progress-source validation."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_thresholds_return", "cpp_symbol": "ScoreInfoThresholdsReturn", "rva": "0x039b6625", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "src/game/scoreinfo_overlay.cpp", "detail": "Matching-build static analysis established this threshold consumer return; it publishes the fourth retained row and closes result authority."}], "hook_spec": null
-    },
-    {
-      "id": "scoreinfo_menu_detail_return", "cpp_symbol": "ScoreInfoMenuDetailReturn", "rva": "0x039a8659", "kind": "call_site", "subsystem": "scoreinfo", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": null}, "install_policy": "data_only", "status": "production", "hook_owner": null, "consumers": ["src/game/scoreinfo_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoMenuMetadataEvidence-20260802.md", "detail": "Matching-build selected-index call-chain recovery and runtime correlation establish this return as scoped menu-detail work outside result authority."}], "hook_spec": null
-    },
-    {
-      "id": "game_viewport_client_post_render", "cpp_symbol": "GameViewportClientPostRender", "rva": "0x016ca7e0", "kind": "function", "subsystem": "startup_cache_overlay", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8 96 13 aa 00 48 2b e0 48 8b 01 48 83 c4 28 48 ff a0 28 03 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "optional_hook", "status": "production", "hook_owner": "startup_cache_overlay", "consumers": ["src/game/startup_cache_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md", "detail": "Matching-build static evidence establishes the UGameViewportClient::PostRender ABI, primary vtable slot +0x320, complete prologue, and exact-once original-first detour contract."}],
-      "hook_spec": {"name": "game_viewport_client_post_render", "order": 36, "required_for_release_startup": false}
-    },
-    {
-      "id": "game_viewport_client_draw_post_render_call", "cpp_symbol": "GameViewportClientDrawPostRenderCall", "rva": "0x009ef331", "kind": "call_site", "subsystem": "startup_cache_overlay", "requirement": "optional",
-      "validation": {"policy": "call_site", "signature": {"bytes": "ff 90 20 03 00 00", "mask": "xxxxxx"}},
-      "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/startup_cache_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md", "detail": "Matching-build call-site evidence independently identifies the PostRender virtual call and live DebugCanvasObject argument."}], "hook_spec": null
-    },
-    {
-      "id": "fcanvas_draw_shadowed_string_default_black", "cpp_symbol": "FCanvasDrawShadowedStringDefaultBlack", "rva": "0x05015114", "kind": "function", "subsystem": "startup_cache_overlay", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 56 48 8d ac 24 c0 fe ff ff", "mask": "xxxxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/startup_cache_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md", "detail": "Matching-build static evidence establishes the effective FCanvas text-helper ABI and complete callable signature used only after signature validation."}], "hook_spec": null
-    },
-    {
-      "id": "fcanvas_draw_tile", "cpp_symbol": "FCanvasDrawTile", "rva": "0x05015cdc", "kind": "function", "subsystem": "startup_cache_overlay", "requirement": "optional",
-      "validation": {"policy": "signature", "signature": {"bytes": "40 55 48 8d 6c 24 e9 b8 e0 00 00 00 e8 93 5e 15 fd 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "callable", "status": "production", "hook_owner": null, "consumers": ["src/game/startup_cache_overlay.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md", "detail": "Matching-build first-viewport-call recovery establishes the FCanvas::DrawTile ABI, complete callable signature, null-texture native-white behavior, and alpha-blend semantics."}], "hook_spec": null
-    },
-    {
-      "id": "piano_page_selected_resolve_call", "cpp_symbol": "PianoPageSelectedResolveCall", "rva": "0x039b04f9", "kind": "call_site", "subsystem": "piano_page_selection_guard", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": {"bytes": "e8 fe 44 e8 fc ba 01 00 00 00 48 8b c8 e8 61 9a ed fc 48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "required_hook", "status": "production", "hook_owner": "piano_page_selection_guard", "consumers": ["src/game/piano_page_selection_guard.cpp"],
-      "evidence": [{"type": "runtime_crash", "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md", "detail": "Matching-build static analysis and decisive runtime evidence establish this exact selected weak-resolver call as the single patch site; negative R12D is the native no-selection state."}],
-      "hook_spec": {"name": "piano_page_selected_resolve_call", "order": 37, "required_for_release_startup": true}
-    },
-    {
-      "id": "piano_page_visibility_call", "cpp_symbol": "PianoPageVisibilityCall", "rva": "0x039b0506", "kind": "call_site", "subsystem": "piano_page_selection_guard", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": {"bytes": "e8 61 9a ed fc 48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/piano_page_selection_guard.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md", "detail": "The unchanged visibility call decodes to the cataloged setter and follows the selected resolver sequence."}], "hook_spec": null
-    },
-    {
-      "id": "piano_page_no_selection_continuation", "cpp_symbol": "PianoPageNoSelectionContinuation", "rva": "0x039b050b", "kind": "call_site", "subsystem": "piano_page_selection_guard", "requirement": "release",
-      "validation": {"policy": "call_site", "signature": {"bytes": "48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08", "mask": "xxxxxxxxxxxxxxxxxxxxxx"}}, "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/piano_page_selection_guard.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md", "detail": "Negative selected indices discard the patched-call return and branch here, bypassing both weak resolution and selected visibility mutation."}], "hook_spec": null
-    },
-    {
-      "id": "weak_object_resolver", "cpp_symbol": "WeakObjectResolver", "rva": "0x008349fc", "kind": "function", "subsystem": "piano_page_selection_guard", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "44 8b 49 04 45 33 c0 45 85 c9 74 4f 8b 01 85 c0", "mask": "xxxxxxxxxxxxxxxx"}},
-      "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/piano_page_selection_guard.cpp"],
-      "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md", "detail": "The selected rel32 call decodes exactly to this weak-object resolver; nonnegative selections tail-jump it unchanged."}], "hook_spec": null
-    },
-    {
-      "id": "widget_visibility_setter", "cpp_symbol": "WidgetVisibilitySetter", "rva": "0x00889f6c", "kind": "function", "subsystem": "piano_page_selection_guard", "requirement": "release",
-      "validation": {"policy": "signature", "signature": {"bytes": "b8 28 00 00 00 e8 0a 1c 8e 01 48 2b e0 89 91 3c 01 00 00", "mask": "xxxxxxxxxxxxxxxxxxx"}},
-      "install_policy": "signature_only", "status": "production", "hook_owner": null, "consumers": ["src/game/piano_page_selection_guard.cpp"],
-      "evidence": [{"type": "runtime_crash", "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md", "detail": "Historical and decisive matching-build sessions faulted at RVA 0x00889f79 after null weak resolution; the setter remains unpatched."}], "hook_spec": null
+      "id": "piano_menu_list_open",
+      "cpp_symbol": "PianoMenuListOpen",
+      "kind": "function",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "menu_session_authority",
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_menu_list_open",
+        "order": 32,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b8bf4",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 77 2f 7b fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "Matching-build evidence establishes the unique complete-instruction open signature, ABI, native state writer, and exact state-5 update return-site filter."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_menu_list_cancel_close",
+      "cpp_symbol": "PianoMenuListCancelClose",
+      "kind": "function",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "menu_session_authority",
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_menu_list_cancel_close",
+        "order": 33,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a1af4",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00 e8 80 a0 7c fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "Matching-build evidence establishes the unique close signature, ABI, active-to-closing writer, and filtered shared list-close return site."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_menu_state5_exit",
+      "cpp_symbol": "PianoMenuState5Exit",
+      "kind": "function",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "menu_session_authority",
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_menu_state5_exit",
+        "order": 34,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a6254",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 60 00 00 00 e8 1c 59 7c fe",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "Matching-build evidence establishes the unique complete-instruction state-5 exit signature and controller ABI."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_menu_controller_destructor",
+      "cpp_symbol": "PianoMenuControllerDestructor",
+      "kind": "function",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "menu_session_authority",
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_menu_controller_destructor",
+        "order": 35,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039886cc",
+          "signature": {
+            "bytes": "48 89 5c 24 20 55 56 57 41 56 41 57 48 8d 6c 24 c9 b8 a0 00 00 00 e8 99 34 7e fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "Matching-build evidence establishes the unique complete-instruction controller-destructor signature, ABI, and teardown fallback role."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_menu_list_open_call",
+      "cpp_symbol": "PianoMenuListOpenCall",
+      "kind": "call_site",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399ef1e",
+          "signature": {
+            "bytes": "e8 d1 9c 01 00",
+            "mask": "xxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "The unique matching-build call decodes to the canonical open helper and returns at RVA 0x0399ef23."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_menu_list_cancel_close_call",
+      "cpp_symbol": "PianoMenuListCancelCloseCall",
+      "kind": "call_site",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/menu_session_authority.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399f480",
+          "signature": {
+            "bytes": "e8 6f 26 00 00 84",
+            "mask": "xxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuSessionEvidence-20260729.md",
+              "detail": "The unique matching-build shared activation/cancel close call decodes to the canonical close helper and returns at RVA 0x0399f485; other close callers remain unowned."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_on_setup_item_body",
+      "cpp_symbol": "OnSetupItemBody",
+      "kind": "function",
+      "subsystem": "list",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "list_patch",
+      "consumers": [
+        "src/game/list_patch.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_on_setup_item_body",
+        "order": 0,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a8c18",
+          "signature": {
+            "bytes": "48 85 d2 0f 84 7c 03 00 00 48 89 5c 24 08 48 89",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_on_menu_selected_index_changed_body",
+      "cpp_symbol": "OnMenuSelectedIndexChangedBody",
+      "kind": "function",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "selection",
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_on_menu_selected_index_changed_body",
+        "order": 1,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a84e4",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "select_index_helper",
+      "cpp_symbol": "SelectIndexHelper",
+      "kind": "function",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "selection",
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": {
+        "name": "select_index_helper",
+        "order": 2,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0398a068",
+          "signature": {
+            "bytes": "85 d2 0f 88 ee 01 00 00 48 89 5c 24 08 48 89 6c",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "selected_entry_use",
+      "cpp_symbol": "SelectedEntryUse",
+      "kind": "function",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "selection",
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": {
+        "name": "selected_entry_use",
+        "order": 3,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399e25c",
+          "signature": {
+            "bytes": "48 89 5c 24 10 4c 89 44 24 18 55 56 57 48 8b ec",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "selected_entry_getter",
+      "cpp_symbol": "SelectedEntryGetter",
+      "kind": "function",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "selection",
+      "consumers": [
+        "src/game/selection.cpp",
+        "src/game/chart_patch.cpp"
+      ],
+      "hook_spec": {
+        "name": "selected_entry_getter",
+        "order": 4,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a1208",
+          "signature": {
+            "bytes": "48 63 81 80 04 00 00 4c 8b c1 85 c0 78 1c 3b 81",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "action_state_query",
+      "cpp_symbol": "ActionStateQuery",
+      "kind": "function",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "selection",
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": {
+        "name": "action_state_query",
+        "order": 31,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x010d813c",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 40 00 00 00 e8 34 3a 09 01",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/selection.cpp",
+              "detail": "Matching-build static analysis established bool __fastcall(ActionRef*) ownership semantics and exact primary activation return-site filtering; every detour path calls the original exactly once."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "action_state_query_primary_return",
+      "cpp_symbol": "ActionStateQueryPrimaryReturn",
+      "kind": "call_site",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399f3f9",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/selection.cpp",
+              "detail": "Matching-build activation analysis identified the primary action-state query return address after the call at RVA 0x0399f3f4; secondary and all unrelated callers remain native."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "selected_entry_getter_activation_return",
+      "cpp_symbol": "SelectedEntryGetterActivationReturn",
+      "kind": "call_site",
+      "subsystem": "selection",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/selection.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399f420",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/selection.cpp",
+              "detail": "Matching-build activation caller has the selected-entry getter call instruction at RVA 0x0399f41b and return address RVA 0x0399f420; only this publication may confirm the primary action reservation generation handoff."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_resolver",
+      "cpp_symbol": "ScoreInfoResolver",
+      "kind": "function",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "scoreinfo_overlay",
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": {
+        "name": "scoreinfo_resolver",
+        "order": 5,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03951d5c",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 18 9e 81 fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "note_count",
+      "cpp_symbol": "NoteCount",
+      "kind": "function",
+      "subsystem": "chart",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "note_count",
+      "consumers": [
+        "src/game/note_count.cpp"
+      ],
+      "hook_spec": {
+        "name": "note_count",
+        "order": 6,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a0744",
+          "signature": {
+            "bytes": "48 89 5c 24 08 55 48 8d ac 24 40 ff ff ff b8 c0",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "duration_seconds",
+      "cpp_symbol": "DurationSeconds",
+      "kind": "function",
+      "subsystem": "duration",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "duration",
+      "consumers": [
+        "src/game/duration.cpp"
+      ],
+      "hook_spec": {
+        "name": "duration_seconds",
+        "order": 7,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00d934e8",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 8e 86 3d 01 48 2b",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_score_mode_setup",
+      "cpp_symbol": "PianoScoreModeSetup",
+      "kind": "function",
+      "subsystem": "completion",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "duration",
+      "consumers": [
+        "src/game/duration.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_score_mode_setup",
+        "order": 8,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03998360",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_completion_timing_init",
+      "cpp_symbol": "PianoCompletionTimingInit",
+      "kind": "function",
+      "subsystem": "completion",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "duration",
+      "consumers": [
+        "src/game/duration.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_completion_timing_init",
+        "order": 9,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03999a98",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00 e8 dc 20 7d fe 48 2b e0 48",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_detail_update",
+      "cpp_symbol": "PianoDetailUpdate",
+      "kind": "function",
+      "subsystem": "title",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "title",
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_detail_update",
+        "order": 10,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399a334",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_title_population",
+      "cpp_symbol": "PianoTitlePopulation",
+      "kind": "function",
+      "subsystem": "title",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "title",
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_title_population",
+        "order": 11,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03966a6c",
+          "signature": {
+            "bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57",
+            "mask": "xxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "title_view_converter",
+      "cpp_symbol": "TitleViewConverter",
+      "kind": "function",
+      "subsystem": "title",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "title",
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": {
+        "name": "title_view_converter",
+        "order": 12,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00c2d3e4",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 92 e7 53 01 48 2b e0 4c 8b ca",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "title_view_converter_activation_return",
+      "cpp_symbol": "TitleViewConverterActivationReturn",
+      "kind": "call_site",
+      "subsystem": "title",
+      "requirement": "optional",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03999ce1",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/title.cpp",
+              "detail": "Matching-build static analysis established this exact title-view converter return address in the active-performance setup caller; the native caller copies the converted out-view synchronously before playback publication."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "player_input_input_key",
+      "cpp_symbol": "PlayerInputInputKey",
+      "kind": "function",
+      "subsystem": "title",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "title",
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": {
+        "name": "player_input_input_key",
+        "order": 13,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00e94fc4",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 6c 24 10 56 57 41 54 41 56",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_score_expand",
+      "cpp_symbol": "PianoScoreExpand",
+      "kind": "function",
+      "subsystem": "chart",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "note_count",
+      "consumers": [
+        "src/game/note_count.cpp",
+        "src/game/chart_patch.cpp",
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": {
+        "name": "piano_score_expand",
+        "order": 14,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b9104",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 72 2a 7b fe 48 2b e0 8a 02 45",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_chart_update",
+      "cpp_symbol": "PianoChartUpdate",
+      "kind": "function",
+      "subsystem": "chart",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "note_count",
+      "consumers": [
+        "src/game/note_count.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_chart_update",
+        "order": 15,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039ba628",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 50",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "score_calculate",
+      "cpp_symbol": "ScoreCalculate",
+      "kind": "function",
+      "subsystem": "progress",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "progress",
+      "consumers": [
+        "src/game/progress.cpp"
+      ],
+      "hook_spec": {
+        "name": "score_calculate",
+        "order": 16,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039917f4",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "end_text_block_set_text",
+      "cpp_symbol": "EndTextBlockSetText",
+      "kind": "function",
+      "subsystem": "list",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "diagnostic",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/list_patch.cpp"
+      ],
+      "hook_spec": {
+        "name": "text_set_text",
+        "order": 17,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00afbef8",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 50 00 00 00 e8 78 fc 66 01",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "sqexsead_play_setup",
+      "cpp_symbol": "SeadPlaySetup",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "sqexsead_play_setup",
+        "order": 18,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x01249a44",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50",
+            "mask": "xxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_stop",
+      "cpp_symbol": "BgmSlotStop",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_slot_stop",
+        "order": 19,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x012499c0",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes record the Ghidra-confirmed slot Stop RVA; no verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_playback_transfer",
+      "cpp_symbol": "BgmPlaybackTransfer",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_playback_transfer",
+        "order": 30,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x012496ac",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "Supported-build read-only Ghidra and retained runtime evidence establish void __fastcall(dst, src), exact moved-handle adoption into retired playback, source handle zeroing, conditional optional-token transfer, and bounded observation-only lineage correlation; no verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_set",
+      "cpp_symbol": "BgmSlotSet",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp",
+        "src/game/audio_production_wiring.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_slot_set",
+        "order": 20,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x01249ce0",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8",
+            "mask": "xxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_play",
+      "cpp_symbol": "BgmSlotPlay",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_slot_play",
+        "order": 21,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x01249dd8",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8",
+            "mask": "xxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_prepare",
+      "cpp_symbol": "BgmPrepare",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_prepare",
+        "order": 22,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0124848c",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes record the Ghidra-confirmed BGM prepare RVA; no verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_controller_lookup",
+      "cpp_symbol": "BgmControllerLookup",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_controller_lookup",
+        "order": 23,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x01249c84",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8",
+            "mask": "xxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The runtime safety contract records this signature-gated current-controller lookup; no verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_manager_pause",
+      "cpp_symbol": "BgmManagerPause",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_manager_pause",
+        "order": 24,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x02a78014",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00",
+            "mask": "xxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes classify this as observation-only until matching-slot evidence exists."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_pause_transition",
+      "cpp_symbol": "BgmSlotPauseTransition",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_slot_pause_transition",
+        "order": 25,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x02a78078",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00",
+            "mask": "xxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes classify this pause-like seam as optional and observation-only."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_resume_transition",
+      "cpp_symbol": "BgmSlotResumeTransition",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "bgm_slot_resume_transition",
+        "order": 26,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x02a77658",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00",
+            "mask": "xxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes classify this resume-like seam as optional and observation-only."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_audio_state_tick",
+      "cpp_symbol": "PianoAudioStateTick",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "diagnostic",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_audio_state_tick",
+        "order": 27,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00824c64",
+          "signature": {
+            "bytes": "48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The current runtime safety notes classify this state-machine tick as observation-only after unsafe mutation experiments."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_adaptive_judgment",
+      "cpp_symbol": "PianoAdaptiveJudgment",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "audio_sead",
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_adaptive_judgment",
+        "order": 28,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a896c",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/hook_specs.cpp",
+              "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "progress_lookup",
+      "cpp_symbol": "ProgressLookup",
+      "kind": "function",
+      "subsystem": "progress",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "progress",
+      "consumers": [
+        "src/game/progress.cpp"
+      ],
+      "hook_spec": {
+        "name": "progress_lookup",
+        "order": 29,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a1114",
+          "signature": {
+            "bytes": "b8 48 00 00 00 e8 62 aa 7c fe 48 2b e0",
+            "mask": "xxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/progress.cpp",
+              "detail": "The release progress module already installs this hook with the recorded prologue; no separate verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_slot_setup",
+      "cpp_symbol": "BgmSlotSetup",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "diagnostic",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0142260c",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 30 00 00 00",
+            "mask": "xxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "The audio diagnostics signature-gate this helper before use; no separate verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_audio_request",
+      "cpp_symbol": "PianoAudioRequest",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00c92160",
+          "signature": {
+            "bytes": "48 89 54 24 10 b8 68 00 00 00",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "AGENTS.md",
+              "detail": "The runtime safety contract requires this signature-gated owner request wrapper for same-route replay."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bgm_controller_key_global",
+      "cpp_symbol": "BgmControllerKeyGlobal",
+      "kind": "global",
+      "subsystem": "audio",
+      "requirement": "release",
+      "validation": {
+        "policy": "data_reference"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0901b3f0",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/rvas.h",
+              "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_audio_global",
+      "cpp_symbol": "PianoAudioGlobal",
+      "kind": "global",
+      "subsystem": "audio",
+      "requirement": "release",
+      "validation": {
+        "policy": "data_reference"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x08f325b8",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/rvas.h",
+              "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fname_ctor",
+      "cpp_symbol": "FNameCtor",
+      "kind": "function",
+      "subsystem": "unreal",
+      "requirement": "release",
+      "validation": {
+        "policy": "build_identity"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/title.cpp",
+        "src/game/audio_sead.cpp",
+        "src/game/chart_patch.cpp",
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00b517c4",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/rvas.h",
+              "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "static_construct_object",
+      "cpp_symbol": "StaticConstructObject",
+      "kind": "function",
+      "subsystem": "unreal",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00b1eb58",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74",
+            "mask": "xxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "The fail-closed audio diagnostic records this signature and an unresolved lifetime/rollback gap."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "create_package",
+      "cpp_symbol": "CreatePackage",
+      "kind": "function",
+      "subsystem": "unreal",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x045330d4",
+          "signature": {
+            "bytes": "40 55 53 56 57 41 54 41",
+            "mask": "xxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "The fail-closed audio diagnostic records this signature and an unresolved construction-detour gap."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "sead_descriptor_build",
+      "cpp_symbol": "SeadDescriptorBuild",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "release",
+      "validation": {
+        "policy": "build_identity"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x007c04fc",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/rvas.h",
+              "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "sead_onmemory_bank_kind_lookup",
+      "cpp_symbol": "SeadOnMemoryBankKindLookup",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "diagnostic",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0552cba8",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 cc ef c3 fc 48 2b e0 48",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "Supported-build static Ghidra evidence identifies this self-locking wrapper as a read-only token lookup returning the registry entry kind; runtime use remains optional and exact-signature gated."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "sead_onmemory_bank_release",
+      "cpp_symbol": "SeadOnMemoryBankRelease",
+      "kind": "function",
+      "subsystem": "audio",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x007bad3c",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 2f 0e 9b 01 48 2b e0 48 8b f9 48 8d 35 ea 88",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/audio_sead.cpp",
+              "detail": "Static Ghidra provenance and the retained 2026-07-17 runtime session establish copied-token asynchronous release with byte 1 after exact request retirement; runtime use is exact-signature gated and never releases the canonical owner token."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "find_child_widget",
+      "cpp_symbol": "FindChildWidget",
+      "kind": "function",
+      "subsystem": "list",
+      "requirement": "release",
+      "validation": {
+        "policy": "build_identity"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/list_patch.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0088d34c",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "src/game/rvas.h",
+              "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set_string_text",
+      "cpp_symbol": "SetStringText",
+      "kind": "function",
+      "subsystem": "title",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/title.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00e8b948",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/title.cpp",
+              "detail": "The title module signature-gates this direct text setter before use; no separate verification date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "rank_text_widget_name_global",
+      "cpp_symbol": "RankTextWidgetNameGlobal",
+      "kind": "global",
+      "subsystem": "list",
+      "requirement": "release",
+      "validation": {
+        "policy": "data_reference"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/list_patch.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x09010db8",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/list_patch.cpp",
+              "detail": "The release list item setup uses this executable global to resolve the rank text widget name."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "persistent_chart_expand_caller",
+      "cpp_symbol": "PersistentChartExpandCaller",
+      "kind": "call_site",
+      "subsystem": "chart",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/audio_sead.cpp",
+        "src/game/chart_patch.cpp",
+        "src/game/note_count.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03999f53",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "repository_documentation",
+              "path": "analysis/ChartRowLimitEvidence.md",
+              "detail": "Documents the parser's 512-row source boundary, dynamic downstream arrays, recovered event ABI and ownership hazards, and the bounded 2026-07-15 diagnostic result; it does not demonstrate a playable bypass."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_score_parser",
+      "cpp_symbol": "PianoScoreParser",
+      "kind": "function",
+      "subsystem": "extended_chart",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b3608",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_artifact",
+              "path": "analysis/ChartEventAbiGhidra.txt",
+              "detail": "The retained Ghidra export contains the parser decompilation and references; no analysis date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_event_deep_copy",
+      "cpp_symbol": "PianoEventDeepCopy",
+      "kind": "function",
+      "subsystem": "extended_chart",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03987624",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_artifact",
+              "path": "analysis/ChartEventAbiGhidra.txt",
+              "detail": "The retained Ghidra export contains the event deep-copy decompilation and references; no analysis date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_event_construct",
+      "cpp_symbol": "PianoEventConstruct",
+      "kind": "function",
+      "subsystem": "extended_chart",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03987734",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_artifact",
+              "path": "analysis/ChartEventAbiGhidra.txt",
+              "detail": "The retained Ghidra export contains the event constructor decompilation and references; no analysis date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_event_link",
+      "cpp_symbol": "PianoEventLink",
+      "kind": "function",
+      "subsystem": "extended_chart",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0398db4c",
+          "signature": {
+            "bytes": "48 85 d2 74 15 48 89 4a 10 48 8b 41 18 48 89 51",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_artifact",
+              "path": "analysis/ChartEventAbiGhidra.txt",
+              "detail": "The retained Ghidra export contains the event-link helper decompilation and references; no analysis date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_event_destruct",
+      "cpp_symbol": "PianoEventDestruct",
+      "kind": "function",
+      "subsystem": "extended_chart",
+      "requirement": "research",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/extended_chart_runtime_specs.h"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x03988a04",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 70 31 7e fe 48 2b e0 48",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_artifact",
+              "path": "analysis/ChartEventAbiGhidra.txt",
+              "detail": "The retained Ghidra export contains the event destructor decompilation and references; no analysis date is asserted."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "progress_lookup_display_caller_0",
+      "cpp_symbol": "ProgressLookupDisplayCaller0",
+      "kind": "call_site",
+      "subsystem": "progress",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/progress.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039670bc",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/progress.cpp",
+              "detail": "The progress detour allowlists this return site for display-only lookup behavior."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "progress_lookup_display_caller_1",
+      "cpp_symbol": "ProgressLookupDisplayCaller1",
+      "kind": "call_site",
+      "subsystem": "progress",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/progress.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0398a151",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/progress.cpp",
+              "detail": "The progress detour allowlists this return site for display-only lookup behavior."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "progress_lookup_display_caller_2",
+      "cpp_symbol": "ProgressLookupDisplayCaller2",
+      "kind": "call_site",
+      "subsystem": "progress",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/progress.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399a393",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "repository_source",
+              "path": "src/game/progress.cpp",
+              "detail": "The progress detour allowlists this return site for display-only lookup behavior."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_style_setup_return",
+      "cpp_symbol": "ScoreInfoStyleSetupReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039983c9",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/scoreinfo_overlay.cpp",
+              "detail": "Matching-build static analysis established this resolver return in style setup; it publishes the first custom result row and captures immutable result authority."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_detail_return",
+      "cpp_symbol": "ScoreInfoDetailReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x0399a384",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/scoreinfo_overlay.cpp",
+              "detail": "Matching-build static analysis established this piano-detail resolver return; it publishes a fresh row and establishes the consumer thread."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_progress_source_return",
+      "cpp_symbol": "ScoreInfoProgressSourceReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a113b",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/scoreinfo_overlay.cpp",
+              "detail": "Matching-build static analysis established this generic progress-source resolver return inside piano_detail_update; it validates ordering and source authority without publishing a row."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_rank_text_return",
+      "cpp_symbol": "ScoreInfoRankTextReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a0c79",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/scoreinfo_overlay.cpp",
+              "detail": "Matching-build static analysis established this generic rank-text resolver return inside piano_detail_update; it publishes a fresh immutable row after progress-source validation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_thresholds_return",
+      "cpp_symbol": "ScoreInfoThresholdsReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b6625",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "src/game/scoreinfo_overlay.cpp",
+              "detail": "Matching-build static analysis established this threshold consumer return; it publishes the fourth retained row and closes result authority."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_menu_detail_return",
+      "cpp_symbol": "ScoreInfoMenuDetailReturn",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "data_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/scoreinfo_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a8659",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoMenuMetadataEvidence-20260802.md",
+              "detail": "Matching-build selected-index call-chain recovery and runtime correlation establish this return as scoped menu-detail work outside result authority."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "game_viewport_client_post_render",
+      "cpp_symbol": "GameViewportClientPostRender",
+      "kind": "function",
+      "subsystem": "startup_cache_overlay",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "optional_hook",
+      "status": "production",
+      "hook_owner": "startup_cache_overlay",
+      "consumers": [
+        "src/game/startup_cache_overlay.cpp"
+      ],
+      "hook_spec": {
+        "name": "game_viewport_client_post_render",
+        "order": 36,
+        "required_for_release_startup": false
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x016ca7e0",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 96 13 aa 00 48 2b e0 48 8b 01 48 83 c4 28 48 ff a0 28 03 00 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
+              "detail": "Matching-build static evidence establishes the UGameViewportClient::PostRender ABI, primary vtable slot +0x320, complete prologue, and exact-once original-first detour contract."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "game_viewport_client_draw_post_render_call",
+      "cpp_symbol": "GameViewportClientDrawPostRenderCall",
+      "kind": "call_site",
+      "subsystem": "startup_cache_overlay",
+      "requirement": "optional",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/startup_cache_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x009ef331",
+          "signature": {
+            "bytes": "ff 90 20 03 00 00",
+            "mask": "xxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
+              "detail": "Matching-build call-site evidence independently identifies the PostRender virtual call and live DebugCanvasObject argument."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fcanvas_draw_shadowed_string_default_black",
+      "cpp_symbol": "FCanvasDrawShadowedStringDefaultBlack",
+      "kind": "function",
+      "subsystem": "startup_cache_overlay",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/startup_cache_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x05015114",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 56 48 8d ac 24 c0 fe ff ff",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
+              "detail": "Matching-build static evidence establishes the effective FCanvas text-helper ABI and complete callable signature used only after signature validation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "fcanvas_draw_tile",
+      "cpp_symbol": "FCanvasDrawTile",
+      "kind": "function",
+      "subsystem": "startup_cache_overlay",
+      "requirement": "optional",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/startup_cache_overlay.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x05015cdc",
+          "signature": {
+            "bytes": "40 55 48 8d 6c 24 e9 b8 e0 00 00 00 e8 93 5e 15 fd 48 2b e0",
+            "mask": "xxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
+              "detail": "Matching-build first-viewport-call recovery establishes the FCanvas::DrawTile ABI, complete callable signature, null-texture native-white behavior, and alpha-blend semantics."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_page_selected_resolve_call",
+      "cpp_symbol": "PianoPageSelectedResolveCall",
+      "kind": "call_site",
+      "subsystem": "piano_page_selection_guard",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "piano_page_selection_guard",
+      "consumers": [
+        "src/game/piano_page_selection_guard.cpp"
+      ],
+      "hook_spec": {
+        "name": "piano_page_selected_resolve_call",
+        "order": 37,
+        "required_for_release_startup": true
+      },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b04f9",
+          "signature": {
+            "bytes": "e8 fe 44 e8 fc ba 01 00 00 00 48 8b c8 e8 61 9a ed fc 48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "runtime_crash",
+              "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
+              "detail": "Matching-build static analysis and decisive runtime evidence establish this exact selected weak-resolver call as the single patch site; negative R12D is the native no-selection state."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_page_visibility_call",
+      "cpp_symbol": "PianoPageVisibilityCall",
+      "kind": "call_site",
+      "subsystem": "piano_page_selection_guard",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/piano_page_selection_guard.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b0506",
+          "signature": {
+            "bytes": "e8 61 9a ed fc 48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
+              "detail": "The unchanged visibility call decodes to the cataloged setter and follows the selected resolver sequence."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "piano_page_no_selection_continuation",
+      "cpp_symbol": "PianoPageNoSelectionContinuation",
+      "kind": "call_site",
+      "subsystem": "piano_page_selection_guard",
+      "requirement": "release",
+      "validation": {
+        "policy": "call_site"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/piano_page_selection_guard.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b050b",
+          "signature": {
+            "bytes": "48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
+              "detail": "Negative selected indices discard the patched-call return and branch here, bypassing both weak resolution and selected visibility mutation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "weak_object_resolver",
+      "cpp_symbol": "WeakObjectResolver",
+      "kind": "function",
+      "subsystem": "piano_page_selection_guard",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/piano_page_selection_guard.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x008349fc",
+          "signature": {
+            "bytes": "44 8b 49 04 45 33 c0 45 85 c9 74 4f 8b 01 85 c0",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
+              "detail": "The selected rel32 call decodes exactly to this weak-object resolver; nonnegative selections tail-jump it unchanged."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "widget_visibility_setter",
+      "cpp_symbol": "WidgetVisibilitySetter",
+      "kind": "function",
+      "subsystem": "piano_page_selection_guard",
+      "requirement": "release",
+      "validation": {
+        "policy": "signature"
+      },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": [
+        "src/game/piano_page_selection_guard.cpp"
+      ],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x00889f6c",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 0a 1c 8e 01 48 2b e0 89 91 3c 01 00 00",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "runtime_crash",
+              "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
+              "detail": "Historical and decisive matching-build sessions faulted at RVA 0x00889f79 after null weak resolution; the setter remains unpatched."
+            }
+          ]
+        }
+      }
     }
   ],
   "locators": [
@@ -499,8 +2708,18 @@
         "displacement_offset": "0x02",
         "instruction_size": "0x06"
       },
-      "candidate_adjustments": ["0x00", "0x24", "0x20", "0x10", "0x30"],
-      "consumers": ["src/game/list_patch.cpp", "src/game/chart_patch.cpp", "src/game/uobject_identity.cpp"],
+      "candidate_adjustments": [
+        "0x00",
+        "0x24",
+        "0x20",
+        "0x10",
+        "0x30"
+      ],
+      "consumers": [
+        "src/game/list_patch.cpp",
+        "src/game/chart_patch.cpp",
+        "src/game/uobject_identity.cpp"
+      ],
       "evidence": [
         {
           "type": "migration_record",

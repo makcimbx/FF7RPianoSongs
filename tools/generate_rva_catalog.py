@@ -15,23 +15,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG_PATH = ROOT / "src/game/rva_catalog.json"
-OUTPUT_PATHS = (
-    Path("src/game/generated/rvas.generated.h"),
-    Path("src/game/generated/hook_specs.generated.inc"),
-    Path("src/game/generated/rva_signatures.generated.inc"),
-    Path("src/core/generated/build_identity.generated.h"),
-    Path("src/game/generated/runtime_locator_specs.generated.inc"),
-)
 
-TOP_LEVEL_KEYS = {"schema_version", "catalog_id", "cataloged_on", "build", "addresses", "locators"}
+TOP_LEVEL_KEYS = {
+    "schema_version", "catalog_id", "cataloged_on", "default_build", "builds", "addresses", "locators",
+}
 BUILD_KEYS = {
-    "id", "pe_timestamp", "size_of_image", "pe_checksum", "file_size", "sha256"
+    "id", "game_version", "pe_timestamp", "size_of_image", "pe_checksum", "file_size", "sha256"
 }
 ADDRESS_KEYS = {
-    "id", "cpp_symbol", "rva", "kind", "subsystem", "requirement", "validation",
-    "install_policy", "status", "hook_owner", "consumers", "evidence", "hook_spec",
+    "id", "cpp_symbol", "kind", "subsystem", "requirement", "validation",
+    "install_policy", "status", "hook_owner", "consumers", "hook_spec", "builds",
 }
-VALIDATION_KEYS = {"policy", "signature"}
+ADDRESS_BUILD_KEYS = {"rva", "signature", "evidence"}
+VALIDATION_KEYS = {"policy"}
 SIGNATURE_KEYS = {"bytes", "mask"}
 EVIDENCE_KEYS = {"type", "path", "detail"}
 HOOK_SPEC_KEYS = {"name", "order", "required_for_release_startup"}
@@ -252,14 +248,45 @@ def validate_locators(raw_locators: object, root: Path) -> list[dict]:
     return parsed
 
 
+def validate_builds(raw_builds: object) -> tuple[list[dict], dict[str, int]]:
+    if not isinstance(raw_builds, list) or not raw_builds:
+        raise CatalogError("builds must be a non-empty array")
+    ids: set[str] = set()
+    parsed: list[dict] = []
+    image_size_by_build: dict[str, int] = {}
+    for index, raw_build in enumerate(raw_builds):
+        context = f"builds[{index}]"
+        build = require_keys(raw_build, BUILD_KEYS, context)
+        identifier = build["id"]
+        if not isinstance(identifier, str) or not re.fullmatch(r"ff7rebirth-[a-z0-9-]+", identifier):
+            raise CatalogError(f"{context}.id is invalid")
+        if identifier in ids:
+            raise CatalogError(f"{context}.id duplicates an existing build id")
+        if not isinstance(build["game_version"], str) or not re.fullmatch(r"[0-9]+\.[0-9]+", build["game_version"]):
+            raise CatalogError(f"{context}.game_version is invalid")
+        timestamp = parse_hex(build["pe_timestamp"], f"{context}.pe_timestamp", 32)
+        image_size = parse_hex(build["size_of_image"], f"{context}.size_of_image", 32)
+        checksum = parse_hex(build["pe_checksum"], f"{context}.pe_checksum", 32)
+        if timestamp == 0 or image_size < 0x100000 or checksum == 0:
+            raise CatalogError(f"{context} PE identity fields are not plausible")
+        if not isinstance(build["file_size"], int) or isinstance(build["file_size"], bool) or build["file_size"] <= 0:
+            raise CatalogError(f"{context}.file_size must be a positive integer")
+        if not isinstance(build["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", build["sha256"]):
+            raise CatalogError(f"{context}.sha256 must be a lowercase SHA-256 digest")
+        ids.add(identifier)
+        image_size_by_build[identifier] = image_size
+        parsed.append(build)
+    return parsed, image_size_by_build
+
+
 def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
     try:
         catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise CatalogError(f"cannot read {CATALOG_PATH}: {error}") from error
     require_keys(catalog, TOP_LEVEL_KEYS, "catalog")
-    if catalog["schema_version"] != 2:
-        raise CatalogError("schema_version must be 2")
+    if catalog["schema_version"] != 3:
+        raise CatalogError("schema_version must be 3")
     if catalog["catalog_id"] != "ff7rpianosongs-rva-catalog":
         raise CatalogError("catalog_id is not canonical")
     if not isinstance(catalog["cataloged_on"], str) or not re.fullmatch(
@@ -267,25 +294,17 @@ def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
     ):
         raise CatalogError("cataloged_on must be an ISO date")
 
-    build = require_keys(catalog["build"], BUILD_KEYS, "build")
-    if not isinstance(build["id"], str) or not re.fullmatch(r"ff7rebirth-[a-z0-9-]+", build["id"]):
-        raise CatalogError("build.id is invalid")
-    timestamp = parse_hex(build["pe_timestamp"], "build.pe_timestamp", 32)
-    image_size = parse_hex(build["size_of_image"], "build.size_of_image", 32)
-    checksum = parse_hex(build["pe_checksum"], "build.pe_checksum", 32)
-    if timestamp == 0 or image_size < 0x100000 or checksum == 0:
-        raise CatalogError("build PE identity fields are not plausible")
-    if not isinstance(build["file_size"], int) or isinstance(build["file_size"], bool) or build["file_size"] <= 0:
-        raise CatalogError("build.file_size must be a positive integer")
-    if not isinstance(build["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", build["sha256"]):
-        raise CatalogError("build.sha256 must be a lowercase SHA-256 digest")
+    builds, image_size_by_build = validate_builds(catalog["builds"])
+    build_ids = set(image_size_by_build)
+    if not isinstance(catalog["default_build"], str) or catalog["default_build"] not in build_ids:
+        raise CatalogError("default_build must reference a declared build id")
 
     addresses = catalog["addresses"]
     if not isinstance(addresses, list) or not addresses:
         raise CatalogError("addresses must be a non-empty array")
     ids: set[str] = set()
     symbols: set[str] = set()
-    rvas: set[int] = set()
+    rvas_by_build: dict[str, set[int]] = {build_id: set() for build_id in build_ids}
     hook_names: set[str] = set()
     hook_orders: list[int] = []
     parsed: list[dict] = []
@@ -298,14 +317,10 @@ def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
             raise CatalogError(f"{context}.id is invalid")
         if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z][A-Za-z0-9]*", symbol):
             raise CatalogError(f"{context}.cpp_symbol is invalid")
-        rva = parse_hex(entry["rva"], f"{context}.rva")
-        if rva == 0 or rva >= image_size:
-            raise CatalogError(f"{context}.rva is outside the executable image")
-        if identifier in ids or symbol in symbols or rva in rvas:
-            raise CatalogError(f"{context} duplicates an id, C++ symbol, or RVA")
+        if identifier in ids or symbol in symbols:
+            raise CatalogError(f"{context} duplicates an id or C++ symbol")
         ids.add(identifier)
         symbols.add(symbol)
-        rvas.add(rva)
         for field, allowed in (
             ("kind", ALLOWED_KINDS), ("requirement", ALLOWED_REQUIREMENTS),
             ("install_policy", ALLOWED_INSTALL_POLICIES), ("status", ALLOWED_STATUSES),
@@ -320,22 +335,14 @@ def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
         ):
             raise CatalogError(f"{context}.hook_owner is invalid")
         validate_repository_paths(entry["consumers"], f"{context}.consumers", ROOT)
-        validate_evidence(entry["evidence"], f"{context}.evidence", ROOT)
 
         validation = require_keys(entry["validation"], VALIDATION_KEYS, f"{context}.validation")
         if validation["policy"] not in ALLOWED_VALIDATION_POLICIES:
             raise CatalogError(f"{context}.validation.policy is invalid")
-        signature = parse_signature(validation["signature"], f"{context}.validation.signature")
-        if validation["policy"] == "signature" and signature is None:
-            raise CatalogError(f"{context} requires a signature")
-        if identifier in REQUIRED_SIGNATURE_IDS and signature is None:
-            raise CatalogError(f"{context} is missing its required centralized signature")
 
         hook_spec = entry["hook_spec"]
         if hook_spec is not None:
             hook = require_keys(hook_spec, HOOK_SPEC_KEYS, f"{context}.hook_spec")
-            if signature is None:
-                raise CatalogError(f"{context}.hook_spec requires a signature")
             if not isinstance(hook["name"], str) or not re.fullmatch(r"[a-z][a-z0-9_]*", hook["name"]):
                 raise CatalogError(f"{context}.hook_spec.name is invalid")
             if hook["name"] in hook_names:
@@ -347,15 +354,52 @@ def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
             hook_names.add(hook["name"])
             hook_orders.append(hook["order"])
 
-        validate_install_relationships(entry, hook_spec, signature, context)
-        parsed.append({**entry, "rva_value": rva, "signature_value": signature})
+        raw_builds_for_entry = entry["builds"]
+        if not isinstance(raw_builds_for_entry, dict) or not raw_builds_for_entry:
+            raise CatalogError(f"{context}.builds must be a non-empty object naming at least one declared build")
+        if entry["requirement"] == "release" and set(raw_builds_for_entry) != build_ids:
+            raise CatalogError(f"{context} is release and must have a value in every declared build")
+
+        entry_builds: dict[str, dict] = {}
+        for build_id, raw_build_entry in raw_builds_for_entry.items():
+            build_context = f"{context}.builds.{build_id}"
+            if build_id not in build_ids:
+                raise CatalogError(f"{build_context} references an undeclared build id")
+            build_entry = require_keys(raw_build_entry, ADDRESS_BUILD_KEYS, build_context)
+            rva = parse_hex(build_entry["rva"], f"{build_context}.rva")
+            if rva == 0 or rva >= image_size_by_build[build_id]:
+                raise CatalogError(f"{build_context}.rva is outside the executable image")
+            if rva in rvas_by_build[build_id]:
+                raise CatalogError(f"{build_context} duplicates an RVA already used in build {build_id}")
+            rvas_by_build[build_id].add(rva)
+
+            signature = parse_signature(build_entry["signature"], f"{build_context}.signature")
+            if validation["policy"] == "signature" and signature is None:
+                raise CatalogError(f"{build_context} requires a signature")
+            if identifier in REQUIRED_SIGNATURE_IDS and signature is None:
+                raise CatalogError(f"{build_context} is missing its required centralized signature")
+            if hook_spec is not None and signature is None:
+                raise CatalogError(f"{build_context}.hook_spec requires a signature")
+
+            evidence = validate_evidence(build_entry["evidence"], f"{build_context}.evidence", ROOT)
+            validate_install_relationships(entry, hook_spec, signature, build_context)
+
+            entry_builds[build_id] = {
+                "rva": build_entry["rva"],
+                "rva_value": rva,
+                "signature": build_entry["signature"],
+                "signature_value": signature,
+                "evidence": evidence,
+            }
+
+        parsed.append({**entry, "builds": entry_builds})
 
     if not parsed or not hook_orders:
         raise CatalogError("addresses and hook specifications must not be empty")
     if sorted(hook_orders) != list(range(len(hook_orders))):
         raise CatalogError("hook_spec.order values must be contiguous from zero")
     validate_consumer_references(parsed)
-    validate_source_literals(parsed, image_size)
+    validate_source_literals(parsed, max(image_size_by_build.values()))
     locators = validate_locators(catalog["locators"], ROOT)
     return catalog, parsed, locators
 
@@ -387,7 +431,10 @@ def validate_consumer_references(entries: list[dict]) -> None:
 
 
 def validate_source_literals(entries: list[dict], image_size: int) -> None:
-    by_rva = {entry["rva_value"]: entry["id"] for entry in entries}
+    by_rva: dict[int, str] = {}
+    for entry in entries:
+        for build_data in entry["builds"].values():
+            by_rva[build_data["rva_value"]] = entry["id"]
     literal_pattern = re.compile(r"0x[0-9a-fA-F]+(?:[uUlL]*)")
     ownership_pattern = re.compile(r"(?:rva|address|caller|exe_base|exe_module|module_base)", re.IGNORECASE)
     failures: list[str] = []
@@ -416,24 +463,33 @@ def format_uintptrs(values: list[int]) -> str:
     return ", ".join(f"0x{value:02x}" for value in values)
 
 
-def render_rvas(entries: list[dict]) -> bytes:
+def render_rvas(entries: list[dict], build_id: str) -> bytes:
     lines = [
         "// Generated by tools/generate_rva_catalog.py from src/game/rva_catalog.json. Do not edit.",
         "#pragma once", "", "#include <cstdint>", "",
         "namespace ff7r::piano::game::rva {", "",
     ]
     for entry in entries:
-        lines.append(f"inline constexpr uintptr_t {entry['cpp_symbol']} = {entry['rva']};")
+        build_data = entry["builds"].get(build_id)
+        if build_data is None:
+            lines.append(
+                f"inline constexpr uintptr_t {entry['cpp_symbol']} = 0x0; // absent in build {build_id}"
+            )
+        else:
+            lines.append(f"inline constexpr uintptr_t {entry['cpp_symbol']} = {build_data['rva']};")
     lines.extend(["", "} // namespace ff7r::piano::game::rva", ""])
     return "\n".join(lines).encode("ascii")
 
 
-def render_hook_specs(entries: list[dict]) -> bytes:
-    hooks = sorted((entry for entry in entries if entry["hook_spec"]), key=lambda item: item["hook_spec"]["order"])
+def render_hook_specs(entries: list[dict], build_id: str) -> bytes:
+    hooks = sorted(
+        (entry for entry in entries if entry["hook_spec"] and build_id in entry["builds"]),
+        key=lambda item: item["hook_spec"]["order"],
+    )
     lines = ["// Generated by tools/generate_rva_catalog.py from src/game/rva_catalog.json. Do not edit."]
     for entry in hooks:
         hook = entry["hook_spec"]
-        values, _ = entry["signature_value"]
+        values, _ = entry["builds"][build_id]["signature_value"]
         required = "true" if hook["required_for_release_startup"] else "false"
         lines.append(f"// hook-spec: {hook['name']} required_for_release_startup={required}")
         lines.append(
@@ -443,12 +499,13 @@ def render_hook_specs(entries: list[dict]) -> bytes:
     return "\n".join(lines).encode("ascii")
 
 
-def render_rva_signatures(entries: list[dict]) -> bytes:
+def render_rva_signatures(entries: list[dict], build_id: str) -> bytes:
     lines = ["// Generated by tools/generate_rva_catalog.py from src/game/rva_catalog.json. Do not edit."]
     for entry in entries:
-        if entry["signature_value"] is None:
+        build_data = entry["builds"].get(build_id)
+        if build_data is None or build_data["signature_value"] is None:
             continue
-        values, _ = entry["signature_value"]
+        values, _ = build_data["signature_value"]
         lines.append(
             f"{{\"{entry['id']}\", rva::{entry['cpp_symbol']}, {{{format_bytes(values)}}}}},"
         )
@@ -501,16 +558,31 @@ def render_runtime_locator_specs(locators: list[dict]) -> bytes:
     return "\n".join(lines).encode("ascii")
 
 
+def build_output_paths(build_id: str) -> tuple[Path, ...]:
+    base = Path("src/generated") / build_id
+    return (
+        base / "game/generated/rvas.generated.h",
+        base / "game/generated/hook_specs.generated.inc",
+        base / "game/generated/rva_signatures.generated.inc",
+        base / "core/generated/build_identity.generated.h",
+        base / "game/generated/runtime_locator_specs.generated.inc",
+    )
+
+
 def generated_outputs(catalog: dict, entries: list[dict], locators: list[dict]) -> dict[Path, bytes]:
     catalog_sha256 = hashlib.sha256(CATALOG_PATH.read_bytes()).hexdigest()
     generator_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-    return {
-        OUTPUT_PATHS[0]: render_rvas(entries),
-        OUTPUT_PATHS[1]: render_hook_specs(entries),
-        OUTPUT_PATHS[2]: render_rva_signatures(entries),
-        OUTPUT_PATHS[3]: render_build_identity(catalog["build"], catalog_sha256, generator_sha256),
-        OUTPUT_PATHS[4]: render_runtime_locator_specs(locators),
-    }
+    locator_specs = render_runtime_locator_specs(locators)
+    outputs: dict[Path, bytes] = {}
+    for build in catalog["builds"]:
+        build_id = build["id"]
+        paths = build_output_paths(build_id)
+        outputs[paths[0]] = render_rvas(entries, build_id)
+        outputs[paths[1]] = render_hook_specs(entries, build_id)
+        outputs[paths[2]] = render_rva_signatures(entries, build_id)
+        outputs[paths[3]] = render_build_identity(build, catalog_sha256, generator_sha256)
+        outputs[paths[4]] = locator_specs
+    return outputs
 
 
 def write_outputs(root: Path, outputs: dict[Path, bytes]) -> None:
@@ -548,8 +620,8 @@ def compare_outputs(outputs: dict[Path, bytes], temp_root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--write", action="store_true", help="write tracked generated artifacts")
-    mode.add_argument("--check", action="store_true", help="validate and byte-compare tracked artifacts")
+    mode.add_argument("--write", action="store_true", help="write tracked generated artifacts for every build")
+    mode.add_argument("--check", action="store_true", help="validate and byte-compare tracked artifacts for every build")
     parser.add_argument("--temp-dir", type=Path, help="deterministic comparison directory for --check")
     args = parser.parse_args()
     if args.temp_dir and not args.check:
@@ -569,9 +641,10 @@ def main() -> int:
             1 for entry in entries
             if entry["hook_spec"] and entry["hook_spec"]["required_for_release_startup"]
         )
+        build_ids = ",".join(build["id"] for build in catalog["builds"])
         print(
-            f"rva catalog {action}: schema=2 addresses={len(entries)} locators={len(locators)} hooks={hook_count} "
-            f"required={required_count} optional={hook_count - required_count} build={catalog['build']['id']}"
+            f"rva catalog {action}: schema=3 addresses={len(entries)} locators={len(locators)} hooks={hook_count} "
+            f"required={required_count} optional={hook_count - required_count} builds={build_ids}"
         )
         return 0
     except CatalogError as error:
