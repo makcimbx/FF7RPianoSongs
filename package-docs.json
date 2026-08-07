@@ -1,0 +1,26 @@
+{
+  "schema": "ff7rpianosongs.package-docs.v2",
+  "documents": [
+    { "role": "entrypoint", "distribution": "package", "source": "README.md", "destination": "README.md" },
+    { "role": "first-party-license", "distribution": "package", "source": "LICENSE", "destination": "LICENSE" },
+    { "role": "third-party-notices", "distribution": "package", "source": "THIRD_PARTY_NOTICES.md", "destination": "THIRD_PARTY_NOTICES.md" },
+    { "role": "song-format", "distribution": "package", "source": "docs/SongFormat.md", "destination": "docs/SongFormat.md" },
+    { "role": "changelog", "distribution": "package", "source": "CHANGELOG.md", "destination": "CHANGELOG.md" },
+    { "role": "in-game-validation", "distribution": "repository", "source": "docs/InGameValidation.md" },
+    { "role": "release-status", "distribution": "repository", "source": "docs/CurrentStatus.md" },
+    { "role": "docs-index", "distribution": "repository", "source": "docs/README.md" },
+    { "role": "architecture", "distribution": "repository", "source": "docs/Architecture.md" },
+    { "role": "build-release", "distribution": "repository", "source": "docs/BuildAndRelease.md" },
+    { "role": "hca-criteria", "distribution": "repository", "source": "docs/HcaValidation.md" },
+    { "role": "midi-methodology", "distribution": "repository", "source": "docs/MidiGeneration.md" },
+    { "role": "chart-limits", "distribution": "repository", "source": "docs/ChartLimits.md" },
+    { "role": "analysis-index", "distribution": "repository", "source": "analysis/README.md" },
+    { "role": "audio-lifecycle-evidence", "distribution": "repository", "source": "analysis/AudioLifecycleEvidence-202607.md" },
+    { "role": "midi-calibration-evidence", "distribution": "repository", "source": "analysis/MidiDifficultyCalibration-v38-20260714.md" },
+    { "role": "chart-row-limit-evidence", "distribution": "repository", "source": "analysis/ChartRowLimitEvidence.md" },
+    { "role": "cache-optimization-evidence", "distribution": "repository", "source": "analysis/ProductionCacheOptimization-v38-20260715.md" },
+    { "role": "adaptive-mabf-evidence", "distribution": "repository", "source": "analysis/AdaptiveMabfModeEvidence.md" },
+    { "role": "chart-event-abi-evidence", "distribution": "repository", "source": "analysis/ChartEventAbiGhidra.txt" },
+    { "role": "developer-tools", "distribution": "repository", "source": "tools/README.md" }
+  ]
+}

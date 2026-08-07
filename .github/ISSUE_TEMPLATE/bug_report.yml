@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible FF7RPianoSongs problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: FF7RPianoSongs version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: executable
+    attributes:
+      label: Executable/catalog identity
+      description: Provide the catalog ID or the unsupported-build message, not a game installation path.
+      placeholder: ff7rebirth-steam-win64-6a16ced2
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the selected song, profile, cache state, and exact actions.
+    validations:
+      required: true
+  - type: textarea
+    id: song
+    attributes:
+      label: Song and cache details
+      description: State audio/MIDI formats, whether the cache was regenerated, and whether the issue reproduces with a minimal lawful input. Do not upload copyrighted music without permission.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized log excerpt
+      description: Remove usernames, private paths, unrelated file names, tokens, and other personal data. Include only the bounded lines needed for this reproduction.
+      render: text
+    validations:
+      required: true

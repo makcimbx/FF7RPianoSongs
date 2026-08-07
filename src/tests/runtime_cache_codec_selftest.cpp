@@ -1,0 +1,312 @@
+#include "pipeline/cache.h"
+#include "pipeline/chart_compiler.h"
+#include "pipeline/runtime_cache_codec.h"
+
+#include <array>
+#include <cstdint>
+#include <iostream>
+#include <span>
+#include <string>
+#include <vector>
+
+namespace {
+
+using namespace ff7rp::pipeline;
+
+constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '3'};
+constexpr std::uint32_t kFormat = 13;
+
+bool expect(const bool condition, const char* message) {
+    if (!condition) std::cerr << message << '\n';
+    return condition;
+}
+
+LoadedSong representative_song() {
+    LoadedSong song;
+    song.id = "unicode-codec";
+    song.cache_key = 0x123456789abcdef0ull;
+    song.accepted_chart_input_limit = 512;
+    song.published_chart_row_limit = 512;
+    song.chart_policy_identity = "disabled";
+    song.manifest_digest = 0x9988776655443322ull;
+    song.audio.sample_rate = 48000;
+    song.audio.channels = 2;
+    song.audio.source_frame_count = 96000;
+    song.mabf_metadata.logical_source_frames = song.audio.source_frame_count;
+    song.mabf_metadata.digest = 7;
+    song.mabf_metadata.byte_count = 4096;
+    song.mabf_metadata.hca_frame_count = 94;
+    song.mabf_metadata.sample_rate = 48000;
+    song.mabf_metadata.channels = 2;
+    song.mabf_metadata.block_size = 1024;
+    song.metronome_first_beat_seconds = -1.0;
+    song.metronome_last_beat_seconds = -1.0;
+    song.config.schema = "ff7rpianosongs.song.v2";
+    song.config.title = "Codec 星 café";
+    song.config.bpm = 120.0;
+    song.config.difficulty = 3;
+    song.config.notes_provided = true;
+    song.config.notes = {{0.0, 1.0, "C4", "和音"}, {1.5, 2.0, "E4", ""}};
+    if (!compile_chart(song.config, &song.chart).ok()) return {};
+    LoadedDifficultyProfile profile;
+    profile.config = song.config;
+    profile.chart = song.chart;
+    profile.diagnostics.selected_actions = 2;
+    profile.diagnostics.candidate_actions = 5;
+    profile.diagnostics.maximum_window_actions = {1, 2, 3, 4, 5};
+    profile.diagnostics.maximum_window_begin_seconds = {0.1, 0.2, 0.3, 0.4, 0.5};
+    profile.diagnostics.joint_strain_p95 = 0.75;
+    profile.diagnostics.dominant_skill = 2;
+    profile.diagnostics.satisfied_route = 1;
+    profile.diagnostics.dominant_skill_is_global = true;
+    profile.diagnostics.satisfied_route_name = "route-右";
+    profile.diagnostics.exposure_decision = "publish";
+    profile.diagnostics.exposure_reason = "理由";
+    song.difficulty_profiles.push_back(std::move(profile));
+    return song;
+}
+
+DifficultyProfileDiagnostics comprehensive_diagnostics(const std::size_t base) {
+    DifficultyProfileDiagnostics value;
+    std::size_t size_value = base;
+#define SET_SIZE(field) value.field = ++size_value
+    SET_SIZE(selected_actions); SET_SIZE(candidate_actions); SET_SIZE(candidate_frames);
+    SET_SIZE(protected_baseline_actions); SET_SIZE(target_rows); SET_SIZE(target_minimum_rows);
+    SET_SIZE(target_maximum_rows); SET_SIZE(target_exclusions); SET_SIZE(local_skill_rejections);
+    SET_SIZE(retained_actions); SET_SIZE(removed_actions); SET_SIZE(replaced_actions); SET_SIZE(added_actions);
+    SET_SIZE(scheduled_rows); SET_SIZE(scheduled_conflicts); SET_SIZE(dropped_actions);
+    SET_SIZE(lead_in_rejections); SET_SIZE(audio_duration_rejections); SET_SIZE(strain_rejections);
+    for (std::size_t& field : value.maximum_window_actions) field = ++size_value;
+    SET_SIZE(maximum_quarter_second_stream_actions); SET_SIZE(maximum_half_second_stream_actions);
+    SET_SIZE(maximum_jack_run); SET_SIZE(maximum_reversal_run);
+    SET_SIZE(maximum_octave_movements_in_five_seconds); SET_SIZE(maximum_large_reversals_in_five_seconds);
+#undef SET_SIZE
+    double double_value = static_cast<double>(base) + 0.125;
+#define SET_DOUBLE(field) value.field = double_value; double_value += 0.125
+    SET_DOUBLE(joint_strain_p95); SET_DOUBLE(joint_strain_peak);
+    for (double& field : value.maximum_window_begin_seconds) { field = double_value; double_value += 0.125; }
+    SET_DOUBLE(maximum_quarter_second_stream_duration); SET_DOUBLE(maximum_quarter_second_stream_begin_seconds);
+    SET_DOUBLE(maximum_half_second_stream_duration); SET_DOUBLE(maximum_half_second_stream_begin_seconds);
+    SET_DOUBLE(maximum_jack_begin_seconds); SET_DOUBLE(maximum_reversal_begin_seconds);
+    SET_DOUBLE(rapid_movement_p90); SET_DOUBLE(rapid_movement_maximum); SET_DOUBLE(octave_movement_rate);
+    SET_DOUBLE(maximum_octave_window_begin_seconds); SET_DOUBLE(maximum_large_reversal_window_begin_seconds);
+    SET_DOUBLE(right_fatigue_peak); SET_DOUBLE(right_fatigue_peak_seconds); SET_DOUBLE(left_fatigue_peak);
+    SET_DOUBLE(left_fatigue_peak_seconds); SET_DOUBLE(hand_imbalance); SET_DOUBLE(rhythm_irregularity_p90);
+    SET_DOUBLE(rhythm_irregularity_maximum); SET_DOUBLE(rhythm_irregularity_peak_seconds);
+    SET_DOUBLE(hardest_window_begin_seconds); SET_DOUBLE(hardest_window_end_seconds); SET_DOUBLE(overlap_ratio);
+    SET_DOUBLE(maximum_quarter_second_stream_actions_end_seconds);
+    SET_DOUBLE(maximum_quarter_second_stream_duration_begin_seconds);
+    SET_DOUBLE(maximum_quarter_second_stream_duration_end_seconds);
+    SET_DOUBLE(maximum_half_second_stream_actions_end_seconds);
+    SET_DOUBLE(maximum_half_second_stream_duration_begin_seconds);
+    SET_DOUBLE(maximum_half_second_stream_duration_end_seconds);
+    SET_DOUBLE(rapid_movement_maximum_seconds); SET_DOUBLE(satisfied_route_ratio); SET_DOUBLE(satisfied_route_margin);
+#undef SET_DOUBLE
+    value.dominant_skill = static_cast<int>(base + 301);
+    value.satisfied_route = static_cast<int>(base + 302);
+    value.satisfied_route_name = "route-" + std::to_string(base);
+    value.exposure_decision = "decision-" + std::to_string(base);
+    value.exposure_reason = "reason-" + std::to_string(base);
+    // Across bases 100/500/900, persisted flag signatures are respectively
+    // complete=101, row_limit_exceeded=011, nested_from_previous=110, global=001.
+    value.complete = base == 100 || base == 900;
+    value.row_limit_exceeded = base == 500 || base == 900;
+    value.nested_from_previous = base == 100 || base == 500;
+    value.dominant_skill_is_global = base == 900;
+    return value;
+}
+
+LoadedSong comprehensive_oracle_song() {
+    LoadedSong song;
+    song.id = "oracle-comprehensive";
+    song.cache_key = 0x123456789abcdef0ull;
+    song.accepted_chart_input_limit = 512;
+    song.published_chart_row_limit = 512;
+    song.chart_policy_identity = "disabled";
+    song.manifest_digest = 0x9988776655443322ull;
+    song.audio.sample_rate = 48000;
+    song.audio.channels = 2;
+    song.audio.source_frame_count = 96000;
+    song.mabf_metadata.logical_source_frames = 96000;
+    song.mabf_metadata.digest = 7;
+    song.mabf_metadata.byte_count = 4096;
+    song.mabf_metadata.hca_frame_count = 94;
+    song.mabf_metadata.sample_rate = 48000;
+    song.mabf_metadata.channels = 2;
+    song.mabf_metadata.block_size = 1024;
+    song.metronome_first_beat_seconds = -1.0;
+    song.metronome_last_beat_seconds = -1.0;
+    song.config.schema = "ff7rpianosongs.song.v2";
+    song.config.title = "Oracle comprehensive";
+    song.config.bpm = 120.0;
+    song.config.difficulty = 3;
+    song.config.notes_provided = true;
+    song.config.notes = {{0.0, 1.0, "C4", "a"}, {1.5, 2.0, "E4", "b"}};
+    if (!compile_chart(song.config, &song.chart).ok()) return {};
+    LoadedDifficultyProfile profile;
+    profile.config = song.config;
+    profile.chart = song.chart;
+    profile.diagnostics = comprehensive_diagnostics(100);
+    song.difficulty_profiles.push_back(std::move(profile));
+    DifficultyProfileOmission omission;
+    omission.difficulty = 4;
+    omission.desired_rows = 77;
+    omission.reason = "oracle-omission";
+    omission.diagnostics = comprehensive_diagnostics(500);
+    omission.witness_notes = {{2.5, 1.25, "G4", "witness"}};
+    song.difficulty_profile_omissions.push_back(std::move(omission));
+    return song;
+}
+
+LoadedSong diagnostic_tail_oracle_song() {
+    LoadedSong song = comprehensive_oracle_song();
+    song.id = "oracle-tail";
+    song.cache_key = 0xfedcba9876543210ull;
+    song.accepted_chart_input_limit = 1024;
+    song.chart_policy_enabled = true;
+    song.chart_policy_generation = 9;
+    song.chart_policy_identity = "chart_rows=native512+diagnostic1024;extended=verified";
+    song.difficulty_profile_omissions.clear();
+    SongConfig source = song.config;
+    source.title = "Oracle tail";
+    source.diagnostic_extended_chart_fixture = true;
+    source.notes.clear();
+    for (std::size_t index = 0; index < 520; ++index) {
+        source.notes.push_back({static_cast<double>(index), 1.0, index % 2 ? "D4" : "C4",
+            "tail-" + std::to_string(index)});
+    }
+    DiagnosticChartRetention diagnostic;
+    if (!compile_chart(source, &song.chart, &diagnostic, 520).ok()) return {};
+    source.notes.resize(512);
+    song.config = source;
+    song.difficulty_profiles.clear();
+    LoadedDifficultyProfile profile;
+    profile.config = source;
+    profile.chart = song.chart;
+    profile.diagnostics = comprehensive_diagnostics(900);
+    profile.diagnostic_chart = std::move(diagnostic);
+    profile.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
+        song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+    song.difficulty_profiles.push_back(std::move(profile));
+    return song;
+}
+
+bool expect_parent_oracle(
+    const LoadedSong& song,
+    const std::size_t expected_size,
+    const std::uint64_t expected_hash,
+    const char* name) {
+    std::vector<std::uint8_t> bytes;
+    if (!expect(encode_runtime_cache(song, kMagic, kFormat, &bytes), "parent-oracle fixture did not encode")) return false;
+    const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
+    if (bytes.size() != expected_size || hash != expected_hash) {
+        std::cerr << name << " parent oracle changed: bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
+        return false;
+    }
+    LoadedSong decoded;
+    decoded.id = song.id;
+    decoded.cache_key = song.cache_key;
+    decoded.accepted_chart_input_limit = song.accepted_chart_input_limit;
+    decoded.published_chart_row_limit = song.published_chart_row_limit;
+    decoded.chart_policy_enabled = song.chart_policy_enabled;
+    decoded.chart_policy_generation = song.chart_policy_generation;
+    decoded.chart_policy_identity = song.chart_policy_identity;
+    decoded.config = song.config;
+    std::vector<std::uint8_t> round_trip;
+    return expect(decode_runtime_cache(bytes, kMagic, kFormat, &decoded), "parent-oracle fixture did not decode") &&
+        expect(encode_runtime_cache(decoded, kMagic, kFormat, &round_trip), "parent-oracle round-trip did not encode") &&
+        expect(round_trip == bytes, "parent-oracle round-trip bytes changed");
+}
+
+} // namespace
+
+int main() {
+    // Oracle derivation: an archive of parent 24ce7710af2595ca39ad89928381f052f4688c33 was
+    // built in a private temporary workspace. A test-only wrapper called the
+    // parent's internal write_runtime_cache for these exact value constructors, then hashed
+    // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2380u, 0x5ada3b1213dd62abull, "comprehensive") ||
+        !expect_parent_oracle(diagnostic_tail_oracle_song(), 104682u, 0xe63478ac0b3c1900ull, "diagnostic tail")) return 1;
+
+    const LoadedSong source = representative_song();
+    std::vector<std::uint8_t> bytes;
+    if (!expect(!source.id.empty(), "representative chart setup failed") ||
+        !expect(encode_runtime_cache(source, kMagic, kFormat, &bytes), "encode failed")) return 1;
+
+    const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
+    if (!expect(bytes.size() == 1572u, "encoded byte count changed") ||
+        !expect(hash == 0x22e27f9dfb2a2584ull, "encoded byte fixture changed")) {
+        std::cerr << "actual bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
+        return 1;
+    }
+
+    LoadedSong decoded;
+    decoded.id = source.id;
+    decoded.cache_key = source.cache_key;
+    decoded.accepted_chart_input_limit = source.accepted_chart_input_limit;
+    decoded.published_chart_row_limit = source.published_chart_row_limit;
+    decoded.chart_policy_identity = source.chart_policy_identity;
+    decoded.config = source.config;
+    if (!expect(decode_runtime_cache(bytes, kMagic, kFormat, &decoded), "round-trip decode failed") ||
+        !expect(decoded.config.title == source.config.title && decoded.config.notes[0].chord_id == source.config.notes[0].chord_id,
+            "Unicode fields changed") ||
+        !expect(decoded.difficulty_profiles.size() == 1u &&
+            decoded.difficulty_profiles[0].diagnostics.maximum_window_actions[4] == 5u &&
+            decoded.difficulty_profiles[0].diagnostics.satisfied_route_name == "route-右",
+            "profile diagnostics changed") ||
+        !expect(!decoded.difficulty_profiles[0].diagnostic_chart.present(), "diagnostic retention state changed")) return 1;
+
+    const auto rejects_without_publication = [&](std::vector<std::uint8_t> candidate, const char* message) {
+        LoadedSong destination = decoded;
+        destination.config.title = "sentinel";
+        const bool rejected = !decode_runtime_cache(candidate, kMagic, kFormat, &destination);
+        return expect(rejected && destination.config.title == "sentinel", message);
+    };
+    std::vector<std::uint8_t> truncated = bytes;
+    truncated.resize(24u);
+    std::vector<std::uint8_t> truncated_envelope = bytes;
+    truncated_envelope.resize(39u);
+    std::vector<std::uint8_t> truncated_payload = bytes;
+    truncated_payload.resize(bytes.size() - 16u);
+    std::vector<std::uint8_t> trailing = bytes;
+    trailing.push_back(0);
+    std::vector<std::uint8_t> corrupt = bytes;
+    corrupt[24] ^= 1u;
+    std::array<char, 8> wrong_magic{'B', 'A', 'D', 'M', 'A', 'G', 'I', 'C'};
+    LoadedSong wrong_identity = decoded;
+    wrong_identity.cache_key ^= 1u;
+    if (!rejects_without_publication(std::move(truncated), "truncation was accepted or partially published") ||
+        !rejects_without_publication(std::move(truncated_envelope), "truncated envelope was accepted") ||
+        !rejects_without_publication(std::move(truncated_payload), "truncated payload was accepted") ||
+        !rejects_without_publication(std::move(trailing), "trailing bytes were accepted or partially published") ||
+        !rejects_without_publication(std::move(corrupt), "corruption was accepted or partially published") ||
+        !expect(!decode_runtime_cache(bytes, wrong_magic, kFormat, &wrong_identity), "wrong magic was accepted") ||
+        !expect(!decode_runtime_cache(bytes, kMagic, kFormat + 1u, &wrong_identity), "wrong version was accepted")) return 1;
+
+    wrong_identity = decoded;
+    wrong_identity.cache_key ^= 1u;
+    if (!expect(!decode_runtime_cache(bytes, kMagic, kFormat, &wrong_identity), "cache identity mismatch was accepted")) return 1;
+
+    const auto encoded_rejects = [&](LoadedSong candidate, const char* message) {
+        std::vector<std::uint8_t> invalid_bytes;
+        if (!encode_runtime_cache(candidate, kMagic, kFormat, &invalid_bytes)) return expect(false, "invalid fixture did not encode");
+        LoadedSong destination = decoded;
+        return expect(!decode_runtime_cache(invalid_bytes, kMagic, kFormat, &destination), message);
+    };
+    LoadedSong invalid_semantics = source;
+    invalid_semantics.config.title.clear();
+    invalid_semantics.difficulty_profiles[0].config.title.clear();
+    LoadedSong invalid_enum = source;
+    invalid_enum.chart.notes[0].note_type = 99;
+    invalid_enum.difficulty_profiles[0].chart.notes[0].note_type = 99;
+    LoadedSong invalid_count = source;
+    invalid_count.config.notes.resize(8193u, source.config.notes.front());
+    invalid_count.difficulty_profiles[0].config.notes = invalid_count.config.notes;
+    LoadedSong invalid_length = source;
+    invalid_length.config.title.assign((1u << 20u) + 1u, 'x');
+    if (!encoded_rejects(std::move(invalid_semantics), "invalid semantic payload was accepted") ||
+        !encoded_rejects(std::move(invalid_enum), "invalid chart enum was accepted") ||
+        !expect(!encode_runtime_cache(invalid_count, kMagic, kFormat, &bytes), "invalid note count was encoded") ||
+        !expect(!encode_runtime_cache(invalid_length, kMagic, kFormat, &bytes), "oversized string was encoded")) return 1;
+    return 0;
+}

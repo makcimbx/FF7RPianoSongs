@@ -1,0 +1,47 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-validation:
+    runs-on: windows-2022
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build Release
+        shell: pwsh
+        run: ./build.ps1 -Configuration Release
+
+      - name: Validate RVA catalog
+        shell: pwsh
+        run: ./tools/check_rva_catalog.ps1
+
+      - name: Run CTest
+        shell: pwsh
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Audit source
+        shell: pwsh
+        run: ./build/Release/release_audit_tool.exe .
+
+      - name: Stage deterministic package
+        shell: pwsh
+        run: ./package_dist.ps1 -Configuration Release -SkipBuild
+
+      - name: Audit staged documentation
+        shell: pwsh
+        run: ./build/Release/release_audit_tool.exe . --staged-docs ./package

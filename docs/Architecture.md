@@ -1,0 +1,81 @@
+# Architecture
+
+## Data Flow
+
+```text
+song folder
+  -> pipeline discovery and strict parsing
+  -> audio decode/normalization/HCA/MABF cache + explicit or MIDI chart profiles
+  -> immutable SongDescriptor registry
+  -> game hooks and descriptor-backed list/selection/chart/audio integration
+```
+
+The offline pipeline completes validation before a descriptor is visible to runtime code. Runtime consumers do not parse user files or infer missing cache state.
+
+## Module Ownership
+
+- `src/core/` owns generic logging, configuration, memory/PE helpers, and hook infrastructure. It does not own song semantics.
+- `src/pipeline/` owns user-file discovery, strict schema validation, audio/chart generation, cache identity, and publication of validated descriptors. It does not read or write game memory.
+- `src/game/` owns executable-version gating, addresses, hook installation, native object identity, UI/list/selection/chart integration, and audio lifecycle interaction.
+- Generated directories under `src/` contain derived source inputs. Generated files are outputs, not a second hand-edited source of truth.
+- `src/tests/` owns offline validation and release-audit enforcement; tests do not establish in-game proof.
+
+## Address Ownership
+
+[rva_catalog.json](../src/game/rva_catalog.json) is the machine-readable source of supported executable identity, RVAs, signatures, hook declarations, and required/optional classification. Generated hook/address source is derived from that catalog. Documentation must not duplicate its current counts.
+
+Any required timestamp, signature, or prologue mismatch fails closed. Optional behavior may be omitted only when its owning feature explicitly supports safe degradation.
+
+## Publication Invariants
+
+- Invalid folders, schemas, audio, charts, caches, and generated profiles are rejected before registry publication.
+- Runtime behavior is descriptor-driven; parallel ad-hoc song state is not authoritative.
+- Selected-index detail rendering owns one thread-local descriptor/profile scope around the exact native callback, including explicit profile refresh. Title, duration, note count, and the cataloged menu-detail ScoreInfo caller consume this scope first; playback is consulted only when no menu scope exists. Temporary ScoreInfo rows are retained by the outer scope and released when that callback returns.
+- Cache reuse requires matching source identity, semantic configuration, generated profile data, format metadata, and structural validation.
+- Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
+- Diagnostic input acceptance does not imply playable runtime publication.
+- Failure never publishes a partial descriptor or partially replaces the active package directory.
+- Release hooks install against an explicit empty custom catalog. Discovery exposes stable non-owning views of each newly contiguous lexical settlement delta only for the synchronous callback lifetime. Startup admits descriptors once and offers every increased fully validated prefix. If the unchanged final prefix follows a recoverable publication rejection, it receives exactly one final publication retry from the retained immutable descriptor/sidecar candidate without source I/O, sidecar reconstruction, or allocation; invalid-only settlement does not republish an already accepted descriptor identity. Each admitted song owns one immutable shared sidecar node linked to the prior prefix, so snapshots are O(1), prior MABF data is never reread or reallocated, and aggregate sidecar preparation is O(N).
+- Progressive composition centralizes the already-enforced piano-list bound of 128 total rows (five vanilla plus at most 123 custom rows). This is an existing runtime safety bound, not a new recovered layout or address claim; exceeding it fails composition while retaining any earlier accepted catalog.
+- Pending catalogs are adopted only by the game thread at the exact pre-open boundary after callback, menu, selection, playback, list, audio, and registry quiescence are revalidated. List tuple, owner, sidecar, and registry publication is one failure-atomic transaction; an already open list or playback retains its previous catalog identity. Registry state generation guards the quiescent transaction and mutable selection/profile/playback state, while a separate monotonic catalog revision plus immutable storage identity owns list coherence and changes only when storage is replaced.
+- Exact menu-open admission is evaluated before catalog adoption. Unrelated calls and recoverable callback-admission failure forward the native original exactly once without product bookkeeping or mutation; authoritative terminal failure takes precedence and remains suppressed because an unverified native tuple rollback makes forwarding unsafe. For admitted callbacks, the authoritative adoption result governs catalog behavior: `Adopted`, `NoPending`, and recoverable `Blocked` all forward exactly once. `Blocked` retains the pending catalog and opens the unchanged active catalog (including the initial vanilla/empty-custom state) without waiting, polling, replay, deferred input, or catalog mutation. A later quiescent open may adopt that pending catalog.
+
+## Lifecycle Invariants
+
+- Hook callbacks validate executable identity, native object identity, ownership generations, and pointer readability before use.
+- Runtime registry snapshots outlive callbacks that can observe them.
+- Piano-list activity is owned by a monotonic menu-session generation. Open, shared close, state exit, and controller destruction form one mandatory hook transaction; stale generations cannot submit profile input, refresh UI, or claim activation ownership.
+- Profile-direction input is sampled as explicit held facts per keyboard, PlayerInput, WindowProc, RawInput/HID, async-gamepad, and XInput provider. A merged direction emits only its aggregate released-to-held edge and rearms only after aggregate release, so overlapping reports for one physical hold cannot submit multiple profile changes. Authoritative focus loss, application deactivation, device removal, and teardown clear all event-backed PlayerInput, WindowProc-key, and RawInput/HID facts; sampled keyboard, async-gamepad, and XInput facts remain independent. Native forwarding, opposite-direction policy, callback admission, and missing-provider fallback remain unchanged.
+- Cache-overlay `Ready` means discovery and artifact preparation are fully settled. It does not mean that the loader thread mutated game objects or the active registry. Rendering consumes one fixed-size O(1) startup snapshot and does not scan repository or catalog storage.
+- Catalog adoption continues to emit already-computed prepared, deferred, and adopted count events through a startup-owned process-lifetime observer for internal readiness state. The startup overlay never renders active/current-menu counts, adoption/deferred state, count transitions, or reopen guidance. During Loading it shows processed/total and ready counts and uses typed stage plus active-worker facts to distinguish ordinary cache validation from actual rebuilding. Repository settlement produces one bounded `Piano songs ready` notice and then hides on the cosmetic deadline regardless of adoption or menu lifecycle.
+- During Loading, `ready on reopen` is the count accepted into a pending immutable prefix. A menu that is already open, and any playback started from it, retain their prior catalog identity until the existing quiescent pre-open transaction adopts a newer prefix.
+- A confirmed selection handoff crosses the shared activation/cancel close only when the menu session, list widget, registry selection, BGM controller, and optional canonical-substrate identities remain exact. Unowned closes revoke, while accepted activation closes preserve a single generation-bound transfer.
+- Persistent chart expansion claims that preserved transfer once using the validated caller, controller-owned wrapper, and immutable selection identity. Duplicate or stale claims reject without revoking the valid owner; every pre-admission failure performs an exact generation-bound thaw.
+- Chart planning, admission, the restoration journal, playback publication, title, and note-count consumers retain owning snapshots from the same registry storage instead of reopening raw registry views mid-transaction.
+- The runtime sidecar catalog retains its registry snapshot for the catalog lifetime. Admission proves exact catalog storage, song, profile, and profile index before chart or audio mutation.
+- Production PlaySetup, Set, Play, and Stop forwarding execute through one wiring authority that owns exact argument tuples, exact-once dispatch, callback/TLS restoration, lifecycle leasing, and the recursive operation boundary. Route and borrower decisions remain in the audio coordinator.
+- Audio shutdown is an explicit fail-closed phase transaction. Cleanup readiness is the only failure that reopens admission; disable, drain, aggregate rollback, restore/release, or publication failure retains authority and cannot publish successful state clearing.
+- Native audio state transitions are requested through verified native paths; arbitrary owner-memory replay is not a supported recovery strategy.
+- A retained canonical substrate may qualify the one-use list-return reset lineage either through the authenticated changed-request rebase or through exact unchanged-request continuity. The unchanged path requires the same live controller, slot, BGM, sound pointer and UObject identity, state 4, clear aggregate/cleanup/quarantine ownership, and the exact lease-cleared canonical-relinquishment successor (`proof generation N` to idle unowned `reset generation N+1`); changed requests still require a valid authenticated reset lease and lifecycle lineage. Both paths also require lifecycle admission, canonical-only token ownership, and unchanged bridge/source/list-exit identity. Qualification commits only reset route/lease/lifecycle lineage and one revocation epoch; it does not release ownership, reset route state, clear failure latches, free tokens/backing, or invoke native audio operations.
+- Install rollback is serialized against callbacks. Process detach does not perform blocking hook teardown under the loader lock.
+- The piano-page negative-selection guard owns exactly the selected weak-resolver CALL declared by the RVA catalog. It installs while callback admission is closed through an exact-signature, target-decoded, protection-restoring rel32 transaction. Negative native no-index values bypass weak resolution and selected visibility mutation at the cataloged continuation; nonnegative values tail-call the original resolver unchanged. The process-lifetime relay is retained whenever a live or uncertain instruction may reference it and is not subject to live teardown.
+- Disabled trampoline ownership can remain for process lifetime when delayed pre-entry callbacks may still reach originals.
+- Runtime ownership is process-bound and attach-only. Live same-process ASI teardown, unload, or reload is unsupported; normal shutdown relies on process exit rather than attempting to retire hooks, callbacks, native objects, or SQEXSEAD state while the host remains alive.
+- Audio resources are released and reacquired through validated native operations before replacement; same-pointer shortcuts cannot be assumed to rebuild state.
+
+## Runtime Observability
+
+- Production diagnostics are part of the runtime support contract. Retain bounded, event-driven markers that identify admission, route, bridge, cleanup, token ownership, release, readiness, and rollback failures without requiring a replacement diagnostic build.
+- State-machine failures should report a stable stage/outcome and the first failed predicate. Include only the generation, identity, ownership, and provenance needed to correlate the event safely.
+- Diagnostic capture must reuse already-computed facts, remain fixed and bounded, and never change control flow or repeat native reads. Formatting and logging occur only after native mutation authority and protected locks are released.
+- Per-frame repetition, duplicate snapshots, and unbounded raw dumps are not durable observability. Remove or rate-limit those while preserving high-signal transition and failure markers.
+
+## Durable Boundaries
+
+Current reverse-engineering outcomes and unresolved lifecycle work belong in [Current Status](CurrentStatus.md) and the [analysis index](../analysis/README.md), not here. Defaults belong in source configuration and user contracts. Build targets and tests belong in CMake/CTest and release-audit output.
+
+The descriptor catalog also owns the retained `GUObjectArray` locator contract.
+Its existing first-match byte pattern, rel32 decode, and ordered candidate
+adjustments were migrated from `runtime_layouts.h` on 2026-07-16. Consumers in
+list, chart, and UObject-identity code use that generated descriptor; they do
+not carry independent locator policy.

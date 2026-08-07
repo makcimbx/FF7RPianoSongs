@@ -1,0 +1,68 @@
+#pragma once
+
+#include <cstddef>
+#include <string>
+#include <tuple>
+#include <vector>
+
+#include "song_types.h"
+
+namespace ff7rp::pipeline {
+
+struct MidiSourceIdentity {
+    int tick = 0;
+    int end_tick = 0;
+    int pitch = 0;
+    int velocity = 0;
+    int track = 0;
+    int channel = 0;
+    std::size_t ordinal = 0;
+
+    bool operator<(const MidiSourceIdentity& other) const {
+        return std::tie(tick, end_tick, pitch, velocity, track, channel, ordinal) <
+            std::tie(other.tick, other.end_tick, other.pitch, other.velocity,
+                other.track, other.channel, other.ordinal);
+    }
+
+    bool operator==(const MidiSourceIdentity& other) const {
+        return std::tie(tick, end_tick, pitch, velocity, track, channel, ordinal) ==
+            std::tie(other.tick, other.end_tick, other.pitch, other.velocity,
+                other.track, other.channel, other.ordinal);
+    }
+};
+
+struct NormalizedMidiNoteEvent {
+    MidiSourceIdentity source;
+    double start = 0.0;
+    double end = 0.0;
+    double beat = 0.0;
+    double stream_prior = 0.5;
+};
+
+struct MidiTempoChange {
+    int tick = 0;
+    double bpm = 120.0;
+    int track = 0;
+    int ordinal = 0;
+};
+
+struct MidiMeterChange {
+    int tick = 0;
+    int numerator = 4;
+    int denominator = 4;
+    int track = 0;
+    int ordinal = 0;
+    bool explicit_event = false;
+};
+
+struct NormalizedMidiSource {
+    int ticks_per_quarter = 0;
+    double source_bpm = 120.0;
+    std::vector<MidiTempoChange> tempos;
+    std::vector<MidiMeterChange> meters;
+    std::vector<NormalizedMidiNoteEvent> notes;
+};
+
+Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_source);
+
+} // namespace ff7rp::pipeline

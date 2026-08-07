@@ -1,0 +1,30 @@
+# Analysis Evidence Index
+
+Files in this directory are dated engineering evidence, not user contracts. Durable behavior belongs in `docs/`; mutable implementation and release status belongs in [Current Status](../docs/CurrentStatus.md).
+
+## Evidence Retention Policy
+
+- Canonical Markdown links must target tracked repository files.
+- Ignored runtime logs such as `FF7RPianoSongs-*.log` are ephemeral session inputs, not durable evidence targets. Refer to their filenames only as code spans.
+- Before a claim becomes durable, retain the relevant bounded excerpts or derived findings in a tracked evidence file, together with enough build and scenario context to interpret them.
+
+## Architecture
+
+- [PianoMenuSessionEvidence-20260729.md](PianoMenuSessionEvidence-20260729.md) preserves matching-build list open/close, state-exit, teardown, and session-generation evidence for Phase 4 coordination.
+- [PianoMenuMetadataEvidence-20260802.md](PianoMenuMetadataEvidence-20260802.md) preserves the matching-build selected-index duration, note-count, and menu-detail ScoreInfo call chain plus the scoped metadata authority decision.
+- [PianoPageSelectionGuardEvidence-20260803.md](PianoPageSelectionGuardEvidence-20260803.md) preserves the historical and decisive negative-selection crash evidence, exact single-site rel32 ownership, and durable bypass contract.
+- [ControlledTeardownInvalidation-20260731.md](ControlledTeardownInvalidation-20260731.md) records the two invalidated live-teardown attempts and the resulting unsupported/NO-GO disposition.
+
+## Chart And MIDI
+
+- [ChartRowLimitEvidence.md](ChartRowLimitEvidence.md) preserves parser-cap, event ABI, ownership, synthetic-model, and runtime diagnostic findings.
+- [ChartEventAbiGhidra.txt](ChartEventAbiGhidra.txt) is the underlying recovered chart-event ABI report.
+- [RecoverChartEventAbi.java](GhidraScripts/RecoverChartEventAbi.java) is the Ghidra extraction script.
+- [MidiDifficultyCalibration-v38-20260714.md](MidiDifficultyCalibration-v38-20260714.md) preserves authored-route calibration, generated fixture diagnostics, and performance observations.
+- [ProductionCacheOptimization-v38-20260715.md](ProductionCacheOptimization-v38-20260715.md) records the cache optimizer investigation.
+
+## Audio
+
+- [AudioLifecycleEvidence-202607.md](AudioLifecycleEvidence-202607.md) is the consolidated lifecycle chronology and bounded disposition.
+- [AdaptiveMabfModeEvidence.md](AdaptiveMabfModeEvidence.md) records adaptive MABF mode work.
+- [NativeHcaParity-20260731.md](NativeHcaParity-20260731.md) records the bounded matching-build native structural/metadata/decode parity closure, independent decoder provenance, integrity and error measurements, and corrected slot/timing defects.

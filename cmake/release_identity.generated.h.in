@@ -1,0 +1,14 @@
+#pragma once
+
+#include <string_view>
+
+namespace ff7r::piano::generated {
+
+inline constexpr std::string_view kProduct = "@FF7RP_RELEASE_PRODUCT@";
+inline constexpr std::string_view kVersion = "@FF7RP_RELEASE_VERSION@";
+inline constexpr std::string_view kPlatform = "@FF7RP_RELEASE_PLATFORM@";
+inline constexpr std::string_view kLicense = "@FF7RP_RELEASE_LICENSE@";
+inline constexpr std::string_view kSupportedExecutableCatalogId = "@FF7RP_RELEASE_CATALOG@";
+inline constexpr std::string_view kArchiveBasename = "@FF7RP_RELEASE_ARCHIVE_BASENAME@";
+
+} // namespace ff7r::piano::generated

@@ -1,0 +1,9 @@
+{
+  "schema": "ff7rpianosongs.release.v1",
+  "product": "FF7RPianoSongs",
+  "version": "0.1.0",
+  "platform": "win64",
+  "license": "MIT",
+  "supported_executable_catalog_id": "ff7rebirth-steam-win64-6a16ced2",
+  "archive_basename": "FF7RPianoSongs-0.1.0-win64"
+}
