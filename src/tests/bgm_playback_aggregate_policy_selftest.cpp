@@ -1011,60 +1011,110 @@ void test_bgm_playback_aggregate_observer_policy()
             && bgm_playback_list_return_clear_authorized(false, false, true),
         "list-return clear authority rejected one source or required two clears");
     {
-        BgmPlaybackSharedBankRestoreFacts shared{};
-        shared.shared_lineage_present = true;
-        shared.shared_sound_exact = true;
-        shared.shared_route_exact = true;
-        shared.shared_owner_restore_verified = true;
-        shared.detached_lifecycle_absent = true;
-        shared.lifecycle_failure_clear = true;
-        shared.owner_patch_restored = true;
-        shared.retired_sound_identity_exact = true;
-        shared.route_cleanup_pending = true;
-        shared.controller_exact = true;
-        shared.slot_bgm_exact = true;
-        shared.live_chain_exact = true;
-        shared.no_custom_publication_pending = true;
-        shared.no_unresolved_request = true;
-        shared.patch_journals_restored = true;
-        require(bgm_playback_shared_bank_restore_proven(shared),
-            "complete shared-bank restore evidence was not accepted");
-        constexpr bool BgmPlaybackSharedBankRestoreFacts::*kSharedMembers[] = {
-            &BgmPlaybackSharedBankRestoreFacts::shared_lineage_present,
-            &BgmPlaybackSharedBankRestoreFacts::shared_sound_exact,
-            &BgmPlaybackSharedBankRestoreFacts::shared_route_exact,
-            &BgmPlaybackSharedBankRestoreFacts::shared_owner_restore_verified,
-            &BgmPlaybackSharedBankRestoreFacts::detached_lifecycle_absent,
-            &BgmPlaybackSharedBankRestoreFacts::lifecycle_failure_clear,
-            &BgmPlaybackSharedBankRestoreFacts::owner_patch_restored,
-            &BgmPlaybackSharedBankRestoreFacts::retired_sound_identity_exact,
-            &BgmPlaybackSharedBankRestoreFacts::route_cleanup_pending,
-            &BgmPlaybackSharedBankRestoreFacts::controller_exact,
-            &BgmPlaybackSharedBankRestoreFacts::slot_bgm_exact,
-            &BgmPlaybackSharedBankRestoreFacts::live_chain_exact,
-            &BgmPlaybackSharedBankRestoreFacts::no_custom_publication_pending,
-            &BgmPlaybackSharedBankRestoreFacts::no_unresolved_request,
-            &BgmPlaybackSharedBankRestoreFacts::patch_journals_restored,
+        // The captured failing session, in the terms this predicate reads: the
+        // native stopped the mod's sound and immediately re-Set the canonical
+        // BGM, so live_sound_exact=0, live_request_exact=0 and
+        // live_sound_identity_exact=0, while live_controller_exact=1,
+        // live_slot_exact=1 and live_bgm_exact=1.  The aggregate borrower
+        // ordinal was 0 and the route's native clear was never verified.  The
+        // lineage was detached (distinct canonical/custom tokens).  None of
+        // that bears on whether the mod's own mutation was reverted, so this
+        // session must retire.
+        BgmPlaybackRouteRestoreRetirementFacts retirement{};
+        retirement.lineage_present = true;
+        retirement.lineage_sound_exact = true;
+        retirement.lineage_route_exact = true;
+        retirement.lineage_owner_restore_verified = true;
+        retirement.lifecycle_failure_clear = true;
+        retirement.owner_patch_restored = true;
+        retirement.retired_sound_identity_exact = true;
+        retirement.route_cleanup_pending = true;
+        retirement.controller_exact = true;
+        retirement.slot_bgm_exact = true;
+        retirement.live_chain_exact = true;
+        retirement.no_custom_publication_pending = true;
+        retirement.deferred_handoff_forwarded = true;
+        retirement.custom_request_retired = true;
+        retirement.patch_journals_restored = true;
+        const bool captured_session_proven =
+            bgm_playback_route_restore_retirement_proven(retirement);
+        require(captured_session_proven,
+            "complete route-restore retirement evidence was not accepted");
+        // Both older authorities are false in that session -- the mod no longer
+        // owns live playback and no borrower record was ever captured for a
+        // mod-initiated publication -- so the retirement has to be reachable
+        // from this authority alone.  Otherwise list_cleanup_pending stays
+        // latched and every later activation is denied.
+        require(bgm_playback_list_return_clear_authorized(
+                    false, false, captured_session_proven)
+                && bgm_playback_route_restore_relinquishment_path(
+                    false, false, captured_session_proven),
+            "captured stop/re-Set session did not reach the retirement branch");
+        // Structural proof that the removal is a removal.  The predicate reads
+        // exactly the fifteen facts enumerated below and requires every one of
+        // them, so no live-sound or live-request identity fact, and no
+        // quiescence, poll-count or elapsed-time fact, can be gating this path.
+        // Re-adding one changes the size and fails here.
+        static_assert(sizeof(BgmPlaybackRouteRestoreRetirementFacts)
+                == 15 * sizeof(bool),
+            "route-restore retirement gained or lost a fact; its input surface "
+            "must stay exactly the fifteen members enumerated below");
+        constexpr bool BgmPlaybackRouteRestoreRetirementFacts::*kRetirementMembers[] = {
+            &BgmPlaybackRouteRestoreRetirementFacts::lineage_present,
+            &BgmPlaybackRouteRestoreRetirementFacts::lineage_sound_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::lineage_route_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::lineage_owner_restore_verified,
+            &BgmPlaybackRouteRestoreRetirementFacts::lifecycle_failure_clear,
+            &BgmPlaybackRouteRestoreRetirementFacts::owner_patch_restored,
+            &BgmPlaybackRouteRestoreRetirementFacts::retired_sound_identity_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::route_cleanup_pending,
+            &BgmPlaybackRouteRestoreRetirementFacts::controller_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::slot_bgm_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::live_chain_exact,
+            &BgmPlaybackRouteRestoreRetirementFacts::no_custom_publication_pending,
+            &BgmPlaybackRouteRestoreRetirementFacts::deferred_handoff_forwarded,
+            &BgmPlaybackRouteRestoreRetirementFacts::custom_request_retired,
+            &BgmPlaybackRouteRestoreRetirementFacts::patch_journals_restored,
         };
-        for (const auto member : kSharedMembers) {
-            BgmPlaybackSharedBankRestoreFacts rejected = shared;
+        static_assert(sizeof(kRetirementMembers) / sizeof(kRetirementMembers[0])
+                == 15,
+            "route-restore retirement necessity loop must cover every fact");
+        for (const auto member : kRetirementMembers) {
+            BgmPlaybackRouteRestoreRetirementFacts rejected = retirement;
             rejected.*member = false;
-            require(!bgm_playback_shared_bank_restore_proven(rejected),
-                "incomplete shared-bank restore evidence authorized cleanup");
+            require(!bgm_playback_route_restore_retirement_proven(rejected),
+                "incomplete route-restore evidence authorized cleanup");
         }
-        // A detached bank must never reach the shared authority: it owns a
-        // separate bank and still has to run the release path.
-        BgmPlaybackSharedBankRestoreFacts detached_present = shared;
-        detached_present.detached_lifecycle_absent = false;
-        require(!bgm_playback_shared_bank_restore_proven(detached_present),
-            "shared-bank authority accepted a live detached-bank record");
-        // The shared branch runs only when it is the sole authority, so the
-        // native slot clear stays unreachable from it.
-        require(bgm_playback_shared_bank_relinquishment_path(false, false, true)
-                && !bgm_playback_shared_bank_relinquishment_path(true, false, true)
-                && !bgm_playback_shared_bank_relinquishment_path(false, true, true)
-                && !bgm_playback_shared_bank_relinquishment_path(false, false, false),
-            "shared-bank relinquishment path did not stay mutually exclusive");
+        // A route whose mutation is not provably reverted must never retire:
+        // that is the one thing this authority exists to prove.
+        BgmPlaybackRouteRestoreRetirementFacts unreverted = retirement;
+        unreverted.owner_patch_restored = false;
+        require(!bgm_playback_route_restore_retirement_proven(unreverted),
+            "retirement accepted a sound whose owner patch was still applied");
+        // The genuine "the mod may still own live playback" shape: the native
+        // has not moved the mod's request handle into the slot's retired
+        // vector.  This must not retire, and must not release.
+        BgmPlaybackRouteRestoreRetirementFacts request_outstanding = retirement;
+        request_outstanding.custom_request_retired = false;
+        require(!bgm_playback_route_restore_retirement_proven(request_outstanding)
+                && !bgm_playback_route_restore_relinquishment_path(false, false,
+                    bgm_playback_route_restore_retirement_proven(
+                        request_outstanding)),
+            "retirement accepted a request handle the native had not retired");
+        // Ambiguous or absent lineage must not retire: whether the mod owes a
+        // bank release is decided by exactly one arm-time record, never by
+        // ambient live state.
+        BgmPlaybackRouteRestoreRetirementFacts no_lineage = retirement;
+        no_lineage.lineage_present = false;
+        require(!bgm_playback_route_restore_retirement_proven(no_lineage),
+            "retirement accepted a route with no single arm-time lineage");
+        // The branch runs only when it is the sole authority, so the native
+        // slot clear stays unreachable from it.
+        require(bgm_playback_route_restore_relinquishment_path(false, false, true)
+                && !bgm_playback_route_restore_relinquishment_path(true, false, true)
+                && !bgm_playback_route_restore_relinquishment_path(false, true, true)
+                && !bgm_playback_route_restore_relinquishment_path(false, false, false),
+            "route-restore relinquishment path did not stay mutually exclusive");
     }
     BgmPlaybackCanonicalSubstrateRelinquishmentFacts relinquishment{
         true, true, true, true};

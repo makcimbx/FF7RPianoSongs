@@ -512,7 +512,7 @@ enum class AudioRouteTransitionReason : uint8_t {
     ListReturnEarly,
     ListReturnVerified,
     ListReturnCanonicalRelinquish,
-    ListReturnSharedBankRelinquish,
+    ListReturnRouteRestoreRelinquish,
     ListReturnNativeClear,
     ShutdownReset,
     SetupProofRejected,
@@ -879,7 +879,7 @@ const char* audio_route_transition_reason_name(AudioRouteTransitionReason reason
     case AudioRouteTransitionReason::ListReturnEarly: return "list_return_early";
     case AudioRouteTransitionReason::ListReturnVerified: return "list_return_verified";
     case AudioRouteTransitionReason::ListReturnCanonicalRelinquish: return "list_return_canonical_relinquish";
-    case AudioRouteTransitionReason::ListReturnSharedBankRelinquish: return "list_return_shared_bank_relinquish";
+    case AudioRouteTransitionReason::ListReturnRouteRestoreRelinquish: return "list_return_route_restore_relinquish";
     case AudioRouteTransitionReason::ListReturnNativeClear: return "list_return_native_clear";
     case AudioRouteTransitionReason::ShutdownReset: return "shutdown_reset";
     case AudioRouteTransitionReason::SetupProofRejected: return "setup_proof_rejected";
@@ -1875,7 +1875,7 @@ enum class ListReturnClearAuthoritySource : uint8_t {
     LegacyRoute,
     AggregateCanonical,
     Both,
-    SharedBank,
+    RouteRestore,
 };
 
 struct ListReturnClearAuthorityDiagnostic final {
@@ -3136,7 +3136,7 @@ const char* list_return_clear_authority_source_name(
     case ListReturnClearAuthoritySource::AggregateCanonical:
         return "aggregate_canonical";
     case ListReturnClearAuthoritySource::Both: return "both";
-    case ListReturnClearAuthoritySource::SharedBank: return "shared_bank";
+    case ListReturnClearAuthoritySource::RouteRestore: return "route_restore";
     }
     return "unknown";
 }
@@ -14354,109 +14354,163 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                 aggregate_canonical_exit_exact;
         }
     }
-    // Third authority: the game's OnMemory bank was already resident when the
-    // custom play-setup ran, so the native allocator was never reached and both
-    // roles observe one bank the game owns.  No bank was ever detached, so no
-    // detached record exists, so neither of the two authorities above can ever
-    // fire -- which used to leave list_cleanup_pending latched for the life of
-    // the process and deny every later activation.
+    // Direct evidence that the native has retired the mod's request handle: a
+    // live read of the slot's retired vector.  This is deliberately not the
+    // stop monitor's quiescent phase.  The monitor is advanced only from
+    // piano_audio_state_tick, so on a build whose catalog lacks that locator it
+    // never polls at all and its phase stays Waiting with poll_count 0 -- while
+    // the handle it was waiting on is already retired.  Retirement is the fact
+    // the retirement and the release actually depend on; quiescence is a
+    // property of the poller.
+    const StopRetirementRead list_return_retirement =
+        (snapshot.controller && snapshot.owned_slot && snapshot.owned_bgm
+            && snapshot.owned_sound && snapshot.owned_request_handle != 0)
+        ? read_stop_retirement(snapshot.controller,
+            snapshot.controller_identity, snapshot.generation,
+            snapshot.lease_identity, snapshot.owned_slot, snapshot.owned_bgm,
+            snapshot.owned_sound, snapshot.owned_request_handle)
+        : StopRetirementRead{};
+    const bool custom_request_retired = list_return_retirement.observation.valid
+        && list_return_retirement.observation.request_handle_retired;
+
+    // Third authority: proof that the mod's route bookkeeping may be retired.
+    // It covers both arm-time lineages.  A shared lineage means the game's
+    // OnMemory bank was already resident at custom play-setup, so the native
+    // allocator was never reached and the mod never held a bank to release.  A
+    // detached lineage means the mod did cause the load and still owes a
+    // release -- but that release is proven by the arm-time record below, not
+    // by anything on this path.  Neither of the two authorities above can fire
+    // for either lineage once the native re-Set the canonical BGM, which used
+    // to leave list_cleanup_pending latched for the life of the process and
+    // deny every later activation.
     OnMemoryBankSharedRecord shared_bank{};
-    BgmPlaybackSharedBankRestoreFacts shared_bank_facts{};
+    OnMemoryBankDetachedRecord detached_bank{};
+    uint64_t lineage_state_epoch = 0;
+    bool shared_lineage = false;
+    bool detached_lineage = false;
+    BgmPlaybackRouteRestoreRetirementFacts retirement_facts{};
     {
         const OnMemoryBankSoundIdentity retired_sound{
             snapshot.owned_sound, snapshot.owned_sound_identity.live};
         std::lock_guard<std::mutex> lock(g_audio_state_mutex);
         shared_bank = g_onmemory_bank_lifecycle.shared();
-        shared_bank_facts.shared_lineage_present = static_cast<bool>(shared_bank);
-        shared_bank_facts.shared_sound_exact = shared_bank.sound == retired_sound;
-        shared_bank_facts.shared_route_exact =
-            g_onmemory_bank_lifecycle.shared_matches(retired_sound,
-                snapshot.owned_request_handle, snapshot.generation);
-        shared_bank_facts.shared_owner_restore_verified =
-            shared_bank.owner_restore_verified;
-        shared_bank_facts.detached_lifecycle_absent =
-            !g_onmemory_bank_lifecycle.active();
-        shared_bank_facts.lifecycle_failure_clear =
+        detached_bank = g_onmemory_bank_lifecycle.active();
+        lineage_state_epoch = g_onmemory_bank_lifecycle.state_epoch();
+        shared_lineage = static_cast<bool>(shared_bank);
+        // Only a record still holding its arm-time restore state describes a
+        // route this path may retire; a claimed or already-completed release
+        // does not.
+        detached_lineage = static_cast<bool>(detached_bank)
+            && detached_bank.phase == OnMemoryBankLifecyclePhase::RestoreApplied;
+        // Exactly one lineage.  This is what makes "does the mod owe a bank
+        // release?" a question answered by immutable arm-time proof and never
+        // by ambient live state.
+        retirement_facts.lineage_present = shared_lineage != detached_lineage;
+        retirement_facts.lineage_sound_exact = shared_lineage
+            ? shared_bank.sound == retired_sound
+            : detached_lineage && detached_bank.sound == retired_sound;
+        retirement_facts.lineage_route_exact = shared_lineage
+            ? g_onmemory_bank_lifecycle.shared_matches(retired_sound,
+                snapshot.owned_request_handle, snapshot.generation)
+            : detached_lineage && snapshot.owned_request_handle != 0
+                && detached_bank.request_handle == snapshot.owned_request_handle
+                && detached_bank.route_generation <= snapshot.generation;
+        retirement_facts.lineage_owner_restore_verified = shared_lineage
+            ? shared_bank.owner_restore_verified
+            : detached_lineage && detached_bank.owner_restore_verified;
+        retirement_facts.lifecycle_failure_clear =
             !g_onmemory_bank_lifecycle.failed()
             && !g_onmemory_bank_lifecycle.release_in_flight();
-        shared_bank_facts.no_custom_publication_pending =
+        retirement_facts.no_custom_publication_pending =
             !g_unpublished_audio_setup
             && g_pending_play_setup_patch.patches.empty()
             && !snapshot.set_play_handoff_pending;
-        shared_bank_facts.patch_journals_restored = pending_restored
+        retirement_facts.patch_journals_restored = pending_restored
             && failed_restored && auxiliary_journals_restored
             && g_failed_patch_journal.empty()
             && g_active_patch_journal.empty();
     }
-    shared_bank_facts.owner_patch_restored =
+    retirement_facts.owner_patch_restored =
         frozen_sound_patch_fields_restored(snapshot.frozen_sound_patch);
-    shared_bank_facts.retired_sound_identity_exact = uobject_identity_matches(
+    retirement_facts.retired_sound_identity_exact = uobject_identity_matches(
         snapshot.owned_sound, snapshot.owned_sound_identity);
-    shared_bank_facts.route_cleanup_pending = snapshot.custom_resource_owned
+    retirement_facts.route_cleanup_pending = snapshot.custom_resource_owned
         && snapshot.list_cleanup_pending;
-    shared_bank_facts.controller_exact = current_controller_exact
+    retirement_facts.controller_exact = current_controller_exact
         && current_controller_identity_exact;
-    shared_bank_facts.slot_bgm_exact = current_chain_read
+    retirement_facts.slot_bgm_exact = current_chain_read
         && slot == snapshot.owned_slot && bgm == snapshot.owned_bgm;
     // Note what this does *not* require: that the live sound and request are
     // still the mod's.  A native stop followed by an immediate native re-Set of
     // the canonical BGM legitimately drives both away from the mod's values.
-    shared_bank_facts.live_chain_exact = current_sound_identity_read;
-    shared_bank_facts.no_unresolved_request = deferred_native_forwarded
-        && stop_retirement_quiescent;
-    const bool shared_bank_restore_proven =
-        bgm_playback_shared_bank_restore_proven(shared_bank_facts);
-    // Report the shared evidence whenever a shared lineage exists, including
-    // when it fails: otherwise a shared session that does not qualify is
-    // indistinguishable from one that never had a shared bank at all.
-    if (shared_bank_facts.shared_lineage_present) {
-        std::ostringstream shared_facts_out;
-        shared_facts_out << "[audio_sead] shared_bank_authority proven="
-            << (shared_bank_restore_proven ? 1 : 0)
+    retirement_facts.live_chain_exact = current_sound_identity_read;
+    retirement_facts.deferred_handoff_forwarded = deferred_native_forwarded;
+    retirement_facts.custom_request_retired = custom_request_retired;
+    const bool route_restore_retirement_proven =
+        bgm_playback_route_restore_retirement_proven(retirement_facts);
+    // Report the lineage evidence whenever any lineage exists, including when
+    // it fails: otherwise a session that does not qualify is indistinguishable
+    // from one that never had a lineage record at all.
+    if (shared_lineage || detached_lineage) {
+        std::ostringstream lineage_facts_out;
+        lineage_facts_out << "[audio_sead] route_restore_authority proven="
+            << (route_restore_retirement_proven ? 1 : 0)
+            << " lineage=" << (shared_lineage && detached_lineage ? "ambiguous"
+                : shared_lineage ? "shared" : "detached")
             << " shared_token=" << shared_bank.token.encode()
             << " shared_ordinal=" << shared_bank.ordinal
-            << " sound_exact=" << (shared_bank_facts.shared_sound_exact ? 1 : 0)
-            << " route_exact=" << (shared_bank_facts.shared_route_exact ? 1 : 0)
+            << " detached_canonical=" << detached_bank.canonical.encode()
+            << " detached_custom=" << detached_bank.custom.encode()
+            << " detached_ordinal=" << detached_bank.ordinal
+            << " lineage_present="
+            << (retirement_facts.lineage_present ? 1 : 0)
+            << " sound_exact=" << (retirement_facts.lineage_sound_exact ? 1 : 0)
+            << " route_exact=" << (retirement_facts.lineage_route_exact ? 1 : 0)
             << " owner_restore_verified="
-            << (shared_bank_facts.shared_owner_restore_verified ? 1 : 0)
-            << " detached_absent="
-            << (shared_bank_facts.detached_lifecycle_absent ? 1 : 0)
+            << (retirement_facts.lineage_owner_restore_verified ? 1 : 0)
             << " failure_clear="
-            << (shared_bank_facts.lifecycle_failure_clear ? 1 : 0)
+            << (retirement_facts.lifecycle_failure_clear ? 1 : 0)
             << " owner_patch_restored="
-            << (shared_bank_facts.owner_patch_restored ? 1 : 0)
+            << (retirement_facts.owner_patch_restored ? 1 : 0)
             << " retired_sound_identity_exact="
-            << (shared_bank_facts.retired_sound_identity_exact ? 1 : 0)
+            << (retirement_facts.retired_sound_identity_exact ? 1 : 0)
             << " route_cleanup_pending="
-            << (shared_bank_facts.route_cleanup_pending ? 1 : 0)
+            << (retirement_facts.route_cleanup_pending ? 1 : 0)
             << " controller_exact="
-            << (shared_bank_facts.controller_exact ? 1 : 0)
-            << " slot_bgm_exact=" << (shared_bank_facts.slot_bgm_exact ? 1 : 0)
+            << (retirement_facts.controller_exact ? 1 : 0)
+            << " slot_bgm_exact=" << (retirement_facts.slot_bgm_exact ? 1 : 0)
             << " live_chain_exact="
-            << (shared_bank_facts.live_chain_exact ? 1 : 0)
+            << (retirement_facts.live_chain_exact ? 1 : 0)
             << " no_custom_publication="
-            << (shared_bank_facts.no_custom_publication_pending ? 1 : 0)
-            << " no_unresolved_request="
-            << (shared_bank_facts.no_unresolved_request ? 1 : 0)
+            << (retirement_facts.no_custom_publication_pending ? 1 : 0)
+            << " deferred_handoff_forwarded="
+            << (retirement_facts.deferred_handoff_forwarded ? 1 : 0)
+            << " custom_request_retired="
+            << (retirement_facts.custom_request_retired ? 1 : 0)
+            << " retired_count="
+            << list_return_retirement.observation.retired_count
+            << " stop_retirement_quiescent="
+            << (stop_retirement_quiescent ? 1 : 0)
             << " patch_journals_restored="
-            << (shared_bank_facts.patch_journals_restored ? 1 : 0);
-        core::log(core::LogLevel::Info, shared_facts_out.str());
+            << (retirement_facts.patch_journals_restored ? 1 : 0);
+        core::log(core::LogLevel::Info, lineage_facts_out.str());
     }
 
     const bool clear_authorized = bgm_playback_list_return_clear_authorized(
-        route_owned, aggregate_canonical_exit_exact, shared_bank_restore_proven);
-    const bool shared_bank_relinquishment_path =
-        bgm_playback_shared_bank_relinquishment_path(
+        route_owned, aggregate_canonical_exit_exact,
+        route_restore_retirement_proven);
+    const bool route_restore_relinquishment_path =
+        bgm_playback_route_restore_relinquishment_path(
             route_owned, aggregate_canonical_exit_exact,
-            shared_bank_restore_proven);
+            route_restore_retirement_proven);
     if (diagnostic) {
         diagnostic->source = route_owned && aggregate_canonical_exit_exact
             ? ListReturnClearAuthoritySource::Both
             : route_owned ? ListReturnClearAuthoritySource::LegacyRoute
             : aggregate_canonical_exit_exact
                 ? ListReturnClearAuthoritySource::AggregateCanonical
-            : shared_bank_restore_proven
-                ? ListReturnClearAuthoritySource::SharedBank
+            : route_restore_retirement_proven
+                ? ListReturnClearAuthoritySource::RouteRestore
                 : ListReturnClearAuthoritySource::None;
         if (!clear_authorized && diagnostic->blocker
                 == ListReturnClearAuthorityBlocker::None) {
@@ -14474,16 +14528,21 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
         return result;
     }
 
-    // Shared-bank retirement.  There is nothing to release (the bank is the
-    // game's) and nothing to clear (the native owns the slot and has already
-    // re-Set the canonical BGM on it).  Retire the mod's own route bookkeeping
-    // and return here: returning before the pin/pre-clear/native-clear code
-    // below is what keeps call_bgm_slot_set_original(controller, nullptr)
-    // unreachable for this authority.  Reaching it would stop the vanilla BGM
-    // the game had just started.
-    if (shared_bank_relinquishment_path) {
+    // Restore retirement.  There is nothing to clear here: the native owns the
+    // slot and has already re-Set the canonical BGM on it.  Retire the mod's
+    // own route bookkeeping and return before the pin/pre-clear/native-clear
+    // code below -- that is what keeps call_bgm_slot_set_original(controller,
+    // nullptr) unreachable for this authority.  Reaching it would stop the
+    // vanilla BGM the game had just started.
+    //
+    // Freeing the bank is a separate obligation, attempted after this
+    // transaction commits and only for a detached lineage.  A shared lineage
+    // leaves active_ empty, so claim_release() is structurally unreachable for
+    // it and a bank the game owns can never be freed from here.
+    if (route_restore_relinquishment_path) {
         AudioRouteCleanupResult result;
         bool relinquished = false;
+        uint64_t relinquished_state_epoch = 0;
         {
             const OnMemoryBankSoundIdentity retired_sound{
                 snapshot.owned_sound, snapshot.owned_sound_identity.live};
@@ -14499,17 +14558,31 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                     == snapshot.owned_request_handle
                 && g_audio_route_state.custom_resource_owned
                 && g_audio_route_state.list_cleanup_pending;
-            if (route_unchanged
-                && g_onmemory_bank_lifecycle.shared_matches(retired_sound,
-                    snapshot.owned_request_handle, snapshot.generation)) {
+            // The lineage that authorized this branch must still be the one on
+            // record.  The epoch covers every lifecycle mutation, so a record
+            // that was consumed, claimed or re-armed between the evidence read
+            // and this commit cannot be retired against stale proof.
+            const bool lineage_unchanged =
+                g_onmemory_bank_lifecycle.state_epoch() == lineage_state_epoch
+                && (shared_lineage
+                    ? g_onmemory_bank_lifecycle.shared_matches(retired_sound,
+                        snapshot.owned_request_handle, snapshot.generation)
+                    : static_cast<bool>(g_onmemory_bank_lifecycle.active()));
+            if (route_unchanged && lineage_unchanged) {
                 result = g_frozen_profile_lease.transition(
                     AudioRouteCleanupEvent::CanonicalSubstrateRelinquished,
                     snapshot.lease_identity);
-                if (result.clear_route_metadata
-                    && g_onmemory_bank_lifecycle.consume_shared(retired_sound,
-                        snapshot.owned_request_handle, snapshot.generation)) {
+                // The shared observation is consumed here because nothing else
+                // will ever act on it.  The detached record is left intact:
+                // it is the release authority, and the release runs after this
+                // transaction has committed the route retirement.
+                const bool lineage_retired = result.clear_route_metadata
+                    && (!shared_lineage
+                        || g_onmemory_bank_lifecycle.consume_shared(retired_sound,
+                            snapshot.owned_request_handle, snapshot.generation));
+                if (lineage_retired) {
                     AudioRouteTransitionRecorder route_transition_record(
-                        AudioRouteTransitionReason::ListReturnSharedBankRelinquish,
+                        AudioRouteTransitionReason::ListReturnRouteRestoreRelinquish,
                         AudioRouteTransitionKind::RouteReset);
                     g_pending_play_setup_patch = {};
                     g_failed_patch_journal.clear();
@@ -14538,6 +14611,8 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                     g_audio_route_state.list_cleanup_pending = false;
                     g_audio_route_state.native_clear_verified = false;
                     relinquished = true;
+                    relinquished_state_epoch =
+                        g_onmemory_bank_lifecycle.state_epoch();
                 }
             } else {
                 result = apply_policy_locked(snapshot.lease_identity);
@@ -14546,16 +14621,113 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
         if (result.thaw_profile) registry().clear_frozen_profile();
         if (relinquished) retire_registry_cleanup(snapshot.lease_identity);
         if (diagnostic) diagnostic->clear_attempted = false;
-        std::ostringstream shared_out;
-        shared_out << "[audio_sead] list_return_release status="
-            << (relinquished ? "released" : "shared_bank_retain_failed")
-            << " authority=shared_bank"
+
+        // Second obligation: free the bank the mod caused to load.  Reached
+        // only for a detached lineage, and proven by the arm-time record plus
+        // the retired request handle -- never by live-sound identity.  The
+        // route retirement above has already committed on its own evidence, so
+        // a rejected claim leaves the bank retained without re-latching the
+        // list.
+        const char* release_status = detached_lineage ? "claim_rejected" : "none";
+        if (relinquished && detached_lineage) {
+            uint64_t owner_token = 0;
+            const bool owner_readable = core::safe_read_field(
+                snapshot.owned_sound,
+                runtime_layouts::SqexSeadSound::observed_field548, owner_token);
+            const OnMemoryBankSoundIdentity retired_sound{
+                snapshot.owned_sound, snapshot.owned_sound_identity.live};
+            OnMemoryBankRetirementFacts release_facts;
+            release_facts.route_generation = detached_bank.route_generation + 1;
+            release_facts.cleanup_generation = detached_bank.cleanup_generation;
+            release_facts.retired_request_handle = detached_bank.request_handle;
+            release_facts.current_request_handle =
+                list_return_retirement.current_request_handle;
+            release_facts.current_backing = list_return_retirement.current_backing;
+            release_facts.current_backing_observed =
+                list_return_retirement.current_backing_observed;
+            release_facts.retired_backing = list_return_retirement.retired_backing;
+            release_facts.retired_backing_observed =
+                list_return_retirement.retired_backing_observed;
+            release_facts.current_owner = classify_onmemory_bank_retirement_owner(
+                detached_bank, retired_sound,
+                retirement_facts.retired_sound_identity_exact, owner_readable,
+                owner_token);
+            release_facts.exact_request_retired = custom_request_retired;
+            release_facts.route_released = true;
+            release_facts.playback_released = true;
+            release_facts.cleanup_released = true;
+            release_facts.owner_restore_verified = owner_readable
+                && (owner_token == 0
+                    || owner_token == detached_bank.canonical.encode());
+            release_facts.runtime_installed =
+                g_audio_route_installed.load(std::memory_order_acquire);
+            release_facts.lookup_signature_valid =
+                g_onmemory_bank_kind_lookup_available.load(std::memory_order_acquire);
+            release_facts.release_signature_valid =
+                g_onmemory_bank_release_available.load(std::memory_order_acquire);
+            release_facts.shutdown_or_disabled = !release_facts.runtime_installed
+                || g_audio_route_disabled.load(std::memory_order_acquire);
+            OnMemoryBankReleaseAction release_action;
+            bool release_claimed = false;
+            {
+                std::lock_guard<std::mutex> lock(g_audio_state_mutex);
+                release_claimed = g_onmemory_bank_lifecycle.state_epoch()
+                        == relinquished_state_epoch
+                    && g_onmemory_bank_lifecycle.claim_release(
+                        release_facts, release_action);
+            }
+            if (release_claimed) {
+                observe_bgm_playback_release(release_action, false);
+                if (bgm_aggregate_release_has_borrowers(release_action)) {
+                    // Another aggregate borrower still references the bank; the
+                    // deferred path owns the native call once it drains.
+                    defer_bgm_aggregate_release(release_action);
+                    release_status = "deferred";
+                } else {
+                    const auto execution = execute_onmemory_bank_release(
+                        release_facts.lookup_signature_valid,
+                        release_facts.release_signature_valid,
+                        release_facts.shutdown_or_disabled,
+                        release_action,
+                        [](const uint64_t token) noexcept {
+                            return lookup_onmemory_bank_kind_noexcept(token);
+                        },
+                        [](const uint64_t* token,
+                            const uint8_t asynchronous) noexcept {
+                            return release_onmemory_bank_async_noexcept(
+                                token, asynchronous);
+                        });
+                    {
+                        std::lock_guard<std::mutex> lock(g_audio_state_mutex);
+                        (void)g_onmemory_bank_lifecycle.finish_release(
+                            release_action, execution.outcome);
+                    }
+                    if (execution.outcome != OnMemoryBankReleaseOutcome::Failed) {
+                        observe_bgm_playback_release(release_action, true);
+                    }
+                    release_status = execution.outcome
+                            == OnMemoryBankReleaseOutcome::AlreadyAbsent
+                        ? "already_absent"
+                        : execution.outcome
+                                == OnMemoryBankReleaseOutcome::AsyncReleaseRequested
+                            ? "async_requested" : "failed";
+                }
+                observe_bgm_playback_aggregate(true, false);
+            }
+        }
+
+        std::ostringstream restore_out;
+        restore_out << "[audio_sead] list_return_release status="
+            << (relinquished ? "released" : "route_restore_retain_failed")
+            << " authority=route_restore"
+            << " lineage=" << (shared_lineage ? "shared" : "detached")
             << " cleanup=" << (relinquished ? "verified" : "retained")
+            << " bank_release=" << release_status
             << " shared_token=" << shared_bank.token.encode()
-            << " shared_ordinal=" << shared_bank.ordinal
+            << " detached_custom=" << detached_bank.custom.encode()
             << " route_generation=" << snapshot.generation;
         core::log(relinquished ? core::LogLevel::Info : core::LogLevel::Error,
-            shared_out.str());
+            restore_out.str());
         return result;
     }
 
