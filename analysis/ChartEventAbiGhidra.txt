@@ -1,4 +1,14 @@
 PROGRAM ff7rebirth_.exe
+GAME_VERSION 1.005
+CATALOG_BUILD_ID ff7rebirth-steam-win64-6a16ced2
+PE_TIMESTAMP 0x6a16ced2
+BUILD_NOTE Every RVA and virtual address in this file belongs to game build 1.005.
+BUILD_NOTE The Ghidra program name "ff7rebirth_.exe" is NOT build-identifying: the
+BUILD_NOTE 1.004 project opened later in this workspace carries the same program
+BUILD_NOTE name. Replaying these addresses against a 1.004 image reads unrelated
+BUILD_NOTE code. For the 1.004 addresses of the same entities see
+BUILD_NOTE analysis/RebirthBuild1004RvaEvidence-20260808.md and the per-build
+BUILD_NOTE entries in src/game/rva_catalog.json.
 IMAGE_BASE 140000000
 LANGUAGE x86:LE:64:default
 

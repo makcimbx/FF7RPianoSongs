@@ -898,6 +898,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c3f4f4",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8d 68 a1 b8 a0 00 00 00 e8 16",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by container anchoring: FUN_143c3f4f4 contains the confirmed scoreinfo_style_setup_return call site 0x03c3f55d and calls the confirmed scoreinfo_resolver 0x03bff0a4 at 0x03c3f558; its 566-byte body matches the 1.005 container exactly. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -933,6 +947,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c40d58",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00 e8 cc e1 46 fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
             }
           ]
         }
@@ -1074,6 +1102,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00f6c09c",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 8a 2e 14 01 48 2b e0",
+            "mask": "xxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by enumerating every direct call target of the 1.004 activation container FUN_143c40db4, the persistent-chart container immediately preceding piano_detail_update: exactly one target carries the converter prologue shape, and its decompilation is the three-parameter forwarder returning param_2 that matches the consumer ABI in src/game/title.cpp. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -1102,6 +1144,17 @@
               "type": "ghidra_static_analysis",
               "path": "src/game/title.cpp",
               "detail": "Matching-build static analysis established this exact title-view converter return address in the active-performance setup caller; the native caller copies the converted out-view synchronously before playback publication."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c40fa1",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed as the instruction address following the title_view_converter call at 0x03c40f9c (e8 rel32, 5 bytes) inside container FUN_143c40db4; it lands at container offset 0x1ed, the same offset the 1.005 return address holds in its own container, which corroborates rather than derives it. No signature is stored because install_policy is data_only; the measured-unique run at this address is 41 8b d5 4c 89 6c 24 40 41 8b, retained here as address provenance only."
             }
           ]
         }
@@ -1139,6 +1192,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00851644",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 6c 24 10 56 57 41 54 41 56 41 57 b8 60 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed from its own body: it hashes the 8-byte FKey in param_2, looks it up in the stride-0xf0 KeyStateMap rooted at this+0x4c with an insert helper on miss, switches on the int event type 0/1/2/3, stores the float amount into keystate+0xc0, increments the event counter at this+0x74 into the per-event index arrays at keystate+0x70/+0x80/+0xa0, and double-click-detects against config field +0x78. Matches PlayerInputInputKeyFn including the float fourth parameter. Signature measured unique image-wide."
             }
           ]
         }
@@ -1370,6 +1437,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01212540",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 db c9",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
+            }
+          ]
         }
       }
     },
@@ -1407,6 +1488,20 @@
               "detail": "The current runtime safety notes record the Ghidra-confirmed slot Stop RVA; no verification date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x012124bc",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 5f ca",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
+            }
+          ]
         }
       }
     },
@@ -1442,6 +1537,20 @@
               "type": "repository_source",
               "path": "src/game/audio_sead.cpp",
               "detail": "Supported-build read-only Ghidra and retained runtime evidence establish void __fastcall(dst, src), exact moved-handle adoption into retired playback, source handle zeroing, conditional optional-token transfer, and bounded observation-only lineage correlation; no verification date is asserted."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01212bf4",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 27 c3",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
             }
           ]
         }
@@ -1482,6 +1591,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x012127dc",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 4a c7 e9 00 48 2b",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
+            }
+          ]
         }
       }
     },
@@ -1517,6 +1640,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x012128d4",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 20 00 00 00 e8 4c c6 e9",
+            "mask": "xxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
             }
           ]
         }
@@ -1556,6 +1693,20 @@
               "detail": "The current runtime safety notes record the Ghidra-confirmed BGM prepare RVA; no verification date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01212f40",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d 68 b8 b8 30 01 00 00 e8 ce",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
+            }
+          ]
         }
       }
     },
@@ -1591,6 +1742,20 @@
               "type": "repository_documentation",
               "path": "AGENTS.md",
               "detail": "The runtime safety contract records this signature-gated current-controller lookup; no verification date is asserted."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01212780",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 a6 c7 e9 00 48 2b",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
             }
           ]
         }
@@ -1778,6 +1943,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4f5a8",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55 41 54 41 55 41 56 41 57 48 8b ec b8 50 00 00 00 e8 63",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by four consistent signals: the ABI is exactly PianoAdaptiveJudgmentFn; the body dedupe-appends the event into the dynamic array rooted at state+0x90 keyed on the int at event+0x20, then classifies on the event-type byte at event+0x4a with cases 1/2/4/5 writing state+0x60; it calls 0x03c35eac inside the neighborhood of the confirmed piano_event_link anchor 0x03c35e90; and it is the only function in the image with the 1.005 prologue shape falling between the confirmed anchors scoreinfo_menu_detail_return 0x03c4f295 and piano_on_setup_item_body 0x03c4f960, the same pair bracketing the 1.005 entry. The frame immediate differs from 1.005 (0x50 against 0x40) and the 1.004 body size is 0x379. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -1860,6 +2039,20 @@
               "type": "repository_source",
               "path": "src/game/audio_sead.cpp",
               "detail": "The audio diagnostics signature-gate this helper before use; no separate verification date is asserted."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01213e68",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 30 00 00 00 e8 b8 b0",
+            "mask": "xxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "PROBABLE, not confirmed. Adopted deliberately; see the adoption record in analysis/RebirthBuild1004RvaEvidence-20260808.md for what remains unproven. Positive evidence: the three-parameter ABI matches BgmSlotSetupFn exactly, the function is called directly by the confirmed 1.004 sqexsead_play_setup anchor 0x01212540, and the body guards on and stores the flag at slot+0x5e, forwards flag and context to three helpers on the sub-object at slot+0xc0, and on flag==0 sets slot+0x9c - all three are documented SqexSeadSlot fields in src/game/runtime_layouts.h. Unproven: the 1.005 counterpart body and its call edge could not be read from this project, so byte-level role equivalence across builds is unverified. Signature measured unique image-wide."
             }
           ]
         }
@@ -2101,6 +2294,20 @@
               "detail": "The fail-closed audio diagnostic records this signature and an unresolved construction-detour gap."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x047aa91c",
+          "signature": {
+            "bytes": "40 55 53 56 57 41 54 41 56 41 57 48 8b ec b8 60 00 00 00 e8 fc",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by string anchors rather than prologue matching: the three UE CreatePackage fatal-log literals at 0x145ee3b30, 0x145ee3ab0 and 0x145ee3620 are referenced from this function and from nowhere else in the image. The prologue is byte-identical to 1.005 except the stack frame immediate, which grew from 0x50 to 0x60; that one byte is why a 1.005-prefix search returned five unrelated candidates and missed the real function. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -2175,6 +2382,20 @@
               "detail": "Supported-build static Ghidra evidence identifies this self-locking wrapper as a read-only token lookup returning the registry entry kind; runtime use remains optional and exact-signature gated."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x056d7b50",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 d4 73 9d fc",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by ABI and semantics: one token pointer in, uint32 out, matching SeadOnMemoryBankKindLookupFn. The body resolves the token through FUN_1407abfb0 - the same shared lookup helper under the same critical section DAT_14929a1c8 that the confirmed sead_onmemory_bank_release 0x0106b664 uses - then returns the uint32 at entry+0x48, or 0 when the token does not resolve. Of the three functions calling that helper with the 1.005 prologue shape, this is the only one returning a uint32 field read. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -2206,6 +2427,20 @@
               "type": "repository_source",
               "path": "src/game/audio_sead.cpp",
               "detail": "Static Ghidra provenance and the retained 2026-07-17 runtime session establish copied-token asynchronous release with byte 1 after exact request retirement; runtime use is exact-signature gated and never releases the canonical owner token."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x0106b664",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 b7 38",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by ABI and semantics: the body dereferences the token, resolves it through the shared lookup helper under critical section DAT_14929a1c8, sets the release flag at entry+0x1c, and - only when the second parameter is zero - spin-waits with Sleep(1) re-resolving the token until it no longer resolves. That blocking-when-not-asynchronous behavior is the defining semantic of SeadOnMemoryBankReleaseFn. One of its two callers, FUN_141212acc, lies inside the confirmed 1.004 SQEXSEAD BGM cluster containing sqexsead_play_setup and bgm_controller_lookup. Signature measured unique image-wide."
             }
           ]
         }
@@ -2413,6 +2648,20 @@
               "detail": "The retained Ghidra export contains the parser decompilation and references; no analysis date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c59e64",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8d a8 e8 fd ff ff b8 f0 02 00 00 e8 a3",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by a positional chain on two independently confirmed 1.004 anchors: the confirmed piano_score_expand 0x03c5fad8 makes its single call at intra-function offset 0x5c onto piano_score_parser 0x03c59e64, whose ordered piano-band calls form four consecutive twice-called pairs; the third pair is the confirmed piano_event_link anchor 0x03c35e90, so the flanking pairs align one-to-one with the 1.005 construct/deep_copy/link/destruct order. The parser body grew from 0x5c8 to 0x891 bytes between builds, so it was identified by the call edge and not by size. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -2444,6 +2693,20 @@
               "type": "ghidra_artifact",
               "path": "analysis/ChartEventAbiGhidra.txt",
               "detail": "The retained Ghidra export contains the event deep-copy decompilation and references; no analysis date is asserted."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c317bc",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 56 b8 20 00 00 00 e8 55 d7",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by a positional chain on two independently confirmed 1.004 anchors: the confirmed piano_score_expand 0x03c5fad8 makes its single call at intra-function offset 0x5c onto piano_score_parser 0x03c59e64, whose ordered piano-band calls form four consecutive twice-called pairs; the third pair is the confirmed piano_event_link anchor 0x03c35e90, so the flanking pairs align one-to-one with the 1.005 construct/deep_copy/link/destruct order. This is the second pair. Corroborated independently: the 1.004 body size is 0x10d, exactly the 1.005 size. Signature measured unique image-wide."
             }
           ]
         }
@@ -2479,6 +2742,20 @@
               "detail": "The retained Ghidra export contains the event constructor decompilation and references; no analysis date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c318cc",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 4f d6",
+            "mask": "xxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by a positional chain on two independently confirmed 1.004 anchors: the confirmed piano_score_expand 0x03c5fad8 makes its single call at intra-function offset 0x5c onto piano_score_parser 0x03c59e64, whose ordered piano-band calls form four consecutive twice-called pairs; the third pair is the confirmed piano_event_link anchor 0x03c35e90, so the flanking pairs align one-to-one with the 1.005 construct/deep_copy/link/destruct order. This is the first pair. Corroborated independently: the 1.004 body size is 0xda, exactly the 1.005 size, and the prologue matches the 1.005 signature byte-for-byte in its fixed part. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -2512,6 +2789,20 @@
               "detail": "The retained Ghidra export contains the event-link helper decompilation and references; no analysis date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c35e90",
+          "signature": {
+            "bytes": "48 85 d2 74 15 48 89 4a 10 48 8b 41",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed. The address was established in an earlier derivation pass of this session and is carried forward; the entry-anchored signature stored here was measured unique image-wide in the second pass."
+            }
+          ]
         }
       }
     },
@@ -2543,6 +2834,20 @@
               "type": "ghidra_artifact",
               "path": "analysis/ChartEventAbiGhidra.txt",
               "detail": "The retained Ghidra export contains the event destructor decompilation and references; no analysis date is asserted."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c32c48",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 dc c2 47 fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by a positional chain on two independently confirmed 1.004 anchors: the confirmed piano_score_expand 0x03c5fad8 makes its single call at intra-function offset 0x5c onto piano_score_parser 0x03c59e64, whose ordered piano-band calls form four consecutive twice-called pairs; the third pair is the confirmed piano_event_link anchor 0x03c35e90, so the flanking pairs align one-to-one with the 1.005 construct/deep_copy/link/destruct order. This is the fourth pair. Corroborated independently: the 1.004 body size is 0x29, exactly the 1.005 size, matching the tiny destructor recorded in analysis/ChartEventAbiGhidra.txt. Signature measured unique image-wide."
             }
           ]
         }
@@ -2940,6 +3245,20 @@
               "detail": "Matching-build static evidence establishes the UGameViewportClient::PostRender ABI, primary vtable slot +0x320, complete prologue, and exact-once original-first detour contract."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01662270",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 b6 cc a4 00 48 2b e0",
+            "mask": "xxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by the vtable route, not by delta: the UGameViewportClient primary vtable at 0x145fdadf0 holds this function at slot +0x318 and the Draw-side virtual call that passes the debug UCanvas targets exactly [vtable+0x318]. 1.005 used slot +0x320; 1.004 removed one virtual ahead of PostRender, and the thin 26-byte forwarder's tail jump moved 0x328 -> 0x320 correspondingly. Two look-alikes at 0x0138a2c4 and 0x05006a58 were rejected as unrelated adaptors. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -2971,6 +3290,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
               "detail": "Matching-build call-site evidence independently identifies the PostRender virtual call and live DebugCanvasObject argument."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00cc3763",
+          "signature": {
+            "bytes": "ff 90 18 03 00 00 48 8b bc 24",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed as the PostRender virtual call inside UGameViewportClient::Draw FUN_140cc2194; the instruction immediately after is MOV RDI,[RSP+0x160], byte-identical to the 1.005 call-site trailer. The signature differs from 1.005 in exactly one byte - the vtable slot (ff 90 18 03 00 00 against ff 90 20 03 00 00) - which is why the 1.005 run finds nothing in this image. Signature measured unique image-wide."
             }
           ]
         }
@@ -3006,6 +3339,20 @@
               "detail": "Matching-build static evidence establishes the effective FCanvas text-helper ABI and complete callable signature used only after signature validation."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x051dcd40",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 56 48 8d ac 24 c0 fe ff ff b8 40 02 00 00 e8 d0",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed from its own body: param_4 is walked as a null-terminated short* and copied, a text item is built from (x,y,font,color), and a null font or a clear font+0x110 bit0 selects the constant black shadow color DAT_145eb6298 with FVector2D(1,1) - the documented default-black shadow. Submits through FCanvas::DrawItem FUN_14095dc50 and returns a float layout field, matching the documented layout-metric return contract. Signature measured unique image-wide."
+            }
+          ]
         }
       }
     },
@@ -3037,6 +3384,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/StartupCacheOverlayNativeCanvas-v1-20260801.md",
               "detail": "Matching-build first-viewport-call recovery establishes the FCanvas::DrawTile ABI, complete callable signature, null-texture native-white behavior, and alpha-blend semantics."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x051dd908",
+          "signature": {
+            "bytes": "40 55 48 8d 6c 24 e9 b8 e0 00 00 00 e8 17",
+            "mask": "xxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed from its own body: the eleventh parameter is the texture and the first statement is the documented null-texture-selects-native-white fallback to DAT_1488f7ed0; the twelfth parameter is the alpha-blend char that selects a blend mode from canvas+0x95 and otherwise forces mode 0. Submits through the same FCanvas::DrawItem FUN_14095dc50 as the text helper, confirming both are methods of the same FCanvas object. Signature measured unique image-wide."
             }
           ]
         }

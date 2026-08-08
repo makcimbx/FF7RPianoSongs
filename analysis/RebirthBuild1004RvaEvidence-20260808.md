@@ -297,6 +297,305 @@ The `probable` grade is retained deliberately. It was not promoted to make the
 set look complete, and in-game qualification on a 1.004 executable is what
 would settle it.
 
+## Second derivation pass: the remaining 33 entries
+
+Everything above describes the first pass, which established 45 of the 78
+catalog entries; its coverage and uniqueness counts are scoped to those 45. This
+section covers the second pass over the remaining 33. The same rules apply
+unchanged: static read-only analysis of the 1.004 image only, semantic route
+first and signature second, and every recorded run re-read at its own entry RVA
+and *measured* image-wide with `search_byte_patterns` rather than assumed unique.
+Every run recorded in this pass measured exactly one match.
+
+Outcome of the second pass:
+
+| disposition | count |
+| --- | --- |
+| adopted, graded confirmed | 25 |
+| adopted, graded probable | 1 (`bgm_slot_setup`) |
+| already present from an earlier pass, still probable | 1 (`bgm_controller_key_global`) |
+| held back deliberately | 1 (`piano_audio_state_tick`) |
+| unestablished | 5 |
+| positively absent from 1.004 | 1 (`progress_lookup_display_caller_1`, above) |
+
+Build `ff7rebirth-steam-win64-68fd6fde` therefore moves from 45 to **71 of 78**
+addresses and from 20 to **33 of 38** hook specifications.
+
+### Routes used in this pass
+
+1. **Call-edge chains from a confirmed anchor.** The strongest route available
+   without symbols, and the one that settled the piano event quartet. The
+   confirmed `piano_score_expand` (`0x03c5fad8`) makes exactly one call, at
+   intra-function offset `0x5c`, and it lands on `piano_score_parser`
+   (`0x03c59e64`). Inside that parser the ordered piano-band direct calls form
+   four consecutive pairs, each target called exactly twice; the third pair is
+   the already-confirmed `piano_event_link` anchor (`0x03c35e90`), which fixes
+   the phase of the sequence and aligns the flanking pairs one-to-one with the
+   1.005 order construct / deep_copy / link / destruct.
+2. **Container enumeration.** `title_view_converter` was found by enumerating
+   every direct call target of the confirmed 1.004 activation container
+   `FUN_143c40db4` and comparing callee prologues, rather than by searching for
+   the 1.005 prologue image-wide.
+3. **String literal anchors.** `create_package` was recovered from the three UE
+   `CreatePackage` fatal-log literals, which are referenced from that one
+   function and nowhere else in the image.
+4. **Vtable slot references.** `game_viewport_client_post_render` was recovered
+   from the `UGameViewportClient` primary vtable at `0x145fdadf0` and the
+   Draw-side virtual call that targets the same slot.
+5. **ABI plus semantic body reading.** Used where no anchor existed but the body
+   is self-identifying: `player_input_input_key` (stride-`0xf0` KeyStateMap,
+   double-click detection), `sead_onmemory_bank_release` (blocking `Sleep(1)`
+   spin only when the asynchronous parameter is zero),
+   `sead_onmemory_bank_kind_lookup` (same shared lookup helper and critical
+   section as the release entry), and both `FCanvas` helpers.
+6. **Return-site decoding.** `title_view_converter_activation_return` was
+   obtained by decoding the `e8 rel32` CALL at `0x03c40f9c` and taking the
+   following instruction boundary, never by adding a 1.005 delta.
+
+### Two identity corrections that explain earlier failures
+
+Both are cases where a 1.005-derived prologue prefix was silently wrong for
+1.004, so a prefix search either returned nothing or returned only decoys. They
+are recorded because the same mistake is available to any future pass.
+
+- **`game_viewport_client_post_render` moved vtable slot `+0x320` → `+0x318`.**
+  One virtual was removed ahead of `PostRender` in 1.004. The entry is a thin
+  26-byte forwarder whose own tail jump moved `0x328` → `0x320` by the same one
+  slot. The consequence is that the 1.005 call-site signature for
+  `game_viewport_client_draw_post_render_call` (`ff 90 20 03 00 00 ...`) returns
+  **zero** matches in 1.004; the 1.004 run is the same bytes with the slot byte
+  changed to `18`. A search that found nothing was therefore correct evidence of
+  a slot change, not evidence that the call site was gone. Two look-alike
+  forwarders at `0x0138a2c4` and `0x05006a58` were rejected: both insert a
+  `MOV RCX,[RCX+0x78]` / `MOV RCX,[RCX+0x30]` adjustment before the vtable jump
+  and are unrelated adaptors.
+- **`create_package` prologue frame immediate `0x50` → `0x60`.** The prologue is
+  otherwise byte-identical between builds. That single immediate byte is why a
+  1.005-prefix search returned five unrelated candidates and missed the real
+  function entirely. It was recovered only through its three fatal-log string
+  literals, which is why string anchoring outranks prologue matching whenever a
+  unique literal exists.
+
+The general lesson both cases carry: a prologue prefix is a *search accelerator*
+derived from the other build, not evidence. Neither entry would have been found
+by the accelerator, and one would have been mis-assigned to a decoy.
+
+### `piano_score_parser` grew from `0x5c8` to `0x891` bytes
+
+Body size was an explicit corroborator for three of the four piano event
+entries — `piano_event_construct` (`0xda`), `piano_event_deep_copy` (`0x10d`)
+and `piano_event_destruct` (`0x29`) are byte-for-byte the same size as their
+1.005 counterparts. Their container is not: `piano_score_parser` grew by `0x2c9`
+bytes between builds, a 46% increase.
+
+That is recorded because it bounds how far size may be trusted. The parser was
+identified purely by the call edge from `piano_score_expand` and by the internal
+pair ordering; had size been used as a filter it would have been rejected. Small
+leaf helpers appear to survive builds unchanged while their callers absorb
+inlined code, so size agreement is usable as confirmation and never as a search
+key.
+
+## Probable addresses in build 1.004
+
+The catalog schema has no confidence field. A probable address is therefore
+indistinguishable from a confirmed one by inspection of `rva_catalog.json`
+alone, which is exactly the failure this section exists to prevent. Every
+probable 1.004 address is listed here, and each carries an explicit
+`PROBABLE, not confirmed` marker in its catalog `evidence.detail` prose.
+
+Three entries in build 1.004 are probable: `select_index_helper` (recorded in
+its own section above), `bgm_slot_setup`, and `bgm_controller_key_global`.
+
+### `bgm_slot_setup` (`0x01213e68`) — adopted
+
+`install_policy` is `callable`, so the product forms a function pointer at this
+address and calls it directly. A misidentified address behind a direct call is
+the highest-consequence failure the catalog can carry, so adoption was decided
+on evidence rather than on the entry's low `diagnostic` status.
+
+Positive evidence:
+
+- The three-parameter ABI matches `BgmSlotSetupFn`
+  (`void __fastcall(void*, uint8_t, uint64_t)`) exactly.
+- The function is called **directly by the confirmed 1.004
+  `sqexsead_play_setup` anchor** (`0x01212540`). This is a call edge from an
+  independently established address, the same route class that settled the
+  piano event quartet, and it is independent of prologue shape.
+- The object layout the body touches matches the documented slot layout in
+  `src/game/runtime_layouts.h`. The body guards on and stores the flag at
+  `slot+0x5e`, forwards flag and context to three helpers on the sub-object at
+  `slot+0xc0`, and on `flag == 0` sets `slot+0x9c`. All three are declared
+  `SqexSeadSlot` fields (`observed_field5e`, `bgm`, `observed_field9c`), and
+  `observed_field5e` and `observed_field9c` are precisely two of the five fields
+  `apply_slot_setup_profile` snapshots and rolls back **around this very call**.
+  A three-of-three agreement between an independently decompiled body and a
+  layout recorded from a different build is corroboration, not coincidence.
+- The 14-byte entry-anchored run was measured unique image-wide.
+
+What remains unproven, and why the grade stays probable:
+
+- The 1.005 counterpart sits at `0x0142260c`, far outside the 1.005 BGM cluster
+  (`0x01248xxx`–`0x01249xxx`) that corresponds to the 1.004 cluster at
+  `0x01212xxx`. Confirming that the 1.005 function has the same body and the
+  same call edge from `play_setup` requires the 1.005 program, which the bridge
+  serving this session does not host. Cross-build role equivalence is therefore
+  asserted from the 1.004 side only.
+- No runtime evidence exists on any 1.004 executable.
+
+Why adoption is safe even if the identification were wrong:
+
+- `g_slot_setup_available` is set at startup from
+  `signature_matches(exe_module, find_rva_signature("bgm_slot_setup"))`. When the
+  entry is absent for the active build, `find_rva_signature` returns null,
+  `signature_matches` returns false for a null spec or a zero RVA, and the flag
+  stays false. `apply_slot_setup_profile` re-reads the flag with acquire
+  ordering immediately before forming the pointer and returns without calling.
+  This bounds *build drift*, not misidentification — the signature was derived
+  from this address, so it necessarily matches on this image.
+- The call itself runs inside `call_bgm_slot_setup_seh`, so an access violation
+  in the callee is contained and reported as failure.
+- Every field the sequence mutates (`+0x34`, `+0x48`, `+0x5e`, `+0x60..0x9b`,
+  `+0x9c`) is snapshotted before the call and restored by `rollback_setup_fields`
+  with verifying read-back if the native call fails or the
+  controller → slot → bgm chain no longer matches; a failed rollback disables the
+  entire audio route.
+- On native failure `g_slot_setup_available` is latched false, so the address is
+  never called again in that session.
+- The whole path is unreachable until `capture_slot_setup_profile` has succeeded,
+  which itself requires the live controller lookup, a UObject identity match, and
+  a readable controller → slot → bgm chain.
+
+The residual risk a wrong address would carry is silent corruption inside an
+unrelated callee invoked with a slot pointer in `RCX` — SEH catches faults, not
+wrong-but-valid writes. That risk is judged acceptable against the call edge from
+a confirmed anchor plus the three-field layout agreement. It is not zero, which
+is why the grade is not promoted.
+
+### `bgm_controller_key_global` (`0x091e3320`) — retained, unchanged
+
+Already present in the catalog from an earlier pass and **not** re-derived here.
+Its `requirement` is `release`, and the generator rejects a `release` entry that
+is missing from any declared build, so it cannot be withheld without
+reclassifying the entry. It is recorded here so it is not mistaken for a
+confirmed address.
+
+`validation.policy` is `data_reference` and no signature applies, so there is no
+byte-level check of this address at any point. Nothing verifies that the 1.005
+`sqexsead_play_setup` passes the cataloged global; the single missing proof is a
+read of the 1.005 `play_setup` body to see which global feeds its controller-key
+argument, and that requires the 1.005 program this bridge does not serve. Until
+then the 1.004 value is unverified by that route.
+
+### `piano_audio_state_tick` (`0x03cb2ba4`) — held back
+
+The address was derived and is **not** in the catalog. It stays absent, which is
+a supported state: `requirement` is `research` and the generator only forbids a
+`release` entry from missing a build.
+
+The candidate: of the three functions image-wide carrying the 1.005 prologue
+register/frame shape, this is the only one that consumes the incoming `XMM1`
+float — `VMOVAPS XMM9,XMM1` immediately after frame setup — matching
+`PianoAudioStateTickFn = void __fastcall(void*, float)`, followed by timing
+arithmetic against `[R15+0x224]`. The other two candidates only spill
+callee-saved `XMM10`–`XMM13` and never read `XMM1`. The 31-byte run measured
+unique.
+
+Why that is not enough:
+
+- The identification rests entirely on prologue shape plus float-parameter
+  consumption. That is a discriminator *among three prologue-shape matches*, not
+  a tie to the piano audio subsystem. There is no call edge to any confirmed
+  1.004 anchor, and the single caller `FUN_143ca8918` is itself undocumented, so
+  the owning subsystem is unverified.
+- The consequence of a wrong target is not bounded the way `bgm_slot_setup`'s
+  is. `RawRvaHook::install` verifies the full cataloged prologue before hooking,
+  but that signature was derived from this address, so it bounds build drift and
+  not misidentification — the same limitation as the signature gate above, with
+  none of the compensating anchor evidence.
+- `piano_audio_state_tick_detour` is not an observation-only pass-through. It
+  takes the audio route operations lock, drives `g_piano_audio_owner_tick`, the
+  tick nonce, `g_piano_audio_owner_custom_playsetup` and the pause/resume marker
+  batch, and its deferred actions reach the OnMemory bank release path. Installed
+  on an unrelated function it would drive the product's own audio route state
+  machine from a false owner pointer at that function's call frequency —
+  corruption of product state rather than a contained native fault.
+
+Being an `optional_hook` bounds the cost of *absence* (installation is skipped
+and logged as `optional_hook_disabled`), not the cost of a wrong target. Absence
+is the cheaper error here, so the entry is held.
+
+Next experiment to settle it: anchor through the caller rather than the callee.
+Identify `FUN_143ca8918` first — its own callers, and whether it touches
+`PianoAudioGlobal::owner` (`+0x1b0`) or `PianoAudioOwner` fields (`state +0x08`,
+`packed_key +0x50`, `request_index +0x7c`) from `src/game/runtime_layouts.h`.
+A confirmed edge into the piano audio owner object would settle both entries at
+once; without one, the prologue-shape match should not be adopted.
+
+## Entries still unestablished in build 1.004
+
+Five entries have no 1.004 address. All are `diagnostic` or `research`, none is
+`release`, and their absence is a supported catalog state. The next experiment
+recorded for each is the one that pass two would have run with more budget.
+
+- **`bgm_manager_pause`.** The 1.005 entry sits at `0x02a78014` with
+  `bgm_slot_pause_transition` `0x64` later and `bgm_slot_resume_transition` at
+  `0x02a77658` — a tight three-function cluster in a band that is **not** the
+  SQEXSEAD BGM cluster (1.005 `0x01248xxx`–`0x01249xxx`, 1.004 `0x01212xxx`). The
+  corresponding 1.004 band was not located, and the prologue
+  `40 53 b8 30 00 00 00 e8` exceeds 1000 matches image-wide with no
+  discriminating tail. *Next experiment:* the BGM manager singleton is
+  `0x1490fd850` with an int32 pause count at `+0x54`
+  (`SqexSeadManager::pause_count`). Run a **function-scoped** instruction search
+  for `INC`/`DEC`/`ADD`/`SUB` against `dword [reg+0x54]`, restricted to functions
+  that also touch the `+0x28` slot array and `+0x30` slot count. The image-wide
+  form of that search did not return within 120s. The manager-side pause should
+  iterate the slot array and call the per-slot transition, which would settle all
+  three entries at once.
+- **`bgm_slot_pause_transition`.** Expected to be the per-slot callee of
+  `bgm_manager_pause`. *Next experiment:* settle `bgm_manager_pause` first, then
+  take its per-slot callee. The 1.005 adjacency is a hint only — this session
+  already found two SQEXSEAD functions that broke relative order between builds,
+  so adjacency must not be used to derive the address.
+- **`bgm_slot_resume_transition`.** Counterpart of the pause transition; 1.005
+  `0x02a77658`. *Next experiment:* same chain — once the pause path is
+  identified, the resume counterpart is the sibling that decrements the manager
+  pause count at `+0x54` and drives the inverse slot transition.
+- **`end_text_block_set_text`.** 1.005 `0x00afbef8`. The prologue prefix
+  `48 89 5c 24 08 57 b8 50 00 00 00 e8` exceeds 1000 matches image-wide, the
+  image carries no `SetText` symbol, and no confirmed 1.004 anchor with a direct
+  call edge to it was found within the available context. *Next experiment:*
+  anchor through the consumer. `src/game/list_patch.cpp:106` calls this as
+  `SetTextFn` on a widget it reaches from the confirmed anchors
+  `find_child_widget` (`0x00803390`) and `set_string_text` (`0x0098eaf4`).
+  Recover the 1.004 list-patch call path from those two and read the `SetText`
+  target off the actual call site — the same call-edge method that settled the
+  piano event quartet.
+- **`static_construct_object`.** 1.005 `0x00b1eb58`. The frame-independent
+  prologue prefix still matches 111 sites; all three exact-frame candidates
+  (`0x01304f34`, `0x01635044`, `0x0236a320`) have only one caller each, which is
+  disqualifying for the central UObject factory. The callees of the confirmed
+  `create_package` (`0x047aa91c`) were checked on the theory that `CreatePackage`
+  reaches `StaticConstructObject_Internal` via `NewObject<UPackage>`, but none of
+  its 19 callees carries the entry shape, so that path is inlined or indirect in
+  1.004. *Next experiment:* identify `StaticAllocateObject` first — the callee
+  `StaticConstructObject_Internal` invokes before running the class constructor —
+  then take its caller with the one-parameter `FStaticConstructObjectParameters`
+  ABI (`sizeof 0x40`, Class at `+0`, Outer at `+8`, Name at `+0x10`).
+  `FUN_140e79dc4` was the `StaticAllocateObject` guess from the `create_package`
+  callee list but has only 6 callers, so it must be verified or rejected before
+  that chain is trusted.
+
+## Corrected build attribution in `analysis/ChartEventAbiGhidra.txt`
+
+That retained Ghidra export is cited as catalog evidence for the 1.005
+`piano_event_link` entry, and its header named only `PROGRAM ff7rebirth_.exe`.
+Every RVA in it is 1.005, but the 1.004 Ghidra project opened for this pass
+carries the **same** program name, so the header was not build-identifying:
+anyone replaying those addresses against the live bridge during a 1.004 session
+would have read unrelated code at each one. The header now states the game
+version, catalog build id and PE timestamp explicitly and points at this note for
+the 1.004 counterparts. No data line in that file was altered.
+
 ## Known defects in the catalog carried by this note
 
 - The 1.005 catalog signature for `weak_object_resolver` is the same 16-byte run
