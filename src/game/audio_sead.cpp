@@ -855,6 +855,20 @@ private:
     const PlaySetupQualificationDiagnostic* play_setup_qualification_ = nullptr;
 };
 
+const char* audio_deferred_native_handoff_phase_name(
+    AudioDeferredNativeHandoffPhase phase) noexcept
+{
+    switch (phase) {
+    case AudioDeferredNativeHandoffPhase::None: return "none";
+    case AudioDeferredNativeHandoffPhase::SetCaptured: return "set_captured";
+    case AudioDeferredNativeHandoffPhase::CustomCleared: return "custom_cleared";
+    case AudioDeferredNativeHandoffPhase::NativeSetApplied: return "native_set_applied";
+    case AudioDeferredNativeHandoffPhase::NativePlayForwarded: return "native_play_forwarded";
+    case AudioDeferredNativeHandoffPhase::RetainedFailure: return "retained_failure";
+    }
+    return "unknown";
+}
+
 const char* audio_route_transition_reason_name(AudioRouteTransitionReason reason) noexcept
 {
     switch (reason) {
@@ -4842,10 +4856,8 @@ AudioCleanupEvidence audio_cleanup_evidence_locked(
     evidence.failed_journal_empty = g_failed_patch_journal.empty();
     evidence.immutable_identity_matches = g_frozen_profile_lease.active()
         && g_audio_route_state.lease_identity == g_frozen_profile_lease.identity();
-    const auto deferred_phase = g_audio_route_state.deferred_native_handoff.phase;
-    const bool deferred_native_forwarded = deferred_phase
-        == AudioDeferredNativeHandoffPhase::None
-        || deferred_phase == AudioDeferredNativeHandoffPhase::NativePlayForwarded;
+    const bool deferred_native_forwarded =
+        g_audio_route_state.deferred_native_handoff.native_play_obligation_met();
     const auto stop_phase = g_audio_route_state.stop_retirement.phase;
     const bool stop_retirement_quiescent = stop_phase == AudioStopRetirementPhase::None
         || stop_phase == AudioStopRetirementPhase::Quiescent;
@@ -11078,6 +11090,15 @@ void __fastcall bgm_slot_play_detour(void* controller)
                 postcondition_verified = true;
             }
         }
+        // Record the forwarding on every branch that reached the native Play,
+        // not only the one that could also verify a postcondition.  The
+        // retained-failure recovery forwards the native's own Play and then has
+        // no later phase to advance into, so without this the record would stay
+        // in `RetainedFailure` for the rest of the session and misreport a
+        // discharged obligation as permanently outstanding.
+        if (play_forwarded) {
+            record_deferred_native_play_forwarded(deferred);
+        }
         {
             std::lock_guard<std::mutex> lock(g_audio_state_mutex);
             if (g_audio_route_state.controller == controller
@@ -14059,9 +14080,8 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
         return early_result;
     }
 
-    const bool deferred_native_forwarded = !snapshot.deferred_native_handoff.active()
-        || snapshot.deferred_native_handoff.phase
-            == AudioDeferredNativeHandoffPhase::NativePlayForwarded;
+    const bool deferred_native_forwarded =
+        snapshot.deferred_native_handoff.native_play_obligation_met();
     const bool stop_retirement_quiescent = snapshot.stop_retirement.phase
             == AudioStopRetirementPhase::None
         || snapshot.stop_retirement.phase == AudioStopRetirementPhase::Quiescent;
@@ -14485,6 +14505,11 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
             << (retirement_facts.no_custom_publication_pending ? 1 : 0)
             << " deferred_handoff_forwarded="
             << (retirement_facts.deferred_handoff_forwarded ? 1 : 0)
+            // Without the phase, a false `deferred_handoff_forwarded` cannot be
+            // told apart from a handoff that legitimately never forwarded.
+            << " deferred_handoff_phase="
+            << audio_deferred_native_handoff_phase_name(
+                snapshot.deferred_native_handoff.phase)
             << " custom_request_retired="
             << (retirement_facts.custom_request_retired ? 1 : 0)
             << " retired_count="

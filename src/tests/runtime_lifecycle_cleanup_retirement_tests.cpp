@@ -2,6 +2,7 @@
 
 #include "core/hooks.h"
 #include "game/audio_cleanup_policy.h"
+#include "game/bgm_playback_aggregate_policy.h"
 #include "game/completion_capture.h"
 #include "game/duration.h"
 #include "game/frozen_profile_lifecycle.h"
@@ -497,6 +498,137 @@ void test_native_handoff_cleanup_policy()
     require(result.status == AudioRouteCleanupStatus::NoAction
             && !result.thaw_profile && !result.clear_route_metadata,
         "verified cleanup retry was not idempotent");
+}
+
+// Regression: a deferred handoff that forwarded the native's Play through the
+// retained-failure recovery must retire, because that branch has no later phase
+// to advance into.  Reading the obligation off `phase == NativePlayForwarded`
+// left such a handoff active for the rest of the session, so every later list
+// activation was denied - "custom song plays once, then all activation blocked".
+void test_deferred_native_handoff_recovery_forward_retires()
+{
+    using namespace ff7r::piano::game;
+
+    const auto pointer = [](uintptr_t value) { return reinterpret_cast<void*>(value); };
+    const auto request_handle = [](uint32_t generation, uint16_t pool_index = 0) {
+        return (static_cast<uint64_t>(generation) << 32)
+            | (static_cast<uint64_t>(pool_index) << 16) | 8ull;
+    };
+    const AudioRouteLeaseIdentity identity{91, 0x520};
+    const uint64_t owned_generation = 40;
+    const uint64_t handoff_generation = owned_generation + 1;
+    const AudioNativeRouteObservation custom{
+        pointer(0x1000), pointer(0x2000), pointer(0x3000), request_handle(4),
+        4, true, owned_generation, identity,
+    };
+    void* controller = pointer(0x9000);
+    void* requested_sound = pointer(0x5000);
+
+    // Every conjunct except the deferred handoff, matching the captured
+    // session in which fourteen of fifteen facts were already true.
+    const auto retirement_facts_with = [](bool deferred_handoff_forwarded) {
+        BgmPlaybackRouteRestoreRetirementFacts facts;
+        facts.lineage_present = true;
+        facts.lineage_sound_exact = true;
+        facts.lineage_route_exact = true;
+        facts.lineage_owner_restore_verified = true;
+        facts.lifecycle_failure_clear = true;
+        facts.owner_patch_restored = true;
+        facts.retired_sound_identity_exact = true;
+        facts.route_cleanup_pending = true;
+        facts.controller_exact = true;
+        facts.slot_bgm_exact = true;
+        facts.live_chain_exact = true;
+        facts.no_custom_publication_pending = true;
+        facts.custom_request_retired = true;
+        facts.patch_journals_restored = true;
+        facts.deferred_handoff_forwarded = deferred_handoff_forwarded;
+        return facts;
+    };
+
+    // The captured shape: `bgm_slot_set` could not verify its clear, so the
+    // handoff fell to RetainedFailure before any Play was forwarded.
+    AudioDeferredNativeHandoffState recovered;
+    AudioNativeRouteObservation unverified_clear{
+        custom.slot, custom.bgm, nullptr, custom.request_handle, 0, true,
+        handoff_generation, identity,
+    };
+    require(begin_deferred_native_handoff(
+                recovered, custom, controller, requested_sound, handoff_generation)
+            && !record_deferred_native_clear(recovered, custom, unverified_clear)
+            && recovered.phase == AudioDeferredNativeHandoffPhase::RetainedFailure,
+        "recovery-forward setup did not reach the captured retained-failure phase");
+
+    // Before the recovery Play the obligation is genuinely outstanding: the
+    // native's own BGM has not been handed back, so retirement must still be
+    // refused.  This is the conjunct's full strength and it is not relaxed.
+    require(!recovered.native_play_obligation_met(),
+        "retained-failure handoff was retired before it forwarded the native Play");
+    require(!bgm_playback_route_restore_retirement_proven(
+                retirement_facts_with(recovered.native_play_obligation_met())),
+        "route restore retirement was proven while the native Play was still pending");
+
+    // `bgm_slot_play` forwards the native Play through the retained-failure
+    // recovery.  The phase deliberately stays RetainedFailure - the mod still
+    // could not verify its own clear - but the obligation is discharged.
+    AudioNativeRouteObservation recovered_native{
+        custom.slot, custom.bgm, requested_sound, request_handle(6, 1), 4, true,
+        handoff_generation, identity,
+    };
+    require(evaluate_deferred_native_handoff_action(recovered, recovered_native)
+            == AudioDeferredNativeHandoffAction::ForwardNativePlayRetainingFailure,
+        "reconstructed native route did not authorize the retained recovery Play");
+    record_deferred_native_play_forwarded(recovered);
+    require(recovered.phase == AudioDeferredNativeHandoffPhase::RetainedFailure
+            && recovered.native_play_forwarded,
+        "recovery Play forwarding was not recorded as a fact independent of the phase");
+    require(recovered.native_play_obligation_met(),
+        "handoff that forwarded the native Play through recovery stayed outstanding, "
+        "so every later activation would be denied for the rest of the session");
+    require(bgm_playback_route_restore_retirement_proven(
+                retirement_facts_with(recovered.native_play_obligation_met())),
+        "route restore retirement stayed unproven after the native Play was forwarded, "
+        "reproducing the once-only playback block");
+
+    // Monotonic: repeated dispatches keep the fact, and only resetting the whole
+    // record clears it, so a fresh handoff never inherits a stale forward.
+    record_deferred_native_play_forwarded(recovered);
+    require(recovered.native_play_forwarded,
+        "repeated recovery dispatch dropped the recorded forward");
+    recovered = {};
+    require(!recovered.native_play_forwarded && recovered.native_play_obligation_met(),
+        "reset handoff record did not clear the forwarding fact");
+
+    // A handoff still pending on the live route blocks at every pre-forward
+    // phase, not just the retained-failure one.
+    AudioDeferredNativeHandoffState pending;
+    require(begin_deferred_native_handoff(
+                pending, custom, controller, requested_sound, handoff_generation)
+            && !pending.native_play_obligation_met(),
+        "captured Set intent was retired before the native Play was forwarded");
+    AudioNativeRouteObservation cleared{
+        custom.slot, custom.bgm, nullptr, 0, 0, true, handoff_generation, identity,
+    };
+    require(record_deferred_native_clear(pending, custom, cleared)
+            && !pending.native_play_obligation_met(),
+        "cleared custom route was retired before the native Play was forwarded");
+    AudioNativeRouteObservation native_route{
+        custom.slot, custom.bgm, requested_sound, request_handle(5), 2, true,
+        handoff_generation, identity,
+    };
+    require(record_deferred_native_set(pending, native_route)
+            && !pending.native_play_obligation_met(),
+        "applied native Set was retired before the native Play was forwarded");
+
+    // The verified path keeps the invariant: reaching NativePlayForwarded
+    // implies the forward was recorded, so the two can never disagree.
+    AudioNativeRouteObservation played_native = native_route;
+    played_native.state = 4;
+    require(record_deferred_native_play(pending, played_native)
+            && pending.phase == AudioDeferredNativeHandoffPhase::NativePlayForwarded
+            && pending.native_play_forwarded
+            && pending.native_play_obligation_met(),
+        "verified native Play did not record the forwarding fact");
 }
 
 void test_deferred_native_handoff_state_machine()

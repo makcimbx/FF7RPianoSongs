@@ -36,6 +36,7 @@
     X(test_frozen_profile_lease_lifecycle) \
     X(test_native_handoff_cleanup_policy) \
     X(test_deferred_native_handoff_state_machine) \
+    X(test_deferred_native_handoff_recovery_forward_retires) \
     X(test_audio_stop_retirement_monitor) \
     X(test_audio_natural_completion_retirement_policy) \
     X(test_reentrant_play_setup_private_claim_policy)

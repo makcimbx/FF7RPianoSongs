@@ -897,8 +897,20 @@ bool record_deferred_native_play(
     if (!deferred_native_play_ready(handoff, current) || current.state != 4) {
         return false;
     }
+    handoff.native_play_forwarded = true;
     handoff.phase = AudioDeferredNativeHandoffPhase::NativePlayForwarded;
     return true;
+}
+
+// Monotonic.  Called once per `bgm_slot_play` dispatch, immediately after a
+// `call_bgm_slot_play_original` returned for this handoff's `requested_sound`,
+// on every branch that forwards - including the retained-failure recovery,
+// which discharges the obligation without any phase left to advance to.
+void record_deferred_native_play_forwarded(
+    AudioDeferredNativeHandoffState& handoff) noexcept
+{
+    if (!handoff.active()) return;
+    handoff.native_play_forwarded = true;
 }
 
 bool AudioPatchJournalState::begin(

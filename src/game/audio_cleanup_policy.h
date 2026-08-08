@@ -537,10 +537,32 @@ struct AudioDeferredNativeHandoffState {
     void* requested_sound = nullptr;
     uint64_t retired_custom_request_handle = 0;
     uint64_t native_request_handle = 0;
+    // Monotonic record that `call_bgm_slot_play_original` returned for
+    // `requested_sound`.  The phase cannot carry this fact.  `RetainedFailure`
+    // is reached both *before* any forward (a clear or Set the mod could not
+    // verify, in `bgm_slot_set`) and *after* a successful recovery forward, and
+    // the recovery branch has no later phase to advance into.  Only the
+    // forwarding event itself is evidence that the native's own BGM Play
+    // reached the game.  Cleared solely by resetting the whole record.
+    bool native_play_forwarded = false;
 
     bool active() const noexcept
     {
         return phase != AudioDeferredNativeHandoffPhase::None;
+    }
+
+    // The deferred obligation is exactly "the native's replacement Play was not
+    // swallowed by the mod".  It is met when no handoff exists at all, or when
+    // this handoff forwarded that Play.  A handoff that has not forwarded yet
+    // still blocks retirement, unchanged.
+    //
+    // Deliberately not conditioned on any post-Play observation: an obligation
+    // to *make a call* is discharged by making it.  Re-deriving it from
+    // observed slot state would let one unverifiable read strand the record
+    // permanently, which is the defect this replaces.
+    bool native_play_obligation_met() const noexcept
+    {
+        return !active() || native_play_forwarded;
     }
 };
 
@@ -611,6 +633,8 @@ bool audio_retirement_cleanup_proven(
 bool record_deferred_native_play(
     AudioDeferredNativeHandoffState& handoff,
     const AudioNativeRouteObservation& current) noexcept;
+void record_deferred_native_play_forwarded(
+    AudioDeferredNativeHandoffState& handoff) noexcept;
 AudioRouteCleanupResult apply_audio_cleanup(
     FrozenProfileLeaseState& lease,
     AudioRouteLeaseIdentity identity,
