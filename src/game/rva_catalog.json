@@ -290,8 +290,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039a84e4",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d 68 a1 b8 90 00 00 00 e8 7a 36 7c fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -364,8 +364,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x0399e25c",
           "signature": {
-            "bytes": "48 89 5c 24 10 4c 89 44 24 18 55 56 57 48 8b ec",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 10 4c 89 44 24 18 55 56 57 48 8b ec b8 40 00 00 00 e8 0a d9 7c fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -573,8 +573,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039a0744",
           "signature": {
-            "bytes": "48 89 5c 24 08 55 48 8d ac 24 40 ff ff ff b8 c0",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 55 48 8d ac 24 40 ff ff ff b8 c0 01 00 00 e8 24 b4 7c fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -647,8 +647,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x03998360",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8d 68 a1 b8 a0 00 00 00 e8 fa 37 7d fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -721,8 +721,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x0399a334",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48",
-            "mask": "xxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d a8 88 fc ff ff b8 60 04 00 00 e8 27 18 7d fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -758,8 +758,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x03966a6c",
           "signature": {
-            "bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57",
-            "mask": "xxxxxxxxxxxxx"
+            "bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 58 ff ff ff b8 a8 01 00 00 e8 f5 50 80 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -862,8 +862,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00e94fc4",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 6c 24 10 56 57 41 54 41 56",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 6c 24 10 56 57 41 54 41 56 41 57 b8 60 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -938,8 +938,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039ba628",
           "signature": {
-            "bytes": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 50",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 50 00 00 00 e8 40 15 7b fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -975,8 +975,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039917f4",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 77 a3 7d fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1049,8 +1049,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249a44",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50",
-            "mask": "xxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 27 21 f2 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1086,8 +1086,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x012499c0",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 ab 21 f2 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1123,8 +1123,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x012496ac",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 bf 24 f2 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1161,8 +1161,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249ce0",
           "signature": {
-            "bytes": "b8 28 00 00 00 e8",
-            "mask": "xxxxxx"
+            "bytes": "b8 28 00 00 00 e8 96 1e f2 00",
+            "mask": "xxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1198,8 +1198,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249dd8",
           "signature": {
-            "bytes": "48 89 5c 24 08 57 b8",
-            "mask": "xxxxxxx"
+            "bytes": "48 89 5c 24 08 57 b8 20 00 00 00 e8 98 1d f2 00",
+            "mask": "xxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1235,8 +1235,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x0124848c",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d 68 b8 b8 30 01 00 00 e8 d2 36 f2 00",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1272,8 +1272,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249c84",
           "signature": {
-            "bytes": "b8 28 00 00 00 e8",
-            "mask": "xxxxxx"
+            "bytes": "b8 28 00 00 00 e8 f2 1e f2 00",
+            "mask": "xxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1309,8 +1309,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a78014",
           "signature": {
-            "bytes": "40 53 b8 30 00 00 00",
-            "mask": "xxxxxxx"
+            "bytes": "40 53 b8 30 00 00 00 e8 60 3b 6f ff",
+            "mask": "xxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1346,8 +1346,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a78078",
           "signature": {
-            "bytes": "40 53 b8 20 00 00 00",
-            "mask": "xxxxxxx"
+            "bytes": "40 53 b8 20 00 00 00 e8 fc 3a 6f ff",
+            "mask": "xxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1383,8 +1383,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a77658",
           "signature": {
-            "bytes": "40 53 b8 20 00 00 00",
-            "mask": "xxxxxxx"
+            "bytes": "40 53 b8 20 00 00 00 e8 1c 45 6f ff",
+            "mask": "xxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1420,8 +1420,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00824c64",
           "signature": {
-            "bytes": "48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 c0 fd ff ff b8 40 03 00 00 e8 fa 6e 94 01",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1457,8 +1457,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039a896c",
           "signature": {
-            "bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55 41 54 41 55 41 56 41 57 48 8b ec b8 40 00 00 00 e8 ef 31 7c fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1527,8 +1527,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x0142260c",
           "signature": {
-            "bytes": "48 89 5c 24 08 57 b8 30 00 00 00",
-            "mask": "xxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 57 b8 30 00 00 00 e8 64 95 d4 00",
+            "mask": "xxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1560,8 +1560,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00c92160",
           "signature": {
-            "bytes": "48 89 54 24 10 b8 68 00 00 00",
-            "mask": "xxxxxxxxxx"
+            "bytes": "48 89 54 24 10 b8 68 00 00 00 e8 11 9a 4d 01",
+            "mask": "xxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1686,8 +1686,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00b1eb58",
           "signature": {
-            "bytes": "48 89 5c 24 10 48 89 74",
-            "mask": "xxxxxxxx"
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 54 41 56 41 57 48 8d ac 24 50 ff ff ff b8 b0 01 00 00 e8 04 d0 64 01",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1719,8 +1719,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x045330d4",
           "signature": {
-            "bytes": "40 55 53 56 57 41 54 41",
-            "mask": "xxxxxxxx"
+            "bytes": "40 55 53 56 57 41 54 41 56 41 57 48 8b ec b8 50 00 00 00 e8 94 8a c3 fd",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1878,8 +1878,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00e8b948",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 23 02 2e 01",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -1973,8 +1973,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039b3608",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8d a8 28 fe ff ff b8 b0 02 00 00 e8 4f 85 7b fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -2006,8 +2006,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x03987624",
           "signature": {
-            "bytes": "48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 56 b8 20 00 00 00 e8 3d 45 7e fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -2039,8 +2039,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x03987734",
           "signature": {
-            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 37 44 7e fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -2292,7 +2292,7 @@
             {
               "type": "ghidra_static_analysis",
               "path": "src/game/scoreinfo_overlay.cpp",
-              "detail": "Matching-build static analysis established this generic progress-source resolver return inside piano_detail_update; it validates ordering and source authority without publishing a row."
+              "detail": "Matching-build static analysis established this generic progress-source resolver return inside progress_lookup; it validates ordering and source authority without publishing a row."
             }
           ]
         }
@@ -2322,7 +2322,7 @@
             {
               "type": "ghidra_static_analysis",
               "path": "src/game/scoreinfo_overlay.cpp",
-              "detail": "Matching-build static analysis established this generic rank-text resolver return inside piano_detail_update; it publishes a fresh immutable row after progress-source validation."
+              "detail": "Matching-build static analysis established this generic rank-text resolver return inside the separate rank-text helper at RVA 0x039a0c48; it publishes a fresh immutable row after progress-source validation."
             }
           ]
         }
@@ -2445,8 +2445,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x009ef331",
           "signature": {
-            "bytes": "ff 90 20 03 00 00",
-            "mask": "xxxxxx"
+            "bytes": "ff 90 20 03 00 00 48 8b bc 24 60 01 00 00",
+            "mask": "xxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -2478,8 +2478,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x05015114",
           "signature": {
-            "bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 56 48 8d ac 24 c0 fe ff ff",
-            "mask": "xxxxxxxxxxxxxxxxxxxxxx"
+            "bytes": "48 89 5c 24 10 48 89 74 24 18 55 57 41 56 48 8d ac 24 c0 fe ff ff b8 40 02 00 00 e8 4c 6a 15 fd",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
@@ -2647,8 +2647,8 @@
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x008349fc",
           "signature": {
-            "bytes": "44 8b 49 04 45 33 c0 45 85 c9 74 4f 8b 01 85 c0",
-            "mask": "xxxxxxxxxxxxxxxx"
+            "bytes": "44 8b 49 04 45 33 c0 45 85 c9 74 4f 8b 01 85 c0 78 49 3b 05 38 a1 ee 07",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [
             {
