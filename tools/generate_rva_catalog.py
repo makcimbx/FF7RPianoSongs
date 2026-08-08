@@ -31,10 +31,8 @@ VALIDATION_KEYS = {"policy"}
 SIGNATURE_KEYS = {"bytes", "mask"}
 EVIDENCE_KEYS = {"type", "path", "detail"}
 HOOK_SPEC_KEYS = {"name", "order", "required_for_release_startup"}
-LOCATOR_KEYS = {
-    "id", "cpp_symbol", "pattern", "match_policy", "decode",
-    "candidate_adjustments", "consumers", "evidence",
-}
+LOCATOR_KEYS = {"id", "cpp_symbol", "match_policy", "consumers", "builds"}
+LOCATOR_BUILD_KEYS = {"pattern", "decode", "candidate_adjustments", "evidence"}
 LOCATOR_PATTERN_KEYS = {"bytes", "mask"}
 LOCATOR_DECODE_KEYS = {"kind", "displacement_offset", "instruction_size"}
 
@@ -188,7 +186,7 @@ def validate_evidence(items: object, context: str, root: Path) -> list[dict]:
     return validated
 
 
-def validate_locators(raw_locators: object, root: Path) -> list[dict]:
+def validate_locators(raw_locators: object, root: Path, build_ids: set[str]) -> list[dict]:
     if not isinstance(raw_locators, list) or not raw_locators:
         raise CatalogError("locators must be a non-empty array")
     ids: set[str] = set()
@@ -208,43 +206,68 @@ def validate_locators(raw_locators: object, root: Path) -> list[dict]:
         ids.add(identifier)
         symbols.add(symbol)
 
-        pattern = parse_locator_pattern(locator["pattern"], f"{context}.pattern")
         if locator["match_policy"] != "first":
             raise CatalogError(f"{context}.match_policy must be 'first'")
-        decode = require_keys(locator["decode"], LOCATOR_DECODE_KEYS, f"{context}.decode")
-        if decode["kind"] != "rel32":
-            raise CatalogError(f"{context}.decode.kind must be 'rel32'")
-        displacement_offset = parse_hex(
-            decode["displacement_offset"], f"{context}.decode.displacement_offset")
-        instruction_size = parse_hex(decode["instruction_size"], f"{context}.decode.instruction_size")
-        if displacement_offset + 4 > len(pattern[0]):
-            raise CatalogError(f"{context}.decode rel32 displacement is outside the pattern")
-        if instruction_size == 0 or instruction_size > len(pattern[0]):
-            raise CatalogError(f"{context}.decode.instruction_size is outside the pattern")
-        if displacement_offset + 4 > instruction_size:
-            raise CatalogError(f"{context}.decode rel32 displacement is outside the instruction")
-
-        raw_adjustments = locator["candidate_adjustments"]
-        if not isinstance(raw_adjustments, list) or not raw_adjustments:
-            raise CatalogError(f"{context}.candidate_adjustments must be a non-empty array")
-        adjustments = [
-            parse_hex(value, f"{context}.candidate_adjustments[{adjustment_index}]")
-            for adjustment_index, value in enumerate(raw_adjustments)
-        ]
-        if len(adjustments) != len(set(adjustments)):
-            raise CatalogError(f"{context}.candidate_adjustments must be unique")
-        if adjustments[0] != 0:
-            raise CatalogError(f"{context}.candidate_adjustments must begin with zero")
-
         validate_repository_paths(locator["consumers"], f"{context}.consumers", root)
-        validate_evidence(locator["evidence"], f"{context}.evidence", root)
-        parsed.append({
-            **locator,
-            "pattern_value": pattern,
-            "displacement_offset_value": displacement_offset,
-            "instruction_size_value": instruction_size,
-            "candidate_adjustment_values": adjustments,
-        })
+
+        raw_builds_for_locator = locator["builds"]
+        if not isinstance(raw_builds_for_locator, dict):
+            raise CatalogError(f"{context}.builds must be an object keyed by build id")
+        # A locator carries no requirement field and has no null-spec degradation path: a build
+        # that cannot resolve it loads without runtime object identity and silently publishes
+        # nothing. Absence is therefore never meaningful, and every declared build must name
+        # exactly one derivation of its own.
+        declared = set(raw_builds_for_locator)
+        if declared != build_ids:
+            raise CatalogError(
+                f"{context}.builds must be derived for every declared build; "
+                f"missing={sorted(build_ids - declared)} extra={sorted(declared - build_ids)}")
+
+        locator_builds: dict[str, dict] = {}
+        for build_id, raw_build_locator in raw_builds_for_locator.items():
+            build_context = f"{context}.builds.{build_id}"
+            build_locator = require_keys(raw_build_locator, LOCATOR_BUILD_KEYS, build_context)
+            pattern = parse_locator_pattern(build_locator["pattern"], f"{build_context}.pattern")
+            decode = require_keys(
+                build_locator["decode"], LOCATOR_DECODE_KEYS, f"{build_context}.decode")
+            if decode["kind"] != "rel32":
+                raise CatalogError(f"{build_context}.decode.kind must be 'rel32'")
+            displacement_offset = parse_hex(
+                decode["displacement_offset"], f"{build_context}.decode.displacement_offset")
+            instruction_size = parse_hex(
+                decode["instruction_size"], f"{build_context}.decode.instruction_size")
+            if displacement_offset + 4 > len(pattern[0]):
+                raise CatalogError(
+                    f"{build_context}.decode rel32 displacement is outside the pattern")
+            if instruction_size == 0 or instruction_size > len(pattern[0]):
+                raise CatalogError(f"{build_context}.decode.instruction_size is outside the pattern")
+            if displacement_offset + 4 > instruction_size:
+                raise CatalogError(
+                    f"{build_context}.decode rel32 displacement is outside the instruction")
+
+            raw_adjustments = build_locator["candidate_adjustments"]
+            if not isinstance(raw_adjustments, list) or not raw_adjustments:
+                raise CatalogError(f"{build_context}.candidate_adjustments must be a non-empty array")
+            adjustments = [
+                parse_hex(value, f"{build_context}.candidate_adjustments[{adjustment_index}]")
+                for adjustment_index, value in enumerate(raw_adjustments)
+            ]
+            if len(adjustments) != len(set(adjustments)):
+                raise CatalogError(f"{build_context}.candidate_adjustments must be unique")
+            if adjustments[0] != 0:
+                raise CatalogError(f"{build_context}.candidate_adjustments must begin with zero")
+
+            locator_builds[build_id] = {
+                "pattern": build_locator["pattern"],
+                "pattern_value": pattern,
+                "decode": decode,
+                "displacement_offset_value": displacement_offset,
+                "instruction_size_value": instruction_size,
+                "candidate_adjustment_values": adjustments,
+                "evidence": validate_evidence(
+                    build_locator["evidence"], f"{build_context}.evidence", root),
+            }
+        parsed.append({**locator, "builds": locator_builds})
     return parsed
 
 
@@ -400,7 +423,7 @@ def load_and_validate_catalog() -> tuple[dict, list[dict], list[dict]]:
         raise CatalogError("hook_spec.order values must be contiguous from zero")
     validate_consumer_references(parsed)
     validate_source_literals(parsed, max(image_size_by_build.values()))
-    locators = validate_locators(catalog["locators"], ROOT)
+    locators = validate_locators(catalog["locators"], ROOT, build_ids)
     return catalog, parsed, locators
 
 
@@ -531,12 +554,13 @@ def render_build_identity(build: dict, catalog_sha256: str, generator_sha256: st
     return "\n".join(lines).encode("ascii")
 
 
-def render_runtime_locator_specs(locators: list[dict]) -> bytes:
+def render_runtime_locator_specs(locators: list[dict], build_id: str) -> bytes:
     lines = ["// Generated by tools/generate_rva_catalog.py from src/game/rva_catalog.json. Do not edit.", ""]
     for locator in locators:
         symbol = locator["cpp_symbol"]
-        values, mask = locator["pattern_value"]
-        adjustments = locator["candidate_adjustment_values"]
+        build_data = locator["builds"][build_id]
+        values, mask = build_data["pattern_value"]
+        adjustments = build_data["candidate_adjustment_values"]
         lines.extend([
             f"constexpr std::array<std::uint8_t, {len(values)}> k{symbol}PatternBytes{{{{{format_bytes(values)}}}}};",
             f"constexpr std::array<std::uintptr_t, {len(adjustments)}> k{symbol}CandidateAdjustments{{{{{format_uintptrs(adjustments)}}}}};",
@@ -545,13 +569,14 @@ def render_runtime_locator_specs(locators: list[dict]) -> bytes:
     lines.append(f"constexpr std::array<RuntimeLocatorSpec, {len(locators)}> kRuntimeLocatorSpecs{{{{")
     for locator in locators:
         symbol = locator["cpp_symbol"]
-        _, mask = locator["pattern_value"]
+        build_data = locator["builds"][build_id]
+        _, mask = build_data["pattern_value"]
         lines.append(
             f'    {{"{locator["id"]}", '
             f'{{k{symbol}PatternBytes.data(), "{mask}", k{symbol}PatternBytes.size()}}, '
             "RuntimeLocatorMatchPolicy::First, "
-            f'{{RuntimeLocatorDecodeKind::Rel32, {locator["displacement_offset_value"]}, '
-            f'{locator["instruction_size_value"]}}}, '
+            f'{{RuntimeLocatorDecodeKind::Rel32, {build_data["displacement_offset_value"]}, '
+            f'{build_data["instruction_size_value"]}}}, '
             f'{{k{symbol}CandidateAdjustments.data(), k{symbol}CandidateAdjustments.size()}}}},'
         )
     lines.extend(["}};", ""])
@@ -572,7 +597,6 @@ def build_output_paths(build_id: str) -> tuple[Path, ...]:
 def generated_outputs(catalog: dict, entries: list[dict], locators: list[dict]) -> dict[Path, bytes]:
     catalog_sha256 = hashlib.sha256(CATALOG_PATH.read_bytes()).hexdigest()
     generator_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
-    locator_specs = render_runtime_locator_specs(locators)
     outputs: dict[Path, bytes] = {}
     for build in catalog["builds"]:
         build_id = build["id"]
@@ -581,7 +605,7 @@ def generated_outputs(catalog: dict, entries: list[dict], locators: list[dict]) 
         outputs[paths[1]] = render_hook_specs(entries, build_id)
         outputs[paths[2]] = render_rva_signatures(entries, build_id)
         outputs[paths[3]] = render_build_identity(build, catalog_sha256, generator_sha256)
-        outputs[paths[4]] = locator_specs
+        outputs[paths[4]] = render_runtime_locator_specs(locators, build_id)
     return outputs
 
 

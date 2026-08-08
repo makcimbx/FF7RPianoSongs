@@ -3647,35 +3647,64 @@
     {
       "id": "guobject_array",
       "cpp_symbol": "GuObjectArray",
-      "pattern": {
-        "bytes": "03 00 00 00 00 00 ff c8 3b d0 0f 8d 00 00 00 00 44 8b",
-        "mask": "x?????xxxxxx????xx"
-      },
       "match_policy": "first",
-      "decode": {
-        "kind": "rel32",
-        "displacement_offset": "0x02",
-        "instruction_size": "0x06"
-      },
-      "candidate_adjustments": [
-        "0x00",
-        "0x24",
-        "0x20",
-        "0x10",
-        "0x30"
-      ],
       "consumers": [
         "src/game/list_patch.cpp",
         "src/game/chart_patch.cpp",
         "src/game/uobject_identity.cpp"
       ],
-      "evidence": [
-        {
-          "type": "migration_record",
-          "path": "docs/Architecture.md",
-          "detail": "The durable architecture contract records the runtime_layouts.h GUObjectArray locator migration on 2026-07-16; this preserves the existing first-match pattern, rel32 decode, and candidate order without asserting an independent verification date."
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "pattern": {
+            "bytes": "03 00 00 00 00 00 ff c8 3b d0 0f 8d 00 00 00 00 44 8b",
+            "mask": "x?????xxxxxx????xx"
+          },
+          "decode": {
+            "kind": "rel32",
+            "displacement_offset": "0x02",
+            "instruction_size": "0x06"
+          },
+          "candidate_adjustments": [
+            "0x00",
+            "0x24",
+            "0x20",
+            "0x10",
+            "0x30"
+          ],
+          "evidence": [
+            {
+              "type": "migration_record",
+              "path": "docs/Architecture.md",
+              "detail": "The durable architecture contract records the runtime_layouts.h GUObjectArray locator migration on 2026-07-16; this preserves the existing first-match pattern, rel32 decode, and candidate order without asserting an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "pattern": {
+            "bytes": "3b 05 00 00 00 00 7d 00 99 b9 00 00 01 00 f7 f9 48 63 c8 48 63 c2",
+            "mask": "xx????x?xxxxxxxxxxxxxx"
+          },
+          "decode": {
+            "kind": "rel32",
+            "displacement_offset": "0x02",
+            "instruction_size": "0x06"
+          },
+          "candidate_adjustments": [
+            "0x00",
+            "0x24",
+            "0x20",
+            "0x10",
+            "0x30"
+          ],
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "The 1.005 pattern matches zero sites in this image, so the locator was re-derived from this binary. It anchors the inlined FUObjectArray index-to-item idiom CMP EAX,[rip+num_elements] / JGE / CDQ / MOV ECX,0x10000 / IDIV ECX / MOVSXD RCX,EAX / MOVSXD RAX,EDX. Scanning the mapped image finds 650 matches, and every one decodes to the same target 0x088eb4cc, so the first-match policy is unambiguous. The first match is RVA 0x0077e0b9, whose rel32 decodes to 0x0077e0b9 + 0x06 + 0x0816d40d = 0x088eb4cc, the cataloged object-count field; candidate adjustment 0x24 recovers the GUObjectArray base 0x088eb4a8. The same idiom appears at RVA 0x01905998 in the confirmed weak-object-resolver consumer."
+            }
+          ]
         }
-      ]
+      }
     }
   ]
 }

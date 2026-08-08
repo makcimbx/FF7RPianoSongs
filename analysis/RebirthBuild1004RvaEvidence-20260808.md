@@ -596,6 +596,118 @@ would have read unrelated code at each one. The header now states the game
 version, catalog build id and PE timestamp explicitly and points at this note for
 the 1.004 counterparts. No data line in that file was altered.
 
+## The `GUObjectArray` locator, re-derived for 1.004
+
+### The defect
+
+Schema 3 made `addresses` per build but left `locators` a single top-level
+array. The one locator, `guobject_array`, therefore kept the pattern derived
+from the 1.005 image, and the 1.004 generated tree received a byte-for-byte copy
+of it. The same reasoning that forbids translating an RVA between builds applies
+to a masked pattern: `x?????xxxxxx????xx` over `03 .. .. .. .. .. ff c8 3b d0 0f
+8d .. .. .. .. 44 8b` matches **zero** sites in the 1.004 image.
+
+The runtime consequence was silent. `initialize_uobject_identity` scanned the
+image, found no match, and reported
+
+```text
+[error] [list_patch]  status=guobjectarray_signature_not_found
+[error] [chart_patch] guobjectarray status=signature_missing
+```
+
+while all 33 hooks still installed successfully, so every subsystem published
+`custom_songs=0`. Hook installation is not evidence that object identity
+resolved.
+
+### The anchor chosen for 1.004
+
+1.004 inlines the `FUObjectArray` index-to-item idiom directly at its call
+sites. The bounds check against `num_elements` is followed by the chunked-index
+division, which is unmistakable because `elements_per_chunk` is `0x10000`:
+
+```text
+3b 05 <disp32>        CMP    EAX, dword ptr [rip+num_elements]
+7d <rel8>             JGE    <out of range>
+99                    CDQ
+b9 00 00 01 00        MOV    ECX, 0x10000
+f7 f9                 IDIV   ECX
+48 63 c8              MOVSXD RCX, EAX
+48 63 c2              MOVSXD RAX, EDX
+```
+
+The pattern spans those 22 bytes, wildcarding only the `disp32` and the `rel8`.
+The anchor instruction is the `CMP` at pattern offset `0`, so `decode` stays
+`rel32` with `displacement_offset = 0x02` and `instruction_size = 0x06`. The
+decode resolves to `num_elements`, which is `GUObjectArray + 0x24`, so candidate
+adjustment `0x24` recovers the structure base; the ordered adjustment list is
+unchanged from 1.005.
+
+| field | value |
+| --- | --- |
+| first image-wide match | `0x0077e0b9` |
+| encoded `disp32` | `0x0816d40d` |
+| decoded target | `0x0077e0b9 + 0x06 + 0x0816d40d = 0x088eb4cc` |
+| target field | `GUObjectArray.num_elements` (`base + 0x24`) |
+| recovered base | `0x088eb4cc - 0x24 = 0x088eb4a8` |
+
+`0x088eb4a8` is the `GUObjectArray` base already established for this build, and
+`0x088eb4cc` is its cataloged object-count field, so the locator lands on
+addresses that were derived independently earlier in this note.
+
+### How the pattern was measured
+
+Ghidra supplied the disassembly. The shipping spec was then checked against the
+executable itself, outside Ghidra: the mapped image was rebuilt in RVA space
+from the PE section headers, scanned with the catalog mask, and the `rel32`
+decoded exactly as `uobject_locator_core::LegacyLocator` does for
+`LocatorPolicy::ListEager`. The file's `sha256` selected catalog build
+`ff7rebirth-steam-win64-68fd6fde` and its reconstructed image size matched the
+cataloged `size_of_image`.
+
+- The 1.004 pattern matches **650** sites.
+- **Every one of the 650 decodes to the same target, `0x088eb4cc`.**
+- The 1.005 pattern matches **0** sites in the same image.
+
+`match_policy` is `first`, and first-match is normally only as safe as the
+ordering. Here the question does not arise: the idiom is the compiler's inlined
+accessor for the one process-wide `FUObjectArray`, so every match names the same
+singleton field, and which match wins cannot change the resolved address. The
+650 sites are not ambiguity, they are corroboration.
+
+The same idiom appears at `0x01905998`, the confirmed `weak_object_resolver`
+consumer, which loads the chunk table from `0x088eb4b8` a few instructions
+later. `GUObjectArray` lies in uninitialized data and reads as zero statically,
+so the header predicates in `list_header_accepts` and `chart_header_accepts`
+cannot be exercised offline — that check remains a runtime one, as it is for
+1.005.
+
+### Schema and generator consequences
+
+`locators[]` now carries a `builds` map alongside `addresses[]`. `id`,
+`cpp_symbol`, `match_policy`, and `consumers` stay shared; `pattern`, `decode`,
+`candidate_adjustments`, and `evidence` are per build, because the decode
+offsets index into that build's own pattern and the adjustments depend on which
+field its anchor touches.
+
+Unlike an address, a locator has no `requirement` field and no null-spec
+degradation path, so absence is never meaningful: a build missing its locator
+loads, installs every hook, and publishes nothing. The generator therefore
+requires every declared build to supply exactly one derivation of every locator
+and rejects a `builds` map that omits a declared build or names an undeclared
+one. That rule is what turns this class of defect from a runtime symptom into a
+generation-time failure.
+
+No C++ changed. `render_runtime_locator_specs` now emits the selected build's
+locator into that build's generated tree, which each binary already includes.
+The 1.005 `runtime_locator_specs.generated.inc` is byte-identical to its
+pre-change content; the only 1.005 movement is `kRvaCatalogSha256` and
+`kRvaGeneratorSha256` in `build_identity.generated.h`, which any catalog or
+generator edit necessarily moves.
+
+**Not runtime-validated.** This locator has been validated against the 1.004
+executable on disk, not against a running game. Whether the resolved base passes
+the header predicates and populates the song list remains an in-game check.
+
 ## Known defects in the catalog carried by this note
 
 - The 1.005 catalog signature for `weak_object_resolver` is the same 16-byte run

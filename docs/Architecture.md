@@ -55,11 +55,23 @@ The catalog is `schema_version` 3. It declares the supported game builds once an
         }
       } }
   ],
-  "locators": [ "... build-independent masked patterns ..." ]
+  "locators": [
+    { "id": "...", "cpp_symbol": "...", "match_policy": "first", "consumers": [ "..." ],
+      "builds": {
+        "<build-id>": {
+          "pattern": { "bytes": "...", "mask": "..." },
+          "decode": { "kind": "rel32", "displacement_offset": "0x...", "instruction_size": "0x..." },
+          "candidate_adjustments": [ "0x00", "..." ],
+          "evidence": [ { "type": "...", "path": "analysis/...", "detail": "..." } ]
+        }
+      } }
+  ]
 }
 ```
 
 Shared metadata is written once per address. Only `rva`, `signature`, and `evidence` are per build, because a signature and the analysis that derived it are facts about one binary while a validation policy is not. Build identities carry the `ff7rebirth-` prefix; the release audit compares that set against the targets declared in `release.json`.
+
+Locators split the same way. `id`, `cpp_symbol`, `match_policy`, and `consumers` are shared; `pattern`, `decode`, `candidate_adjustments`, and `evidence` are per build, because the decode offsets index into that build's own pattern and the adjustments depend on which field its chosen instruction touches. A masked pattern no more survives recompilation than a fixed signature does, so a locator is derived from each binary and never translated between builds.
 
 An address that a build does not catalog omits that build's key. The literal `"0x0"` remains forbidden in the catalog: zero is the generator's absence sentinel and must never be authored by hand.
 
@@ -72,6 +84,8 @@ An address that a build does not catalog omits that build's key. The literal `"0
 The omitted `.inc` lines carry the behavior: `find_hook_spec` and `find_rva_signature` return `nullptr`, and consumers already fail closed on a null spec. The zero in the header exists only so the tree compiles. A consumer that forms `exe_base + rva` without a spec lookup must test the RVA for zero, because `exe_base + 0` is a non-null pointer that would pass an ordinary pointer check.
 
 The generator enforces the invariants that make the sentinel safe: a `release` address must be present in every declared build; every address must be present in at least one build; RVAs are unique within a build and satisfy `0 < rva < size_of_image` of that same build; and hook `order` values stay globally contiguous, with each build installing the sorted subset it declares.
+
+Locators admit no absence at all. A locator carries no `requirement` field and has no null-spec degradation path, so a build that omitted one would still install its hooks and then silently publish nothing. The generator therefore requires every declared build to name exactly one derivation of every locator, and rejects a `builds` map that omits a declared build or names an undeclared one.
 
 ### Per-Build Generated Trees
 
@@ -132,8 +146,9 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 
 Current reverse-engineering outcomes and unresolved lifecycle work belong in [Current Status](CurrentStatus.md) and the [analysis index](../analysis/README.md), not here. Defaults belong in source configuration and user contracts. Build targets and tests belong in CMake/CTest and release-audit output.
 
-The descriptor catalog also owns the retained `GUObjectArray` locator contract.
-Its existing first-match byte pattern, rel32 decode, and ordered candidate
-adjustments were migrated from `runtime_layouts.h` on 2026-07-16. Consumers in
-list, chart, and UObject-identity code use that generated descriptor; they do
-not carry independent locator policy.
+The descriptor catalog also owns the `GUObjectArray` locator contract. The
+pattern, rel32 decode, and ordered candidate adjustments were migrated from
+`runtime_layouts.h` on 2026-07-16 and became per build on 2026-08-08, once a
+second game build showed that one build's pattern matches nothing in another.
+Consumers in list, chart, and UObject-identity code use the generated descriptor
+for the selected build; they do not carry independent locator policy.

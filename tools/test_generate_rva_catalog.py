@@ -20,16 +20,30 @@ class RuntimeLocatorGeneratorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalog, cls.entries, cls.locators = generator.load_and_validate_catalog()
+        cls.build_ids = {build["id"] for build in cls.catalog["builds"]}
+        cls.default_build = cls.catalog["default_build"]
 
     def locator(self) -> dict:
         return copy.deepcopy(self.catalog["locators"][0])
 
+    def build_locator(self, locator: dict) -> dict:
+        return locator["builds"][self.default_build]
+
+    def pattern_length(self, locator: dict) -> int:
+        return len(self.build_locator(locator)["pattern"]["mask"])
+
     def validate(self, locator: dict) -> list[dict]:
-        return generator.validate_locators([locator], generator.ROOT)
+        return generator.validate_locators([locator], generator.ROOT, self.build_ids)
 
     def test_locator_schema_is_strict(self) -> None:
         locator = self.locator()
         locator["unexpected"] = True
+        with self.assertRaisesRegex(generator.CatalogError, "invalid keys"):
+            self.validate(locator)
+
+    def test_locator_build_schema_is_strict(self) -> None:
+        locator = self.locator()
+        self.build_locator(locator)["unexpected"] = True
         with self.assertRaisesRegex(generator.CatalogError, "invalid keys"):
             self.validate(locator)
 
@@ -42,57 +56,98 @@ class RuntimeLocatorGeneratorTests(unittest.TestCase):
 
     def test_locator_masks_are_strict_and_match_byte_length(self) -> None:
         invalid_character = self.locator()
-        invalid_character["pattern"]["mask"] = "x.....xxxxxx????xx"
+        invalid_pattern = self.build_locator(invalid_character)["pattern"]
+        invalid_pattern["mask"] = "." * len(invalid_pattern["mask"])
         with self.assertRaisesRegex(generator.CatalogError, "only 'x' and '\\?'"):
             self.validate(invalid_character)
 
         wrong_length = self.locator()
-        wrong_length["pattern"]["mask"] = "x?????xxxxxx????x"
+        short_pattern = self.build_locator(wrong_length)["pattern"]
+        short_pattern["mask"] = short_pattern["mask"][:-1]
         with self.assertRaisesRegex(generator.CatalogError, "lengths differ"):
             self.validate(wrong_length)
 
     def test_rel32_and_instruction_offsets_must_fit_pattern(self) -> None:
         rel32_out_of_bounds = self.locator()
-        rel32_out_of_bounds["decode"]["displacement_offset"] = "0x0f"
-        with self.assertRaisesRegex(generator.CatalogError, "rel32 displacement is outside"):
+        self.build_locator(rel32_out_of_bounds)["decode"]["displacement_offset"] = (
+            f"0x{self.pattern_length(rel32_out_of_bounds) - 3:02x}")
+        with self.assertRaisesRegex(generator.CatalogError, "rel32 displacement is outside the pattern"):
             self.validate(rel32_out_of_bounds)
 
         instruction_out_of_bounds = self.locator()
-        instruction_out_of_bounds["decode"]["instruction_size"] = "0x13"
+        self.build_locator(instruction_out_of_bounds)["decode"]["instruction_size"] = (
+            f"0x{self.pattern_length(instruction_out_of_bounds) + 1:02x}")
         with self.assertRaisesRegex(generator.CatalogError, "instruction_size is outside"):
             self.validate(instruction_out_of_bounds)
 
     def test_rel32_displacement_must_fit_instruction(self) -> None:
         displacement_outside_instruction = self.locator()
-        displacement_outside_instruction["decode"]["instruction_size"] = "0x05"
+        self.build_locator(displacement_outside_instruction)["decode"]["instruction_size"] = "0x05"
         with self.assertRaisesRegex(generator.CatalogError, "rel32 displacement is outside the instruction"):
             self.validate(displacement_outside_instruction)
 
     def test_adjustments_reject_duplicates_and_require_zero_first(self) -> None:
         duplicate = self.locator()
-        duplicate["candidate_adjustments"] = ["0x00", "0x24", "0x24"]
+        self.build_locator(duplicate)["candidate_adjustments"] = ["0x00", "0x24", "0x24"]
         with self.assertRaisesRegex(generator.CatalogError, "must be unique"):
             self.validate(duplicate)
 
         reordered_zero = self.locator()
-        reordered_zero["candidate_adjustments"] = ["0x24", "0x00", "0x20"]
+        self.build_locator(reordered_zero)["candidate_adjustments"] = ["0x24", "0x00", "0x20"]
         with self.assertRaisesRegex(generator.CatalogError, "begin with zero"):
             self.validate(reordered_zero)
 
+    def test_locator_must_be_derived_for_every_declared_build(self) -> None:
+        missing_build = self.locator()
+        missing_build["builds"].pop(self.default_build)
+        with self.assertRaisesRegex(generator.CatalogError, "must be derived for every declared build"):
+            self.validate(missing_build)
+
+        undeclared_build = self.locator()
+        undeclared_build["builds"]["ff7rebirth-steam-win64-33333333"] = copy.deepcopy(
+            undeclared_build["builds"][self.default_build])
+        with self.assertRaisesRegex(generator.CatalogError, "must be derived for every declared build"):
+            self.validate(undeclared_build)
+
     def test_nonzero_adjustment_order_is_preserved_without_sorting(self) -> None:
         locator = self.locator()
-        locator["candidate_adjustments"] = ["0x00", "0x10", "0x30", "0x24", "0x20"]
+        self.build_locator(locator)["candidate_adjustments"] = ["0x00", "0x10", "0x30", "0x24", "0x20"]
         parsed = self.validate(locator)
-        rendered = generator.render_runtime_locator_specs(parsed).decode("ascii")
+        rendered = generator.render_runtime_locator_specs(parsed, self.default_build).decode("ascii")
         self.assertIn("{{0x00, 0x10, 0x30, 0x24, 0x20}}", rendered)
 
-    def test_generated_api_contains_catalog_data(self) -> None:
-        rendered = generator.render_runtime_locator_specs(self.locators).decode("ascii")
-        self.assertIn("kGuObjectArrayPatternBytes", rendered)
-        self.assertIn('"x?????xxxxxx????xx"', rendered)
-        self.assertIn("RuntimeLocatorMatchPolicy::First", rendered)
-        self.assertIn("RuntimeLocatorDecodeKind::Rel32, 2, 6", rendered)
-        self.assertIn("{{0x00, 0x24, 0x20, 0x10, 0x30}}", rendered)
+    def test_generated_api_contains_each_builds_own_catalog_data(self) -> None:
+        for build_id in self.build_ids:
+            rendered = generator.render_runtime_locator_specs(self.locators, build_id).decode("ascii")
+            self.assertIn("RuntimeLocatorMatchPolicy::First", rendered)
+            for locator in self.locators:
+                build_data = locator["builds"][build_id]
+                _, mask = build_data["pattern_value"]
+                self.assertIn(f"k{locator['cpp_symbol']}PatternBytes", rendered)
+                self.assertIn(f'"{mask}"', rendered)
+                self.assertIn(
+                    f"RuntimeLocatorDecodeKind::Rel32, {build_data['displacement_offset_value']}, "
+                    f"{build_data['instruction_size_value']}",
+                    rendered,
+                )
+                self.assertIn(
+                    "{{" + generator.format_uintptrs(build_data["candidate_adjustment_values"]) + "}}",
+                    rendered,
+                )
+
+    def test_builds_with_different_patterns_do_not_share_rendered_specs(self) -> None:
+        """A locator re-derived for one build must not leak another build's pattern."""
+        rendered = {
+            build_id: generator.render_runtime_locator_specs(self.locators, build_id)
+            for build_id in self.build_ids
+        }
+        for locator in self.locators:
+            for build_id, other_id in ((a, b) for a in self.build_ids for b in self.build_ids if a < b):
+                if locator["builds"][build_id]["pattern"] == locator["builds"][other_id]["pattern"]:
+                    continue
+                self.assertNotEqual(
+                    rendered[build_id], rendered[other_id],
+                    f"{locator['id']} renders identically for {build_id} and {other_id}")
 
     def test_write_and_check_are_deterministic_and_fail_on_stale_output(self) -> None:
         outputs = generator.generated_outputs(self.catalog, self.entries, self.locators)
@@ -137,6 +192,9 @@ class MultiBuildCatalogTests(unittest.TestCase):
             if entry["id"] in omit_ids:
                 continue
             entry["builds"][new_build_id] = copy.deepcopy(entry["builds"][source_build_id])
+        # Locators admit no absence, so a new build must always carry its own derivation.
+        for locator in catalog["locators"]:
+            locator["builds"][new_build_id] = copy.deepcopy(locator["builds"][source_build_id])
         return catalog
 
     def test_release_entry_missing_from_a_build_is_rejected(self) -> None:
@@ -144,6 +202,14 @@ class MultiBuildCatalogTests(unittest.TestCase):
         release_entry = next(entry for entry in catalog["addresses"] if entry["requirement"] == "release")
         self.add_second_build(catalog, "ff7rebirth-steam-win64-11111111", omit_ids={release_entry["id"]})
         with self.assertRaisesRegex(generator.CatalogError, "must have a value in every declared build"):
+            self.load(catalog)
+
+    def test_locator_missing_from_a_declared_build_is_rejected(self) -> None:
+        catalog = self.raw()
+        new_build_id = "ff7rebirth-steam-win64-44444444"
+        self.add_second_build(catalog, new_build_id)
+        catalog["locators"][0]["builds"].pop(new_build_id)
+        with self.assertRaisesRegex(generator.CatalogError, "must be derived for every declared build"):
             self.load(catalog)
 
     def test_address_absent_from_every_build_is_rejected(self) -> None:

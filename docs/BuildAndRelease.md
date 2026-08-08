@@ -112,14 +112,20 @@ catalog layout and generator invariants are described in
    equivalent static route — and record that route in the evidence document. Do not copy an RVA
    between builds and do not treat a signature hit as provenance.
 4. Cut a fresh signature per address from the new binary and confirm it matches its own address
-   exactly once in that binary. A signature matching zero or several sites is not a locator.
-5. Add each `builds.<catalog-build-id>` block, regenerate, and validate. The generator rejects a
-   missing `release` entry, an address present in no build, a duplicate or out-of-image RVA, and
-   a hand-authored `"0x0"`.
-6. Add the matching `release.json` target and one matrix entry in
+   exactly once in that binary. A signature matching zero or several sites does not identify it.
+5. Re-derive every `locators[].builds.<catalog-build-id>` entry from the new binary. A masked
+   pattern is no more portable than a fixed signature. A locator has no optional form: the
+   generator rejects a build that omits one, because a build without its locator still installs
+   every hook and then publishes nothing. Confirm the anchor instruction decodes to a cataloged
+   field of the target structure, and that the first image-wide match is the intended one —
+   `match_policy` is `first`, so a later match cannot rescue a wrong one.
+6. Add each `builds.<catalog-build-id>` block, regenerate, and validate. The generator rejects a
+   missing `release` entry, an address present in no build, a duplicate or out-of-image RVA, a
+   locator missing from a declared build, and a hand-authored `"0x0"`.
+7. Add the matching `release.json` target and one matrix entry in
    `.github/workflows/windows-ci.yml`. The release audit fails while the catalog builds and the
    release targets disagree.
-7. Build, test, and package that build, then qualify it against the real executable. Startup
+8. Build, test, and package that build, then qualify it against the real executable. Startup
    must stop reporting `status=disabled_game_updated` and must reach hook installation before
    any behavior is claimed. Offline checks cannot qualify a new build's addresses; run the
    focused scenarios in [In-Game Validation](InGameValidation.md).
