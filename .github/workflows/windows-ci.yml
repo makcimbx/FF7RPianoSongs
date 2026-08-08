@@ -28,6 +28,8 @@ jobs:
         include:
           - catalog_id: ff7rebirth-steam-win64-6a16ced2
             game_build: "1.005"
+          - catalog_id: ff7rebirth-steam-win64-68fd6fde
+            game_build: "1.004"
 
     steps:
       - name: Check out source

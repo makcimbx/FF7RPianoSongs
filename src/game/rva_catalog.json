@@ -12,6 +12,15 @@
       "pe_checksum": "0x0769ea6e",
       "file_size": 124317952,
       "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc"
+    },
+    {
+      "id": "ff7rebirth-steam-win64-68fd6fde",
+      "game_version": "1.004",
+      "pe_timestamp": "0x68fd6fde",
+      "size_of_image": "0x09bad000",
+      "pe_checksum": "0x07877c99",
+      "file_size": 126263624,
+      "sha256": "76bd4d539878a8759433f1cd7c7b47d5e3abda0ef41572a664d2d606a9f09dc8"
     }
   ],
   "addresses": [
@@ -47,6 +56,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/PianoMenuSessionEvidence-20260729.md",
               "detail": "Matching-build evidence establishes the unique complete-instruction open signature, ABI, native state writer, and exact state-5 update return-site filter."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5f5c8",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 53 f9 44 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 21-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -86,6 +109,20 @@
               "detail": "Matching-build evidence establishes the unique close signature, ABI, active-to-closing writer, and filtered shared list-close return site."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c48a68",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00 e8 bc 64 46 fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 12-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -121,6 +158,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/PianoMenuSessionEvidence-20260729.md",
               "detail": "Matching-build evidence establishes the unique complete-instruction state-5 exit signature and controller ABI."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4ce78",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 60 00 00 00 e8 a8 20 46 fe",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -160,6 +211,20 @@
               "detail": "Matching-build evidence establishes the unique complete-instruction controller-destructor signature, ABI, and teardown fallback role."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c32970",
+          "signature": {
+            "bytes": "48 89 5c 24 20 55 56 57 41 56 41 57 48 8d 6c 24 c9 b8 a0 00 00 00 e8 a5 c5 47 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 27-byte run anchored at this address was measured unique image-wide (matches=1). Its 22-byte displacement-free entry run matches 6 sites image-wide; the earlier offset-anchored proposal is not expressible in this schema."
+            }
+          ]
         }
       }
     },
@@ -193,6 +258,20 @@
               "detail": "The unique matching-build call decodes to the canonical open helper and returns at RVA 0x0399ef23."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c45f18",
+          "signature": {
+            "bytes": "e8 ab 96 01 00 33 d2 48 8b ce",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 10-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -224,6 +303,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/PianoMenuSessionEvidence-20260729.md",
               "detail": "The unique matching-build shared activation/cancel close call decodes to the canonical close helper and returns at RVA 0x0399f485; other close callers remain unowned."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c46478",
+          "signature": {
+            "bytes": "e8 eb 25 00 00 84 db 74 53",
+            "mask": "xxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 9-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -263,6 +356,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4f960",
+          "signature": {
+            "bytes": "48 85 d2 0f 84 7c 03 00 00 48 89 5c 24 08 48 89",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -298,6 +405,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4f130",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d 68 a1 b8 90 00 00 00 e8 de fd 45 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 34-byte run anchored at this address was measured unique image-wide (matches=1). Its 29-byte displacement-free entry run matches 34 sites image-wide; the run was extended through the CALL __chkstk rel32 to reach a measured single match."
             }
           ]
         }
@@ -337,6 +458,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x023a7410",
+          "signature": {
+            "bytes": "85 d2 0f 88 5b 0c 00 00 48 89 4c 24 08 55 41 54",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1). Confidence is probable, not confirmed. The role is exact (sole callee of the confirmed selected-index body, called twice as (holder, old_index, 1) then (holder, new_index, 0), carrying the +0x484 toggle and the 0x4000 flag, with the confirmed body as its single caller), but the code unit is 3422 bytes against 503 in 1.005 with siblings apparently inlined into it. Over-merge was ruled out. The address is adopted because the product's detour forwards (wrapper, index, flag) unchanged and depends only on the entry address, that ABI, and the cataloged prologue."
+            }
+          ]
         }
       }
     },
@@ -372,6 +507,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c45274",
+          "signature": {
+            "bytes": "48 89 5c 24 10 4c 89 44 24 18 55 56 57 48 8b ec b8 40 00 00 00 e8 a2 9c 46 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 26-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -412,6 +561,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4817c",
+          "signature": {
+            "bytes": "48 63 81 80 04 00 00 4c 8b c1 85 c0 78 1c 3b 81",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1). Independently cross-checked: the CALL at 0x143c46413 decodes to this entry."
+            }
+          ]
         }
       }
     },
@@ -449,6 +612,20 @@
               "detail": "Matching-build static analysis established bool __fastcall(ActionRef*) ownership semantics and exact primary activation return-site filtering; every detour path calls the original exactly once."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x0080619c",
+          "signature": {
+            "bytes": "48 89 5c 24 08 57 b8 40 00 00 00 e8 84 8d 8a 01",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -479,6 +656,17 @@
               "detail": "Matching-build activation analysis identified the primary action-state query return address after the call at RVA 0x0399f3f4; secondary and all unrelated callers remain native."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c463f1",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 21-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -507,6 +695,17 @@
               "type": "ghidra_static_analysis",
               "path": "src/game/selection.cpp",
               "detail": "Matching-build activation caller has the selected-entry getter call instruction at RVA 0x0399f41b and return address RVA 0x0399f420; only this publication may confirm the primary action reservation generation handoff."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c46418",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 22-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
             }
           ]
         }
@@ -546,6 +745,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03bff0a4",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 80 fe 4a fe",
+            "mask": "xxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 12-byte run anchored at this address was measured unique image-wide (matches=1). Independently cross-checked: the CALL at 0x143c480aa decodes to this entry."
+            }
+          ]
         }
       }
     },
@@ -583,6 +796,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c476b8",
+          "signature": {
+            "bytes": "48 89 5c 24 08 55 48 8d ac 24 40 ff ff ff b8 c0 01 00 00 e8 60 78 46 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 24-byte run anchored at this address was measured unique image-wide (matches=1). Its 19-byte displacement-free entry run matches 3 sites image-wide (0x140a7c1f4, 0x143c476b8, 0x145691b44)."
+            }
+          ]
         }
       }
     },
@@ -618,6 +845,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00dcb52c",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 fa 39 2e 01",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 10-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -731,6 +972,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c41618",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d a8 88 fc ff ff b8 60 04 00 00 e8 f3 d8 46 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 37-byte run anchored at this address was measured unique image-wide (matches=1). Its 32-byte displacement-free entry run still matches 5 sites image-wide, including the unusual LEA RBP,[RAX-0x378]; 37 bytes are required here."
+            }
+          ]
         }
       }
     },
@@ -766,6 +1021,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c1264c",
+          "signature": {
+            "bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 58 ff ff ff b8 a8 01 00 00 e8 c5 c8 49 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 31-byte run anchored at this address was measured unique image-wide (matches=1). Its 26-byte displacement-free entry run matches 12 sites image-wide; the eight-register push block plus frame imm32 is a shared compiler idiom."
             }
           ]
         }
@@ -911,6 +1180,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5fad8",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 4e f4 44 fe",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 10-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -948,6 +1231,20 @@
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c60ffc",
+          "signature": {
+            "bytes": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 50 00 00 00 e8 1c df 44 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 24-byte run anchored at this address was measured unique image-wide (matches=1). Its 19-byte displacement-free entry run matches 58 sites image-wide."
+            }
+          ]
         }
       }
     },
@@ -983,6 +1280,20 @@
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
               "detail": "Cataloged from the checked-in release hook table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c39b38",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 e3 53 47 fe",
+            "mask": "xxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 21-byte run anchored at this address was measured unique image-wide (matches=1). A 16-byte displacement-free entry run exceeds 1000 image-wide matches; the CALL __chkstk rel32 is what makes an entry-anchored run viable at all."
             }
           ]
         }
@@ -1504,6 +1815,20 @@
               "detail": "The release progress module already installs this hook with the recorded prologue; no separate verification date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c48088",
+          "signature": {
+            "bytes": "b8 48 00 00 00 e8 9e 6e 46 fe",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 10-byte run anchored at this address was measured unique image-wide (matches=1). Independently cross-checked: the CALL at 0x143c41672 decodes to this entry. It has exactly four UNCONDITIONAL_CALL xrefs in 1.004, against five in 1.005."
+            }
+          ]
         }
       }
     },
@@ -1570,6 +1895,20 @@
               "detail": "The runtime safety contract requires this signature-gated owner request wrapper for same-route replay."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01348a5c",
+          "signature": {
+            "bytes": "48 89 54 24 10 b8 68 00 00 00 e8 c5 64 d6 00",
+            "mask": "xxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 15-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -1600,6 +1939,17 @@
               "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x091e3320",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is data_reference."
+            }
+          ]
         }
       }
     },
@@ -1628,6 +1978,17 @@
               "type": "migration_record",
               "path": "src/game/rvas.h",
               "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x090fede8",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is data_reference."
             }
           ]
         }
@@ -1661,6 +2022,17 @@
               "type": "migration_record",
               "path": "src/game/rvas.h",
               "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00882298",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is build_identity."
             }
           ]
         }
@@ -1759,6 +2131,17 @@
               "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01456908",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is build_identity."
+            }
+          ]
         }
       }
     },
@@ -1855,6 +2238,17 @@
               "detail": "Cataloged from the checked-in release RVA table on 2026-07-16; this is a migration date, not an independent verification date."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00803390",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is build_identity."
+            }
+          ]
         }
       }
     },
@@ -1888,6 +2282,20 @@
               "detail": "The title module signature-gates this direct text setter before use; no separate verification date is asserted."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x0098eaf4",
+          "signature": {
+            "bytes": "48 89 5c 24 10 57 b8 50 00 00 00 e8 2c 04 72 01",
+            "mask": "xxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1). An earlier offset-anchored 16-byte proposal still matched 3 sites; this entry-anchored run is measured unique."
+            }
+          ]
         }
       }
     },
@@ -1916,6 +2324,17 @@
               "type": "repository_source",
               "path": "src/game/list_patch.cpp",
               "detail": "The release list item setup uses this executable global to resolve the rank text widget name."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x091d8d08",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is data_reference."
             }
           ]
         }
@@ -1948,6 +2367,17 @@
               "type": "repository_documentation",
               "path": "analysis/ChartRowLimitEvidence.md",
               "detail": "Documents the parser's 512-row source boundary, dynamic downstream arrays, recovered event ABI and ownership hazards, and the bounded 2026-07-15 diagnostic result; it does not demonstrate a playable bypass."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c41213",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 26-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
             }
           ]
         }
@@ -2145,6 +2575,17 @@
               "detail": "The progress detour allowlists this return site for display-only lookup behavior."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c12c9c",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 25-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -2153,7 +2594,7 @@
       "cpp_symbol": "ProgressLookupDisplayCaller1",
       "kind": "call_site",
       "subsystem": "progress",
-      "requirement": "release",
+      "requirement": "optional",
       "validation": {
         "policy": "call_site"
       },
@@ -2205,6 +2646,17 @@
               "detail": "The progress detour allowlists this return site for display-only lookup behavior."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c41677",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 17-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -2233,6 +2685,17 @@
               "type": "ghidra_static_analysis",
               "path": "src/game/scoreinfo_overlay.cpp",
               "detail": "Matching-build static analysis established this resolver return in style setup; it publishes the first custom result row and captures immutable result authority."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c3f55d",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 26-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
             }
           ]
         }
@@ -2265,6 +2728,17 @@
               "detail": "Matching-build static analysis established this piano-detail resolver return; it publishes a fresh row and establishes the consumer thread."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c41668",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 15-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -2293,6 +2767,17 @@
               "type": "ghidra_static_analysis",
               "path": "src/game/scoreinfo_overlay.cpp",
               "detail": "Matching-build static analysis established this generic progress-source resolver return inside progress_lookup; it validates ordering and source authority without publishing a row."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c480af",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 22-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
             }
           ]
         }
@@ -2325,6 +2810,17 @@
               "detail": "Matching-build static analysis established this generic rank-text resolver return inside the separate rank-text helper at RVA 0x039a0c48; it publishes a fresh immutable row after progress-source validation."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c47bed",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 19-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -2355,6 +2851,17 @@
               "detail": "Matching-build static analysis established this threshold consumer return; it publishes the fourth retained row and closes result authority."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5d16d",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 21-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
+            }
+          ]
         }
       }
     },
@@ -2383,6 +2890,17 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/PianoMenuMetadataEvidence-20260802.md",
               "detail": "Matching-build selected-index call-chain recovery and runtime correlation establish this return as scoped menu-detail work outside result authority."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4f295",
+          "signature": null,
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 20-byte run anchored at this address was measured unique image-wide (matches=1). The catalog stores no signature for a data_only entry."
             }
           ]
         }
@@ -2558,6 +3076,20 @@
               "detail": "Matching-build static analysis and decisive runtime evidence establish this exact selected weak-resolver call as the single patch site; negative R12D is the native no-selection state."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c56d55",
+          "signature": {
+            "bytes": "e8 3e ec ca fd ba 01 00 00 00 48 8b c8 e8 2d b1 c0 fc",
+            "mask": "xxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 18-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -2589,6 +3121,20 @@
               "type": "ghidra_static_analysis",
               "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
               "detail": "The unchanged visibility call decodes to the cataloged setter and follows the selected resolver sequence."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c56d62",
+          "signature": {
+            "bytes": "e8 2d b1 c0 fc 48 8b 0e 48 8b 01 ff 90 80 00 00 00",
+            "mask": "xxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 17-byte run anchored at this address was measured unique image-wide (matches=1)."
             }
           ]
         }
@@ -2624,6 +3170,20 @@
               "detail": "Negative selected indices discard the patched-call return and branch here, bypassing both weak resolution and selected visibility mutation."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c56d67",
+          "signature": {
+            "bytes": "48 8b 0e 48 8b 01 ff 90 80 00 00 00 89 87 88 00 00 00 41 80 ce 08 4c 8d 7f 20",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 26-byte run anchored at this address was measured unique image-wide (matches=1)."
+            }
+          ]
         }
       }
     },
@@ -2657,6 +3217,20 @@
               "detail": "The selected rel32 call decodes exactly to this weak-object resolver; nonnegative selections tail-jump it unchanged."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x01905998",
+          "signature": {
+            "bytes": "44 8b 49 04 45 33 c0 45 85 c9 74 4f 8b 01 85 c0 78 49 3b 05 1c 5b fe 06",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 24-byte run anchored at this address was measured unique image-wide (matches=1). Its 16-byte entry run matches 2 sites in 1.004 (0x1418eb3d4 and the correct 0x141905998); the run is extended through the RIP-relative bound compare."
+            }
+          ]
         }
       }
     },
@@ -2688,6 +3262,20 @@
               "type": "runtime_crash",
               "path": "analysis/PianoPageSelectionGuardEvidence-20260803.md",
               "detail": "Historical and decisive matching-build sessions faulted at RVA 0x00889f79 after null weak resolution; the setter remains unpatched."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00861e94",
+          "signature": {
+            "bytes": "b8 28 00 00 00 e8 92 d0 84 01",
+            "mask": "xxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Derived from the 1.004 image by static analysis. A 10-byte run anchored at this address was measured unique image-wide (matches=1). Independently cross-checked: the CALL at 0x143c56d62 decodes to this entry."
             }
           ]
         }

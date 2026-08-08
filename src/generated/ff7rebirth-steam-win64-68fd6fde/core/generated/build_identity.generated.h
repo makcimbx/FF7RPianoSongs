@@ -7,12 +7,12 @@
 
 namespace ff7r::piano::core::generated {
 
-inline constexpr std::string_view kBuildId = "ff7rebirth-steam-win64-6a16ced2";
-inline constexpr uint32_t kExeTimestamp = 0x6a16ced2;
-inline constexpr uint32_t kSizeOfImage = 0x099d9000;
-inline constexpr uint32_t kPeChecksum = 0x0769ea6e;
-inline constexpr std::size_t kExeFileSize = 124317952;
-inline constexpr std::string_view kExeSha256 = "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc";
+inline constexpr std::string_view kBuildId = "ff7rebirth-steam-win64-68fd6fde";
+inline constexpr uint32_t kExeTimestamp = 0x68fd6fde;
+inline constexpr uint32_t kSizeOfImage = 0x09bad000;
+inline constexpr uint32_t kPeChecksum = 0x07877c99;
+inline constexpr std::size_t kExeFileSize = 126263624;
+inline constexpr std::string_view kExeSha256 = "76bd4d539878a8759433f1cd7c7b47d5e3abda0ef41572a664d2d606a9f09dc8";
 inline constexpr std::string_view kRvaCatalogSha256 = "cd40fc92be1d0f62306c3d516b97d948bfd35203c599a3f57f192b248a220b39";
 inline constexpr std::string_view kRvaGeneratorSha256 = "e72f775ad9626e82ee16b08dcceccb09253cc143c08455d8f7d1ca10720483b4";
 

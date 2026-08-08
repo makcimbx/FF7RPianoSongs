@@ -40,11 +40,14 @@ std::mutex g_score_diagnostic_mutex;
 alignas(16) std::array<uint8_t, 16> g_progress_state_overlay{};
 ScoreCalculationDiagnosticBudget g_score_diagnostic_budget;
 
-constexpr uintptr_t kProgressLookupCallerRvas[] = {
+// A build that does not declare one of these call sites renders it as the
+// generated zero sentinel; progress_lookup_display_caller_allowed treats such an
+// element as unmatchable rather than as a wildcard.
+constexpr std::array<uintptr_t, 3> kProgressLookupCallerRvas{{
     rva::ProgressLookupDisplayCaller0,
     rva::ProgressLookupDisplayCaller1,
     rva::ProgressLookupDisplayCaller2,
-};
+}};
 
 constexpr wchar_t kLastPlayedDifficultyKey[] = L"LastPlayedDifficulty";
 
@@ -66,16 +69,6 @@ uintptr_t to_rva(void* caller_address)
     return caller >= g_module_base && g_module_size != 0
         && caller - g_module_base < g_module_size
         ? caller - g_module_base : 0;
-}
-
-bool is_progress_lookup_display_caller(uintptr_t caller_rva)
-{
-    for (const uintptr_t allowed : kProgressLookupCallerRvas) {
-        if (caller_rva == allowed) {
-            return true;
-        }
-    }
-    return false;
 }
 
 int __fastcall score_calculate_detour(void* context, void* counters)
@@ -159,7 +152,9 @@ uintptr_t __fastcall progress_lookup_detour(void* arg0, void* arg1, void* arg2, 
     const SelectionSnapshot selection = registry().selection_snapshot();
     const SongDescriptor* song = selection.song;
     const uintptr_t caller_rva = to_rva(caller);
-    if (!song || g_scores_ini_path.empty() || !is_progress_lookup_display_caller(caller_rva)) {
+    if (!song || g_scores_ini_path.empty()
+        || !progress_lookup_display_caller_allowed(
+            caller_rva, kProgressLookupCallerRvas)) {
         return original;
     }
 

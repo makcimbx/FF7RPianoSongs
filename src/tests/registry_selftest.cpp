@@ -8,9 +8,11 @@
 
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <span>
 #include <string>
 #include <thread>
 #include <stdexcept>
@@ -447,6 +449,35 @@ int characterize_registry_lifetime()
     return 0;
 }
 
+int characterize_progress_lookup_display_caller_policy()
+{
+    using namespace ff7r::piano::game;
+    // A build that does not declare a display call site renders it as the
+    // generated zero sentinel. The sentinel must not turn the allowlist into a
+    // wildcard for callers the module range check could not resolve.
+    constexpr std::uintptr_t with_sentinel[] = {0x03c12c9c, 0, 0x03c41677};
+    if (progress_lookup_display_caller_allowed(0, with_sentinel)) {
+        return fail("an unresolved caller matched the absent-entry sentinel");
+    }
+    if (!progress_lookup_display_caller_allowed(0x03c12c9c, with_sentinel)
+        || !progress_lookup_display_caller_allowed(0x03c41677, with_sentinel)) {
+        return fail("a declared display call site was rejected");
+    }
+    if (progress_lookup_display_caller_allowed(0x0398a151, with_sentinel)) {
+        return fail("a call site absent from this build was accepted");
+    }
+    constexpr std::uintptr_t complete[] = {0x039670bc, 0x0398a151, 0x0399a393};
+    if (progress_lookup_display_caller_allowed(0, complete)) {
+        return fail("an unresolved caller matched a sentinel-free allowlist");
+    }
+    if (!progress_lookup_display_caller_allowed(0x0398a151, complete)) {
+        return fail("a declared display call site was rejected");
+    }
+    static_assert(!progress_lookup_display_caller_allowed(
+        0, std::span<const std::uintptr_t>{}));
+    return 0;
+}
+
 int characterize_score_diagnostic_policy()
 {
     using namespace ff7r::piano::game;
@@ -604,6 +635,11 @@ int main()
     if (const int initialization_result = characterize_profile_initialization();
         initialization_result != 0) {
         return initialization_result;
+    }
+    if (const int display_caller_result
+            = characterize_progress_lookup_display_caller_policy();
+        display_caller_result != 0) {
+        return display_caller_result;
     }
     if (const int diagnostic_result = characterize_score_diagnostic_policy();
         diagnostic_result != 0) {

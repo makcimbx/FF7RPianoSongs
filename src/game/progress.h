@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -23,6 +24,23 @@ struct RankText {
     int32_t num = 1;
     const char* kind = "not_played";
 };
+
+// Zero is never a valid caller RVA: it is the PE header, the value the module
+// range check yields for a caller outside the executable, and the generated
+// catalog's absence sentinel for an address a build does not declare. Rejecting
+// it first keeps an unknown caller unmatchable even when the allowlist itself
+// carries a sentinel, which happens on any build where a display call site does
+// not exist.
+constexpr bool progress_lookup_display_caller_allowed(
+    const std::uintptr_t caller_rva,
+    const std::span<const std::uintptr_t> allowlist) noexcept
+{
+    if (caller_rva == 0) return false;
+    for (const std::uintptr_t allowed : allowlist) {
+        if (caller_rva == allowed) return true;
+    }
+    return false;
+}
 
 enum class ScoreCalculationDiagnosticClassification : std::uint8_t {
     Eligible = 0,

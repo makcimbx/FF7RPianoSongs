@@ -8,6 +8,10 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 - Ignored runtime logs such as `FF7RPianoSongs-*.log` are ephemeral session inputs, not durable evidence targets. Refer to their filenames only as code spans.
 - Before a claim becomes durable, retain the relevant bounded excerpts or derived findings in a tracked evidence file, together with enough build and scenario context to interpret them.
 
+## Game Builds
+
+- [RebirthBuild1004RvaEvidence-20260808.md](RebirthBuild1004RvaEvidence-20260808.md) records how every catalog address for game build `1.004` was derived, the measured signature-uniqueness results, and the two build-specific dispositions: the positively established absence of `progress_lookup_display_caller_1` and the retained `probable` grade for `select_index_helper`.
+
 ## Architecture
 
 - [PianoMenuSessionEvidence-20260729.md](PianoMenuSessionEvidence-20260729.md) preserves matching-build list open/close, state-exit, teardown, and session-generation evidence for Phase 4 coordination.
