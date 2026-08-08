@@ -1498,7 +1498,7 @@ void test_onmemory_bank_sequential_lifecycle()
             + static_cast<uint64_t>(index) * 0x100000000ull;
         void* const backing = reinterpret_cast<void*>(0x9000 + index * 0x10);
         require(state.retain_detached(sound, custom, route, route, cleanup, request,
-                    backing, true, true, true, true, 2, 2)
+                    backing, true, true, true, true, 2, 2).detached()
                 && state.active().ordinal == previous_ordinal + 1,
             "restored/published custom bank was not retained sequentially");
         if (!index) {
@@ -1860,7 +1860,7 @@ void test_onmemory_bank_sequential_lifecycle()
     require(state.retain_detached(sound, post_rebase_custom,
                 post_rebase_route, post_rebase_route, post_rebase_cleanup,
                 post_rebase_request, post_rebase_backing,
-                true, true, true, true, 2, 2),
+                true, true, true, true, 2, 2).detached(),
         "rebased canonical could not retain a later custom bank");
     OnMemoryBankRetirementFacts post_rebase_retirement;
     post_rebase_retirement.route_generation = post_rebase_route + 1;
@@ -1907,7 +1907,7 @@ void test_onmemory_bank_sequential_lifecycle()
             "edge-case route could not qualify canonical bank");
         void* const backing = reinterpret_cast<void*>(0xc000 + route);
         require(target.retain_detached(sound, custom, route, route, route + 100,
-                    route + 200, backing, true, true, true, true, 2, 2),
+                    route + 200, backing, true, true, true, true, 2, 2).detached(),
             "edge-case detached bank was not retained");
         OnMemoryBankRetirementFacts facts;
         facts.route_generation = route + 1;
@@ -2066,7 +2066,7 @@ void test_onmemory_bank_completed_owner_zero_rearm()
                     == OnMemoryBankRouteDecision::Allowed
                 && state.retain_detached(sound, released_custom, route, route,
                     cleanup, request, reinterpret_cast<void*>(0x19100), true,
-                    true, true, true, 2, 2),
+                    true, true, true, 2, 2).detached(),
             "completed-rearm fixture did not retain exact detached bank");
         OnMemoryBankRetirementFacts facts;
         facts.route_generation = route + 1;
@@ -2286,7 +2286,7 @@ void test_onmemory_bank_completed_owner_zero_rearm()
         const DecodedOnMemoryBankToken next_custom{1, 0x603, 0x803};
         require(state.retain_detached(sound, next_custom, route + 2, route + 2,
                     cleanup + 1, request + UINT64_C(0x100000000),
-                    reinterpret_cast<void*>(0x19300), true, true, true, true, 2, 2),
+                    reinterpret_cast<void*>(0x19300), true, true, true, true, 2, 2).detached(),
             "rearmed canonical did not retain subsequent custom ownership");
     }
 
@@ -2785,7 +2785,7 @@ void test_onmemory_bank_observed_null_backing()
             && exact.applied && owner == canonical.encode()
             && lifecycle.retain_detached(sound, custom, qualification_route,
                 route, cleanup, request, nullptr, backing_observed,
-                true, exact.applied, true, 2, 2)
+                true, exact.applied, true, 2, 2).detached()
             && lifecycle.active().backing_observed
             && lifecycle.active().backing_identity == nullptr,
         "observed-null backing blocked exact owner restore/publication/retention");
@@ -2815,7 +2815,7 @@ void test_onmemory_bank_observed_null_backing()
             && !unreadable_restore.applied
             && !unreadable.retain_detached(sound, custom, qualification_route,
                 route, cleanup, request, nullptr, false,
-                true, true, true, 2, 2)
+                true, true, true, 2, 2).detached()
             && !unreadable.active(),
         "unreadable backing was treated as observed-null and retained");
 
@@ -3320,6 +3320,297 @@ void test_frozen_profile_lease_lifecycle()
     registry_under_test.clear_frozen_profile();
     require(profile_cycle_allowed(),
         "canonical substrate relinquishment left the registry profile frozen");
+}
+
+// The game's OnMemory bank allocator has no reuse path, so an unchanged owner
+// token proves the allocator was never reached: the canonical bank was already
+// resident and the same bank came back for the custom role.  That case must be
+// classified Shared -- recorded, never owned, never released -- while the
+// distinct-token case must still produce a full detached record.  A fix that
+// collapsed every case into shared mode would leak banks, so both directions
+// are asserted here.
+void test_onmemory_bank_shared_resident_retirement()
+{
+    using namespace ff7r::piano::game;
+    const OnMemoryBankSoundIdentity sound{
+        reinterpret_cast<void*>(0x10000), {17, 29}};
+    const DecodedOnMemoryBankToken canonical{1, 0x21b, 0x21c};
+    const uint64_t canonical_value = canonical.encode();
+    const uint64_t route = 101;
+    const uint64_t cleanup = 301;
+    const uint64_t request = 0x400010008ull;
+    void* const backing = reinterpret_cast<void*>(0x9000);
+
+    const auto qualify = [&](OnMemoryBankLifecycleState& state) {
+        const OnMemoryBankPlaySetupPreflight play_setup =
+            state.snapshot_play_setup(true, true, true, true, sound,
+                canonical_value, route);
+        require(play_setup.allowed()
+                && play_setup.snapshot.query_token.encode() == canonical_value
+                && state.commit_play_setup_qualification(play_setup.snapshot,
+                       sound, canonical_value, route, 2)
+                    == OnMemoryBankRouteDecision::Allowed,
+            "shared-bank fixture could not qualify the canonical bank");
+    };
+
+    {
+        OnMemoryBankLifecycleState state;
+        qualify(state);
+        const OnMemoryBankRetainResult result = state.retain_detached(sound,
+            canonical, route, route, cleanup, request, backing, true, true,
+            true, true, 2, 2);
+        require(result.shared() && !result.detached()
+                && result.first_failure == OnMemoryBankRetainFailure::None
+                && result.canonical_token == canonical_value
+                && result.custom_token == canonical_value
+                && result.ordinal != 0,
+            "already-resident bank was not classified as shared");
+        // The detached record stays empty, which is what keeps claim_release
+        // -- the only path to the native bank release -- unreachable.
+        require(!state.active() && !state.release_in_flight()
+                && !state.custom_route_blocked(),
+            "shared bank populated the detached ownership record");
+        OnMemoryBankRetirementFacts release_facts;
+        OnMemoryBankReleaseAction release_action;
+        require(!state.claim_release(release_facts, release_action)
+                && !release_action,
+            "shared bank was allowed to claim a native bank release");
+        require(state.shared() && state.shared().token.encode() == canonical_value
+                && state.shared().request_handle == request
+                && state.shared().route_generation == route
+                && state.shared().cleanup_generation == cleanup
+                && state.shared().owner_restore_verified,
+            "shared bank record did not retain its route evidence");
+        const OnMemoryBankSoundIdentity other_sound{
+            reinterpret_cast<void*>(0x10800), {18, 30}};
+        require(state.shared_matches(sound, request, route)
+                && !state.shared_matches(sound, request + 1, route)
+                && !state.shared_matches(sound, 0, route)
+                && !state.shared_matches(other_sound, request, route)
+                && !state.shared_matches(sound, request, route - 1),
+            "shared bank matched a playback it was not recorded for");
+        require(state.consume_shared(sound, request, route)
+                && !state.shared()
+                && !state.consume_shared(sound, request, route),
+            "shared bank record was not consumed exactly once");
+    }
+
+    {
+        OnMemoryBankLifecycleState state;
+        qualify(state);
+        const DecodedOnMemoryBankToken custom{1, 0x300, 0x500};
+        require(custom.encode() != canonical_value,
+            "detached counter-case fixture reused the canonical token");
+        const OnMemoryBankRetainResult result = state.retain_detached(sound,
+            custom, route, route, cleanup, request, backing, true, true, true,
+            true, 2, 2);
+        require(result.detached() && !result.shared()
+                && result.first_failure == OnMemoryBankRetainFailure::None
+                && result.canonical_token == canonical_value
+                && result.custom_token == custom.encode(),
+            "distinct custom bank was not classified as detached");
+        require(state.active()
+                && state.active().phase
+                    == OnMemoryBankLifecyclePhase::RestoreApplied
+                && state.active().custom.encode() == custom.encode()
+                && state.active().canonical.encode() == canonical_value
+                && state.active().request_handle == request
+                && state.custom_route_blocked(),
+            "detached bank did not populate the ownership record");
+        require(!state.shared()
+                && !state.shared_matches(sound, request, route),
+            "detached bank was also recorded as shared");
+    }
+
+    {
+        OnMemoryBankLifecycleState state;
+        qualify(state);
+        const DecodedOnMemoryBankToken custom{1, 0x300, 0x500};
+        const OnMemoryBankRetainResult rejected = state.retain_detached(sound,
+            custom, route, route, cleanup, request, backing, true, true, true,
+            true, 2, 1);
+        require(rejected.outcome == OnMemoryBankRetainOutcome::Rejected
+                && rejected.first_failure
+                    == OnMemoryBankRetainFailure::CustomKindInvalid
+                && !state.active() && !state.shared(),
+            "rejected retirement was not reported with its failing predicate");
+        const DecodedOnMemoryBankToken malformed{0, 0x300, 0x500};
+        const OnMemoryBankRetainResult bad_token = state.retain_detached(sound,
+            malformed, route, route, cleanup, request, backing, true, true,
+            true, true, 2, 2);
+        require(bad_token.outcome == OnMemoryBankRetainOutcome::Rejected
+                && bad_token.first_failure
+                    == OnMemoryBankRetainFailure::CustomTokenInvalid
+                && !state.active() && !state.shared(),
+            "non-type-1 custom token was not rejected");
+    }
+
+    // Admission split.  The production play-setup chain gates the retirement
+    // classifier on exactly these two predicates.  If the shared admission is
+    // ever folded back into the detached one, the shared outcome becomes
+    // unreachable in production while every direct-call fixture above keeps
+    // passing -- which is precisely how that defect survived once already.
+    require(onmemory_bank_detached_retirement_admitted(true, true)
+            && !onmemory_bank_detached_retirement_admitted(true, false)
+            && !onmemory_bank_detached_retirement_admitted(false, true),
+        "detached retirement admission did not require a distinct custom bank");
+    require(onmemory_bank_shared_retirement_admitted(true, false)
+            && !onmemory_bank_shared_retirement_admitted(true, true)
+            && !onmemory_bank_shared_retirement_admitted(false, false),
+        "shared retirement admission was not reachable on equal tokens");
+
+    // The admission predicates are necessary but not sufficient: the guard that
+    // actually reaches the classifier carries further conjuncts, and one of
+    // them (owner_restore.applied) is structurally false for a shared bank,
+    // because the restore has nothing to write when the field already holds the
+    // canonical token.  These cases assert the whole guard, not its parts.
+    {
+        // A shared session exactly as production presents it: no detached
+        // admission, no applied restore, the owner field observed correct.
+        OnMemoryBankRetirementGuardFacts shared_session;
+        shared_session.shared_retirement_admitted = true;
+        shared_session.pending_patch_restored = true;
+        shared_session.owner_restore_applied = false;
+        shared_session.shared_owner_field_exact = true;
+        require(onmemory_bank_retirement_guard_admits(shared_session),
+            "production retirement guard did not admit a shared session");
+
+        // The pre-fix shape.  Without the observed-field proof the shared
+        // session is stranded even though its admission predicate is true, and
+        // no direct-call fixture would notice.
+        OnMemoryBankRetirementGuardFacts stranded = shared_session;
+        stranded.shared_owner_field_exact = false;
+        require(!onmemory_bank_retirement_guard_admits(stranded),
+            "shared session was admitted without any owner-field proof");
+
+        // The detached path must be unchanged: it still demands a restore that
+        // was actually applied, and the shared proof must not stand in for it.
+        OnMemoryBankRetirementGuardFacts detached_session;
+        detached_session.detached_retirement_admitted = true;
+        detached_session.pending_patch_restored = true;
+        detached_session.owner_restore_applied = true;
+        require(onmemory_bank_retirement_guard_admits(detached_session),
+            "production retirement guard rejected a detached session");
+        detached_session.owner_restore_applied = false;
+        require(!onmemory_bank_retirement_guard_admits(detached_session),
+            "detached session was admitted without an applied owner restore");
+
+        // Neither admission, and a failed restore, each reject on their own.
+        OnMemoryBankRetirementGuardFacts unadmitted = shared_session;
+        unadmitted.shared_retirement_admitted = false;
+        require(!onmemory_bank_retirement_guard_admits(unadmitted),
+            "retirement guard admitted a play setup with neither outcome");
+        OnMemoryBankRetirementGuardFacts unrestored = shared_session;
+        unrestored.pending_patch_restored = false;
+        require(!onmemory_bank_retirement_guard_admits(unrestored),
+            "retirement guard admitted a play setup whose restore failed");
+
+        // Close the loop: the proof the guard accepts must also satisfy the
+        // classifier's own owner_restore_verified predicate, or the shared case
+        // would clear the guard and then be rejected inside retain_detached.
+        OnMemoryBankLifecycleState state;
+        qualify(state);
+        const OnMemoryBankRetainResult admitted = state.retain_detached(
+            sound, canonical, route, route, cleanup, request, backing, true, true,
+            onmemory_bank_owner_restore_proven(
+                shared_session.owner_restore_applied,
+                shared_session.shared_owner_field_exact),
+            true, 2, 2);
+        require(admitted.shared()
+                && admitted.first_failure == OnMemoryBankRetainFailure::None,
+            "guard-admitted shared session was rejected by the classifier");
+
+        OnMemoryBankLifecycleState unproven_state;
+        qualify(unproven_state);
+        const OnMemoryBankRetainResult unproven = unproven_state.retain_detached(
+            sound, canonical, route, route, cleanup, request, backing, true, true,
+            onmemory_bank_owner_restore_proven(false, false), true, 2, 2);
+        require(unproven.outcome == OnMemoryBankRetainOutcome::Rejected
+                && unproven.first_failure
+                    == OnMemoryBankRetainFailure::OwnerRestoreUnverified,
+            "classifier accepted a shared bank with no owner-field proof");
+    }
+
+    // A shared session runs the pending-patch restore with preserve_playing_route
+    // set, because it is a live playing route.  That flag reaches
+    // evaluate_audio_patch_restore as allow_native_changes, so a field the
+    // native rewrote to a third value is preserved rather than failing the whole
+    // restore.  Narrowing the flag back would turn the shared session's restore
+    // into a hard failure that latches the audio route off.
+    {
+        const bool shared_preserves_playing_route =
+            onmemory_bank_shared_retirement_admitted(true, false);
+        require(evaluate_audio_patch_restore(
+                    0x33ull, 0x11ull, 0x22ull, shared_preserves_playing_route)
+                == AudioPatchRestoreDecision::NativeOwned,
+            "shared session did not preserve a native-owned field value");
+        require(evaluate_audio_patch_restore(0x33ull, 0x11ull, 0x22ull, false)
+                == AudioPatchRestoreDecision::Conflict,
+            "native-owned field value stopped conflicting without the flag");
+    }
+
+    // The ordinary two-song session: the first song allocated a bank and
+    // released it, the second finds that bank resident.  A completed detached
+    // record must not survive to block the shared authority.
+    {
+        OnMemoryBankLifecycleState state;
+        qualify(state);
+        const DecodedOnMemoryBankToken first_custom{1, 0x300, 0x500};
+        require(state.retain_detached(sound, first_custom, route, route,
+                    cleanup, request, backing, true, true, true, true, 2, 2)
+                .detached(),
+            "first-song detached retention failed");
+        OnMemoryBankRetirementFacts facts;
+        facts.route_generation = route + 1;
+        facts.cleanup_generation = cleanup;
+        facts.retired_request_handle = request;
+        facts.current_request_handle = request + 1;
+        facts.current_backing = reinterpret_cast<void*>(0x9800);
+        facts.retired_backing = backing;
+        facts.current_backing_observed = true;
+        facts.retired_backing_observed = true;
+        facts.current_owner = classify_onmemory_bank_retirement_owner(
+            state.active(), sound, true, true, canonical_value);
+        facts.exact_request_retired = true;
+        facts.route_released = true;
+        facts.playback_released = true;
+        facts.cleanup_released = true;
+        facts.owner_restore_verified = true;
+        facts.runtime_installed = true;
+        facts.lookup_signature_valid = true;
+        facts.release_signature_valid = true;
+        OnMemoryBankReleaseAction action;
+        require(state.claim_release(facts, action)
+                && state.finish_release(action,
+                    OnMemoryBankReleaseOutcome::AlreadyAbsent)
+                && state.active()
+                && state.active().phase
+                    == OnMemoryBankLifecyclePhase::Complete,
+            "first-song release did not reach a completed detached record");
+
+        const uint64_t route2 = route + 10;
+        const OnMemoryBankPlaySetupPreflight second = state.snapshot_play_setup(
+            true, true, true, true, sound, canonical_value, route2);
+        require(second.allowed()
+                && state.commit_play_setup_qualification(second.snapshot, sound,
+                       canonical_value, route2, 2)
+                    == OnMemoryBankRouteDecision::Allowed,
+            "second-song qualification failed after a completed release");
+        const OnMemoryBankRetainResult shared_after_complete =
+            state.retain_detached(sound, canonical, route2, route2, cleanup + 1,
+                request + 2, backing, true, true, true, true, 2, 2);
+        require(shared_after_complete.shared(),
+            "resident bank after a completed release was not classified shared");
+        // The assertion that fails without the active_ reset in the shared
+        // branch: OnMemoryBankDetachedRecord::operator bool is still true for a
+        // Complete record, so the shared authority would read a live detached
+        // record and refuse for the rest of the session.
+        require(!state.active(),
+            "completed detached record survived the shared retirement");
+        require(state.shared()
+                && state.shared_matches(sound, request + 2, route2),
+            "shared record was unusable after a completed detached cycle");
+    }
 }
 
 } // namespace ff7r::piano::tests::runtime_lifecycle

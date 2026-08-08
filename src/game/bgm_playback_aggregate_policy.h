@@ -2343,11 +2343,75 @@ constexpr bool bgm_playback_aggregate_canonical_exit_clear_exact(
         && f.retained_custom_route_exact;
 }
 
+// Third list-return authority, for the case where the game's OnMemory bank was
+// already resident at custom play-setup.  The native allocator was never
+// reached, so both roles observe one bank the game owns and the mod never held
+// a detached bank at all.  The mod's sole mutation was the sound's mabf_source
+// field, and the retirement path already restored it.  What has to be proven
+// here is therefore not "the mod may release a bank" but "the mod's only
+// mutation is provably reverted, so its route bookkeeping may be retired".
+//
+// Deliberately absent: live_sound_exact and live_request_exact.  A native
+// stop immediately followed by a native re-Set of the canonical BGM drives both
+// false -- the live slot legitimately holds the canonical sound and a new
+// request handle.  They are the right test for releasing a bank and the wrong
+// test for confirming a restore; requiring them here reintroduces the latch.
+struct BgmPlaybackSharedBankRestoreFacts final {
+    bool shared_lineage_present = false;
+    bool shared_sound_exact = false;
+    bool shared_route_exact = false;
+    bool shared_owner_restore_verified = false;
+    bool detached_lifecycle_absent = false;
+    bool lifecycle_failure_clear = false;
+    bool owner_patch_restored = false;
+    bool retired_sound_identity_exact = false;
+    bool route_cleanup_pending = false;
+    bool controller_exact = false;
+    bool slot_bgm_exact = false;
+    bool live_chain_exact = false;
+    bool no_custom_publication_pending = false;
+    bool no_unresolved_request = false;
+    // The shared branch retires route bookkeeping directly rather than through
+    // the cleanup policy, so nothing else gates the patch journals for it.  A
+    // non-empty failed journal is the only record that a game object is still
+    // patched; discarding it would be irreversible.
+    bool patch_journals_restored = false;
+};
+
+constexpr bool bgm_playback_shared_bank_restore_proven(
+    const BgmPlaybackSharedBankRestoreFacts& f) noexcept
+{
+    return f.shared_lineage_present && f.shared_sound_exact
+        && f.shared_route_exact && f.shared_owner_restore_verified
+        && f.detached_lifecycle_absent && f.lifecycle_failure_clear
+        && f.owner_patch_restored && f.retired_sound_identity_exact
+        && f.route_cleanup_pending && f.controller_exact && f.slot_bgm_exact
+        && f.live_chain_exact && f.no_custom_publication_pending
+        && f.no_unresolved_request && f.patch_journals_restored;
+}
+
 constexpr bool bgm_playback_list_return_clear_authorized(
     const bool legacy_route_owned,
-    const bool aggregate_canonical_exit_exact) noexcept
+    const bool aggregate_canonical_exit_exact,
+    const bool shared_bank_restore_proven) noexcept
 {
-    return legacy_route_owned || aggregate_canonical_exit_exact;
+    return legacy_route_owned || aggregate_canonical_exit_exact
+        || shared_bank_restore_proven;
+}
+
+// Selects the shared-bank retirement branch, which retires route bookkeeping
+// without any native call.  It runs only when the shared authority is the sole
+// authority: the native already owns the slot and has re-Set the canonical BGM
+// on it, so clearing that slot would silence vanilla audio.  When the mod does
+// own the route, or the aggregate authority applies, those paths keep running
+// unchanged.
+constexpr bool bgm_playback_shared_bank_relinquishment_path(
+    const bool legacy_route_owned,
+    const bool aggregate_canonical_exit_exact,
+    const bool shared_bank_restore_proven) noexcept
+{
+    return shared_bank_restore_proven && !legacy_route_owned
+        && !aggregate_canonical_exit_exact;
 }
 
 struct BgmPlaybackCanonicalSubstrateRelinquishmentFacts final {

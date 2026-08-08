@@ -461,7 +461,7 @@ void test_pause_resume_latest_completed_retirement_release()
                     == OnMemoryBankRouteDecision::Allowed
                 && lifecycle.retain_detached(sound, custom, 501, route, cleanup,
                     initial_request, reinterpret_cast<void*>(0x18200), true,
-                    true, true, true, 2, 2),
+                    true, true, true, 2, 2).detached(),
             "three-cycle fixture could not retain initial hold");
 
         OnMemoryBankRetirementFacts baseline;

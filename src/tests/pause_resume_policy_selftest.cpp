@@ -662,7 +662,7 @@ void test_durable_pause_resume_bank_policy()
                 == OnMemoryBankRouteDecision::Allowed
             && lifecycle.retain_detached(sound_identity, custom, route, route,
                 cleanup, 0x400010008ull, nullptr, true,
-                true, true, true, 2, 2),
+                true, true, true, 2, 2).detached(),
         "durable pause/resume lifecycle fixture did not retain custom bank");
     const auto first_detached = lifecycle.active();
     const uint64_t first_lifecycle_epoch = lifecycle.state_epoch();

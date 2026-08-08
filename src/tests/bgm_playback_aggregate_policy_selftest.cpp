@@ -1004,11 +1004,68 @@ void test_bgm_playback_aggregate_observer_policy()
         require(!bgm_playback_aggregate_canonical_exit_clear_exact(rejected),
             "inexact aggregate canonical list-exit facts authorized native clear");
     }
-    require(!bgm_playback_list_return_clear_authorized(false, false)
-            && bgm_playback_list_return_clear_authorized(true, false)
-            && bgm_playback_list_return_clear_authorized(false, true)
-            && bgm_playback_list_return_clear_authorized(true, true),
+    require(!bgm_playback_list_return_clear_authorized(false, false, false)
+            && bgm_playback_list_return_clear_authorized(true, false, false)
+            && bgm_playback_list_return_clear_authorized(false, true, false)
+            && bgm_playback_list_return_clear_authorized(true, true, false)
+            && bgm_playback_list_return_clear_authorized(false, false, true),
         "list-return clear authority rejected one source or required two clears");
+    {
+        BgmPlaybackSharedBankRestoreFacts shared{};
+        shared.shared_lineage_present = true;
+        shared.shared_sound_exact = true;
+        shared.shared_route_exact = true;
+        shared.shared_owner_restore_verified = true;
+        shared.detached_lifecycle_absent = true;
+        shared.lifecycle_failure_clear = true;
+        shared.owner_patch_restored = true;
+        shared.retired_sound_identity_exact = true;
+        shared.route_cleanup_pending = true;
+        shared.controller_exact = true;
+        shared.slot_bgm_exact = true;
+        shared.live_chain_exact = true;
+        shared.no_custom_publication_pending = true;
+        shared.no_unresolved_request = true;
+        shared.patch_journals_restored = true;
+        require(bgm_playback_shared_bank_restore_proven(shared),
+            "complete shared-bank restore evidence was not accepted");
+        constexpr bool BgmPlaybackSharedBankRestoreFacts::*kSharedMembers[] = {
+            &BgmPlaybackSharedBankRestoreFacts::shared_lineage_present,
+            &BgmPlaybackSharedBankRestoreFacts::shared_sound_exact,
+            &BgmPlaybackSharedBankRestoreFacts::shared_route_exact,
+            &BgmPlaybackSharedBankRestoreFacts::shared_owner_restore_verified,
+            &BgmPlaybackSharedBankRestoreFacts::detached_lifecycle_absent,
+            &BgmPlaybackSharedBankRestoreFacts::lifecycle_failure_clear,
+            &BgmPlaybackSharedBankRestoreFacts::owner_patch_restored,
+            &BgmPlaybackSharedBankRestoreFacts::retired_sound_identity_exact,
+            &BgmPlaybackSharedBankRestoreFacts::route_cleanup_pending,
+            &BgmPlaybackSharedBankRestoreFacts::controller_exact,
+            &BgmPlaybackSharedBankRestoreFacts::slot_bgm_exact,
+            &BgmPlaybackSharedBankRestoreFacts::live_chain_exact,
+            &BgmPlaybackSharedBankRestoreFacts::no_custom_publication_pending,
+            &BgmPlaybackSharedBankRestoreFacts::no_unresolved_request,
+            &BgmPlaybackSharedBankRestoreFacts::patch_journals_restored,
+        };
+        for (const auto member : kSharedMembers) {
+            BgmPlaybackSharedBankRestoreFacts rejected = shared;
+            rejected.*member = false;
+            require(!bgm_playback_shared_bank_restore_proven(rejected),
+                "incomplete shared-bank restore evidence authorized cleanup");
+        }
+        // A detached bank must never reach the shared authority: it owns a
+        // separate bank and still has to run the release path.
+        BgmPlaybackSharedBankRestoreFacts detached_present = shared;
+        detached_present.detached_lifecycle_absent = false;
+        require(!bgm_playback_shared_bank_restore_proven(detached_present),
+            "shared-bank authority accepted a live detached-bank record");
+        // The shared branch runs only when it is the sole authority, so the
+        // native slot clear stays unreachable from it.
+        require(bgm_playback_shared_bank_relinquishment_path(false, false, true)
+                && !bgm_playback_shared_bank_relinquishment_path(true, false, true)
+                && !bgm_playback_shared_bank_relinquishment_path(false, true, true)
+                && !bgm_playback_shared_bank_relinquishment_path(false, false, false),
+            "shared-bank relinquishment path did not stay mutually exclusive");
+    }
     BgmPlaybackCanonicalSubstrateRelinquishmentFacts relinquishment{
         true, true, true, true};
     require(bgm_playback_canonical_substrate_relinquishment_exact(
@@ -1252,7 +1309,7 @@ void test_bgm_playback_aggregate_observer_policy()
     constexpr uint64_t stale_route_request = 0x0000000400010008ULL;
     constexpr uint64_t aggregate_canonical_request = 0x0000000B00000008ULL;
     require(stale_route_request != aggregate_canonical_request
-            && bgm_playback_list_return_clear_authorized(false, true),
+            && bgm_playback_list_return_clear_authorized(false, true, false),
         "stale custom route tuple did not defer to exact aggregate authority");
     require(!bgm_playback_aggregate_release_exact(
                 false, false, true, true, true, true)

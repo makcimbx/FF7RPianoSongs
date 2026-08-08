@@ -57,7 +57,9 @@ inline std::string format_onmemory_bank_lifecycle_log(
     uint64_t ordinal,
     const char* reason,
     uint32_t canonical_kind = UINT32_MAX,
-    uint32_t custom_kind = UINT32_MAX)
+    uint32_t custom_kind = UINT32_MAX,
+    uint64_t canonical_token = 0,
+    uint64_t custom_token = 0)
 {
     std::string text = "[audio_sead] onmemory_bank_lifecycle status=";
     text += status ? status : "unknown";
@@ -73,6 +75,14 @@ inline std::string format_onmemory_bank_lifecycle_log(
     }
     if (custom_kind != UINT32_MAX) {
         text += " custom_kind=" + std::to_string(custom_kind);
+    }
+    // Both tokens are always emitted together when either is known: whether
+    // they are equal is the single fact that selects the retirement path.
+    if (canonical_token != 0 || custom_token != 0) {
+        text += " canonical_token=" + std::to_string(canonical_token);
+        text += " custom_token=" + std::to_string(custom_token);
+        text += " tokens_shared=";
+        text += (canonical_token == custom_token) ? "1" : "0";
     }
     return text;
 }
@@ -324,6 +334,186 @@ struct OnMemoryBankDetachedRecord {
             && cleanup_generation != 0 && request_handle != 0
             && backing_observed
             && exact_distinct_type1_onmemory_tokens(canonical, custom);
+    }
+};
+
+// The game's OnMemory bank allocator mints a fresh token on every allocation
+// and has no reuse path, so an unchanged owner token proves the allocator was
+// never reached: the canonical bank was already resident and the native
+// play-setup handed the *same* bank back for the custom role.  That is a legal
+// and common state, but it is not detached ownership -- there is exactly one
+// bank and the game owns it.  Releasing it would free audio data the game is
+// still using, so a shared bank is recorded here and never in the detached
+// record.  Only the detached record feeds claim_release(), which is the sole
+// path to sead_onmemory_bank_release; keeping the shared observation in a
+// separate member is what makes the release structurally unreachable.
+struct OnMemoryBankSharedRecord {
+    OnMemoryBankSoundIdentity sound{};
+    DecodedOnMemoryBankToken token{};
+    uint64_t ordinal = 0;
+    uint64_t route_generation = 0;
+    uint64_t cleanup_generation = 0;
+    uint64_t request_handle = 0;
+    bool owner_restore_verified = false;
+
+    constexpr explicit operator bool() const noexcept
+    {
+        return sound && ordinal != 0 && route_generation != 0
+            && cleanup_generation != 0 && request_handle != 0
+            && owner_restore_verified && exact_type1_onmemory_token(token);
+    }
+};
+
+enum class OnMemoryBankRetainOutcome : uint8_t {
+    Rejected,
+    Detached,
+    Shared,
+};
+
+enum class OnMemoryBankRetainFailure : uint8_t {
+    None,
+    QualificationMissing,
+    CanonicalMissing,
+    LifecycleFailed,
+    ReleaseInFlight,
+    ActivePending,
+    CanonicalSoundDrift,
+    QualificationSoundDrift,
+    QualificationRouteEpochDrift,
+    CanonicalEpochDrift,
+    FreshOwnerProofMissing,
+    OwnerRestoreUnverified,
+    PublicationFailed,
+    CanonicalKindInvalid,
+    CustomKindInvalid,
+    RouteEpochZero,
+    RouteGenerationZero,
+    CleanupGenerationZero,
+    RequestHandleZero,
+    BackingUnobserved,
+    CustomTokenInvalid,
+};
+
+inline const char* onmemory_bank_retain_outcome_name(
+    OnMemoryBankRetainOutcome outcome) noexcept
+{
+    switch (outcome) {
+    case OnMemoryBankRetainOutcome::Rejected: return "rejected";
+    case OnMemoryBankRetainOutcome::Detached: return "detached";
+    case OnMemoryBankRetainOutcome::Shared: return "shared";
+    }
+    return "rejected";
+}
+
+inline const char* onmemory_bank_retain_failure_name(
+    OnMemoryBankRetainFailure failure) noexcept
+{
+    switch (failure) {
+    case OnMemoryBankRetainFailure::None: return "none";
+    case OnMemoryBankRetainFailure::QualificationMissing: return "qualification_missing";
+    case OnMemoryBankRetainFailure::CanonicalMissing: return "canonical_missing";
+    case OnMemoryBankRetainFailure::LifecycleFailed: return "lifecycle_failed";
+    case OnMemoryBankRetainFailure::ReleaseInFlight: return "release_in_flight";
+    case OnMemoryBankRetainFailure::ActivePending: return "active_pending";
+    case OnMemoryBankRetainFailure::CanonicalSoundDrift: return "canonical_sound_drift";
+    case OnMemoryBankRetainFailure::QualificationSoundDrift: return "qualification_sound_drift";
+    case OnMemoryBankRetainFailure::QualificationRouteEpochDrift: return "qualification_route_epoch_drift";
+    case OnMemoryBankRetainFailure::CanonicalEpochDrift: return "canonical_epoch_drift";
+    case OnMemoryBankRetainFailure::FreshOwnerProofMissing: return "fresh_owner_proof_missing";
+    case OnMemoryBankRetainFailure::OwnerRestoreUnverified: return "owner_restore_unverified";
+    case OnMemoryBankRetainFailure::PublicationFailed: return "publication_failed";
+    case OnMemoryBankRetainFailure::CanonicalKindInvalid: return "canonical_kind_invalid";
+    case OnMemoryBankRetainFailure::CustomKindInvalid: return "custom_kind_invalid";
+    case OnMemoryBankRetainFailure::RouteEpochZero: return "route_epoch_zero";
+    case OnMemoryBankRetainFailure::RouteGenerationZero: return "route_generation_zero";
+    case OnMemoryBankRetainFailure::CleanupGenerationZero: return "cleanup_generation_zero";
+    case OnMemoryBankRetainFailure::RequestHandleZero: return "request_handle_zero";
+    case OnMemoryBankRetainFailure::BackingUnobserved: return "backing_unobserved";
+    case OnMemoryBankRetainFailure::CustomTokenInvalid: return "custom_token_invalid";
+    }
+    return "none";
+}
+
+// Play-setup admission split.  Both retirement outcomes need exactly the same
+// post-query evidence; they differ only in whether the custom role observed a
+// separate bank.  Folding the distinctness test into the shared admission is
+// what previously made the shared outcome unreachable in production: the
+// retirement classifier was never entered at all, so the tri-state could only
+// ever be exercised from fixtures.
+constexpr bool onmemory_bank_detached_retirement_admitted(
+    const bool post_query_exact, const bool tokens_distinct) noexcept
+{
+    return post_query_exact && tokens_distinct;
+}
+
+constexpr bool onmemory_bank_shared_retirement_admitted(
+    const bool post_query_exact, const bool tokens_distinct) noexcept
+{
+    return post_query_exact && !tokens_distinct;
+}
+
+// The two retirement outcomes prove the owner field is correct by different
+// means, because the mod's write to sound+0x548 differs in kind between them.
+//
+// Detached: the mod wrote the custom token over the canonical one, so the
+// restore has real work to do and `applied` records that it was carried out.
+//
+// Shared: the field already held the canonical token, because the game's own
+// bank is the one both roles observe, so there is nothing to write back.  The
+// restore machinery rejects that case rather than reporting success -- an
+// exact override requires `restore_value != current` (exact_override_matches)
+// and a field whose current value already equals its original short-circuits
+// to AlreadyRestored before the override branch is consulted at all.  So
+// `applied` is structurally false for a shared bank, and treating its absence
+// as missing proof would make the shared outcome unreachable.  The proof that
+// actually holds is that the field was *observed* to carry the canonical
+// token, which the post-query read has already established.
+constexpr bool onmemory_bank_owner_restore_proven(
+    const bool owner_restore_applied, const bool shared_owner_field_exact) noexcept
+{
+    return owner_restore_applied || shared_owner_field_exact;
+}
+
+// The production guard that decides whether a play setup reaches the
+// retirement classifier at all.  It is named here, rather than left inline at
+// the call site, so a test can assert that a shared session is admitted --
+// the admission predicates above are necessary but not sufficient, and a
+// conjunct that is structurally false for a shared bank silently strands the
+// whole shared path while every direct-call fixture still passes.
+struct OnMemoryBankRetirementGuardFacts final {
+    bool detached_retirement_admitted = false;
+    bool shared_retirement_admitted = false;
+    bool pending_patch_restored = false;
+    bool owner_restore_applied = false;
+    bool shared_owner_field_exact = false;
+};
+
+constexpr bool onmemory_bank_retirement_guard_admits(
+    const OnMemoryBankRetirementGuardFacts& facts) noexcept
+{
+    return (facts.detached_retirement_admitted || facts.shared_retirement_admitted)
+        && facts.pending_patch_restored
+        && onmemory_bank_owner_restore_proven(
+            facts.owner_restore_applied, facts.shared_owner_field_exact);
+}
+
+struct OnMemoryBankRetainResult {
+    OnMemoryBankRetainOutcome outcome = OnMemoryBankRetainOutcome::Rejected;
+    OnMemoryBankRetainFailure first_failure = OnMemoryBankRetainFailure::None;
+    uint64_t canonical_token = 0;
+    uint64_t custom_token = 0;
+    uint64_t ordinal = 0;
+    uint64_t route_generation = 0;
+    uint64_t cleanup_generation = 0;
+
+    constexpr bool detached() const noexcept
+    {
+        return outcome == OnMemoryBankRetainOutcome::Detached;
+    }
+
+    constexpr bool shared() const noexcept
+    {
+        return outcome == OnMemoryBankRetainOutcome::Shared;
     }
 };
 
@@ -1470,7 +1660,23 @@ public:
         return canonical_;
     }
 
-    bool retain_detached(
+    // Tri-state retirement classification.
+    //
+    //   Detached - the custom role observes a *different* type-1 bank than the
+    //              canonical role, so the native allocator ran and minted a
+    //              bank the mod owns.  Only this outcome populates active_,
+    //              and only active_ can reach claim_release()/native release.
+    //   Shared   - every other predicate holds but both roles observe the same
+    //              valid type-1 bank, i.e. the canonical bank was already
+    //              resident and the allocator was never reached.  There is one
+    //              bank and the game owns it; it is recorded in shared_ and is
+    //              never releasable.
+    //   Rejected - some predicate that guards either outcome failed.
+    //
+    // The two outcomes are distinguished only by the token relationship, which
+    // is evaluated once, here.  No downstream flag can promote a shared bank
+    // into the detached record.
+    OnMemoryBankRetainResult retain_detached(
         const OnMemoryBankSoundIdentity& sound,
         const DecodedOnMemoryBankToken& custom,
         uint64_t qualification_route_epoch,
@@ -1485,18 +1691,55 @@ public:
         uint32_t canonical_kind,
         uint32_t custom_kind) noexcept
     {
-        if (!qualification_ || !canonical_ || failed_ || release_in_flight_
-            || active_pending() || sound != canonical_.sound
-            || qualification_.sound != sound
-            || qualification_.route_epoch != qualification_route_epoch
-            || qualification_.canonical_epoch != canonical_.validation_epoch
-            || !fresh_native_owner_proof || !owner_restore_verified
-            || !publication_succeeded || canonical_kind != 2 || custom_kind != 2
-            || qualification_route_epoch == 0 || route_generation == 0
-            || cleanup_generation == 0
-            || request_handle == 0 || !backing_observed
-            || !exact_distinct_type1_onmemory_tokens(canonical_.token, custom)) {
-            return false;
+        OnMemoryBankRetainResult result;
+        result.canonical_token = canonical_.token.encode();
+        result.custom_token = custom.encode();
+        result.route_generation = route_generation;
+        result.cleanup_generation = cleanup_generation;
+        result.first_failure = first_retain_failure(
+            sound, custom, qualification_route_epoch, route_generation,
+            cleanup_generation, request_handle, backing_observed,
+            fresh_native_owner_proof, owner_restore_verified,
+            publication_succeeded, canonical_kind, custom_kind);
+        if (result.first_failure != OnMemoryBankRetainFailure::None) {
+            return result;
+        }
+        if (!exact_distinct_type1_onmemory_tokens(canonical_.token, custom)) {
+            // Same bank in both roles: record the borrow, never ownership.
+            //
+            // Retire any previous detached record as well.  first_retain_failure
+            // has already established !active_pending() && !failed_, so a record
+            // still present here is a fully retired Complete one from an earlier
+            // cycle.  OnMemoryBankDetachedRecord::operator bool stays true for
+            // Complete, and leaving it would make the shared authority read a
+            // live detached record and refuse -- which is the ordinary
+            // "first song allocated a bank, second song found it resident"
+            // session, not an edge case.  Clearing it here also preserves the
+            // structural argument: the shared branch owns no detached record at
+            // all, so nothing it leaves behind can reach claim_release.
+            //
+            // Second consumer of that record's survival: completed_reset_matches
+            // requires active_ to still hold the Complete record alongside a
+            // matching rearm authority, so clearing it here makes that
+            // verification fail for a session that still had an outstanding
+            // completed-owner-zero rearm authority.  That is fail-closed, and
+            // it is superseded in practice by the fresh qualification that must
+            // precede any retain, so no compensating change is needed -- but it
+            // is a real interaction, recorded so it is not rediscovered as a bug.
+            active_ = {};
+            shared_ = {};
+            shared_.sound = sound;
+            shared_.token = canonical_.token;
+            shared_.ordinal = next_ordinal_++;
+            shared_.route_generation = route_generation;
+            shared_.cleanup_generation = cleanup_generation;
+            shared_.request_handle = request_handle;
+            shared_.owner_restore_verified = true;
+            qualification_ = {};
+            ++state_epoch_;
+            result.outcome = OnMemoryBankRetainOutcome::Shared;
+            result.ordinal = shared_.ordinal;
+            return result;
         }
         active_ = {};
         active_.phase = OnMemoryBankLifecyclePhase::RestoreApplied;
@@ -1511,6 +1754,44 @@ public:
         active_.backing_observed = backing_observed;
         active_.owner_restore_verified = true;
         qualification_ = {};
+        ++state_epoch_;
+        result.outcome = OnMemoryBankRetainOutcome::Detached;
+        result.ordinal = active_.ordinal;
+        return result;
+    }
+
+    const OnMemoryBankSharedRecord& shared() const noexcept
+    {
+        return shared_;
+    }
+
+    // Match the shared observation against the playback the route recorded as
+    // owned.  The native request handle is unique per request, so together
+    // with the live sound identity it names the exact playback the record was
+    // made for; the route generation bound additionally rejects a record made
+    // for a later route.
+    bool shared_matches(
+        const OnMemoryBankSoundIdentity& sound,
+        uint64_t request_handle,
+        uint64_t route_generation_bound) const noexcept
+    {
+        return shared_ && !failed_ && shared_.sound == sound
+            && shared_.request_handle == request_handle
+            && request_handle != 0
+            && shared_.route_generation <= route_generation_bound;
+    }
+
+    // Consume the shared observation exactly once, under the caller's audio
+    // state lock, as part of the route retirement transaction.
+    bool consume_shared(
+        const OnMemoryBankSoundIdentity& sound,
+        uint64_t request_handle,
+        uint64_t route_generation_bound) noexcept
+    {
+        if (!shared_matches(sound, request_handle, route_generation_bound)) {
+            return false;
+        }
+        shared_ = {};
         ++state_epoch_;
         return true;
     }
@@ -1727,6 +2008,7 @@ public:
         canonical_ = {};
         qualification_ = {};
         active_ = {};
+        shared_ = {};
         release_in_flight_ = {};
         failed_ = false;
         ++state_epoch_;
@@ -1822,11 +2104,58 @@ private:
         release_in_flight_ = {};
         qualification_ = {};
         rearm_authority_ = {};
+        shared_ = {};
+    }
+
+    // Ordered evaluation of every predicate that guards *both* retirement
+    // outcomes.  The token relationship is deliberately absent: it selects
+    // between Detached and Shared rather than rejecting the retirement.
+    OnMemoryBankRetainFailure first_retain_failure(
+        const OnMemoryBankSoundIdentity& sound,
+        const DecodedOnMemoryBankToken& custom,
+        uint64_t qualification_route_epoch,
+        uint64_t route_generation,
+        uint64_t cleanup_generation,
+        uint64_t request_handle,
+        bool backing_observed,
+        bool fresh_native_owner_proof,
+        bool owner_restore_verified,
+        bool publication_succeeded,
+        uint32_t canonical_kind,
+        uint32_t custom_kind) const noexcept
+    {
+        using Failure = OnMemoryBankRetainFailure;
+        if (!qualification_) return Failure::QualificationMissing;
+        if (!canonical_) return Failure::CanonicalMissing;
+        if (failed_) return Failure::LifecycleFailed;
+        if (release_in_flight_) return Failure::ReleaseInFlight;
+        if (active_pending()) return Failure::ActivePending;
+        if (sound != canonical_.sound) return Failure::CanonicalSoundDrift;
+        if (qualification_.sound != sound) return Failure::QualificationSoundDrift;
+        if (qualification_.route_epoch != qualification_route_epoch) {
+            return Failure::QualificationRouteEpochDrift;
+        }
+        if (qualification_.canonical_epoch != canonical_.validation_epoch) {
+            return Failure::CanonicalEpochDrift;
+        }
+        if (!fresh_native_owner_proof) return Failure::FreshOwnerProofMissing;
+        if (!owner_restore_verified) return Failure::OwnerRestoreUnverified;
+        if (!publication_succeeded) return Failure::PublicationFailed;
+        if (canonical_kind != 2) return Failure::CanonicalKindInvalid;
+        if (custom_kind != 2) return Failure::CustomKindInvalid;
+        if (qualification_route_epoch == 0) return Failure::RouteEpochZero;
+        if (route_generation == 0) return Failure::RouteGenerationZero;
+        if (cleanup_generation == 0) return Failure::CleanupGenerationZero;
+        if (request_handle == 0) return Failure::RequestHandleZero;
+        if (!backing_observed) return Failure::BackingUnobserved;
+        if (!exact_type1_onmemory_token(custom)) return Failure::CustomTokenInvalid;
+        return Failure::None;
     }
 
     OnMemoryBankCanonicalRecord canonical_{};
     OnMemoryBankRouteQualification qualification_{};
     OnMemoryBankDetachedRecord active_{};
+    OnMemoryBankSharedRecord shared_{};
     OnMemoryBankReleaseAction release_in_flight_{};
     OnMemoryBankCompletedOwnerZeroRearmAuthority rearm_authority_{};
     uint64_t state_epoch_ = 1;

@@ -26,6 +26,7 @@
     X(test_audio_patch_exact_override_metadata_normalization) \
     X(test_onmemory_bank_exact_owner_restore) \
     X(test_onmemory_bank_observed_null_backing) \
+    X(test_onmemory_bank_shared_resident_retirement) \
     X(test_pause_resume_latest_completed_retirement_release) \
     X(test_production_context_transition_policies) \
     X(test_shutdown_aggregation) \
