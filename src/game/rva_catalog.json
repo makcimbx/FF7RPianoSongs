@@ -1906,6 +1906,20 @@
               "detail": "The current runtime safety notes classify this state-machine tick as observation-only after unsafe mutation experiments."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00e5f86c",
+          "signature": {
+            "bytes": "48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 c0 fd ff ff b8 40 03 00 00 e8 a2 f6 24 01",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed by owner identity, not by prologue shape. Its sole caller (the master per-frame subsystem tick at 0x00e5f2d0) invokes it as f(*(piano_audio_global + 0x1b0), delta), which is exactly the owner equality the detour enforces; the body drives the same owner fields the confirmed piano_audio_request path writes, and it calls the confirmed sqexsead_play_setup (0x01212540) and duration_seconds (0x00dcb52c). The 34-byte entry-anchored run stored here was measured unique image-wide (matches=1); its leading 30 bytes alone match three sites, so the trailing chkstk rel32 is the required tie-breaker. This address supersedes the refuted prologue-shape candidate 0x03cb2ba4."
+            }
+          ]
         }
       }
     },

@@ -318,8 +318,11 @@ Outcome of the second pass:
 | unestablished | 5 |
 | positively absent from 1.004 | 1 (`progress_lookup_display_caller_1`, above) |
 
-Build `ff7rebirth-steam-win64-68fd6fde` therefore moves from 45 to **71 of 78**
-addresses and from 20 to **33 of 38** hook specifications.
+Build `ff7rebirth-steam-win64-68fd6fde` therefore moved from 45 to **71 of 78**
+addresses and from 20 to **33 of 38** hook specifications at the end of this
+pass. The follow-up pass recorded below settles the one entry that was held back
+and brings the build to **72 of 78** addresses and **34 of 38** hook
+specifications.
 
 ### Routes used in this pass
 
@@ -486,7 +489,14 @@ read of the 1.005 `play_setup` body to see which global feeds its controller-key
 argument, and that requires the 1.005 program this bridge does not serve. Until
 then the 1.004 value is unverified by that route.
 
-### `piano_audio_state_tick` (`0x03cb2ba4`) — held back
+### `piano_audio_state_tick` (`0x03cb2ba4`) — held back, later refuted
+
+**Superseded.** This records the state at the end of pass two, and is kept
+because the decision to hold the address back was correct and its stated reasons
+are what a later pass acted on. The candidate has since been *refuted* and the
+real 1.004 address confirmed by an independent route; read
+"`piano_audio_state_tick` settled" below before acting on anything in this
+section.
 
 The address was derived and is **not** in the catalog. It stays absent, which is
 a supported state: `requirement` is `research` and the generator only forbids a
@@ -530,6 +540,132 @@ Identify `FUN_143ca8918` first — its own callers, and whether it touches
 `packed_key +0x50`, `request_index +0x7c`) from `src/game/runtime_layouts.h`.
 A confirmed edge into the piano audio owner object would settle both entries at
 once; without one, the prologue-shape match should not be adopted.
+
+## `piano_audio_state_tick` settled: `0x03cb2ba4` refuted, `0x00e5f86c` confirmed
+
+A follow-up pass over the same 1.004 image adjudicated the held-back candidate.
+The executable identity was re-verified at the start of that session by reading
+two known 1.004 byte runs before any conclusion was drawn. The outcome is a
+refutation and a replacement, and the catalog now carries
+`piano_audio_state_tick` for build `ff7rebirth-steam-win64-68fd6fde` at RVA
+`0x00e5f86c` (VA `0x140e5f86c`). `requirement` stays `research`.
+
+### Why `0x03cb2ba4` is wrong
+
+The identification criterion is fixed by the product, not by taste.
+`capture_piano_audio_request_profile` in `src/game/audio_sead.cpp` reads
+`PianoAudioOwner::packed_key` (`+0x50`) and `::request_index` (`+0x7c`) *from the
+detour's first argument* and hard-requires that argument to equal the engine's
+current owner. So the first parameter of the true tick must be the
+`PianoAudioOwner`. That owner is `*(void**)(piano_audio_global + 0x1b0)`: the
+confirmed `piano_audio_request` (`0x01348a5c`) decompiles to
+`FUN_141348c2c(*(void**)(0x1490fede8 + 0x1b0), request_index, &packed_key, ...)`,
+which independently re-confirms both cataloged entries.
+
+`FUN_141348c2c` — reached directly from the confirmed request entry — treats
+owner `+0x08` as a **byte state enum**: `if (owner[8] != 0 && owner[8] < 5) { ...
+owner[0x7c] = request_index; owner[8] = 0; }`. `FUN_143cb2ba4` treats its
+`param_1[1]`, the same `+0x08`, as an **object pointer**, dereferencing and
+forwarding it throughout (`if (param_1[1] != 0)`, three calls taking it, and a
+tail call `FUN_143ca9d60(param_1[1], <xmm1-derived>)`). A one-byte state enum and
+a dereferenced object pointer cannot occupy the same offset of the same class.
+`FUN_143cb2ba4` also never touches `+0x0c`, `+0x50`, `+0x7c`, `+0x148`, `+0x460`,
+`+0x620` or `+0x628`, and it never references `piano_audio_global`. Reading its
+body out, it is a per-entry `CharaSpec_` spawn/event director that evaluates a
+float score against a 100 / 90 / 80 / 50 rank ladder.
+
+### The lesson: prologue shape filters candidates, it does not identify them
+
+`0x03cb2ba4` was selected because its stack-frame and register-save shape matched
+the 1.005 entry, and it was the only one of the three image-wide shape matches
+that consumed the incoming `XMM1`. Both observations were true and both were
+irrelevant to the question actually being asked. A frame shape is produced by the
+compiler from local-variable pressure and callee-saved register use; thousands of
+unrelated functions share it, and nothing about it ties a function to a
+subsystem. The correct discriminator was available the whole time and is
+structural: **the first argument must be the object the detour operates on.**
+
+This is the third naming/identity correction this note records, after the
+`game_viewport_client_post_render` vtable slot move and the `create_package`
+frame immediate. All three carry the same rule from a different direction: a
+prologue prefix derived from the other build is a *search accelerator*, never
+evidence. Use it to shrink the candidate set, then discharge the identification
+against an owner, a call edge to a confirmed anchor, or a unique string.
+
+### The confirmation route for `0x00e5f86c`
+
+`FUN_140e5f86c` was reached by asking which functions call the request-apply
+function `FUN_141348c2c`; it is in that caller set *and* it happens to be one of
+the three prologue-shape matches, which is why the shape filter was not wrong so
+much as insufficient. Four independent facts close it:
+
+1. **Owner identity, from the caller.** Its sole caller `FUN_140e5f2d0`
+   (`0x00e5f2d0`) invokes it as `FUN_140e5f86c(*(param_1 + 0x1b0), param_2)`.
+   That caller is the game's master per-frame subsystem tick: it forwards the
+   same `param_2` delta to roughly thirty subsystems as `f(*(param_1 + off),
+   delta)`, and it uses `param_1` and `piano_audio_global` interchangeably
+   (`param_1 + 0x170` / `DAT_1490fede8 + 0x170`, and likewise at `+0x1a0`). The
+   first argument is therefore literally `*(piano_audio_global + 0x1b0)`, which
+   is exactly the equality the detour enforces.
+2. **ABI.** The body opens `pbVar1 = (byte *)(param_1 + 8)` and is a
+   `do { } while (true)` state machine over states `0..0xc`. It reads `XMM1` at
+   entry and uses it as a per-frame delta twice, subtracting it from
+   `*(float *)(param_1 + 0x78c)` and from each queue entry's `+0x18` field. That
+   is `void __fastcall(void* owner, float delta_seconds)` exactly: `RCX` owner,
+   `XMM1` delta, void return.
+3. **Layout agreement with the confirmed request path.** It drives `+0x08`
+   (state), `+0x0c` (active key), `+0x50` (packed key, loaded from
+   `+0x148 + i*0x30`), `+0x7c` and `+0x7d` (request index and previous), walks
+   the `+0x148 + i*0x30` per-kind slot table with bound `i < 0xb`, and drains the
+   pending queue at `+0x460` / `+0x620` / `+0x628`: it ages each entry's `+0x18`
+   float by the delta and, when it goes negative, calls `FUN_141348c2c` to apply
+   the request, then memmove-compacts and decrements the count. It is the unique
+   per-frame consumer of the queue that `FUN_141348c2c` produces.
+4. **Call edges to confirmed 1.004 anchors.** It calls `sqexsead_play_setup`
+   (`0x01212540`) with the seven arguments matching `play_setup_detour`, and
+   `duration_seconds` (`0x00dcb52c`), storing the result to owner `+0x4c`. It
+   also reaches the SQEXSEAD BGM cluster at `0x012121d0`–`0x01212744`, the same
+   band as the confirmed `bgm_*` entries.
+
+The fourth fact is the one the product depends on. `play_setup_detour` only sets
+`g_piano_audio_owner_custom_playsetup` while it runs inside the tick, so the
+tick must transitively reach `sqexsead_play_setup` on the same thread; this
+function calls it directly. That is a decidable structural test, and it passes.
+
+The stored signature is the 34-byte entry-anchored run
+`48 89 5c 24 10 55 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 c0 fd ff ff b8 40 03
+00 00 e8 a2 f6 24 01`, mask all `x`. `search_byte_patterns` returns exactly one
+match image-wide. The leading 30 bytes alone match three sites
+(`0x140e5f86c`, `0x1432c7518`, `0x143cb2ba4`), so the trailing `__chkstk` call
+`rel32` is required as the tie-breaker — the same construction as the cataloged
+1.005 signature, which ends in its own displacement `fa 6e 94 01`. Apart from
+that displacement the 1.004 prologue is byte-identical to 1.005.
+
+The third shape match, `0x032c7518`, was never examined. It did not need to be
+once `0x00e5f86c` was closed on owner identity.
+
+### `piano_audio_request` does not name a piano-specific function
+
+Three sites in the owner-class band fetch `*(global + 0x1b0)` and tail-call
+`FUN_141348c2c` with a different request kind: `piano_audio_request` itself
+(`0x01348a5c`) passes the caller's index, `FUN_141349740` passes `1`, and
+`FUN_141349f4c` passes `5` after building the names
+`"Encount_DefaultBattleBGM"` and `"bgm_vs_battle_00_01"`. The class is the game's
+general music/BGM request controller, which the piano path reuses; the catalog id
+describes the product's use of it, not the code. The entry, its RVAs and the
+documented owner offsets are unaffected — only the name is misleading, and it is
+recorded here so a future pass does not re-derive the "wrong" conclusion that the
+function handles more than piano audio.
+
+### What is still unverified
+
+Everything above is static analysis of the 1.004 image. The address has not been
+exercised on a running 1.004 game, and `piano_audio_state_tick_detour` is not an
+observation-only pass-through — the concern stated in the superseded section
+still describes what a wrong target would cost. `RawRvaHook::install` verifies
+the full cataloged prologue before hooking, which bounds build drift; the
+misidentification risk is what the owner-identity route above discharges, and
+in-game qualification on a 1.004 executable is what would close the remainder.
 
 ## Entries still unestablished in build 1.004
 
