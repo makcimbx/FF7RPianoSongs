@@ -14107,9 +14107,10 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     uint64_t reset_authority_generation_snapshot = 0;
     uint64_t reset_revocation_epoch_snapshot = 0;
     {
-        // Route-operation authority is already held. Reservation ownership
-        // serializes every revocation-epoch writer while the proof/epoch pair
-        // is captured and the complete zero/Idle readiness decision is made.
+        // Route-operation authority is already held and excludes rebase and
+        // reset-qualification epoch writers. Reservation ownership excludes
+        // reservation/revocation writers while the proof/epoch pair is
+        // captured and the complete zero/Idle readiness decision is made.
         // Borrower and audio locks are acquired separately in the established
         // operation -> reservation -> borrower/audio order.
         std::lock_guard<std::mutex> reservation_lock(
