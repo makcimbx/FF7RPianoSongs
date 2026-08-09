@@ -236,9 +236,16 @@ of the rule stated in [Architecture](../docs/Architecture.md): a consumer that
 forms `exe_base + rva` must test the RVA for zero, and so must a consumer that
 compares against a cataloged RVA.
 
-## `select_index_helper` is `probable`, and why its address is still adopted
+## `select_index_helper` was adopted as `probable` — now confirmed
 
-The 1.004 address is `0x023a7410`. It is retained as **probable**, not promoted
+**Grade superseded.** This section records why the address was adopted while the
+grade was still `probable`; the adoption argument is unchanged and still the
+reason the entry is safe. The grade itself was settled in the third pass below,
+which re-verified the sole-caller relationship directly and disposed of the size
+objection. Read "Three findings worth carrying forward" before treating anything
+here as an open question.
+
+The 1.004 address is `0x023a7410`. It was retained as **probable**, not promoted
 to confirmed. The role is established; the code *unit* is not the same shape as
 the 1.005 entity.
 
@@ -293,9 +300,12 @@ the `progress_lookup` call this unit does not make — adoption would have been
 refused and the catalog entity would need redefinition for 1.004 instead. It
 does not.
 
-The `probable` grade is retained deliberately. It was not promoted to make the
-set look complete, and in-game qualification on a 1.004 executable is what
-would settle it.
+The `probable` grade was retained deliberately at the time. It was not promoted
+to make the set look complete. The third pass below promotes it on independent
+evidence — a direct caller enumeration returning exactly the confirmed
+selected-index body — and records why the size difference was never capable of
+refuting it. In-game qualification on a 1.004 executable remains outstanding, as
+it does for every address in this note.
 
 ## Second derivation pass: the remaining 33 entries
 
@@ -322,7 +332,8 @@ Build `ff7rebirth-steam-win64-68fd6fde` therefore moved from 45 to **71 of 78**
 addresses and from 20 to **33 of 38** hook specifications at the end of this
 pass. The follow-up pass recorded below settles the one entry that was held back
 and brings the build to **72 of 78** addresses and **34 of 38** hook
-specifications.
+specifications. The third pass, recorded further below, adds four more and brings
+it to **76 of 78** addresses and **37 of 38** hook specifications.
 
 ### Routes used in this pass
 
@@ -398,18 +409,24 @@ leaf helpers appear to survive builds unchanged while their callers absorb
 inlined code, so size agreement is usable as confirmation and never as a search
 key.
 
-## Probable addresses in build 1.004
+## Probable addresses in build 1.004 — none remain
 
-The catalog schema has no confidence field. A probable address is therefore
-indistinguishable from a confirmed one by inspection of `rva_catalog.json`
-alone, which is exactly the failure this section exists to prevent. Every
-probable 1.004 address is listed here, and each carries an explicit
-`PROBABLE, not confirmed` marker in its catalog `evidence.detail` prose.
+**Superseded, and deliberately kept.** The catalog schema has no confidence
+field, so a probable address is indistinguishable from a confirmed one by
+inspection of `rva_catalog.json` alone. This section existed to prevent that
+failure, and it did its job: at the end of pass two, three entries in build 1.004
+were probable — `select_index_helper` (recorded in its own section above),
+`bgm_slot_setup`, and `bgm_controller_key_global`.
 
-Three entries in build 1.004 are probable: `select_index_helper` (recorded in
-its own section above), `bgm_slot_setup`, and `bgm_controller_key_global`.
+**All three are now confirmed by the third pass below**, and the
+`PROBABLE, not confirmed` marker that `bgm_slot_setup` carried in its catalog
+`evidence.detail` has been removed along with the equivalent hedges in the other
+two. No entry in build 1.004 is graded probable today. The two subsections that
+follow record what the doubt was and why it was reasonable to hold; the
+subsection after them records a candidate that was held back and later refuted,
+which is the outcome this discipline exists to produce.
 
-### `bgm_slot_setup` (`0x01213e68`) — adopted
+### `bgm_slot_setup` (`0x01213e68`) — adopted as probable, now confirmed
 
 `install_policy` is `callable`, so the product forms a function pointer at this
 address and calls it directly. A misidentified address behind a direct call is
@@ -435,7 +452,7 @@ Positive evidence:
   layout recorded from a different build is corroboration, not coincidence.
 - The 14-byte entry-anchored run was measured unique image-wide.
 
-What remains unproven, and why the grade stays probable:
+What remained unproven, and why the grade stayed probable:
 
 - The 1.005 counterpart sits at `0x0142260c`, far outside the 1.005 BGM cluster
   (`0x01248xxx`–`0x01249xxx`) that corresponds to the 1.004 cluster at
@@ -444,6 +461,13 @@ What remains unproven, and why the grade stays probable:
   serving this session does not host. Cross-build role equivalence is therefore
   asserted from the 1.004 side only.
 - No runtime evidence exists on any 1.004 executable.
+
+**The first point is discharged.** The third pass had both programs open and read
+the 1.005 side: the call edge holds at the same statement position in both
+builds, and the two callee bodies are statement-for-statement identical. The
+1.005 address sitting outside the 1.005 BGM cluster is a relocation artifact with
+no semantic weight. The second point stands and is not build-specific — nothing
+in this note has been runtime-validated on a 1.004 executable.
 
 Why adoption is safe even if the identification were wrong:
 
@@ -474,20 +498,23 @@ wrong-but-valid writes. That risk is judged acceptable against the call edge fro
 a confirmed anchor plus the three-field layout agreement. It is not zero, which
 is why the grade is not promoted.
 
-### `bgm_controller_key_global` (`0x091e3320`) — retained, unchanged
+### `bgm_controller_key_global` (`0x091e3320`) — carried unverified, now confirmed
 
-Already present in the catalog from an earlier pass and **not** re-derived here.
-Its `requirement` is `release`, and the generator rejects a `release` entry that
-is missing from any declared build, so it cannot be withheld without
-reclassifying the entry. It is recorded here so it is not mistaken for a
-confirmed address.
+Already present in the catalog from an earlier pass and **not** re-derived in
+pass two. Its `requirement` is `release`, and the generator rejects a `release`
+entry that is missing from any declared build, so it could not be withheld
+without reclassifying the entry. It was recorded here so it would not be mistaken
+for a confirmed address.
 
 `validation.policy` is `data_reference` and no signature applies, so there is no
-byte-level check of this address at any point. Nothing verifies that the 1.005
-`sqexsead_play_setup` passes the cataloged global; the single missing proof is a
+byte-level check of this address at any point. The single missing proof was a
 read of the 1.005 `play_setup` body to see which global feeds its controller-key
-argument, and that requires the 1.005 program this bridge does not serve. Until
-then the 1.004 value is unverified by that route.
+argument, and that required the 1.005 program the pass-two bridge did not serve.
+
+**That read has now been done and the value is confirmed.** The route and the
+exposure it closes are recorded in "Three findings worth carrying forward" below,
+because the interesting part is not that the address was right — it was — but
+that nothing in the product would have told anyone if it had been wrong.
 
 ### `piano_audio_state_tick` (`0x03cb2ba4`) — held back, later refuted
 
@@ -667,13 +694,19 @@ the full cataloged prologue before hooking, which bounds build drift; the
 misidentification risk is what the owner-identity route above discharges, and
 in-game qualification on a 1.004 executable is what would close the remainder.
 
-## Entries still unestablished in build 1.004
+## Entries still unestablished in build 1.004 — four of five since settled
 
-Five entries have no 1.004 address. All are `diagnostic` or `research`, none is
-`release`, and their absence is a supported catalog state. The next experiment
-recorded for each is the one that pass two would have run with more budget.
+**Largely superseded.** At the end of pass two, five entries had no 1.004
+address. All were `diagnostic` or `research`, none was `release`, and their
+absence was a supported catalog state. The next experiment recorded for each is
+the one that pass two would have run with more budget.
 
-- **`bgm_manager_pause`.** The 1.005 entry sits at `0x02a78014` with
+Four of the five were settled by the third pass below and are marked inline. The
+recorded next experiment is kept even where it is not the route that worked,
+because two of them were actually run — one timed out and one was refuted — and
+that is the part worth knowing. Only `end_text_block_set_text` is still open.
+
+- **`bgm_manager_pause` — settled at `0x02dd6fa0` below.** The 1.005 entry sits at `0x02a78014` with
   `bgm_slot_pause_transition` `0x64` later and `bgm_slot_resume_transition` at
   `0x02a77658` — a tight three-function cluster in a band that is **not** the
   SQEXSEAD BGM cluster (1.005 `0x01248xxx`–`0x01249xxx`, 1.004 `0x01212xxx`). The
@@ -687,26 +720,28 @@ recorded for each is the one that pass two would have run with more budget.
   form of that search did not return within 120s. The manager-side pause should
   iterate the slot array and call the per-slot transition, which would settle all
   three entries at once.
-- **`bgm_slot_pause_transition`.** Expected to be the per-slot callee of
+- **`bgm_slot_pause_transition` — settled at `0x02dd7004` below.** Expected to be the per-slot callee of
   `bgm_manager_pause`. *Next experiment:* settle `bgm_manager_pause` first, then
   take its per-slot callee. The 1.005 adjacency is a hint only — this session
   already found two SQEXSEAD functions that broke relative order between builds,
   so adjacency must not be used to derive the address.
-- **`bgm_slot_resume_transition`.** Counterpart of the pause transition; 1.005
+- **`bgm_slot_resume_transition` — settled at `0x02dd65e4` below.** Counterpart of the pause transition; 1.005
   `0x02a77658`. *Next experiment:* same chain — once the pause path is
   identified, the resume counterpart is the sibling that decrements the manager
   pause count at `+0x54` and drives the inverse slot transition.
-- **`end_text_block_set_text`.** 1.005 `0x00afbef8`. The prologue prefix
-  `48 89 5c 24 08 57 b8 50 00 00 00 e8` exceeds 1000 matches image-wide, the
-  image carries no `SetText` symbol, and no confirmed 1.004 anchor with a direct
-  call edge to it was found within the available context. *Next experiment:*
-  anchor through the consumer. `src/game/list_patch.cpp:106` calls this as
-  `SetTextFn` on a widget it reaches from the confirmed anchors
-  `find_child_widget` (`0x00803390`) and `set_string_text` (`0x0098eaf4`).
-  Recover the 1.004 list-patch call path from those two and read the `SetText`
-  target off the actual call site — the same call-edge method that settled the
-  piano event quartet.
-- **`static_construct_object`.** 1.005 `0x00b1eb58`. The frame-independent
+- **`end_text_block_set_text` — still open.** 1.005 `0x00afbef8`. The prologue
+  prefix `48 89 5c 24 08 57 b8 50 00 00 00 e8` exceeds 1000 matches image-wide,
+  the image carries no `SetText` symbol, and no confirmed 1.004 anchor with a
+  direct call edge to it was found within the available context. The recorded
+  next experiment was *anchor through the consumer* —
+  `src/game/list_patch.cpp:106` calls this as `SetTextFn` on a widget it reaches
+  from the confirmed anchors `find_child_widget` (`0x00803390`) and
+  `set_string_text` (`0x0098eaf4`), so recover the 1.004 list-patch call path
+  from those two and read the `SetText` target off the actual call site. **That
+  experiment was run in the third pass and refuted.** Do not retry it; see "The
+  one that stays open" below for what is now known, the three routes that are
+  positively closed, and the bounded step that remains.
+- **`static_construct_object` — settled at `0x00a44330` below.** 1.005 `0x00b1eb58`. The frame-independent
   prologue prefix still matches 111 sites; all three exact-frame candidates
   (`0x01304f34`, `0x01635044`, `0x0236a320`) have only one caller each, which is
   disqualifying for the central UObject factory. The callees of the confirmed
@@ -720,6 +755,278 @@ recorded for each is the one that pass two would have run with more budget.
   `FUN_140e79dc4` was the `StaticAllocateObject` guess from the `create_package`
   callee list but has only 6 callers, so it must be verified or rejected before
   that chain is trusted.
+
+## Third derivation pass: the BGM cluster, `static_construct_object`, and three adjudications
+
+The rules are unchanged: static read-only analysis of the shipped images only,
+semantic route first and signature second, every recorded run re-read at its own
+entry RVA and *measured* image-wide rather than assumed unique. The 1.004
+program's identity was verified at session start and again after a session-limit
+reset — `function_count == 373972` against the 1.005 program's `377293`, a
+positive read of `0x143c35e90` returning
+`4885d2741548894a10488b4118488951`, and the negative read of `0x14398db4c`
+returning `02c5f259d3c5f82f15974b71027306c5`, which is what excludes the 1.005
+image.
+
+One circumstance was different, and it is what made the difference: **both**
+programs were open simultaneously. Every question pass two had to defer with
+"the bridge serving this session does not host the 1.005 program" became a read
+rather than an assumption. Three of the four adjudications below were blocked on
+exactly that, and all three resolved in favour of the address already in the
+catalog — which is the outcome that makes the *absence* of a check, rather than
+a wrong value, the finding worth recording.
+
+Build `ff7rebirth-steam-win64-68fd6fde` moves from **72 of 78** addresses and
+**34 of 38** hook specifications to **76 of 78** and **37 of 38**. One entry
+remains open (`end_text_block_set_text`) and one is positively absent from the
+build (`progress_lookup_display_caller_1`, recorded above).
+
+### Four addresses added
+
+| entry | 1.004 RVA | run length | measured matches |
+| --- | --- | --- | --- |
+| `bgm_manager_pause` | `0x02dd6fa0` | 20 bytes | 1 |
+| `bgm_slot_pause_transition` | `0x02dd7004` | 20 bytes | 1 |
+| `bgm_slot_resume_transition` | `0x02dd65e4` | 20 bytes | 1 |
+| `static_construct_object` | `0x00a44330` | 37 bytes | 1 |
+
+All four runs are entry-anchored with an all-`x` mask, and no policy field
+changed: `requirement`, `install_policy`, `status`, `hook_owner` and `hook_spec`
+are carried forward exactly as they were.
+
+**`bgm_manager_pause`** was reached without ever searching for a prologue. The
+1.005 entry has exactly two callers, and both reference the 1.005 SQEXSEAD BGM
+manager singleton `DAT_148f30f60`. Enumerating the xrefs to that singleton and to
+the already-known 1.004 singleton `DAT_1490fd850` produced two four-function tail
+groups whose members sit at identical relative offsets (`+0`, `+0x38`, `+0x13c`,
+`+0x174`) *and* whose intra-function xref offsets agree (`+0x0d`, `+0x57`) —
+1.005 `{FUN_142a8d40c, FUN_142a8d444, FUN_142a8d548, FUN_142a8d580}` against
+1.004 `{FUN_142dec368, FUN_142dec3a0, FUN_142dec4a4, FUN_142dec4dc}`. The two
+caller pairs then decompile statement-for-statement identically, down to the
+`0xbf800000` (`-1.0f`) immediate in the first and the fade-out local in the
+second, and each 1.004 caller calls `0x02dd6fa0` exactly where its 1.005 twin
+calls the cataloged entry. The callee body closes it independently: it reads
+`manager+0x48` (`SqexSeadManager::current_slot`), guards on `manager+0x54`
+(`::pause_count`), swaps the fade value at `slot+0x3c` around the transition
+call, and increments the pause count. That `+0x54` writer is precisely what pass
+two set out to find with a function-scoped instruction search whose image-wide
+form did not return within 120 s. The call-graph route needed no search at all.
+
+**`bgm_slot_pause_transition`** has two independent routes that agree. It is the
+callee of the confirmed manager pause from both of that function's arms, exactly
+as the 1.005 manager pause calls the cataloged `0x02a78078`; and its caller set
+matches the 1.005 caller set shape-for-shape — a four-way dispatcher plus the
+manager pause. The 1.004 dispatcher `FUN_142dd6f54` is a case-for-case twin of
+1.005 `FUN_142a77fc8`, switching on `*(char*)(p1+0x30)` over cases 0–3, and
+reaches this entry from its case 2 exactly as the 1.005 dispatcher does.
+
+**`bgm_slot_resume_transition`** is case 3 of that same dispatcher. The structure
+is self-checking: its case 2 independently reproduces the pause-transition
+identification that the separate manager-callee route had already produced, so
+one dispatcher confirms both entries. Both 1.004 transitions share one helper
+(`FUN_142dd7054`) exactly as both 1.005 transitions share `FUN_142a780c8`, and
+the bodies are exact mirrors — pause returns on state 6 and falls through to 6,
+resume returns on 7 and falls through to 7, with the same `slot+0x5c` /
+`slot+0x5d` guard and the same `state == 4` branch through the shared helper.
+
+**`static_construct_object`** was found by searching a *semantic* discriminator
+rather than any prologue. The 1.005 entry opens with the UClass-flag guard
+`(*(uint*)(Class + 0xcc) & 0x10000080) == 0`; the eight-byte encoding of that
+`disp32`/`imm32` pair (`cc 00 00 00 80 00 00 10`) matches 6 sites in 1.005 — one
+of them `0x140b1eba4`, i.e. entry`+0x4c` inside the function itself — and 9 sites
+in 1.004. Of those, `0x140a44383` sits at entry`+0x53` of `FUN_140a44330`, the
+only candidate whose offset-from-entry and body size track the 1.005 shape. The
+body then matches statement-for-statement: same one-parameter
+`FStaticConstructObjectParameters` ABI, same field set, same bit-18 flag test,
+the same `StaticAllocateObject` call in the same position, the same indirect
+class-constructor dispatch through `*(code**)(Class + 0xb0)`, and the same
+returned object. Two independent corroborations close it — the 1.004 body reads
+the console variable through the wide literals `Kismet` and
+`bForceDisableDeferredCDOInitialization`, the CVar Unreal consults inside
+`StaticConstructObject_Internal` on the deferred-CDO path, which no structural
+match can fake; and both builds compile the function with an identical `0x1b0`
+stack frame even though their register-save shapes differ.
+
+### The clearest case yet for permitting `rel32` inside a signature
+
+`bgm_slot_pause_transition` and `bgm_slot_resume_transition` are **byte-identical
+across their first 32 bytes apart from the `__chkstk` `rel32` at offset 8**.
+Bytes 0–7 and 12–31 are the same in both. A displacement-free run of any length
+inside that window does not merely risk an unrelated collision — it collides with
+its own sibling, the one function in the image most likely to be mistaken for it,
+and both are `optional_hook` entries whose detours are installed by the same
+owner. The withdrawn no-`rel32` guidance would have made these two entries
+mutually indistinguishable by construction. Every earlier collision in this note
+was resolved by extending a run; this pair cannot be resolved that way at all.
+
+### Three findings worth carrying forward
+
+Each corrects a belief this project acted on.
+
+**1. `bgm_controller_key_global` had no runtime check of any kind.** Its
+`validation.policy` is `data_reference`, so no signature exists and nothing fails
+closed. `src/game/audio_sead.cpp` forms `exe_base + rva` to reach the SQEXSEAD BGM
+controller-key singleton that the entire custom-audio route hangs off. A wrong
+value would have been consumed silently as a controller key and surfaced as a
+dead audio route — not as a refusal, not as a log line, not as anything a tester
+could attribute. It was the highest-consequence unverified entry in the 1.004 set
+and the catalog gave no signal of that: `requirement: release`,
+`install_policy: data_only`, `status: production`, and no signature, which reads
+as "settled" rather than "unchecked".
+
+It is now closed by direct evidence. 1.005 `play_setup` (`0x01249a44`) opens
+`FUN_141249c84(DAT_14901b3f0)` — VA `0x14901b3f0`, RVA `0x0901b3f0`, exactly the
+cataloged 1.005 value. 1.004 `play_setup` (`0x01212540`) opens
+`FUN_141212780(DAT_1491e3320)` — VA `0x1491e3320`, RVA `0x091e3320`, exactly the
+cataloged 1.004 value. The two bodies are identical statement-for-statement, and
+the global occupies the identical first-statement position in both.
+
+The durable lesson is not about this address, which was right. It is that a
+`data_reference` entry is the one catalog shape with no failure mode between
+"correct" and "silently wrong", so it deserves more derivation scrutiny than a
+signature-gated entry, not less.
+
+**2. The three pause/resume detours are strictly observation-only.** Each opens a
+callback scope, snapshots fields through `core::safe_read_field`, calls the
+original **unconditionally**, re-reads the same fields, and logs — at most 64
+lines for the manager detour and 128 for the slot transitions. On scope-guard
+failure it still forwards and returns. No path writes game memory, suppresses the
+original, or drives any product state machine. While these addresses were absent
+the only thing lost was diagnostic output; startup logged
+`status=optional_hook_disabled hook=bgm_manager_pause` and the game's pause
+behaviour was never affected.
+
+Record explicitly *why* that consequence was low: **because the detours are
+pass-through**, not because the `requirement` field said `research`. Those are
+different claims. `requirement` describes whether an address may be missing from a
+build; it says nothing about what installing a wrong one would do. This project
+has already read that field as a statement of importance once, at real cost —
+see the `piano_audio_state_tick` refutation above, where an `optional_hook`
+bounded the cost of *absence* while its detour would have driven the product's
+own audio route state machine from a false owner pointer. The cost of a wrong
+target is a property of the detour body, and it must be read there.
+
+**3. Function size is not evidence of identity across this build pair.**
+`select_index_helper` is 3422 bytes on 1.004 against 503 on 1.005.
+`static_construct_object` shows the same asymmetry from the other direction —
+1.004 inlines a deferred-CDO block that 1.005 factors out — and pass two already
+recorded `piano_score_parser` growing `0x5c8` → `0x891`. Size divergence is a
+whole-image property of this build pair, not a signal about any one function, so
+it can neither confirm nor refute an identification here. Pass two's caution that
+size is "usable as confirmation and never as a search key" is tightened by this
+pass: across *this* pair it is not usable as confirmation either.
+
+That disposes of the only open objection to `select_index_helper` (`0x023a7410`),
+which is re-verified independently: `get_function_callers` returns **exactly
+one** caller, `0x03c4f130`, which the catalog records as the confirmed
+`piano_on_menu_selected_index_changed_body`. The candidate's sole caller is
+precisely the confirmed selected-index body, matching the recorded role. The
+grade asserts what the hook contract needs and no more — entry address, the
+`uintptr_t __fastcall(void*, int32_t, uint8_t)` ABI, and a matching prologue.
+
+**One residual on `select_index_helper`.** The 1.004 entry covers strictly more
+inlined code than the 1.005 entry: 33 callees against 13, a direct call to
+`set_string_text`, and an `_Init_thread_footer` magic-static block the 1.005
+helper does not have. None of that touches the pass-through contract today,
+because `select_index_helper_detour` returns
+`g_original_select_index_helper(wrapper, index, flag)` unmodified on every path.
+But if that detour is ever made **conditional** — suppressing or altering the
+original call — this entry must be re-examined **first**, because on 1.004 it
+would be gating more behaviour than the same decision would gate on 1.005.
+
+### Two method cautions, both of which cost time
+
+**Read bytes, never reconstruct them.** A byte-pattern search in this pass
+returned zero matches because the pattern had been reconstructed from
+disassembly *text* rather than read from memory. The real prologue is the
+REX-prefixed `40 53`, not `53`; the reconstruction dropped the prefix and the
+search was consequently searching for a sequence that does not exist. Always
+obtain signature bytes with `read_memory` at the entry address. A zero-match
+result from a reconstructed pattern is evidence about the reconstruction, not
+about the image — and this note already records the mirror-image error, where a
+1.005-derived prefix returned zero in 1.004 because a vtable slot had moved.
+
+**A semantic discriminator beats a prologue, and a string beats both.**
+`static_construct_object` was found by searching the `Class+0xcc & 0x10000080`
+guard — a fact about what the function *does* — after prologue-shaped searches
+had produced 111 candidates and three dead ends. It was then confirmed by its
+`Kismet` / `bForceDisableDeferredCDOInitialization` literals and by a caller
+count above 25, which is what finally discharged the single-caller disqualifier
+that had killed `0x01304f34`, `0x01635044` and `0x0236a320`. Note the shape of
+that discharge: the disqualifier was correct and the earlier pass was right to
+apply it; what was missing was a candidate that could satisfy it.
+
+### Bonus anchor established
+
+1.004 `StaticAllocateObject` = `0x00a446d8` (1.005 `0x00b1ee70`). It is not a
+catalog entry, and this pass does not propose adding one, but it is the anchor
+pass two explicitly wanted for the `static_construct_object` chain and it is now
+established on both sides.
+
+### The one that stays open: `end_text_block_set_text`
+
+The entry has no 1.004 address and this pass did not produce one. What it did
+produce is an identification of the 1.005 function and three positively closed
+routes, so the next attempt does not repeat them.
+
+**Identity of the 1.005 function is now known.** `0x00afbef8` is
+`void __fastcall(void* text_widget, FString* text)`, matching `SetTextFn` in
+`src/game/list_patch.cpp` exactly. It compares the incoming `FString` against the
+widget's stored one at `+0x128` (data) / `+0x130` (length), using a shared empty
+wide literal as the fallback for **both** sides, and on difference assigns,
+resets `+0x138`, and — if the Slate widget pointer at `+0x220` is non-null — runs
+an update block writing `+0x2c8`, `+0x2d8` and `+0x2e0` and ending in a call
+taking the literal `5`. That is a `UTextBlock`-style `SetText`.
+
+**Three routes are closed. Do not retry them.**
+
+1. *The consumer anchor cannot yield it.* `rank_text_widget_name_global` has the
+   same xref shape in both builds (1.004 `0x1491d8d08` from `FUN_1404f8a90` once
+   and `FUN_143c1264c` twice; 1.005 `0x149010db8` from `FUN_1404f9610` once and
+   `FUN_143966a6c` twice), which establishes 1.004 `FUN_143c1264c` as the
+   counterpart of 1.005 `FUN_143966a6c`. But the 1.005 function is the *game's
+   own* piano rank-text code, and it sets text with `set_string_text`
+   (`0x00e8b948`), not with `end_text_block_set_text`. It builds the vanilla
+   literals `$minigame_piano_music_select_notget` and
+   `$minigame_piano_music_select_notplayed` and passes those. The piano list path
+   does not reach this function in either build.
+2. *`set_string_text` does not wrap it.* On 1.005 the two are **siblings**,
+   sharing almost their entire callee set including one invalidate helper, and
+   neither calls the other.
+3. *1.004 did not fold them together.* 1.004 `set_string_text` (`0x0098eaf4`) is
+   smaller and structurally different — it writes `+0x138 = 0xffffffff`,
+   `+0x13c = 0`, `+0x140 = 0`, then calls three helpers when `+0x220` is
+   non-null, and releases its parameter. There is no `FString` compare at
+   `+0x128` / `+0x130` anywhere in it.
+
+**The bounded next step** is the nine callers of the 1.004 counterpart of that
+shared invalidate helper, `FUN_14098eddc`: `FUN_14098eaf4` (which is
+`set_string_text` itself), `FUN_140e77b78`, `FUN_140e797e4`, `FUN_140f3e04c`,
+`FUN_14122c3e8`, `FUN_14149aa58`, `FUN_1422e93d0`, `FUN_142335650`,
+`FUN_1439ce00c`. Decompile the ones in the widget bands and look for the
+discriminator: the `FString` compare against `+0x128` / `+0x130`, combined with
+the Slate pointer at `+0x220` and the `+0x2c8` / `+0x2d8` / `+0x2e0` writes. That
+is a bounded set and should resolve in a few calls. If it does not, establish the
+1.004 counterpart of the 1.005 `FString`-assign helper first and take its callers
+that also touch `+0x220`.
+
+**Consequence, stated plainly.** `apply_custom_rank_text` in
+`src/game/list_patch.cpp` gates on `rank_widget && set_text`, logs
+`[list_patch] rank_text status=set_text_missing` when the pointer is null, and
+continues. On 1.004 custom songs still appear in the list and still play. What is
+lost is the product's custom **rank-text overlay** on custom rows, which keep
+whatever text the vanilla widget already carries. It is cosmetic, confined to
+custom rows, observable in the log, and it never gates startup —
+`requirement: optional`, `install_policy: signature_only`, `status: diagnostic`,
+`hook_owner: null`, and hook spec `text_set_text` with
+`required_for_release_startup: false`.
+
+### Still not runtime-validated
+
+Everything in this pass is static analysis of the shipped images. No address
+here has been exercised on a running 1.004 game, and the qualification recorded
+in [In-Game Validation](../docs/InGameValidation.md) remains outstanding for this
+build exactly as it was before the pass.
 
 ## Corrected build attribution in `analysis/ChartEventAbiGhidra.txt`
 

@@ -469,7 +469,7 @@
             {
               "type": "ghidra_static_analysis",
               "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
-              "detail": "Derived from the 1.004 image by static analysis. A 16-byte run anchored at this address was measured unique image-wide (matches=1). Confidence is probable, not confirmed. The role is exact (sole callee of the confirmed selected-index body, called twice as (holder, old_index, 1) then (holder, new_index, 0), carrying the +0x484 toggle and the 0x4000 flag, with the confirmed body as its single caller), but the code unit is 3422 bytes against 503 in 1.005 with siblings apparently inlined into it. Over-merge was ruled out. The address is adopted because the product's detour forwards (wrapper, index, flag) unchanged and depends only on the entry address, that ABI, and the cataloged prologue."
+              "detail": "Derived from the 1.004 image by static analysis and confirmed. A 16-byte run anchored at this address was measured unique image-wide (matches=1). The role is exact and was re-verified independently: this entry has exactly one caller, 0x03c4f130, which the catalog records as the confirmed piano_on_menu_selected_index_changed_body, and that body invokes it twice as (holder, old_index, 1) then (holder, new_index, 0), carrying the +0x484 toggle and the 0x4000 flag. The code unit is 3422 bytes against 503 in 1.005 with siblings apparently inlined into it; over-merge was ruled out, and body size is a whole-image property of this build pair rather than a property of this function - piano_score_parser and static_construct_object show the same asymmetry - so it is not evidence of identity in either direction. The grade asserts exactly what the hook contract needs and no more: the product's detour forwards (wrapper, index, flag) unchanged on every path and depends only on the entry address, the uintptr_t __fastcall(void*, int32_t, uint8_t) ABI, and the cataloged prologue. Residual: the 1.004 entry covers strictly more inlined code than the 1.005 entry, so it must be re-examined first if the detour is ever made conditional rather than a pure pass-through."
             }
           ]
         }
@@ -1795,6 +1795,20 @@
               "detail": "The current runtime safety notes classify this as observation-only until matching-slot evidence exists."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x02dd6fa0",
+          "signature": {
+            "bytes": "40 53 b8 30 00 00 00 e8 84 7f 2d ff 48 2b e0 48 8b d9 48 8b",
+            "mask": "xxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed on the 1.004 image by pure call-graph correspondence, with no delta arithmetic. The 1.005 entry 0x02a78014 has exactly two callers and both reference the 1.005 SQEXSEAD BGM manager singleton; enumerating xrefs to that singleton and to the known 1.004 singleton produced two four-function tail groups with identical relative offsets (+0, +0x38, +0x13c, +0x174) and identical intra-function xref offsets (+0x0d, +0x57). The two 1.004 callers decompile statement-for-statement identically to their 1.005 twins, including the -1.0f (0xbf800000) immediate in one and the fade-out local in the other, and each calls this entry exactly where its twin calls the cataloged 1.005 entry. The body then matches independently: it reads manager+0x48 (SqexSeadManager::current_slot), guards on manager+0x54 (::pause_count), swaps the fade value at slot+0x3c around the transition call, and increments the pause count - the same two manager fields bgm_manager_pause_detour snapshots via core::safe_read_field before and after forwarding. ABI void __fastcall(void*, float) matches BgmManagerPauseFn. The 20-byte entry-anchored run was measured unique image-wide (matches=1); its rel32 to __chkstk at offset 8 is load-bearing, because the first 32 bytes are otherwise identical to bgm_slot_pause_transition."
+            }
+          ]
         }
       }
     },
@@ -1832,6 +1846,20 @@
               "detail": "The current runtime safety notes classify this pause-like seam as optional and observation-only."
             }
           ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x02dd7004",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 20 7f 2d ff 48 2b e0 80 79 5c 00 48",
+            "mask": "xxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed on the 1.004 image by two independent routes that agree. (1) It is the callee of the confirmed 1.004 bgm_manager_pause (0x02dd6fa0) from both of that function's arms, exactly as 1.005 bgm_manager_pause calls the cataloged 0x02a78078. (2) Caller-set equality: the 1.005 entry has exactly two callers, a four-way dispatcher and the manager pause; the 1.004 entry has exactly two callers of the same shapes, and the 1.004 dispatcher is a case-for-case twin switching on *(char*)(p1+0x30), reaching this entry from its case 2 exactly as the 1.005 dispatcher does. The body is statement-for-statement identical to 1.005: guard on slot+0x5c and slot+0x5d, read state at slot+0x28, return on 6, on 4 call the shared helper with *(void**)(slot+0xc0) and *(uint32*)(slot+0x3c) then set state 7, return unless 7, otherwise set state 6. slot+0x5c and slot+0x5d are literally the two offsets log_slot_transition reads by raw offset, and slot+0x28 and slot+0xc0 are the declared SqexSeadSlot state and bgm fields, giving four independent field agreements. ABI void __fastcall(void*) matches BgmSlotTransitionFn. The 20-byte entry-anchored run was measured unique image-wide (matches=1); the rel32 at offset 8 is required, because bytes 0-7 and 12-31 are identical to bgm_slot_resume_transition and a displacement-free run would collide with that sibling."
+            }
+          ]
         }
       }
     },
@@ -1867,6 +1895,20 @@
               "type": "repository_documentation",
               "path": "AGENTS.md",
               "detail": "The current runtime safety notes classify this resume-like seam as optional and observation-only."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x02dd65e4",
+          "signature": {
+            "bytes": "40 53 b8 20 00 00 00 e8 40 89 2d ff 48 2b e0 80 79 5c 00 48",
+            "mask": "xxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed on the 1.004 image as case 3 of the confirmed 1.004 four-way dispatcher, which is a case-for-case twin of the 1.005 dispatcher whose case 3 is the cataloged 1.005 bgm_slot_resume_transition (0x02a77658). The dispatcher correspondence is self-checking: its case 2 independently reproduces the pause-transition identification that was derived by the separate manager-callee route, so one structure confirms both entries. The body is the exact mirror of the pause sibling - same slot+0x5c and slot+0x5d guard, same state read at slot+0x28, return on 7, on 4 call the shared helper then set state 7, return unless 6, otherwise set state 7 - and both 1.004 transitions share one helper exactly as both 1.005 transitions share theirs. Cross-check: the 1.005 resume entry is additionally reached from inside the 1.005 SQEXSEAD BGM cluster only when manager+0x54 (pause count) is at least 1, consistent with the manager-pause increment. ABI void __fastcall(void*) matches BgmSlotTransitionFn. The 20-byte entry-anchored run was measured unique image-wide (matches=1); the rel32 at offset 8 is the only discriminator inside the first 32 bytes against the pause sibling."
             }
           ]
         }
@@ -2066,7 +2108,7 @@
             {
               "type": "ghidra_static_analysis",
               "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
-              "detail": "PROBABLE, not confirmed. Adopted deliberately; see the adoption record in analysis/RebirthBuild1004RvaEvidence-20260808.md for what remains unproven. Positive evidence: the three-parameter ABI matches BgmSlotSetupFn exactly, the function is called directly by the confirmed 1.004 sqexsead_play_setup anchor 0x01212540, and the body guards on and stores the flag at slot+0x5e, forwards flag and context to three helpers on the sub-object at slot+0xc0, and on flag==0 sets slot+0x9c - all three are documented SqexSeadSlot fields in src/game/runtime_layouts.h. Unproven: the 1.005 counterpart body and its call edge could not be read from this project, so byte-level role equivalence across builds is unverified. Signature measured unique image-wide."
+              "detail": "Confirmed on the 1.004 image. The prior pass graded this probable for one stated reason - the 1.005 counterpart body and its call edge could not be read from that project - and both sides are now discharged. Call edge, at the same statement position in both builds: 1.005 sqexsead_play_setup calls its counterpart as f(*(void**)(lVar4 + 0x28), param_6, 0), and 1.004 sqexsead_play_setup (0x01212540) calls this entry with the identical argument expression, inside otherwise statement-identical callers. Body equivalence is statement-for-statement: guard on slot+0x5e with a non-zero flag, store the flag at slot+0x5e, forward flag and context to a helper on the sub-object at slot+0xc0, and on flag==0 call a second helper with 0x3f800000 and set slot+0x9c. Same three-parameter ABI matching BgmSlotSetupFn, same field set, same immediate; slot+0x5e, slot+0xc0 and slot+0x9c are documented SqexSeadSlot fields in src/game/runtime_layouts.h. The 1.005 address sitting outside the 1.005 BGM cluster is a relocation artifact with no semantic weight. install_policy is callable, so misidentification rather than absence was the hazard: SEH catches access violations but not wrong-but-valid writes into an unrelated callee entered with a slot pointer in RCX, and that residual risk is what this confirmation retires. Signature measured unique image-wide."
             }
           ]
         }
@@ -2154,7 +2196,7 @@
             {
               "type": "ghidra_static_analysis",
               "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
-              "detail": "Derived from the 1.004 image by static analysis. No signature is stored: validation.policy is data_reference."
+              "detail": "Confirmed on the 1.004 image by direct cross-build correspondence, not by delta translation. 1.005 sqexsead_play_setup (0x01249a44) opens with FUN_141249c84(DAT_14901b3f0), i.e. VA 0x14901b3f0 = RVA 0x0901b3f0, exactly the cataloged 1.005 value; 1.004 sqexsead_play_setup (0x01212540) opens with FUN_141212780(DAT_1491e3320), i.e. VA 0x1491e3320 = RVA 0x091e3320, exactly this value. The two play_setup bodies are identical statement-for-statement - same seven-parameter ABI, same +0x28 slot deref, same +0x48 and +0x34 stores, same ten-float default block at +0x60..+0x88, same param_7 copy to +0x8c and +0x94, same two guarded +0xc0 sub-object branches, same tail call - and the global occupies the identical first-statement position in both. No signature is stored: validation.policy is data_reference, so nothing checks this address at runtime and a wrong value would have been consumed silently as a controller key, producing a dead audio route rather than a refusal. That unguarded exposure is why the entry was re-derived rather than carried forward."
             }
           ]
         }
@@ -2273,6 +2315,20 @@
               "type": "repository_source",
               "path": "src/game/audio_sead.cpp",
               "detail": "The fail-closed audio diagnostic records this signature and an unresolved lifetime/rollback gap."
+            }
+          ]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x00a44330",
+          "signature": {
+            "bytes": "48 8b c4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 56 41 57 48 8d a8 38 ff ff ff b8 b0 01 00 00 e8 db ab 66 01",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [
+            {
+              "type": "ghidra_static_analysis",
+              "path": "analysis/RebirthBuild1004RvaEvidence-20260808.md",
+              "detail": "Confirmed on the 1.004 image by a semantic discriminator rather than by prologue shape. The 1.005 entry opens with the UClass-flag guard (*(uint*)(Class + 0xcc) & 0x10000080) == 0; the 8-byte encoding of that disp32/imm32 pair matches 9 sites in 1.004, of which only 0x00a44383 - entry+0x53 of this function - tracks the 1.005 offset-from-entry and body size. The body then matches statement-for-statement: the same one-parameter FStaticConstructObjectParameters ABI, the same field set (Class+0x00, Outer+0x08, Name+0x10, +0x14, flags+0x18, +0x1c, +0x20, +0x21, Template+0x28, +0x30, +0x38), the same bit-18 flag test, the same StaticAllocateObject call in the same position (1.004 0x00a446d8 against 1.005 0x00b1ee70), the same indirect class-constructor dispatch through *(code**)(Class + 0xb0), and the same returned allocated object. Two independent corroborations: the 1.004 body reads the UE console variable through the wide literals Kismet and bForceDisableDeferredCDOInitialization, the CVar Unreal consults inside StaticConstructObject_Internal on the deferred-CDO path, which no structural match could fake; and both builds compile the function with an identical 0x1b0 stack frame even though the register-save shapes differ. The single-caller disqualifier that rejected three earlier exact-frame candidates (0x01304f34, 0x01635044, 0x0236a320) is discharged from the correct side: this entry has at least 25 callers, as does the 1.005 entry, which is what a central UObject factory must have. The 37-byte entry-anchored run was measured unique image-wide (matches=1)."
             }
           ]
         }
