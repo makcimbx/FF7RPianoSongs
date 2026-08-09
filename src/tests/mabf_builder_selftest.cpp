@@ -73,6 +73,34 @@ void write_u32_le(std::vector<uint8_t>& bytes, const std::size_t offset, const s
     bytes[offset + 3] = static_cast<std::uint8_t>((value >> 24) & 0xffu);
 }
 
+void write_u16_be(std::vector<uint8_t>& bytes, const std::size_t offset, const std::uint16_t value)
+{
+    bytes[offset] = static_cast<std::uint8_t>((value >> 8) & 0xffu);
+    bytes[offset + 1] = static_cast<std::uint8_t>(value & 0xffu);
+}
+
+void write_u32_be(std::vector<uint8_t>& bytes, const std::size_t offset, const std::uint32_t value)
+{
+    bytes[offset] = static_cast<std::uint8_t>((value >> 24) & 0xffu);
+    bytes[offset + 1] = static_cast<std::uint8_t>((value >> 16) & 0xffu);
+    bytes[offset + 2] = static_cast<std::uint8_t>((value >> 8) & 0xffu);
+    bytes[offset + 3] = static_cast<std::uint8_t>(value & 0xffu);
+}
+
+std::uint16_t hca_crc16(const std::uint8_t* data, const std::size_t size)
+{
+    std::uint16_t crc = 0;
+    for (std::size_t index = 0; index < size; ++index) {
+        crc ^= static_cast<std::uint16_t>(data[index] << 8u);
+        for (int bit = 0; bit < 8; ++bit) {
+            crc = (crc & 0x8000u) != 0
+                ? static_cast<std::uint16_t>((crc << 1u) ^ 0x8005u)
+                : static_cast<std::uint16_t>(crc << 1u);
+        }
+    }
+    return crc;
+}
+
 } // namespace
 
 int main()
@@ -239,6 +267,68 @@ int main()
         metadata.inserted_samples != 128 || metadata.block_size != 682) {
         std::cerr << "Structural MABF validation metadata changed\n";
         return 17;
+    }
+
+    // Construct a structurally and CRC-valid Mode1 HCA with one additional
+    // frame while increasing appended samples so its logical source length
+    // remains exactly one frame. Assemble a hybrid container from otherwise
+    // valid one-frame and two-frame MABFs because the production builder
+    // correctly refuses unequal mode frame counts.
+    std::vector<std::uint8_t> extra_frame_hca = release_hca;
+    extra_frame_hca.insert(extra_frame_hca.end(),
+        release_hca.begin() + ff7rp::pipeline::kMabfHcaHeaderSize, release_hca.end());
+    write_u32_be(extra_frame_hca, 16u, 2u);
+    write_u16_be(extra_frame_hca, 22u, 1919u);
+    write_u16_be(extra_frame_hca, 94u, hca_crc16(extra_frame_hca.data(), 94u));
+    const ff7rp::pipeline::MabfModeHcaPayloads extra_frame_modes{
+        &extra_frame_hca, &extra_frame_hca, &extra_frame_hca};
+    const auto extra_frame_fixture = ff7rp::pipeline::build_mabf_from_mode_hca(extra_frame_modes);
+    if (!extra_frame_fixture.status.ok()) {
+        std::cerr << "CRC-valid extra-frame source fixture did not build\n";
+        return 18;
+    }
+    const std::size_t one_frame_slot = ff7rp::pipeline::mabf_slot_size(release_hca.size());
+    const std::size_t two_frame_slot = ff7rp::pipeline::mabf_slot_size(extra_frame_hca.size());
+    std::vector<std::uint8_t> mixed_geometry(
+        release_fixture.bytes.begin(), release_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize);
+    mixed_geometry.insert(mixed_geometry.end(),
+        release_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize,
+        release_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize + one_frame_slot);
+    mixed_geometry.insert(mixed_geometry.end(),
+        extra_frame_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize + two_frame_slot,
+        extra_frame_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize + 2u * two_frame_slot);
+    mixed_geometry.insert(mixed_geometry.end(),
+        release_fixture.bytes.begin() + ff7rp::pipeline::kMabfHeaderSize + 2u * one_frame_slot,
+        release_fixture.bytes.end());
+    write_u32_le(mixed_geometry, 0x0cu, static_cast<std::uint32_t>(mixed_geometry.size() - 0x30u));
+    write_u32_le(mixed_geometry, 0x424u, static_cast<std::uint32_t>(0x20u + one_frame_slot));
+    write_u32_le(mixed_geometry, 0x428u,
+        static_cast<std::uint32_t>(0x20u + one_frame_slot + two_frame_slot));
+    const std::size_t mode0_suffix = ff7rp::pipeline::kMabfHeaderSize + release_hca.size() +
+        ff7rp::pipeline::mabf_slot_padding(release_hca.size());
+    const std::size_t mode1_begin = ff7rp::pipeline::kMabfHeaderSize + one_frame_slot;
+    const std::size_t mode1_suffix = mode1_begin + extra_frame_hca.size() +
+        ff7rp::pipeline::mabf_slot_padding(extra_frame_hca.size());
+    write_u32_le(mixed_geometry, mode0_suffix + 0x16u,
+        static_cast<std::uint32_t>(extra_frame_hca.size() - ff7rp::pipeline::kMabfHcaHeaderSize));
+    write_u32_le(mixed_geometry, mode1_suffix + 0x16u,
+        static_cast<std::uint32_t>(release_hca.size() - ff7rp::pipeline::kMabfHcaHeaderSize));
+
+    ff7rp::pipeline::MabfArtifactMetadata mixed_geometry_metadata;
+    const auto mixed_structural =
+        ff7rp::pipeline::validate_structural_mabf(mixed_geometry, &mixed_geometry_metadata);
+    if (!mixed_structural.ok() || mixed_geometry_metadata.logical_source_frames != 1u) {
+        std::cerr << "CRC-valid mixed-geometry MABF was not structurally valid: "
+                  << mixed_structural.message << '\n';
+        return 19;
+    }
+    const auto mixed_resolved = ff7rp::pipeline::validate_resolved_mabf(
+        mixed_geometry, 1u, {{0, 1, 0}, false}, &mixed_geometry_metadata);
+    if (mixed_resolved.ok() || mixed_resolved.code != ff7rp::pipeline::StatusCode::MabfNotReleaseValid ||
+        mixed_resolved.message != "MABF Mode1 HCA geometry does not exactly match Mode0") {
+        std::cerr << "CRC-valid mixed Mode1 geometry was not rejected authoritatively: "
+                  << mixed_resolved.message << '\n';
+        return 20;
     }
 
     const std::array<std::size_t, 3> release_offsets{

@@ -1636,6 +1636,25 @@ int test_mode_specific_audio_sources(const std::filesystem::path& root) {
             std::equal(mabf.begin() + left_offset, mabf.begin() + left_offset + hca_size,
                 mabf.begin() + right_offset);
     };
+    const auto same_mode_across = [](const std::vector<std::uint8_t>& left,
+                                     const std::vector<std::uint8_t>& right,
+                                     const std::size_t mode) {
+        if (left.size() <= ff7rp::pipeline::kMabfHeaderSize ||
+            right.size() <= ff7rp::pipeline::kMabfHeaderSize) return false;
+        const std::size_t left_hca_size =
+            ff7rp::pipeline::kMabfHcaHeaderSize + read_u32_le(left, 0x448);
+        const std::size_t right_hca_size =
+            ff7rp::pipeline::kMabfHcaHeaderSize + read_u32_le(right, 0x448);
+        if (left_hca_size != right_hca_size) return false;
+        const std::size_t left_offset = ff7rp::pipeline::kMabfHeaderSize +
+            mode * ff7rp::pipeline::mabf_slot_size(left_hca_size);
+        const std::size_t right_offset = ff7rp::pipeline::kMabfHeaderSize +
+            mode * ff7rp::pipeline::mabf_slot_size(right_hca_size);
+        return left_offset + left_hca_size <= left.size() &&
+            right_offset + right_hca_size <= right.size() &&
+            std::equal(left.begin() + left_offset, left.begin() + left_offset + left_hca_size,
+                right.begin() + right_offset);
+    };
 
     const std::filesystem::path directory = root / "ModeSources";
     std::filesystem::create_directories(directory);
@@ -1701,6 +1720,40 @@ int test_mode_specific_audio_sources(const std::filesystem::path& root) {
         both_cached.audio_sources.resolved_authored_indices != std::array<std::uint8_t, 3>{0, 1, 2} ||
         both_cached.audio.source_frame_count != both.audio.source_frame_count) {
         return fail("mode resolution or base duration did not survive runtime-cache reload");
+    }
+
+    if (!write_explicit_song_json(directory / "song.json", "Mode Sources", true)) {
+        return fail("failed to enable metronome for explicit override composition fixture");
+    }
+    ff7rp::pipeline::LoadedSong guided;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &guided);
+    const auto guided_mabf = read_binary(guided.cache_sidecar_path);
+    ff7rp::pipeline::MabfArtifactMetadata guided_metadata;
+    const auto guided_validation = ff7rp::pipeline::validate_resolved_mabf(
+        guided_mabf, guided.audio.source_frame_count, {{0, 1, 2}, true}, &guided_metadata);
+    const std::string guided_manifest = read_text(guided.cache_manifest_path);
+    if (!status.ok() || guided.loaded_from_runtime_cache || !guided_validation.ok() ||
+        same_mode_across(both_mabf, guided_mabf, 0u) ||
+        !same_mode_across(both_mabf, guided_mabf, 1u) ||
+        !same_mode_across(both_mabf, guided_mabf, 2u) ||
+        guided_metadata.logical_source_frames != guided.audio.source_frame_count ||
+        guided_manifest.find("metronome_mode_mapping=mode0_only\n") == std::string::npos ||
+        guided_manifest.find("mode0_resolved_role=base\n") == std::string::npos ||
+        guided_manifest.find("mode1_resolved_role=mode1\n") == std::string::npos ||
+        guided_manifest.find("mode2_resolved_role=mode2\n") == std::string::npos ||
+        guided_manifest.find("mode0_metronome=1\n") == std::string::npos ||
+        guided_manifest.find("mode1_metronome=0\n") == std::string::npos ||
+        guided_manifest.find("mode2_metronome=0\n") == std::string::npos ||
+        guided_manifest.find("mode0_hca_frames=" + std::to_string(guided_metadata.hca_frame_count) + "\n") ==
+            std::string::npos ||
+        guided_manifest.find("mode1_hca_frames=" + std::to_string(guided_metadata.hca_frame_count) + "\n") ==
+            std::string::npos ||
+        guided_manifest.find("mode2_hca_frames=" + std::to_string(guided_metadata.hca_frame_count) + "\n") ==
+            std::string::npos) {
+        return fail("metronome plus explicit overrides did not preserve Mode0-only guide composition");
+    }
+    if (!write_explicit_song_json(directory / "song.json", "Mode Sources", false)) {
+        return fail("failed to restore clean explicit override fixture");
     }
 
     std::filesystem::remove(directory / "SONG.MODE1.WAV");

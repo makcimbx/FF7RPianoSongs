@@ -238,6 +238,18 @@ Status validate_release_mabf(
     MabfArtifactMetadata metadata;
     metadata.byte_count = bytes.size();
     metadata.logical_source_frames = expected_logical_source_frames;
+    struct ModeGeometry {
+        std::uint32_t sample_rate = 0;
+        std::uint16_t channels = 0;
+        std::uint32_t hca_frame_count = 0;
+        std::uint16_t inserted_samples = 0;
+        std::uint16_t appended_samples = 0;
+        std::uint16_t block_size = 0;
+        std::size_t logical_source_frames = 0;
+
+        bool operator==(const ModeGeometry&) const = default;
+    };
+    std::array<ModeGeometry, 3> mode_geometry{};
     std::size_t first_hca_size = 0;
     std::array<std::size_t, 3> hca_sizes{};
     for (std::size_t mode = 0; mode < mode_ranges.size(); ++mode) {
@@ -271,7 +283,7 @@ Status validate_release_mabf(
             kMabfHcaHeaderSize + static_cast<std::uint64_t>(frames) * block_size != hca_size ||
             static_cast<std::uint64_t>(frames) * 1024u < inserted + appended ||
             (expected_logical_source_frames != 0 && logical_frames != expected_logical_source_frames) ||
-            (mode != 0u && logical_frames != metadata.logical_source_frames) ||
+            (mode != 0u && logical_frames != mode_geometry[0].logical_source_frames) ||
             !valid_hca_crc(hca, kMabfHcaHeaderSize)) {
             return Status::error(StatusCode::MabfNotReleaseValid, "MABF mode HCA metadata or header CRC is invalid");
         }
@@ -291,15 +303,17 @@ Status validate_release_mabf(
         }
         if (mode == 0u) {
             first_hca_size = hca_size;
-            metadata.logical_source_frames = static_cast<std::size_t>(logical_frames);
-            metadata.hca_frame_count = frames;
-            metadata.sample_rate = sample_rate;
-            metadata.channels = channels;
-            metadata.inserted_samples = inserted;
-            metadata.appended_samples = appended;
-            metadata.block_size = block_size;
         }
+        mode_geometry[mode] = ModeGeometry{sample_rate, channels, frames, inserted, appended, block_size,
+            static_cast<std::size_t>(logical_frames)};
     }
+    metadata.logical_source_frames = mode_geometry[0].logical_source_frames;
+    metadata.hca_frame_count = mode_geometry[0].hca_frame_count;
+    metadata.sample_rate = mode_geometry[0].sample_rate;
+    metadata.channels = mode_geometry[0].channels;
+    metadata.inserted_samples = mode_geometry[0].inserted_samples;
+    metadata.appended_samples = mode_geometry[0].appended_samples;
+    metadata.block_size = mode_geometry[0].block_size;
     const auto modes_equal = [&](const std::size_t left, const std::size_t right) {
         return hca_sizes[left] == hca_sizes[right] &&
             std::equal(bytes.begin() + offsets[left], bytes.begin() + offsets[left] + hca_sizes[left],
@@ -312,6 +326,12 @@ Status validate_release_mabf(
             (mode_policy->resolved_authored_indices[2] != 0u &&
                 mode_policy->resolved_authored_indices[2] != 2u)) {
             return Status::error(StatusCode::InvalidArgument, "resolved MABF mode policy is invalid");
+        }
+        for (std::size_t mode = 1u; mode < mode_geometry.size(); ++mode) {
+            if (mode_geometry[mode] != mode_geometry[0]) {
+                return Status::error(StatusCode::MabfNotReleaseValid,
+                    "MABF Mode" + std::to_string(mode) + " HCA geometry does not exactly match Mode0");
+            }
         }
         for (std::size_t left = 0; left < 3u; ++left) {
             for (std::size_t right = left + 1u; right < 3u; ++right) {
