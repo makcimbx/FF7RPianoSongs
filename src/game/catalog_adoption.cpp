@@ -18,10 +18,18 @@ namespace ff7r::piano::game {
 #ifdef FF7RP_CATALOG_ADOPTION_SELFTEST
 void catalog_adoption_selftest_trace_registry_published() noexcept;
 #endif
+// `unresolved` is what the offline pipeline produced: the songs in discovery
+// order, claiming no piano row.  `storage` and `audio` are that catalog
+// resolved onto the rows appended after a live list of `first_custom_row`
+// entries, and are the single identity the list, the registry and the audio
+// catalog all commit together.
 class PreparedPendingCatalog final {
 public:
     std::shared_ptr<const SongRegistryStorage> storage;
     PreparedAudioCatalog audio;
+    SongRegistryStorage unresolved;
+    std::shared_ptr<const PreparedAudioPrefix> prefix;
+    std::int32_t first_custom_row = -1;
 };
 
 namespace {
@@ -40,7 +48,7 @@ void notify_readiness(const CatalogReadinessEvent event,
 bool publish_pending(const std::shared_ptr<PreparedPendingCatalog>& pending) noexcept
 {
     if (!pending) return false;
-    const std::size_t song_count = pending->storage ? pending->storage->size() : 0;
+    const std::size_t song_count = pending->unresolved.size();
     {
         std::lock_guard lock(g_pending_mutex);
         if (piano_list_catalog_terminal_failure()) return false;
@@ -48,6 +56,34 @@ bool publish_pending(const std::shared_ptr<PreparedPendingCatalog>& pending) noe
     }
     notify_readiness(CatalogReadinessEvent::Prepared, song_count);
     return true;
+}
+
+// A piano row is a live-list fact: the vanilla list grows with story progress
+// and unlocked sheet music, so no offline stage can name it.  Resolution
+// happens here, memoised per observed list length so a repeatedly blocked
+// attempt re-uses the same storage instead of rebuilding it.
+bool resolve_pending_catalog_rows(PreparedPendingCatalog& pending,
+    const std::int32_t first_custom_row) noexcept
+{
+    if (pending.storage && pending.first_custom_row == first_custom_row) return true;
+    if (first_custom_row < 0
+        || static_cast<std::size_t>(first_custom_row) + pending.unresolved.size()
+            > static_cast<std::size_t>(runtime_layouts::PianoMusicList::maximum_count)) {
+        return false;
+    }
+    try {
+        SongRegistryStorage resolved = pending.unresolved;
+        if (!assign_custom_rows(resolved, first_custom_row)) return false;
+        auto storage = std::make_shared<const SongRegistryStorage>(std::move(resolved));
+        PreparedAudioCatalog audio;
+        if (!prepare_audio_catalog_from_prefix(storage, pending.prefix, audio)) return false;
+        pending.storage = std::move(storage);
+        pending.audio = std::move(audio);
+        pending.first_custom_row = first_custom_row;
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 const char* republish_state_name(const PianoListRepublishState state) noexcept
@@ -90,6 +126,7 @@ struct AdoptionReport final {
     std::size_t pending_songs = 0;
     std::uint64_t registry_generation = 0;
     std::uint64_t catalog_revision = 0;
+    std::int32_t first_custom_row = -1;
 
     ~AdoptionReport() noexcept
     {
@@ -104,7 +141,8 @@ struct AdoptionReport final {
                 << " binding=" << binding
                 << " list_commit=" << list_commit
                 << " registry_gen=" << registry_generation
-                << " catalog_revision=" << catalog_revision;
+                << " catalog_revision=" << catalog_revision
+                << " first_custom_row=" << first_custom_row;
             core::log(level, out.str());
         } catch (...) {}
     }
@@ -128,16 +166,15 @@ std::shared_ptr<PreparedPendingCatalog> prepare_pending_catalog(
     std::shared_ptr<const PreparedAudioPrefix> prefix) noexcept
 {
     if (descriptors.empty() || !prefix || piano_list_catalog_terminal_failure()) return {};
+    // The native boundary is unavailable until adoption. Admit only the
+    // absolute list bound here; resolution applies the exact live-boundary
+    // bound before preparing or publishing any runtime catalog state.
     if (descriptors.size() > static_cast<std::size_t>(
-            runtime_layouts::PianoMusicList::maximum_count
-            - runtime_layouts::PianoMusicList::vanilla_count)) return {};
+            runtime_layouts::PianoMusicList::maximum_count)) return {};
     try {
-        auto storage = std::make_shared<const SongRegistryStorage>(std::move(descriptors));
         auto pending = std::make_shared<PreparedPendingCatalog>();
-        pending->storage = storage;
-        PreparedAudioCatalog audio;
-        if (!prepare_audio_catalog_from_prefix(storage, std::move(prefix), audio)) return {};
-        pending->audio = std::move(audio);
+        pending->unresolved = std::move(descriptors);
+        pending->prefix = std::move(prefix);
         return pending;
     } catch (...) {
         return {};
@@ -203,8 +240,7 @@ CatalogAdoptionResult try_adopt_pending_catalog_before_menu_open(
     }
     std::shared_ptr<PreparedPendingCatalog> pending = g_pending;
     report.pending_present = static_cast<bool>(pending);
-    report.pending_songs =
-        pending && pending->storage ? pending->storage->size() : 0;
+    report.pending_songs = pending ? pending->unresolved.size() : 0;
     PianoListRepublishState republish_state = PianoListRepublishState::None;
     if (!pending) republish_state = piano_list_catalog_republish_state();
     report.republish_state = republish_state_name(republish_state);
@@ -329,6 +365,16 @@ CatalogAdoptionResult try_adopt_pending_catalog_before_menu_open(
     }
     if (!try_selection_runtime_idle_for_catalog_adoption()) {
         report.first_failure = "selection_runtime_not_idle";
+        return blocked();
+    }
+    std::int32_t first_custom_row = -1;
+    if (!piano_list_first_custom_row(widget, widget_identity, first_custom_row)) {
+        report.first_failure = "list_row_unreadable";
+        return blocked();
+    }
+    report.first_custom_row = first_custom_row;
+    if (!resolve_pending_catalog_rows(*pending, first_custom_row)) {
+        report.first_failure = "list_row_resolve";
         return blocked();
     }
 

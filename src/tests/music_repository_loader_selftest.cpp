@@ -85,10 +85,29 @@ int main()
 MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::move(ordered));
     ok &= require(plan.ready_to_publish, "accepted and rejected discovery must be publishable");
     ok &= require(plan.descriptors.size() == 2, "only accepted songs must become descriptors");
-    ok &= require(plan.descriptors[0].id == "alpha" && plan.descriptors[0].visible_index == 5,
-        "first accepted song must receive visible index 5");
-    ok &= require(plan.descriptors[1].id == "charlie" && plan.descriptors[1].visible_index == 6,
-        "rejected candidates must not consume a visible index");
+    ok &= require(plan.descriptors[0].id == "alpha" && plan.descriptors[1].id == "charlie",
+        "rejected candidates must not displace a later accepted song");
+    ok &= require(plan.descriptors[0].visible_index
+                == ff7r::piano::game::kUnresolvedVisibleIndex
+            && plan.descriptors[1].visible_index
+                == ff7r::piano::game::kUnresolvedVisibleIndex,
+        "offline composition assigned a piano row it cannot know: the vanilla "
+        "list length grows with story progress, so a first row fixed at "
+        "discovery time silently drops every custom song once the game's own "
+        "list is already that long");
+    for (const int native_count : {5, 7}) {
+        ff7r::piano::game::SongRegistryStorage resolved = plan.descriptors;
+        ok &= require(ff7r::piano::game::assign_custom_rows(
+                    resolved, native_count)
+                && resolved[0].visible_index == native_count
+                && resolved[1].visible_index == native_count + 1,
+            "adoption must append custom rows contiguously after every live native length");
+        ok &= require(!ff7r::piano::game::assign_custom_rows(
+                    resolved, native_count)
+                && !ff7r::piano::game::assign_custom_rows(
+                    resolved, native_count - 1),
+            "a catalog already resolved for one list length must not be re-based");
+    }
     ok &= require(plan.events.size() == 9, "ordered event projection count changed");
     ok &= require(plan.events[1].text == "[song] status=loading directory=\"AAlpha\"" &&
         plan.events[2].text == "[song_load] directory=\"AAlpha\" stage=json_loaded" &&
@@ -428,11 +447,15 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
     }
     {
         std::vector<std::size_t> offered_counts;
-        std::vector<int> admitted_indices;
+        std::vector<std::string> admitted_ids;
+        bool admitted_rows_unresolved = true;
         ff7r::piano::startup::ProgressiveRepositoryCallbacks callbacks;
         callbacks.on_descriptor_admission = [&](const ff7r::piano::game::SongDescriptor& descriptor) {
             if (descriptor.id == "bravo") return false;
-            admitted_indices.push_back(descriptor.visible_index);
+            admitted_rows_unresolved = admitted_rows_unresolved
+                && descriptor.visible_index
+                    == ff7r::piano::game::kUnresolvedVisibleIndex;
+            admitted_ids.push_back(descriptor.id);
             return true;
         };
         callbacks.on_catalog = [&](MusicRepositoryPlan offered, bool) {
@@ -441,10 +464,11 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
         };
         const auto state = ff7r::piano::startup::run_progressive_repository_test_sequence(
             3, {{progressive_plan({"alpha", "bravo", "charlie"}), 3, true}}, callbacks);
-        ok &= require(admitted_indices == std::vector<int>{5, 6}
+        ok &= require(admitted_ids == std::vector<std::string>{"alpha", "charlie"}
+                && admitted_rows_unresolved
                 && offered_counts == std::vector<std::size_t>{1, 2}
                 && state.valid_song_count == 2,
-            "failed sidecar admission consumed a visible index or blocked a later valid song");
+            "failed sidecar admission blocked a later valid song or resolved a row offline");
     }
     {
         ff7r::piano::startup::StartupCacheProgress progressive_progress;

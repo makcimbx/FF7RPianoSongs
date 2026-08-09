@@ -60,8 +60,6 @@ struct Fixture {
 } f;
 std::mutex prepare_mutex;
 std::condition_variable prepare_changed;
-bool watch_prepare = false;
-bool prepare_observed = false;
 
 bool require(bool value, const char* message)
 {
@@ -69,11 +67,12 @@ bool require(bool value, const char* message)
     return value;
 }
 
-game::SongDescriptor song(int visible)
+// Songs arrive from the offline pipeline without a row: adoption resolves it
+// against the live list, so the number only identifies the fixture.
+game::SongDescriptor song(int number)
 {
     game::SongDescriptor value;
-    value.id = "catalog-" + std::to_string(visible);
-    value.visible_index = visible;
+    value.id = "catalog-" + std::to_string(number);
     value.base_slot = 0;
     value.profiles.emplace_back();
     value.default_profile_index = 0;
@@ -118,20 +117,22 @@ void readiness_changed(void* context, const game::CatalogReadinessEvent event,
     }
 }
 
+// Sidecar prefixes are keyed by song identity, never by row, so a prefix
+// prepared before adoption still matches once rows are resolved.
 struct PrefixToken {
     std::shared_ptr<const PrefixToken> prior;
-    int visible = 0;
+    std::string id;
 };
 
 std::shared_ptr<const game::PreparedAudioPrefix> prefix_after(
-    const std::shared_ptr<const game::PreparedAudioPrefix>& prior, int visible)
+    const std::shared_ptr<const game::PreparedAudioPrefix>& prior, int number)
 {
     auto token = std::make_shared<PrefixToken>();
     if (prior) {
         token->prior = std::shared_ptr<const PrefixToken>(prior,
             reinterpret_cast<const PrefixToken*>(prior.get()));
     }
-    token->visible = visible;
+    token->id = "catalog-" + std::to_string(number);
     const auto* alias = reinterpret_cast<const game::PreparedAudioPrefix*>(token.get());
     return {std::move(token), alias};
 }
@@ -198,15 +199,10 @@ bool prepare_audio_catalog_from_prefix(
     std::shared_ptr<const PreparedAudioPrefix> prefix,
     PreparedAudioCatalog& prepared) noexcept
 {
-    {
-        std::lock_guard lock(prepare_mutex);
-        if (watch_prepare) prepare_observed = true;
-    }
-    prepare_changed.notify_all();
     if (!storage || !prefix) return false;
     const PrefixToken* node = prefix_token(prefix);
     for (std::size_t count = storage->size(); count != 0; --count) {
-        if (!node || node->visible != (*storage)[count - 1].visible_index) return false;
+        if (!node || node->id != (*storage)[count - 1].id) return false;
         node = node->prior.get();
     }
     if (node) return false;
@@ -242,6 +238,16 @@ void finalize_prepared_audio_catalog_commit(PreparedAudioCatalogCommit& commit) 
     commit.prepared->storage.reset();
 }
 
+bool piano_list_first_custom_row(void* widget, const UObjectLiveHandle& identity,
+    int32_t& first_custom_row) noexcept
+{
+    if (f.stale_widget || widget != &f
+        || identity.internal_index != f.identity.internal_index
+        || identity.serial_number != f.identity.serial_number) return false;
+    first_custom_row = f.owner ? 5 : f.tuple.count;
+    return true;
+}
+
 std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog(
     void* widget, const UObjectLiveHandle& identity, const RegistrySnapshot& expected,
     std::shared_ptr<const SongRegistryStorage> replacement) noexcept
@@ -251,8 +257,9 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog(
         || identity.serial_number != f.identity.serial_number) return {};
     auto out = std::make_shared<PreparedPianoListCatalog>();
     out->source = f.tuple;
+    const int32_t native_count = f.owner ? 5 : f.tuple.count;
     out->replacement = std::make_shared<std::vector<uint64_t>>(
-        static_cast<size_t>(f.tuple.count + 1), 0);
+        static_cast<size_t>(native_count) + replacement->size(), 0);
     out->target = {reinterpret_cast<uintptr_t>(out->replacement->data()),
         static_cast<int32_t>(out->replacement->size()),
         static_cast<int32_t>(out->replacement->capacity())};
@@ -380,7 +387,7 @@ int main()
     std::weak_ptr<const PrefixToken> weak2(std::shared_ptr<const PrefixToken>(prefix2,
         reinterpret_cast<const PrefixToken*>(prefix2.get())));
     std::vector<game::SongDescriptor> oversized;
-    for (int visible = 5; visible < 129; ++visible) oversized.push_back(song(visible));
+    for (int number = 0; number <= 128; ++number) oversized.push_back(song(number));
     ok &= require(!offer(std::move(oversized), prefix3),
         "catalog exceeding the proven piano-list bound became pending");
     auto first_pending = game::prepare_pending_catalog({song(5)}, prefix1);
@@ -464,30 +471,25 @@ int main()
     pending_holder.join();
 
     game::catalog_adoption_selftest_lock_pending();
-    {
-        std::lock_guard lock(prepare_mutex);
-        watch_prepare = true;
-        prepare_observed = false;
-    }
+    bool raced_offer_started = false;
     bool raced_offer_accepted = true;
     std::thread raced_offer([&] {
+        {
+            std::lock_guard lock(prepare_mutex);
+            raced_offer_started = true;
+        }
+        prepare_changed.notify_all();
         raced_offer_accepted = offer({song(5), song(6)}, prefix2);
     });
     {
         std::unique_lock lock(prepare_mutex);
-        prepare_changed.wait(lock, [] { return prepare_observed; });
+        prepare_changed.wait(lock, [&] { return raced_offer_started; });
     }
     f.terminal = true;
     game::catalog_adoption_selftest_unlock_pending();
     raced_offer.join();
-    {
-        std::lock_guard lock(prepare_mutex);
-        watch_prepare = false;
-    }
     ok &= require(!raced_offer_accepted,
         "pending offer did not recheck terminal rollback under publication lock");
-    ok &= require(f.prepared_catalogs >= 4,
-        "terminal publication race lost prepared-catalog ownership evidence");
     f.terminal = false;
     f.stale_widget = true;
     ok &= require(attempt() == game::CatalogAdoptionResult::Blocked
@@ -727,10 +729,10 @@ int main()
     std::shared_ptr<const game::PreparedAudioPrefix> retried_prefix;
     const bool same_prefix_final_retry = same_prefix_retry.retry(retried_prefix);
     ok &= require(second_pending && !same_prefix_first_offer && same_prefix_final_retry
-            && f.prepared_catalogs == preparations_before_retry + 1
+            && f.prepared_catalogs == preparations_before_retry
             && retried_prefix == prefix2
             && !weak1.expired(),
-        "same prepared prefix did not reject then accept without reconstruction");
+        "same unresolved prefix did not reject then accept without eager reconstruction");
 
     game::registry().set_active_selection(5, 0);
     const auto active_registry_before_block = game::registry().registry_snapshot();
@@ -897,11 +899,11 @@ int main()
     auto failed_larger_b = game::prepare_pending_catalog(
         {song(9), song(10)}, stale_prefix);
     std::shared_ptr<const game::PreparedAudioPrefix> stale_retry_prefix;
-    ok &= require(stale_a && !stale_a_accepted && !failed_larger_b
+    ok &= require(stale_a && !stale_a_accepted && failed_larger_b
             && !stale_retry.retry(stale_retry_prefix) && !stale_retry_prefix
-            && f.prepared_catalogs == preparations_before_stale + 1
+            && f.prepared_catalogs == preparations_before_stale
             && attempt() == game::CatalogAdoptionResult::NoPending,
-        "larger preparation failure retained or published the older rejected prefix");
+        "new unresolved offer retained or published the older rejected prefix");
 
     prefix1.reset();
     prefix2.reset();

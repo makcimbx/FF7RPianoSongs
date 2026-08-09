@@ -349,40 +349,13 @@ SelectionSnapshot SongRegistry::snapshot_for_visible_index(int visible_index) co
     for (const auto& song : *songs_) {
         if (song.visible_index != visible_index) continue;
         snapshot.song = &song;
+        snapshot.base_slot = song.base_slot;
         const int index = selected_profile_index(song, selected_profiles_);
         if (index >= 0 && index < static_cast<int>(song.profiles.size())) {
             snapshot.profile_index = index;
             snapshot.profile = &song.profiles[static_cast<size_t>(index)];
         }
         return snapshot;
-    }
-    return snapshot;
-}
-
-SelectionSnapshot SongRegistry::snapshot_for_visible_or_appended_index(
-    const int visible_index, const int appended_start) const
-{
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    SelectionSnapshot snapshot;
-    snapshot.generation = generation_;
-    snapshot.storage = songs_;
-    snapshot.visible_index = visible_index;
-    const SongDescriptor* found = nullptr;
-    for (const auto& song : *songs_) {
-        if (song.visible_index == visible_index) { found = &song; break; }
-    }
-    const int appended = visible_index - appended_start;
-    if (!found && appended >= 0 && static_cast<size_t>(appended) < songs_->size()) {
-        const SongDescriptor& candidate = (*songs_)[static_cast<size_t>(appended)];
-        if (candidate.visible_index < 0) found = &candidate;
-    }
-    if (!found) return snapshot;
-    snapshot.song = found;
-    snapshot.base_slot = found->base_slot;
-    const int index = selected_profile_index(*found, selected_profiles_);
-    if (index >= 0 && index < static_cast<int>(found->profiles.size())) {
-        snapshot.profile_index = index;
-        snapshot.profile = &found->profiles[static_cast<size_t>(index)];
     }
     return snapshot;
 }

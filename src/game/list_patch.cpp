@@ -288,25 +288,30 @@ bool list_catalog_matches_registry(void* widget)
         && native.capacity == static_cast<int32_t>(owner->entries.capacity());
 }
 
-int32_t desired_music_list_count(
-    const PianoListArrayView& source, const RegistrySnapshot& registry_view)
+// Custom rows are appended to the original native list, so the catalog must
+// claim exactly the rows [source.count, source.count + songs). Requiring that outright means
+// composition writes every appended slot exactly once: a catalog resolved
+// against a different list length is refused instead of composing a list with
+// a dropped song or an unpopulated row.
+bool appended_music_list_count(const PianoListArrayView& source,
+    const RegistrySnapshot& registry_view, int32_t& desired_count)
 {
-    int32_t desired = source.count;
-    for (const SongDescriptor& song : registry_view.songs()) {
-        const int32_t visible_index = song.visible_index >= 0 ? song.visible_index : desired;
-        desired = std::max(desired, visible_index + 1);
+    const SongRegistryStorage& songs = registry_view.songs();
+    if (songs.empty()) return false;
+    int32_t next_row = source.count;
+    for (const SongDescriptor& song : songs) {
+        if (song.visible_index != next_row++) return false;
     }
-    return desired;
+    desired_count = next_row;
+    return desired_count > source.count
+        && desired_count <= runtime_layouts::PianoMusicList::maximum_count;
 }
 
 bool clone_registry_entries(const PianoListArrayView& source,
     const RegistrySnapshot& registry_view, std::vector<PianoListEntry>& out)
 {
-    const int32_t desired_count = desired_music_list_count(source, registry_view);
-    if (desired_count <= source.count
-        || desired_count > runtime_layouts::PianoMusicList::maximum_count) {
-        return false;
-    }
+    int32_t desired_count = 0;
+    if (!appended_music_list_count(source, registry_view, desired_count)) return false;
 
     out.resize(static_cast<size_t>(source.count));
     for (int32_t index = 0; index < source.count; ++index) {
@@ -316,15 +321,9 @@ bool clone_registry_entries(const PianoListArrayView& source,
     }
     out.resize(static_cast<size_t>(desired_count));
 
-    int32_t next_appended_index = source.count;
     for (const SongDescriptor& song : registry_view.songs()) {
-        const int32_t visible_index = song.visible_index >= 0 ? song.visible_index : next_appended_index++;
-        if (visible_index < source.count || visible_index >= desired_count) {
-            continue;
-        }
-
         const int32_t base_slot = std::clamp(song.base_slot, 0, source.count - 1);
-        if (!core::safe_read_field(source.data, static_cast<uintptr_t>(sizeof(PianoListEntry) * base_slot), out[static_cast<size_t>(visible_index)])) {
+        if (!core::safe_read_field(source.data, static_cast<uintptr_t>(sizeof(PianoListEntry) * base_slot), out[static_cast<size_t>(song.visible_index)])) {
             return false;
         }
     }
@@ -353,8 +352,7 @@ bool prepare_list_setup_view(ListSetupView& view)
     if (read_music_list_array(view.ingress_context, list_view))
         source_count = std::max(kVanillaPianoSongCount,
             std::min(view.ingress_index, list_view.count - 1));
-    SelectionSnapshot setup = registry().snapshot_for_visible_or_appended_index(
-        view.ingress_index, kVanillaPianoSongCount);
+    SelectionSnapshot setup = registry().snapshot_for_visible_index(view.ingress_index);
     setup.base_slot = setup.song
         ? std::clamp(setup.song->base_slot, 0, source_count)
         : std::clamp(view.ingress_index, 0, source_count);
@@ -625,12 +623,18 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog_impl(
             owner.original_count = prepared->expected_original_count;
             owner.original_capacity = prepared->expected_original_capacity;
         }
+        const PianoListArrayView composition_source = prepared->has_expected_owner
+            ? PianoListArrayView{prepared->expected_original_array,
+                prepared->expected_original_count,
+                prepared->expected_original_capacity}
+            : source_view;
         const RegistrySnapshot replacement_view = owner.catalog;
-        const int32_t desired = desired_music_list_count(source_view, replacement_view);
-        if (desired <= source_view.count
-            || desired > runtime_layouts::PianoMusicList::maximum_count) return {};
+        int32_t desired = 0;
+        if (!appended_music_list_count(
+                composition_source, replacement_view, desired)) return {};
         owner.entries.reserve(static_cast<size_t>(std::max(source_view.capacity, desired)));
-        if (!clone_registry_entries(source_view, replacement_view, owner.entries)) return {};
+        if (!clone_registry_entries(
+                composition_source, replacement_view, owner.entries)) return {};
         prepared->target = {reinterpret_cast<uintptr_t>(owner.entries.data()),
             static_cast<int32_t>(owner.entries.size()), static_cast<int32_t>(owner.entries.capacity())};
         prepared->target_backing_capacity = static_cast<int32_t>(owner.entries.capacity());
@@ -662,6 +666,41 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog(
 {
     return prepare_piano_list_catalog_impl(widget, widget_identity,
         expected, std::move(replacement), false);
+}
+
+bool piano_list_first_custom_row(void* widget,
+    const UObjectLiveHandle& widget_identity, int32_t& first_custom_row) noexcept
+{
+    PianoListArrayView view{};
+    if (!validate_list_identity(widget, widget_identity)
+        || !read_music_list_array(widget, view)) return false;
+    try {
+        std::unique_lock lock(g_owned_list_mutex, std::try_to_lock);
+        if (!lock) return false;
+        const auto owner = std::find_if(g_owned_lists.begin(), g_owned_lists.end(),
+            [widget](const OwnedPianoListPatch& candidate) {
+                return candidate.context == widget;
+            });
+        if (owner == g_owned_lists.end()) {
+            first_custom_row = view.count;
+            return true;
+        }
+        if (!same_list_identity(owner->context_identity, widget_identity)
+            || !validate_list_identity(owner->context, owner->context_identity)
+            || view.data != owner->entries.data()
+            || view.count != static_cast<int32_t>(owner->entries.size())
+            || view.capacity != static_cast<int32_t>(owner->entries.capacity())
+            || !owner->original_array || owner->original_count <= 0
+            || owner->original_capacity < owner->original_count
+            || owner->original_count
+                > runtime_layouts::PianoMusicList::maximum_count) {
+            return false;
+        }
+        first_custom_row = owner->original_count;
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog_republish(
@@ -926,6 +965,15 @@ void configure_list_catalog_selftest(ListCatalogIdentityValidator identity,
     g_test_identity = identity;
     g_test_fault = fault;
     g_test_trace = trace;
+}
+
+bool list_catalog_selftest_compose(void* source_entries, const int32_t source_count,
+    const std::shared_ptr<const SongRegistryStorage>& catalog,
+    std::vector<PianoListEntry>& out) noexcept
+{
+    const PianoListArrayView source{static_cast<PianoListEntry*>(source_entries),
+        source_count, source_count};
+    return clone_registry_entries(source, RegistrySnapshot{1, 1, catalog}, out);
 }
 
 std::size_t list_catalog_selftest_owner_count() noexcept

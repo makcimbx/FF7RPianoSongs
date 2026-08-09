@@ -6,6 +6,7 @@
 #include "game/progress.h"
 #include "game/title.h"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <iostream>
@@ -152,6 +153,37 @@ int main()
     const game::UObjectLiveHandle live{4, 40};
 
     game::configure_list_catalog_selftest(&identity, {}, &event);
+    for (const int32_t native_count : {5, 7}) {
+        std::vector<layouts::PianoListEntry> native_rows(
+            static_cast<std::size_t>(native_count));
+        for (int32_t row = 0; row < native_count; ++row) {
+            native_rows[static_cast<std::size_t>(row)].row_name.comparison_id
+                = static_cast<uint32_t>(100 + row);
+        }
+        game::SongRegistryStorage songs{song(-1), song(-1)};
+        songs[0].base_slot = 1;
+        songs[1].base_slot = native_count - 1;
+        ok &= require(game::assign_custom_rows(songs, native_count),
+            "fixture catalog row resolution failed");
+        auto catalog = std::make_shared<const game::SongRegistryStorage>(
+            std::move(songs));
+        std::vector<layouts::PianoListEntry> composed;
+        ok &= require(game::list_catalog_selftest_compose(native_rows.data(),
+                native_count, catalog, composed)
+                && composed.size()
+                    == static_cast<std::size_t>(native_count + 2)
+                && std::equal(native_rows.begin(), native_rows.end(),
+                    composed.begin(), [](const auto& left, const auto& right) {
+                        return left.row_name.comparison_id
+                            == right.row_name.comparison_id;
+                    })
+                && composed[static_cast<std::size_t>(native_count)]
+                        .row_name.comparison_id == 101
+                && composed[static_cast<std::size_t>(native_count + 1)]
+                        .row_name.comparison_id
+                    == static_cast<uint32_t>(100 + native_count - 1),
+            "custom rows were not contiguous after the live native boundary");
+    }
     ok &= require(game::piano_list_catalog_owner_state(widget.data(), live)
                 == game::PianoListOwnerState::None
             && !game::piano_list_catalog_terminal_failure(),
@@ -418,6 +450,12 @@ int main()
         "state-generation churn invalidated unchanged list catalog indices 10-15");
 
     base = game::registry().registry_snapshot();
+    int32_t managed_native_boundary = -1;
+    ok &= require(game::piano_list_first_custom_row(
+                widget.data(), live, managed_native_boundary)
+                && managed_native_boundary
+                    == static_cast<int32_t>(vanilla.size()),
+        "managed owner did not preserve the original native boundary");
     game::SongRegistryStorage newer_songs = *replacement;
     newer_songs.push_back(song(17));
     auto newer = std::make_shared<const game::SongRegistryStorage>(
@@ -432,8 +470,12 @@ int main()
     game::finalize_prepared_piano_list_catalog(*newer_prefix);
     registry_commit.reset();
     ok &= require(game::list_catalog_selftest_owner_count() == 1
-            && game::list_catalog_selftest_matches_registry(widget.data()),
-        "newer prefix did not retain exactly the current owner");
+            && game::list_catalog_selftest_matches_registry(widget.data())
+            && field<int32_t>(widget, layouts::PianoMusicList::count)
+                == static_cast<int32_t>(vanilla.size() + newer->size())
+            && game::registry().registry_snapshot().by_visible_index(5)
+            && game::registry().registry_snapshot().by_visible_index(17),
+        "managed prefix replacement duplicated, dropped, or displaced rows");
     const auto authoritative_catalog = game::registry().registry_snapshot();
     const game::MenuSessionSnapshot exact_close{7,
         game::MenuSessionPhase::Closing, nullptr, nullptr, widget.data(), live,

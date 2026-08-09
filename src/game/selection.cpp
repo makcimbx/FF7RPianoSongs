@@ -255,8 +255,7 @@ bool selection_alias_exact(
 
 SelectionSnapshot descriptor_for_visible_index(int32_t visible_index)
 {
-    return registry().snapshot_for_visible_or_appended_index(
-        visible_index, runtime_layouts::PianoMusicList::vanilla_count);
+    return registry().snapshot_for_visible_index(visible_index);
 }
 
 bool read_selected_index(void* context, int32_t& out)

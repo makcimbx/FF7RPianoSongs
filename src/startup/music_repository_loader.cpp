@@ -13,8 +13,10 @@
 namespace ff7r::piano::startup {
 namespace {
 
-constexpr int kFirstCustomVisibleIndex = 5;
-constexpr std::size_t kMaximumCustomSongCount = 123; // Existing 128-row list bound minus five vanilla rows.
+// Widest count the 128-row piano list could ever accept. Offline discovery
+// cannot know the live vanilla list length, so this is only a coarse bound;
+// the exact one is enforced at catalog adoption against the live first row.
+constexpr std::size_t kMaximumCustomSongCount = 123;
 
 MusicRepositoryLogEvent event(
     const MusicRepositoryLogLevel level, std::string text)
@@ -262,7 +264,7 @@ public:
                     throw std::length_error("validated custom-song count exceeds the existing piano-list bound");
                 }
                 game::SongDescriptor descriptor = build_song_descriptor(
-                    candidate.song, kFirstCustomVisibleIndex + static_cast<int>(descriptors_.size()));
+                    candidate.song, game::kUnresolvedVisibleIndex);
                 if (publisher_.admit_descriptor(descriptor)) {
                     descriptors_.push_back(std::move(descriptor));
                     emit(event(MusicRepositoryLogLevel::Info, loaded_log(candidate.song)));
@@ -305,7 +307,6 @@ MusicRepositoryPlan compose_music_repository(ff7rp::pipeline::SongRepositoryResu
 
     plan.descriptors.reserve(discovery.songs.size());
 
-    int visible_index = kFirstCustomVisibleIndex;
     for (const auto& candidate : discovery.candidates) {
         plan.events.push_back(event(MusicRepositoryLogLevel::Info,
             "[song] status=loading directory=\"" + candidate.directory_name + "\""));
@@ -333,7 +334,8 @@ MusicRepositoryPlan compose_music_repository(ff7rp::pipeline::SongRepositoryResu
             return plan;
         }
         try {
-            plan.descriptors.push_back(build_song_descriptor(song, visible_index));
+            plan.descriptors.push_back(
+                build_song_descriptor(song, game::kUnresolvedVisibleIndex));
         } catch (const std::exception& error) {
             fail_plan(plan, "song descriptor composition failed for directory " +
                 candidate.directory_name + ": " + error.what());
@@ -343,7 +345,6 @@ MusicRepositoryPlan compose_music_repository(ff7rp::pipeline::SongRepositoryResu
                 candidate.directory_name + ": unknown exception");
             return plan;
         }
-        ++visible_index;
         plan.events.push_back(event(MusicRepositoryLogLevel::Info, loaded_log(song)));
     }
 
@@ -515,8 +516,7 @@ ProgressiveRepositoryState run_progressive_repository_test_sequence(
                 break;
             }
             auto descriptor = settlement.plan.descriptors[index];
-            descriptor.visible_index = kFirstCustomVisibleIndex
-                + static_cast<int>(admitted.size());
+            descriptor.visible_index = game::kUnresolvedVisibleIndex;
             if (publisher.admit_descriptor(descriptor)) admitted.push_back(std::move(descriptor));
             publisher.observe(admitted, settlement.settled_candidate_count, false);
         }

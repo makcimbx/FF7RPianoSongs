@@ -73,6 +73,10 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog(
     std::shared_ptr<const SongRegistryStorage> replacement) noexcept;
 std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog_republish(
     void* widget, const UObjectLiveHandle& widget_identity) noexcept;
+// The row the first custom song must occupy: the live count for an unowned
+// native list, or the preserved original native count for a managed owner.
+bool piano_list_first_custom_row(void* widget,
+    const UObjectLiveHandle& widget_identity, int32_t& first_custom_row) noexcept;
 PianoListCatalogCommitResult commit_prepared_piano_list_catalog(
     PreparedPianoListCatalog& prepared) noexcept;
 void finalize_prepared_piano_list_catalog(

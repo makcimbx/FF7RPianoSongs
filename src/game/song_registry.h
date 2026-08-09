@@ -116,10 +116,18 @@ struct CleanupLease : SelectionSnapshot {
 
 using ActiveSongSnapshot = SelectionSnapshot;
 
+// A song's row in the piano list is a runtime fact, not an offline one. The
+// vanilla list grows with story progress and unlocked sheet music, so its
+// length exists only once the live menu widget does. Descriptors leave the
+// offline pipeline carrying this value and catalog adoption resolves it.
+inline constexpr int kUnresolvedVisibleIndex = -1;
+
 struct SongDescriptor {
     std::string id;
     std::wstring title;
-    int visible_index = -1;
+    // Absolute row in the live piano list once resolved; every consumer
+    // compares it against a live row index, so it is never an ordinal.
+    int visible_index = kUnresolvedVisibleIndex;
     int base_slot = 0;
     int unique_index = 0;
     int difficulty = 1;
@@ -133,6 +141,22 @@ struct SongDescriptor {
     std::vector<SongDifficultyProfile> profiles;
     int default_profile_index = 0;
 };
+
+// Resolves an unresolved catalog onto the rows appended after a live list of
+// first_custom_row entries, in storage order and without gaps. Refuses a
+// catalog that already claims rows, so a catalog resolved against one list
+// length can never be silently re-based against another.
+inline bool assign_custom_rows(
+    SongRegistryStorage& songs, const int first_custom_row) noexcept
+{
+    if (songs.empty() || first_custom_row < 0) return false;
+    for (const SongDescriptor& song : songs) {
+        if (song.visible_index != kUnresolvedVisibleIndex) return false;
+    }
+    int row = first_custom_row;
+    for (SongDescriptor& song : songs) song.visible_index = row++;
+    return true;
+}
 
 class SongRegistry {
 public:
@@ -171,8 +195,6 @@ public:
     bool try_playback_snapshot(PlaybackSnapshot& snapshot) const noexcept;
     CleanupLease cleanup_lease() const;
     SelectionSnapshot snapshot_for_visible_index(int visible_index) const;
-    SelectionSnapshot snapshot_for_visible_or_appended_index(
-        int visible_index, int appended_start) const;
     InitializedProfileState initialized_profile_state(
         const SelectionSnapshot& expected, SelectionSnapshot& initialized) const;
     bool initialize_profile_if_absent(const SelectionSnapshot& expected,
