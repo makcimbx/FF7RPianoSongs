@@ -12855,7 +12855,7 @@ void observe_mabf_slot_mode(void* controller, const std::string& song_id)
         << " requested_mode=0x" << requested_mode
         << " previous_mode_key=0x" << previous.mode_key
         << " mode_key=0x" << mode_key
-        << std::dec << " semantic_mapping=mode0_click_mode1_click_mode2_clean_candidate";
+        << std::dec << " semantic_mapping=mode0_click_mode1_clean_mode2_clean";
     core::log(core::LogLevel::Info, out.str());
 }
 
@@ -13976,6 +13976,53 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     ListReturnClearAuthorityDiagnostic* diagnostic = nullptr)
 {
     if (diagnostic) *diagnostic = {};
+    struct ResetDispositionMarker final {
+        bool eligible = false;
+        CanonicalSubstrateListReturnResetDisposition disposition =
+            CanonicalSubstrateListReturnResetDisposition::Rejected;
+        uint64_t pre_route_generation = 0;
+        uint64_t post_route_generation = 0;
+        uint64_t pre_observation = 0;
+        uint64_t post_observation = 0;
+        CanonicalSubstrateResetLineagePhase authority_phase =
+            CanonicalSubstrateResetLineagePhase::None;
+        uint64_t authority_generation = 0;
+        uint64_t revocation_epoch = 0;
+    } reset_disposition_marker;
+    auto deferred_reset_disposition_marker = make_deferred_noexcept_action(
+        [&]() noexcept {
+            if (!reset_disposition_marker.eligible) return;
+            static std::atomic_uint32_t s_reset_disposition_logs{0};
+            if (s_reset_disposition_logs.fetch_add(
+                    1, std::memory_order_relaxed) >= 32) return;
+            const char* disposition = "rejected";
+            if (reset_disposition_marker.disposition
+                == CanonicalSubstrateListReturnResetDisposition::Performed) {
+                disposition = "performed";
+            } else if (reset_disposition_marker.disposition
+                == CanonicalSubstrateListReturnResetDisposition::AlreadyReady) {
+                disposition = "already_ready";
+            }
+            std::ostringstream out;
+            out << "[audio_sead] canonical_substrate_list_return_reset"
+                << " disposition=" << disposition
+                << " pre_route_generation="
+                << reset_disposition_marker.pre_route_generation
+                << " post_route_generation="
+                << reset_disposition_marker.post_route_generation
+                << " pre_observation="
+                << reset_disposition_marker.pre_observation
+                << " post_observation="
+                << reset_disposition_marker.post_observation
+                << " authority_phase="
+                << static_cast<unsigned>(reset_disposition_marker.authority_phase)
+                << " authority_generation="
+                << reset_disposition_marker.authority_generation
+                << " revocation_epoch="
+                << reset_disposition_marker.revocation_epoch
+                << " native_call_invoked=0 bank_release_invoked=0";
+            core::log(core::LogLevel::Info, out.str());
+        });
     CanonicalSubstrateResetLineageMarker reset_lineage_marker;
     auto deferred_reset_lineage_marker = make_deferred_noexcept_action(
         [&]() noexcept {
@@ -14055,6 +14102,17 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     uint64_t early_reset_observation_generation = 0;
     AudioRouteState early_reset_route;
     AudioRouteCleanupResult early_result;
+    BgmCanonicalSubstrateProof reset_proof_snapshot;
+    uint64_t reset_authority_generation_snapshot = 0;
+    {
+        std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
+        reset_proof_snapshot = g_bgm_canonical_substrate_proof;
+        reset_authority_generation_snapshot =
+            g_canonical_substrate_reset_lineage_generation;
+    }
+    const uint64_t reset_revocation_epoch_snapshot =
+        g_selection_activation_revocation_epoch.load(std::memory_order_acquire);
+    const auto& reset_authority_snapshot = reset_proof_snapshot.reset_lineage;
     {
         std::lock_guard<std::mutex> lock(g_audio_state_mutex);
         if (!g_audio_route_state.custom_resource_owned && !g_audio_route_state.list_cleanup_pending) {
@@ -14063,16 +14121,110 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
             if (early_result.clear_route_metadata || !g_frozen_profile_lease.active()) {
                 early_reset_route = g_audio_route_state;
                 early_reset_native_unowned = !native_audio_route_owned_locked();
-                if (g_canonical_substrate_reset_observation_generation
-                    != UINT64_MAX) {
+                const bool custom_ownership_absent =
+                    !early_reset_route.custom_resource_owned
+                    && !early_reset_route.aggregate_awaiting_transition
+                    && !early_reset_route.owned_slot
+                    && !early_reset_route.owned_bgm
+                    && !early_reset_route.owned_sound
+                    && early_reset_route.owned_request_handle == 0
+                    && !early_reset_route.reusable_sound
+                    && !early_reset_route.reusable_slot
+                    && !early_reset_route.reusable_bgm;
+                const bool route_metadata_empty =
+                    early_reset_route.canonical_relinquishment_generation == 0
+                    && !early_reset_route.sound && !early_reset_route.controller
+                    && !early_reset_route.controller_arm_proof_attempted
+                    && !early_reset_route.controller_arm_bind_succeeded
+                    && !early_reset_route.stop_observed
+                    && early_reset_route.stop_authorized_generation == 0
+                    && !early_reset_route.set_play_handoff_pending
+                    && !early_reset_route.handoff_slot
+                    && !early_reset_route.handoff_bgm
+                    && !early_reset_route.handoff_sound
+                    && early_reset_route.handoff_request_handle == 0
+                    && !early_reset_route.native_clear_verified
+                    && !early_reset_route.deferred_native_handoff.active()
+                    && !early_reset_route.frozen_sound_patch.valid()
+                    && early_reset_route.stop_retirement.phase
+                        == AudioStopRetirementPhase::None
+                    && early_reset_route.stop_retirement_epoch == 0;
+                const bool reset_authority_generation_exact =
+                    reset_authority_snapshot.generation != 0
+                    && reset_authority_snapshot.generation
+                        == reset_authority_generation_snapshot;
+                const bool reset_observation_exact =
+                    reset_authority_snapshot.reset_observation_generation != 0
+                    && reset_authority_snapshot.reset_observation_generation
+                        == g_canonical_substrate_reset_observation_generation;
+                const bool rearm_epoch_exact =
+                    reset_authority_snapshot.rearm_epoch != 0
+                    && reset_authority_snapshot.rearm_epoch
+                        == reset_revocation_epoch_snapshot;
+                const bool activation_route_predecessor_exact =
+                    canonical_substrate_route_predecessor_exact(
+                        canonical_substrate_route_use_facts(
+                            reset_proof_snapshot, 0, {},
+                            g_onmemory_bank_lifecycle.state_epoch(),
+                            g_canonical_substrate_reset_observation_generation,
+                            reset_authority_generation_snapshot,
+                            CanonicalSubstrateResetLineagePhase::Qualified,
+                            CanonicalSubstrateBridgePhase::Available));
+                const CanonicalSubstrateAlreadyReadyFacts already_ready{
+                    early_result.status == AudioRouteCleanupStatus::NoAction,
+                    early_reset_route.phase == AudioRoutePhase::Idle,
+                    early_reset_route.generation == 0,
+                    early_reset_route.lease_identity == AudioRouteLeaseIdentity{},
+                    early_reset_route.desired_song_id.empty()
+                        && early_reset_route.patched_song_id.empty(),
+                    custom_ownership_absent,
+                    !early_reset_route.list_cleanup_pending,
+                    route_metadata_empty,
+                    g_active_patch_journal.empty()
+                        && g_pending_play_setup_patch.patches.empty()
+                        && g_failed_patch_journal.empty(),
+                    !g_unpublished_audio_setup,
+                    !g_frozen_profile_lease.active(),
+                    early_reset_native_unowned,
+                    !g_onmemory_bank_cleanup_only.blocks_custom_routes(),
+                    !g_custom_activation_quarantine,
+                    reset_authority_snapshot.phase
+                        == CanonicalSubstrateResetLineagePhase::Qualified,
+                    reset_authority_generation_exact,
+                    reset_observation_exact,
+                    rearm_epoch_exact,
+                    activation_route_predecessor_exact,
+                };
+                const auto disposition =
+                    classify_canonical_substrate_list_return_reset(
+                        early_reset_route.generation != 0, already_ready);
+                reset_disposition_marker = {true, disposition,
+                    early_reset_route.generation, early_reset_route.generation,
+                    g_canonical_substrate_reset_observation_generation,
+                    g_canonical_substrate_reset_observation_generation,
+                    reset_authority_snapshot.phase,
+                    reset_authority_snapshot.generation,
+                    reset_revocation_epoch_snapshot};
+                if (disposition
+                    == CanonicalSubstrateListReturnResetDisposition::AlreadyReady) {
                     early_reset_observation_generation =
-                        ++g_canonical_substrate_reset_observation_generation;
+                        g_canonical_substrate_reset_observation_generation;
+                } else {
+                    if (g_canonical_substrate_reset_observation_generation
+                        != UINT64_MAX) {
+                        early_reset_observation_generation =
+                            ++g_canonical_substrate_reset_observation_generation;
+                    }
+                    early_route_reset = true;
+                    AudioRouteTransitionRecorder route_transition_record(
+                        AudioRouteTransitionReason::ListReturnEarly,
+                        AudioRouteTransitionKind::RouteReset);
+                    g_audio_route_state = {};
+                    reset_disposition_marker.post_route_generation =
+                        g_audio_route_state.generation;
+                    reset_disposition_marker.post_observation =
+                        g_canonical_substrate_reset_observation_generation;
                 }
-                early_route_reset = true;
-                AudioRouteTransitionRecorder route_transition_record(
-                    AudioRouteTransitionReason::ListReturnEarly,
-                    AudioRouteTransitionKind::RouteReset);
-                g_audio_route_state = {};
             }
         } else {
             snapshot = g_audio_route_state;
@@ -14083,6 +14235,16 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
         (void)try_qualify_canonical_substrate_reset_lineage(
             early_reset_route, true, early_reset_native_unowned,
             early_reset_observation_generation, reset_lineage_marker);
+    }
+    if (reset_disposition_marker.eligible) {
+        std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
+        reset_disposition_marker.authority_phase =
+            g_bgm_canonical_substrate_proof.reset_lineage.phase;
+        reset_disposition_marker.authority_generation =
+            g_bgm_canonical_substrate_proof.reset_lineage.generation;
+        reset_disposition_marker.revocation_epoch =
+            g_selection_activation_revocation_epoch.load(
+                std::memory_order_acquire);
     }
     if (early_result.thaw_profile) registry().clear_frozen_profile();
     if (early_result.released()) retire_registry_cleanup(early_result.identity);

@@ -162,6 +162,57 @@ constexpr bool canonical_substrate_reset_lineage_authority_empty(
         && canonical_empty_private_object_handle(authority.sound_identity);
 }
 
+enum class CanonicalSubstrateListReturnResetDisposition : uint8_t {
+    Performed,
+    AlreadyReady,
+    Rejected,
+};
+
+struct CanonicalSubstrateAlreadyReadyFacts {
+    bool cleanup_no_action = false;
+    bool route_idle = false;
+    bool route_generation_zero = false;
+    bool route_lease_empty = false;
+    bool route_song_empty = false;
+    bool custom_ownership_absent = false;
+    bool list_cleanup_clear = false;
+    bool route_metadata_empty = false;
+    bool journals_empty = false;
+    bool unpublished_setup_absent = false;
+    bool frozen_profile_absent = false;
+    bool native_route_unowned = false;
+    bool cleanup_only_clear = false;
+    bool quarantine_clear = false;
+    bool authority_qualified = false;
+    bool authority_generation_exact = false;
+    bool reset_observation_exact = false;
+    bool rearm_epoch_exact = false;
+    bool activation_route_predecessor_exact = false;
+};
+
+constexpr CanonicalSubstrateListReturnResetDisposition
+classify_canonical_substrate_list_return_reset(
+    const bool route_generation_nonzero,
+    const CanonicalSubstrateAlreadyReadyFacts& f) noexcept
+{
+    if (route_generation_nonzero) {
+        return CanonicalSubstrateListReturnResetDisposition::Performed;
+    }
+    return f.cleanup_no_action && f.route_idle && f.route_generation_zero
+            && f.route_lease_empty && f.route_song_empty
+            && f.custom_ownership_absent && f.list_cleanup_clear
+            && f.route_metadata_empty && f.journals_empty
+            && f.unpublished_setup_absent && f.frozen_profile_absent
+            && f.native_route_unowned && f.cleanup_only_clear
+            && f.quarantine_clear && f.authority_qualified
+            && f.authority_generation_exact && f.reset_observation_exact
+            && f.rearm_epoch_exact && f.activation_route_predecessor_exact
+        ? CanonicalSubstrateListReturnResetDisposition::AlreadyReady
+        : CanonicalSubstrateListReturnResetDisposition::Rejected;
+}
+
+static_assert(std::is_trivially_copyable_v<CanonicalSubstrateAlreadyReadyFacts>);
+
 // Liveness of the route predecessor a retained canonical substrate proof
 // observes, and therefore the retirement rule for the proof itself.
 //

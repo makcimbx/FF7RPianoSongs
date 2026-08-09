@@ -525,16 +525,16 @@ void test_selection_substrate_policy()
     }
 
     CanonicalSubstrateResetLineageAuthority linked_reset;
-    linked_reset.reset_route_generation = 14;
+    linked_reset.reset_route_generation = 5;
     linked_reset.reset_observation_generation = 6;
-    linked_reset.reset_lease = {31, 37};
+    linked_reset.reset_lease = {};
     linked_reset.reset_lifecycle_epoch = 17;
     linked_reset.transaction_generation = 3;
     linked_reset.source_ordinal = 5;
     linked_reset.source_version = 7;
     linked_reset.source_collection_version = 11;
     linked_reset.list_exit_epoch = 13;
-    linked_reset.proof_route_generation = 9;
+    linked_reset.proof_route_generation = 4;
     linked_reset.proof_lease = {19, 23};
     linked_reset.proof_lifecycle_epoch = 17;
     linked_reset.request = advanced_canonical_request;
@@ -563,10 +563,10 @@ void test_selection_substrate_policy()
                 == CanonicalSubstrateResetLineagePhase::Qualified
             && reset_state.authority.generation == 9
             && reset_state.authority.rearm_epoch == 51
-            && reset_state.request_lineage_route_generation == 14
+            && reset_state.request_lineage_route_generation == 5
             && reset_state.request_lineage_lease == linked_reset.reset_lease
             && reset_state.request_lineage_lifecycle_epoch == 17
-            && reset_state.authority.reset_route_generation == 14
+            && reset_state.authority.reset_route_generation == 5
             && reset_state.authority.reset_observation_generation == 6
             && reset_state.authority.reset_lease == linked_reset.reset_lease
             && reset_state.authority.reset_lifecycle_epoch == 17
@@ -575,7 +575,7 @@ void test_selection_substrate_policy()
             && reset_state.authority.source_version == 7
             && reset_state.authority.source_collection_version == 11
             && reset_state.authority.list_exit_epoch == 13
-            && reset_state.authority.proof_route_generation == 9
+            && reset_state.authority.proof_route_generation == 4
             && reset_state.authority.proof_lease == linked_reset.proof_lease
             && reset_state.authority.proof_lifecycle_epoch == 17
             && reset_state.authority.request == advanced_canonical_request
@@ -593,6 +593,55 @@ void test_selection_substrate_policy()
                 reset_state.authority.sound_identity,
                 linked_reset.sound_identity),
         "no-rebase reset qualification did not commit lineage and one rearm edge");
+
+    CanonicalSubstrateAlreadyReadyFacts already_ready;
+    bool CanonicalSubstrateAlreadyReadyFacts::* const already_ready_fields[] = {
+        &CanonicalSubstrateAlreadyReadyFacts::cleanup_no_action,
+        &CanonicalSubstrateAlreadyReadyFacts::route_idle,
+        &CanonicalSubstrateAlreadyReadyFacts::route_generation_zero,
+        &CanonicalSubstrateAlreadyReadyFacts::route_lease_empty,
+        &CanonicalSubstrateAlreadyReadyFacts::route_song_empty,
+        &CanonicalSubstrateAlreadyReadyFacts::custom_ownership_absent,
+        &CanonicalSubstrateAlreadyReadyFacts::list_cleanup_clear,
+        &CanonicalSubstrateAlreadyReadyFacts::route_metadata_empty,
+        &CanonicalSubstrateAlreadyReadyFacts::journals_empty,
+        &CanonicalSubstrateAlreadyReadyFacts::unpublished_setup_absent,
+        &CanonicalSubstrateAlreadyReadyFacts::frozen_profile_absent,
+        &CanonicalSubstrateAlreadyReadyFacts::native_route_unowned,
+        &CanonicalSubstrateAlreadyReadyFacts::cleanup_only_clear,
+        &CanonicalSubstrateAlreadyReadyFacts::quarantine_clear,
+        &CanonicalSubstrateAlreadyReadyFacts::authority_qualified,
+        &CanonicalSubstrateAlreadyReadyFacts::authority_generation_exact,
+        &CanonicalSubstrateAlreadyReadyFacts::reset_observation_exact,
+        &CanonicalSubstrateAlreadyReadyFacts::rearm_epoch_exact,
+        &CanonicalSubstrateAlreadyReadyFacts::activation_route_predecessor_exact,
+    };
+    for (const auto field : already_ready_fields) already_ready.*field = true;
+    require(classify_canonical_substrate_list_return_reset(true, already_ready)
+            == CanonicalSubstrateListReturnResetDisposition::Performed,
+        "proof-4/canonical-5 reset was not classified as the real reset edge");
+    const auto ready_authority = reset_state.authority;
+    const uint64_t ready_observation =
+        ready_authority.reset_observation_generation;
+    const uint64_t ready_epoch = reset_state.rearm_epoch;
+    for (int callback = 0; callback < 2; ++callback) {
+        require(classify_canonical_substrate_list_return_reset(
+                    false, already_ready)
+                    == CanonicalSubstrateListReturnResetDisposition::AlreadyReady
+                && canonical_substrate_reset_lineage_authority_matches(
+                    ready_authority, reset_state.authority)
+                && reset_state.authority.reset_observation_generation
+                    == ready_observation
+                && reset_state.rearm_epoch == ready_epoch,
+            "exact zero/Idle callback mutated qualified reset readiness");
+    }
+    for (const auto field : already_ready_fields) {
+        auto drift = already_ready;
+        drift.*field = false;
+        require(classify_canonical_substrate_list_return_reset(false, drift)
+                == CanonicalSubstrateListReturnResetDisposition::Rejected,
+            "drifted zero/Idle readiness fact entered the idempotent path");
+    }
 
     const CanonicalSubstrateResetLineageAuthority empty_reset{};
     require(canonical_substrate_reset_lineage_authority_empty(empty_reset)
