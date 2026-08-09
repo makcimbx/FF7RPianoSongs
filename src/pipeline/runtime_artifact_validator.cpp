@@ -54,9 +54,10 @@ bool runtime_artifacts_match(
     if (!read_bounded_file(song.cache_sidecar_path, kMaxMabfBytes, &mabf)) return fail("mabf_read");
     report("mabf_validation_started");
     MabfArtifactMetadata actual;
-    const Status validation = song.config.metronome_enabled
-        ? validate_adaptive_metronome_mabf(mabf, song.audio.source_frame_count, &actual)
-        : validate_clean_mabf(mabf, song.audio.source_frame_count, &actual);
+    const MabfResolvedModePolicy policy{
+        song.audio_sources.resolved_authored_indices, song.config.metronome_enabled};
+    const Status validation = validate_resolved_mabf(
+        mabf, song.audio.source_frame_count, policy, &actual);
     if (!validation.ok()) return fail("mabf_validation:" + validation.message);
     report("mabf_hash_started");
     actual.digest = fnv1a64_append(kFnv1a64OffsetBasis, mabf.data(), mabf.size());

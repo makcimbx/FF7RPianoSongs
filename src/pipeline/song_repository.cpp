@@ -48,7 +48,6 @@ constexpr std::uint32_t kRuntimeCacheFormat = 13;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
 constexpr std::uint32_t kMaxRuntimeCacheProfiles = 32;
-constexpr const char* kMetronomeModeMapping = "metronome_modes=mode0_guide,mode1_clean,mode2_clean";
 
 std::string path_string(const std::filesystem::path& path);
 using cache_artifact_writer::clear_last_error;
@@ -124,28 +123,53 @@ std::string path_utf8_string(const std::filesystem::path& path) {
     return std::string(reinterpret_cast<const char*>(utf8.data()), utf8.size());
 }
 
-Status find_audio_source(const std::filesystem::path& directory, std::filesystem::path* out_path) {
-    if (!out_path) {
-        return Status::error(StatusCode::InvalidArgument, "out_path must not be null");
+std::string ascii_lower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](const char c) {
+        return c >= 'A' && c <= 'Z' ? static_cast<char>(c + ('a' - 'A')) : c;
+    });
+    return value;
+}
+
+Status find_audio_sources(const std::filesystem::path& directory, ResolvedAudioSources* out_sources) {
+    if (!out_sources) {
+        return Status::error(StatusCode::InvalidArgument, "out_sources must not be null");
     }
-    constexpr std::array<std::string_view, 3> kAudioNames{"song.wav", "song.mp3", "song.flac"};
-    std::vector<std::filesystem::path> found;
-    for (const std::string_view name : kAudioNames) {
-        const std::filesystem::path candidate = directory / name;
-        if (std::filesystem::is_regular_file(candidate)) {
-            found.push_back(candidate);
+    ResolvedAudioSources sources;
+    std::error_code ec;
+    for (std::filesystem::directory_iterator it(directory, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code type_error;
+        if (!it->is_regular_file(type_error) || type_error) continue;
+        const std::string filename = ascii_lower(path_utf8_string(it->path().filename()));
+        std::size_t role = 3u;
+        if (filename == "song.wav" || filename == "song.mp3" || filename == "song.flac") role = 0u;
+        else if (filename == "song.mode1.wav" || filename == "song.mode1.mp3" || filename == "song.mode1.flac") role = 1u;
+        else if (filename == "song.mode2.wav" || filename == "song.mode2.mp3" || filename == "song.mode2.flac") role = 2u;
+        else if (filename == "song.mode0.wav" || filename == "song.mode0.mp3" || filename == "song.mode0.flac") {
+            return Status::error(StatusCode::InvalidAudio,
+                "song.mode0.* is not supported; Mode0 always uses the required base source: " + path_string(directory));
         }
+        if (role == 3u) continue;
+        if (sources.authored[role].present) {
+            return Status::error(StatusCode::InvalidAudio,
+                "song directory contains multiple supported files for one audio role: " + path_string(directory));
+        }
+        sources.authored[role].present = true;
+        sources.authored[role].path = path_string(it->path());
+        sources.authored[role].filename = filename;
     }
-    if (found.empty()) {
+    if (ec) {
+        return Status::error(StatusCode::IoError,
+            "failed to enumerate song audio sources: " + path_string(directory) + ": " + ec.message());
+    }
+    if (!sources.authored[0].present) {
         return Status::error(StatusCode::NotFound,
-            "song directory must contain exactly one of song.wav, song.mp3, or song.flac: " + path_string(directory));
-    }
-    if (found.size() != 1) {
-        return Status::error(StatusCode::InvalidAudio,
-            "song directory contains multiple audio sources; keep exactly one of song.wav, song.mp3, or song.flac: " +
+            "song directory must contain exactly one required base source song.wav, song.mp3, or song.flac: " +
             path_string(directory));
     }
-    *out_path = std::move(found.front());
+    sources.resolved_authored_indices = {0u,
+        static_cast<std::uint8_t>(sources.authored[1].present ? 1u : 0u),
+        static_cast<std::uint8_t>(sources.authored[2].present ? 2u : 0u)};
+    *out_sources = std::move(sources);
     return Status::ok_status();
 }
 
@@ -546,6 +570,7 @@ Status write_cache_manifest(const LoadedSong& song, const SongConfig& source_con
 Status build_audio_cache(
     LoadedSong* song,
     const SongConfig& source_config,
+    const std::array<std::reference_wrapper<const WavAudio>, 3>& resolved_modes,
     const WavAudio* metronome_mode0_audio,
     const SongLoadTrace& trace) {
     const auto report = [&](const char* stage) {
@@ -555,8 +580,9 @@ Status build_audio_cache(
         return Status::error(StatusCode::InvalidArgument, "song must not be null");
     }
     try {
-        MabfBuildResult mabf = build_audio_mabf(
-            song->audio, metronome_mode0_audio, song->config.metronome_enabled, trace);
+        AudioMabfInputs inputs{resolved_modes, std::nullopt};
+        if (metronome_mode0_audio) inputs.mode0_guide = std::cref(*metronome_mode0_audio);
+        MabfBuildResult mabf = build_audio_mabf(inputs, trace);
         if (!mabf.status.ok()) {
             return mabf.status;
         }
@@ -565,9 +591,10 @@ Status build_audio_cache(
         }
         report("mabf_release_validation_started");
         MabfArtifactMetadata metadata;
-        Status status = song->config.metronome_enabled
-            ? validate_adaptive_metronome_mabf(mabf.bytes, song->audio.source_frame_count, &metadata)
-            : validate_clean_mabf(mabf.bytes, song->audio.source_frame_count, &metadata);
+        const MabfResolvedModePolicy policy{
+            song->audio_sources.resolved_authored_indices, song->config.metronome_enabled};
+        Status status = validate_resolved_mabf(
+            mabf.bytes, song->audio.source_frame_count, policy, &metadata);
         if (!status.ok()) return status;
         report("mabf_hash_started");
         metadata.digest = fnv1a64_append(kFnv1a64OffsetBasis, mabf.bytes.data(), mabf.bytes.size());
@@ -668,17 +695,16 @@ Status load_song_directory(
     song.cache_sidecar_path = cache_sidecar_mabf_path(song.directory);
 
     const std::string json_path = path_string(directory / "song.json");
-    std::filesystem::path audio_path;
     std::filesystem::path midi_path;
 
-    Status status = find_audio_source(directory, &audio_path);
+    Status status = find_audio_sources(directory, &song.audio_sources);
     if (!status.ok()) {
         song.status = status;
         write_last_error(song.directory, status);
         *out_song = std::move(song);
         return status;
     }
-    song.audio_source_path = path_string(audio_path);
+    song.audio_source_path = song.audio_sources.authored[0].path;
 
     if (!std::filesystem::is_regular_file(directory / "song.json")) {
         status = create_default_song_json(directory);
@@ -723,13 +749,24 @@ Status load_song_directory(
 
     std::vector<std::string> cache_files{json_path};
     if (song.chart_from_midi) cache_files.push_back(song.midi_source_path);
-    cache_files.push_back(song.audio_source_path);
+    for (const auto& source : song.audio_sources.authored) {
+        if (source.present) cache_files.push_back(source.path);
+    }
     std::vector<std::string> cache_identity{
         kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
-        song.chart_policy_identity};
-    if (song.config.metronome_enabled) {
-        cache_identity.emplace_back(kMetronomeModeMapping);
+        song.chart_policy_identity,
+        "audio_processing=gain_envelope_then_loudness_or_limiter:v1",
+        song.config.metronome_enabled
+            ? "metronome=resolved_mode0_only_before_hca"
+            : "metronome=disabled"};
+    for (std::size_t role = 0; role < song.audio_sources.authored.size(); ++role) {
+        const auto& source = song.audio_sources.authored[role];
+        cache_identity.push_back("authored_role=" + std::to_string(role) + ":" +
+            (source.present ? source.filename : "absent"));
     }
+    cache_identity.push_back("resolved_modes=base," +
+        std::string(song.audio_sources.resolved_authored_indices[1] == 0u ? "base_fallback" : "mode1") + "," +
+        std::string(song.audio_sources.resolved_authored_indices[2] == 0u ? "base_fallback" : "mode2"));
     status = fnv1a64_files_and_strings(cache_files, cache_identity, &song.cache_key);
     if (!status.ok()) {
         song.status = status;
@@ -779,6 +816,24 @@ Status load_song_directory(
         return status;
     }
     report("audio_decode_ready");
+
+    std::array<WavAudio, 2> override_audio;
+    for (std::size_t role = 1; role < song.audio_sources.authored.size(); ++role) {
+        if (!song.audio_sources.authored[role].present) continue;
+        report(role == 1u ? "mode1_audio_decode_started" : "mode2_audio_decode_started");
+        status = read_audio_file(song.audio_sources.authored[role].path, &override_audio[role - 1u]);
+        if (status.ok() && override_audio[role - 1u].source_frame_count != song.audio.source_frame_count) {
+            status = Status::error(StatusCode::InvalidAudio,
+                "Mode" + std::to_string(role) + " override logical frame count does not match the required base source");
+        }
+        if (!status.ok()) {
+            song.status = status;
+            write_last_error(song.directory, status);
+            *out_song = std::move(song);
+            return status;
+        }
+        report(role == 1u ? "mode1_audio_decode_ready" : "mode2_audio_decode_ready");
+    }
 
     advance(SongLoadProgressStage::GeneratingChart);
     if (song.chart_from_midi) {
@@ -1028,9 +1083,33 @@ Status load_song_directory(
     song.gain_envelope_min_gain_db = loudness.gain_envelope_min_gain_db;
     report("clean_audio_processing_ready");
 
+    for (std::size_t role = 1; role < song.audio_sources.authored.size(); ++role) {
+        if (!song.audio_sources.authored[role].present) continue;
+        AudioLoudnessStats override_loudness;
+        report(role == 1u ? "mode1_audio_processing_started" : "mode2_audio_processing_started");
+        status = normalize_audio_loudness(
+            &override_audio[role - 1u], song.config.gain_envelope,
+            song.config.loudness_normalization, song.config.loudness_target_lufs,
+            song.config.loudness_peak_ceiling_dbfs, &override_loudness);
+        if (!status.ok()) {
+            song.status = status;
+            write_last_error(song.directory, status);
+            *out_song = std::move(song);
+            return status;
+        }
+        report(role == 1u ? "mode1_audio_processing_ready" : "mode2_audio_processing_ready");
+    }
+
+    const std::array<std::reference_wrapper<const WavAudio>, 3> resolved_modes{
+        std::cref(song.audio),
+        song.audio_sources.resolved_authored_indices[1] == 0u
+            ? std::cref(song.audio) : std::cref(override_audio[0]),
+        song.audio_sources.resolved_authored_indices[2] == 0u
+            ? std::cref(song.audio) : std::cref(override_audio[1])};
+
     song.status = Status::ok_status();
     song.hca_status = build_audio_cache(
-        &song, source_config, metronome_mode0_audio_ptr, trace);
+        &song, source_config, resolved_modes, metronome_mode0_audio_ptr, trace);
     if (!song.hca_status.ok()) {
         song.status = song.hca_status;
         write_last_error(song.directory, song.hca_status);

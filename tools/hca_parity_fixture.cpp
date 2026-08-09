@@ -25,8 +25,10 @@ int main(int argc, char** argv) {
             return 3;
         }
     }
-    const auto built = ff7rp::pipeline::build_audio_mabf(
-        audio, argc == 4 ? &mode0 : nullptr, argc == 4);
+    ff7rp::pipeline::AudioMabfInputs inputs{
+        {std::cref(audio), std::cref(audio), std::cref(audio)}, std::nullopt};
+    if (argc == 4) inputs.mode0_guide = std::cref(mode0);
+    const auto built = ff7rp::pipeline::build_audio_mabf(inputs);
     if (!built.status.ok() || !built.release_valid) {
         std::cerr << "MABF generation failed: " << built.status.message << '\n';
         return 4;

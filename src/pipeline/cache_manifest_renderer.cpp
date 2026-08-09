@@ -360,11 +360,7 @@ Status render_cache_manifest(const LoadedSong& song, const SongConfig& source_co
     }
     out << "\n";
     out << "metronome_enabled=" << (song.config.metronome_enabled ? 1 : 0) << "\n";
-    out << "metronome_adaptive_mode_mapping="
-        << (song.config.metronome_enabled
-                ? "mode0_guide,mode1_clean,mode2_clean"
-                : "mode0_clean,mode1_clean,mode2_clean")
-        << "\n";
+    out << "metronome_mode_mapping=mode0_only\n";
     out << "metronome_audio_baked=" << (song.config.metronome_enabled ? 1 : 0) << "\n";
     out << "metronome_level=" << song.config.metronome_level << "\n";
     out << "metronome_beat_zero_offset_seconds=" << song.config.metronome_beat_zero_offset_seconds << "\n";
@@ -378,11 +374,21 @@ Status render_cache_manifest(const LoadedSong& song, const SongConfig& source_co
     out << "hca_frames=" << song.mabf_metadata.hca_frame_count << "\n";
     out << "hca_inserted_samples=" << song.mabf_metadata.inserted_samples << "\n";
     out << "hca_appended_samples=" << song.mabf_metadata.appended_samples << "\n";
+    constexpr std::array<const char*, 3> kRoleNames{"base", "mode1", "mode2"};
+    for (std::size_t mode = 0; mode < 3u; ++mode) {
+        const std::size_t role = song.audio_sources.resolved_authored_indices[mode];
+        out << "mode" << mode << "_resolved_role=" << kRoleNames[role] << "\n";
+        out << "mode" << mode << "_resolved_filename=" << song.audio_sources.authored[role].filename << "\n";
+        out << "mode" << mode << "_direct_base_fallback=" << (mode != 0u && role == 0u ? 1 : 0) << "\n";
+        out << "mode" << mode << "_logical_pcm_frames=" << song.audio.source_frame_count << "\n";
+        out << "mode" << mode << "_hca_frames=" << song.mabf_metadata.hca_frame_count << "\n";
+        out << "mode" << mode << "_metronome=" << (mode == 0u && song.config.metronome_enabled ? 1 : 0) << "\n";
+    }
     out << "loudness_gain_applied=" << (song.loudness_gain_applied ? 1 : 0) << "\n";
     out << "loudness_limiter_engaged=" << (song.loudness_limiter_engaged ? 1 : 0) << "\n";
     out << "source_seconds=" << song.audio.source_duration_seconds() << "\n";
     out << "sidecar=" << std::filesystem::path(song.cache_sidecar_path).generic_string() << "\n";
-    out << "audio_source=" << std::filesystem::path(song.audio_source_path).filename().string() << "\n";
+    out << "audio_source=" << song.audio_sources.authored[0].filename << "\n";
     out << "chart_source=" << (song.chart_from_midi ? "midi" : "json") << "\n";
     out << "midi_source=";
     if (song.chart_from_midi) out << std::filesystem::path(song.midi_source_path).filename().string();

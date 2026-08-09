@@ -33,7 +33,9 @@ End/Binaries/Win64/
   FF7RPianoSongs.log              (generated)
   Music/<Song Name>/
     song.json
-    song.wav | song.mp3 | song.flac
+    song.wav | song.mp3 | song.flac                 (required Mode0/base)
+    song.mode1.wav | .mp3 | .flac                  (optional Mode1 override)
+    song.mode2.wav | .mp3 | .flac                  (optional Mode2 override)
     song.mid | song.midi          (optional)
 ```
 
@@ -75,7 +77,7 @@ To rebuild one song, exit the game and delete only that song's `.cache/` directo
 **A song is missing or changed after an edit**
 
 - Check the fixed names and limits in [Song Format](docs/SongFormat.md).
-- Use exactly one supported audio source and valid JSON.
+- Keep exactly one required `song.*` base source and at most one supported override for each optional `song.mode1.*` and `song.mode2.*` role, plus valid JSON.
 - Delete that song's `.cache/` and retry.
 - Temporarily set `General.LogLevel=debug`, reproduce once, then restore `info`.
 

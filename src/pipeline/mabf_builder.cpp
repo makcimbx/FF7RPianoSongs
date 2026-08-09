@@ -171,16 +171,10 @@ MabfBuildResult build_mabf_from_mode_hca(const MabfModeHcaPayloads& mode_hca) {
 
 namespace {
 
-enum class MabfModePolicy {
-    Clean,
-    Adaptive,
-    Any,
-};
-
 Status validate_release_mabf(
     const std::vector<std::uint8_t>& bytes,
     const std::size_t expected_logical_source_frames,
-    const MabfModePolicy mode_policy,
+    const MabfResolvedModePolicy* mode_policy,
     MabfArtifactMetadata* out_metadata) {
     if (!out_metadata) {
         return Status::error(StatusCode::InvalidArgument, "MABF metadata output must not be null");
@@ -311,14 +305,24 @@ Status validate_release_mabf(
             std::equal(bytes.begin() + offsets[left], bytes.begin() + offsets[left] + hca_sizes[left],
                 bytes.begin() + offsets[right]);
     };
-    if (mode_policy == MabfModePolicy::Adaptive) {
-        if (modes_equal(0, 1) || !modes_equal(1, 2)) {
-            return Status::error(StatusCode::MabfNotReleaseValid,
-                "enabled metronome requires a distinct Mode0 guide and byte-identical clean Mode1/Mode2 payloads");
+    if (mode_policy) {
+        if (mode_policy->resolved_authored_indices[0] != 0u ||
+            (mode_policy->resolved_authored_indices[1] != 0u &&
+                mode_policy->resolved_authored_indices[1] != 1u) ||
+            (mode_policy->resolved_authored_indices[2] != 0u &&
+                mode_policy->resolved_authored_indices[2] != 2u)) {
+            return Status::error(StatusCode::InvalidArgument, "resolved MABF mode policy is invalid");
         }
-    } else if (mode_policy == MabfModePolicy::Clean && (!modes_equal(0, 1) || !modes_equal(0, 2))) {
-        return Status::error(StatusCode::MabfNotReleaseValid,
-            "disabled metronome requires byte-identical clean Mode0/Mode1/Mode2 payloads");
+        for (std::size_t left = 0; left < 3u; ++left) {
+            for (std::size_t right = left + 1u; right < 3u; ++right) {
+                const bool guide_pair = mode_policy->mode0_guide && left == 0u;
+                if (!guide_pair && mode_policy->resolved_authored_indices[left] ==
+                        mode_policy->resolved_authored_indices[right] && !modes_equal(left, right)) {
+                    return Status::error(StatusCode::MabfNotReleaseValid,
+                        "MABF modes resolving to the same authored source must have byte-identical HCA payloads");
+                }
+            }
+        }
     }
     if (read_u32_le(bytes, kHcaPayloadSizeField) + kMabfHcaHeaderSize != first_hca_size) {
         return Status::error(StatusCode::MabfNotReleaseValid, "MABF primary HCA payload size is invalid");
@@ -329,24 +333,18 @@ Status validate_release_mabf(
 
 } // namespace
 
-Status validate_clean_mabf(
+Status validate_resolved_mabf(
     const std::vector<std::uint8_t>& bytes,
     const std::size_t expected_logical_source_frames,
+    const MabfResolvedModePolicy& policy,
     MabfArtifactMetadata* out_metadata) {
-    return validate_release_mabf(bytes, expected_logical_source_frames, MabfModePolicy::Clean, out_metadata);
-}
-
-Status validate_adaptive_metronome_mabf(
-    const std::vector<std::uint8_t>& bytes,
-    const std::size_t expected_logical_source_frames,
-    MabfArtifactMetadata* out_metadata) {
-    return validate_release_mabf(bytes, expected_logical_source_frames, MabfModePolicy::Adaptive, out_metadata);
+    return validate_release_mabf(bytes, expected_logical_source_frames, &policy, out_metadata);
 }
 
 Status validate_structural_mabf(
     const std::vector<std::uint8_t>& bytes,
     MabfArtifactMetadata* out_metadata) {
-    return validate_release_mabf(bytes, 0, MabfModePolicy::Any, out_metadata);
+    return validate_release_mabf(bytes, 0, nullptr, out_metadata);
 }
 
 } // namespace ff7rp::pipeline

@@ -23,7 +23,7 @@ Generated level is not a simple function of row count, actions per minute, pitch
 
 ## Timing And Audio
 
-Generated charts preserve source onset identity. MIDI offset, alignment, and minimum lead-in participate in chart/audio alignment and cache identity. Optional metronome guide synthesis changes only MABF `Mode0`; `Mode1` and `Mode2` remain byte-identical clean processed source audio. It does not change chart timestamps, selected difficulty, or source duration.
+Generated charts preserve source onset identity. MIDI offset, alignment, and minimum lead-in participate in chart/audio alignment and cache identity. The required base audio owns chart timing and descriptor duration. Optional metronome guide synthesis changes only resolved MABF `Mode0`; `Mode1` and `Mode2` remain their clean resolved sources. It does not change chart timestamps, selected difficulty, or source duration.
 
 ## Author Expectations
 

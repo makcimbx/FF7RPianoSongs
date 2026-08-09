@@ -41,15 +41,16 @@ struct MabfBuildResult {
 
 using MabfModeHcaPayloads = std::array<const std::vector<std::uint8_t>*, 3>;
 
-MabfBuildResult build_mabf_from_mode_hca(const MabfModeHcaPayloads& mode_hca);
-Status validate_clean_mabf(
-    const std::vector<std::uint8_t>& bytes,
-    std::size_t expected_logical_source_frames,
-    MabfArtifactMetadata* out_metadata);
+struct MabfResolvedModePolicy {
+    std::array<std::uint8_t, 3> resolved_authored_indices{0, 0, 0};
+    bool mode0_guide = false;
+};
 
-Status validate_adaptive_metronome_mabf(
+MabfBuildResult build_mabf_from_mode_hca(const MabfModeHcaPayloads& mode_hca);
+Status validate_resolved_mabf(
     const std::vector<std::uint8_t>& bytes,
     std::size_t expected_logical_source_frames,
+    const MabfResolvedModePolicy& policy,
     MabfArtifactMetadata* out_metadata);
 
 // Validates the native three-mode container without assuming any mode payloads are equal.

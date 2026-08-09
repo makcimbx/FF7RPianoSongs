@@ -61,9 +61,8 @@ ArtifactData make_artifact(const bool adaptive) {
     ArtifactData artifact;
     artifact.mabf = built.bytes;
     artifact.adaptive = adaptive;
-    const auto status = adaptive
-        ? ff7rp::pipeline::validate_adaptive_metronome_mabf(artifact.mabf, 1, &artifact.metadata)
-        : ff7rp::pipeline::validate_clean_mabf(artifact.mabf, 1, &artifact.metadata);
+    const auto status = ff7rp::pipeline::validate_resolved_mabf(
+        artifact.mabf, 1, {{0, 0, 0}, adaptive}, &artifact.metadata);
     if (!status.ok()) throw std::runtime_error("failed to validate MABF fixture: " + status.message);
     artifact.metadata.digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, artifact.mabf.data(), artifact.mabf.size());
@@ -88,6 +87,9 @@ Fixture make_fixture(
     fixture.song.audio.source_frame_count = 1;
     fixture.song.mabf_metadata = artifact.metadata;
     fixture.song.audio_source_path = "audio.wav";
+    fixture.song.audio_sources.authored[0].present = true;
+    fixture.song.audio_sources.authored[0].path = "audio.wav";
+    fixture.song.audio_sources.authored[0].filename = "song.wav";
     fixture.source_config = fixture.song.config;
     fixture.source_config.title = "Source\ncontrol:\x02:end";
     const auto render = ff7rp::pipeline::render_cache_manifest(
@@ -230,14 +232,14 @@ int main() {
         wrong_selection.song.config.metronome_enabled = false;
         const ValidationResult wrong_selection_result = validate(wrong_selection);
         if (!expect(wrong_selection_result, false,
-                "mabf_validation:disabled metronome requires byte-identical clean Mode0/Mode1/Mode2 payloads",
+                "mabf_validation:MABF modes resolving to the same authored source must have byte-identical HCA payloads",
                 {"mabf_read_started", "mabf_validation_started"}, "clean/adaptive validator selection")) {
             return 7;
         }
 
         Fixture legacy_disabled_manifest = make_fixture(root, "legacy-disabled-manifest", clean);
         const std::string current_mapping =
-            "metronome_adaptive_mode_mapping=mode0_clean,mode1_clean,mode2_clean";
+            "metronome_mode_mapping=mode0_only";
         const std::string legacy_mapping =
             "metronome_adaptive_mode_mapping=mode0_strong_guide,mode1_weak_guide,mode2_clean";
         const std::size_t mapping_offset = legacy_disabled_manifest.manifest.find(current_mapping);
@@ -312,8 +314,8 @@ int main() {
 
         const std::vector<std::pair<std::string, std::string>> parent_mismatch_cases{
             {"first-line",
-                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v39:"
-                "expected=version=ff7rpianosongs.pipeline.v39"},
+                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v40:"
+                "expected=version=ff7rpianosongs.pipeline.v40"},
             {"line-boundary",
                 "manifest_bytes:offset=36:actual=xache_key=123456789abcdef0:"
                 "expected=cache_key=123456789abcdef0"},

@@ -9,13 +9,35 @@ Create one directory per song:
 ```text
 End/Binaries/Win64/Music/<Song Name>/
   song.json                           (authored or generated on first discovery)
-  song.wav | song.mp3 | song.flac
+  song.wav | song.mp3 | song.flac    (exactly one required base/Mode0 source)
+  song.mode1.wav | .mp3 | .flac      (optional Mode1 override)
+  song.mode2.wav | .mp3 | .flac      (optional Mode2 override)
   song.mid | song.midi              (optional)
 ```
 
-Use exactly one supported audio file. File names are fixed and case-insensitive on the supported Windows filesystem. `.cache/` is generated beside the inputs; do not author or distribute it as source material.
+File names and roles are fixed and case-insensitive. Provide exactly one base
+source and at most one supported file for each optional override role. Different
+roles may use different WAV, MP3, or FLAC formats. Multiple extensions for one
+role are ambiguous and reject the folder. `song.mode0.*` is not supported because
+the required base already owns Mode0. `.cache/` is generated beside the inputs;
+do not author or distribute it as source material.
 
-Every published song has a `song.json`. After discovery confirms exactly one supported audio file, a missing `song.json` is atomically generated with schema v2, the folder name as the title, and an explicitly enabled metronome at level `0.12`. The generated file becomes normal authored input and may be edited; discovery never overwrites an existing file. A starter file still needs MIDI-backed timing/chart data or later authored timing and notes before the song can pass normal validation. Manually authored JSON that omits `metronome.enabled` retains the ordinary default of `false`.
+Every published song has a `song.json`. After discovery confirms one unambiguous
+required base and validates every optional override role, a missing `song.json`
+is atomically generated with schema v2, the folder name as the title, and an
+explicitly enabled metronome at level `0.12`. Invalid optional roles prevent
+generation. The generated file becomes normal authored input and may be edited;
+discovery never overwrites an existing file. A starter file still needs
+MIDI-backed timing/chart data or later authored timing and notes before the song
+can pass normal validation. Manually authored JSON that omits
+`metronome.enabled` retains the ordinary default of `false`.
+
+Mode0 always resolves to the base. Mode1 and Mode2 independently resolve to their
+own override when present and otherwise directly to the base; fallback never
+cascades through another override. The base owns chart timing and descriptor
+duration. Every override is decoded/resampled through the same 48 kHz stereo
+path and must have exactly the base logical frame count. A mismatch rejects the
+song; the pipeline never trims, pads, stretches, loops, or retimes an override.
 
 A song may provide explicit `notes`, a MIDI file, or both; explicit notes remain authoritative and are not reduced by the MIDI generator. Malformed existing JSON, conflicting audio inputs, and other invalid or ambiguous folders fail closed and are omitted from the game list.
 
@@ -98,7 +120,11 @@ Generated levels are independent profiles, can have sparse labels, and may be om
 - `level` is finite in `0..1` and must be greater than zero when enabled.
 - `beat_zero_offset_seconds` is finite in `-30..30`.
 
-When enabled, the click is mixed only into generated MABF `Mode0`; `Mode1` and `Mode2` contain the same clean processed source audio. When disabled, all three modes contain clean audio. Metronome processing does not alter chart timestamps or source-audio duration. Cache manifests record the effective mode mapping, so pre-correction manifests are rejected and rebuilt, including disabled caches whose numeric cache key remains unchanged.
+When enabled, the click is mixed only into resolved MABF `Mode0`; Mode1 and Mode2
+never receive it. When disabled, all modes contain their clean resolved sources.
+Metronome processing does not alter chart timestamps or source-audio duration.
+Cache manifests record the effective mapping and placement, so older manifests
+are rejected and rebuilt.
 
 ## Gain And Loudness
 
@@ -111,12 +137,12 @@ When enabled, the click is mixed only into generated MABF `Mode0`; `Mode1` and `
 ]
 ```
 
-Each point permits only `time_seconds` and `gain_db`. Times must be finite, non-negative, and strictly increasing; gain must be finite in `-12..12` dB. Loudness normalization and limiting are cache-generation operations; changing any related field invalidates derived cache data.
+Each point permits only `time_seconds` and `gain_db`. Times must be finite, non-negative, and strictly increasing; gain must be finite in `-12..12` dB. Gain, loudness normalization, and limiting are applied independently to each distinct authored source. A fallback reuses processed base semantics rather than normalizing the base again. With `loudness_normalization=false`, authored relative levels are preserved subject to the configured gain envelope and existing limiter policy. Changing any related field invalidates derived cache data.
 
 ## Input Limits
 
 - Supported source duration is at most 10 minutes after decode at 48 kHz.
-- A source audio file may be at most 512 MiB.
+- Each source audio file may be at most 512 MiB.
 - A generated MABF payload may be at most 64 MiB.
 - A playable chart may contain at most 512 rows.
 

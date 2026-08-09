@@ -9,6 +9,27 @@
 
 namespace ff7rp::pipeline {
 
+enum class AudioSourceRole : std::uint8_t {
+    Base = 0,
+    Mode1 = 1,
+    Mode2 = 2,
+};
+
+struct AuthoredAudioSource {
+    AudioSourceRole role = AudioSourceRole::Base;
+    std::string path;
+    std::string filename;
+    bool present = false;
+};
+
+struct ResolvedAudioSources {
+    std::array<AuthoredAudioSource, 3> authored{{
+        {AudioSourceRole::Base}, {AudioSourceRole::Mode1}, {AudioSourceRole::Mode2}}};
+    // Mode0 always resolves to Base. Mode1/Mode2 contain their authored role
+    // index when present and zero for direct Base fallback.
+    std::array<std::uint8_t, 3> resolved_authored_indices{0, 0, 0};
+};
+
 enum class StatusCode {
     Ok,
     NotFound,
@@ -222,6 +243,7 @@ struct LoadedSong {
     std::string id;
     std::string directory;
     std::string audio_source_path;
+    ResolvedAudioSources audio_sources;
     std::string midi_source_path;
     bool chart_from_midi = false;
     bool loaded_from_runtime_cache = false;

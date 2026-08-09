@@ -97,12 +97,12 @@ int golden_fail(const char* message, const MabfBuildResult& result) {
 }
 
 std::vector<std::string> clean_trace() {
-    return {"hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready", "mabf_build_started"};
+    return {"hca_mode0_pcm_started", "hca_mode0_encode_started", "hca_mode0_ready", "mabf_build_started"};
 }
 
 std::vector<std::string> adaptive_trace() {
-    return {"hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready",
-        "hca_mode0_pcm_started", "hca_mode0_encode_started", "hca_mode0_ready", "mabf_build_started"};
+    return {"hca_mode0_pcm_started", "hca_mode0_encode_started", "hca_mode0_ready",
+        "hca_mode1_pcm_started", "hca_mode1_encode_started", "hca_mode1_ready", "mabf_build_started"};
 }
 
 } // namespace
@@ -116,8 +116,10 @@ int main() {
     const WavAudio weak_before = weak;
 
     std::vector<std::string> trace;
+    ff7rp::pipeline::AudioMabfInputs inputs{
+        {std::cref(clean), std::cref(clean), std::cref(clean)}, std::nullopt};
     MabfBuildResult result = ff7rp::pipeline::build_audio_mabf(
-        clean, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
+        inputs, [&](const char* stage) { trace.emplace_back(stage); });
     if (!result.status.ok() || !result.release_valid || result.used_placeholder_scaffold ||
         result.validation_note != kReleaseValidationNote) return fail("clean build flags changed");
     if (trace != clean_trace()) return fail("clean trace changed");
@@ -126,12 +128,14 @@ int main() {
         mode_digests(result.bytes) != kCleanModeDigests || !mode_hca_equal(result.bytes, 0u, 1u) ||
         !mode_hca_equal(result.bytes, 0u, 2u)) return golden_fail("clean parent byte golden changed", result);
     MabfArtifactMetadata metadata;
-    if (!ff7rp::pipeline::validate_clean_mabf(result.bytes, kFixtureFrames, &metadata).ok() ||
+    if (!ff7rp::pipeline::validate_resolved_mabf(
+            result.bytes, kFixtureFrames, {{0, 0, 0}, false}, &metadata).ok() ||
         !metadata_matches(metadata)) return fail("clean validator metadata changed");
 
     trace.clear();
+    inputs.mode0_guide = std::cref(strong);
     result = ff7rp::pipeline::build_audio_mabf(
-        clean, &strong, true, [&](const char* stage) { trace.emplace_back(stage); });
+        inputs, [&](const char* stage) { trace.emplace_back(stage); });
     if (!result.status.ok() || !result.release_valid || result.used_placeholder_scaffold ||
         result.validation_note != kReleaseValidationNote) return fail("adaptive build flags changed");
     if (trace != adaptive_trace()) return fail("adaptive trace changed");
@@ -144,37 +148,49 @@ int main() {
         return golden_fail("adaptive parent byte golden or mode order changed", result);
     }
     metadata = {};
-    if (!ff7rp::pipeline::validate_adaptive_metronome_mabf(result.bytes, kFixtureFrames, &metadata).ok() ||
+    if (!ff7rp::pipeline::validate_resolved_mabf(
+            result.bytes, kFixtureFrames, {{0, 0, 0}, true}, &metadata).ok() ||
         !metadata_matches(metadata)) return fail("adaptive validator metadata changed");
 
-    const std::vector<std::string> ready_trace{
-        "hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready"};
+    inputs = {{std::cref(clean), std::cref(strong), std::cref(weak)}, std::nullopt};
     trace.clear();
-    result = ff7rp::pipeline::build_audio_mabf(
-        clean, nullptr, true, [&](const char* stage) { trace.emplace_back(stage); });
-    if (result.status.code != StatusCode::MabfNotReleaseValid ||
-        result.status.message != "metronome Mode0 audio is missing or has mismatched duration" ||
-        !result.bytes.empty() || trace != ready_trace) return fail("missing-guide failure changed");
+    result = ff7rp::pipeline::build_audio_mabf(inputs);
+    if (!result.status.ok() || mode_hca_equal(result.bytes, 0, 1) ||
+        mode_hca_equal(result.bytes, 0, 2) || mode_hca_equal(result.bytes, 1, 2) ||
+        !ff7rp::pipeline::validate_resolved_mabf(
+            result.bytes, kFixtureFrames, {{0, 1, 2}, false}, &metadata).ok()) {
+        return fail("three distinct resolved modes were not preserved");
+    }
+    if (ff7rp::pipeline::validate_resolved_mabf(
+            result.bytes, kFixtureFrames, {{0, 2, 1}, false}, &metadata).code != StatusCode::InvalidArgument) {
+        return fail("invalid cross-role fallback policy was accepted");
+    }
+
+    inputs = {{std::cref(clean), std::cref(strong), std::cref(strong)}, std::nullopt};
+    result = ff7rp::pipeline::build_audio_mabf(inputs);
+    if (!result.status.ok() || !mode_hca_equal(result.bytes, 1, 2) ||
+        !ff7rp::pipeline::validate_resolved_mabf(
+            result.bytes, kFixtureFrames, {{0, 1, 2}, false}, &metadata).ok()) {
+        return fail("byte-identical distinct overrides were rejected");
+    }
 
     WavAudio mismatched = weak;
     mismatched.stereo_samples.resize(mismatched.stereo_samples.size() - 2u);
     const WavAudio mismatched_before = mismatched;
     trace.clear();
-    result = ff7rp::pipeline::build_audio_mabf(
-        clean, &mismatched, true, [&](const char* stage) { trace.emplace_back(stage); });
+    inputs = {{std::cref(clean), std::cref(mismatched), std::cref(clean)}, std::nullopt};
+    result = ff7rp::pipeline::build_audio_mabf(inputs, [&](const char* stage) { trace.emplace_back(stage); });
     if (result.status.code != StatusCode::MabfNotReleaseValid ||
-        result.status.message != "metronome Mode0 audio is missing or has mismatched duration" ||
-        !result.bytes.empty() || trace != ready_trace) return fail("mismatched-guide failure changed");
+        result.status.message != "resolved Mode1 audio has mismatched 48 kHz stereo frame geometry" ||
+        !result.bytes.empty() || !trace.empty()) return fail("mismatched resolved mode was not rejected early");
 
     const WavAudio zero;
     const WavAudio zero_before = zero;
     trace.clear();
-    result = ff7rp::pipeline::build_audio_mabf(
-        zero, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
-    const std::vector<std::string> zero_trace{"hca_clean_pcm_started", "hca_clean_encode_started"};
-    if (result.status.code != StatusCode::HcaUnavailable ||
-        result.status.message != "native HCA encoder requires non-empty 48 kHz stereo PCM16 at 256 kbps" ||
-        !result.bytes.empty() || trace != zero_trace) return fail("zero-frame HCA failure changed");
+    inputs = {{std::cref(zero), std::cref(zero), std::cref(zero)}, std::nullopt};
+    result = ff7rp::pipeline::build_audio_mabf(inputs, [&](const char* stage) { trace.emplace_back(stage); });
+    if (result.status.code != StatusCode::MabfNotReleaseValid ||
+        !result.bytes.empty() || !trace.empty()) return fail("zero-frame audio was not rejected before encoding");
 
     if (!audio_equal(clean, clean_before) || !audio_equal(strong, strong_before) ||
         !audio_equal(weak, weak_before) || !audio_equal(mismatched, mismatched_before) ||

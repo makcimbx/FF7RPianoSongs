@@ -1232,9 +1232,9 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
-    constexpr std::uint64_t kExpectedCacheKey = 0xcd7f7a21e9b6083dull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x9e6a66a7586f332full;
-    constexpr std::size_t kExpectedNormalizedManifestBytes = 4768u;
+    constexpr std::uint64_t kExpectedCacheKey = 0x5779dbce2e1865e8ull;
+    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x35cf322143d58479ull;
+    constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=8d6270bd79225857";
     if (generated.cache_key != kExpectedCacheKey ||
         normalized_manifest_digest != kExpectedNormalizedManifestDigest ||
@@ -1511,23 +1511,7 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
         enabled.metronome_last_beat_seconds < enabled.metronome_first_beat_seconds) {
         return fail("adaptive metronome fixture did not produce beat diagnostics");
     }
-    const std::vector<std::string> enabled_cache_files{
-        (enabled_directory / "song.json").generic_string(),
-        (enabled_directory / "song.wav").generic_string()};
-    std::uint64_t legacy_cache_key = 0;
-    std::uint64_t corrected_cache_key = 0;
-    status = ff7rp::pipeline::fnv1a64_files_and_strings(enabled_cache_files,
-        {ff7rp::pipeline::kPipelineCacheVersion, "chart=json", enabled.chart_policy_identity},
-        &legacy_cache_key);
-    if (status.ok()) {
-        status = ff7rp::pipeline::fnv1a64_files_and_strings(enabled_cache_files,
-            {ff7rp::pipeline::kPipelineCacheVersion, "chart=json", enabled.chart_policy_identity,
-                "metronome_modes=mode0_guide,mode1_clean,mode2_clean"},
-            &corrected_cache_key);
-    }
-    if (!status.ok() || enabled.cache_key != corrected_cache_key || enabled.cache_key == legacy_cache_key) {
-        return fail("corrected metronome mode mapping did not invalidate the legacy enabled cache identity");
-    }
+    if (enabled.cache_key == 0) return fail("metronome fixture has no canonical cache identity");
     const std::vector<std::uint8_t> enabled_mabf = read_binary(enabled.cache_sidecar_path);
     if (enabled_mabf.size() <= ff7rp::pipeline::kMabfHeaderSize ||
         (enabled_mabf.size() - ff7rp::pipeline::kMabfHeaderSize) % 3u != 0u) {
@@ -1548,8 +1532,8 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
         return fail("enabled metronome did not preserve Mode0 guide with clean Mode1/Mode2 payloads");
     }
     ff7rp::pipeline::MabfArtifactMetadata enabled_metadata;
-    if (!ff7rp::pipeline::validate_adaptive_metronome_mabf(
-            enabled_mabf, enabled.audio.source_frame_count, &enabled_metadata).ok() ||
+    if (!ff7rp::pipeline::validate_resolved_mabf(enabled_mabf, enabled.audio.source_frame_count,
+            {enabled.audio_sources.resolved_authored_indices, true}, &enabled_metadata).ok() ||
         enabled_metadata.logical_source_frames != enabled.audio.source_frame_count ||
         enabled_metadata.sample_rate != enabled.audio.sample_rate ||
         enabled_metadata.channels != enabled.audio.channels) {
@@ -1640,6 +1624,182 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_mode_specific_audio_sources(const std::filesystem::path& root) {
+    const auto mode_equal = [](const std::vector<std::uint8_t>& mabf,
+                                const std::size_t left, const std::size_t right) {
+        if (mabf.size() <= ff7rp::pipeline::kMabfHeaderSize) return false;
+        const std::size_t hca_size = ff7rp::pipeline::kMabfHcaHeaderSize + read_u32_le(mabf, 0x448);
+        const std::size_t slot_size = ff7rp::pipeline::mabf_slot_size(hca_size);
+        const std::size_t left_offset = ff7rp::pipeline::kMabfHeaderSize + left * slot_size;
+        const std::size_t right_offset = ff7rp::pipeline::kMabfHeaderSize + right * slot_size;
+        return right_offset + hca_size <= mabf.size() &&
+            std::equal(mabf.begin() + left_offset, mabf.begin() + left_offset + hca_size,
+                mabf.begin() + right_offset);
+    };
+
+    const std::filesystem::path directory = root / "ModeSources";
+    std::filesystem::create_directories(directory);
+    if (!write_tone_wav(directory / "SoNg.WaV", 0.6, 3000.0) ||
+        !write_explicit_song_json(directory / "song.json", "Mode Sources", false)) {
+        return fail("failed to create case-insensitive base fixture");
+    }
+    ff7rp::pipeline::LoadedSong legacy;
+    auto status = ff7rp::pipeline::load_song_directory(directory.string(), &legacy);
+    if (!status.ok() || legacy.audio_sources.authored[0].filename != "song.wav" ||
+        legacy.audio_sources.resolved_authored_indices != std::array<std::uint8_t, 3>{0, 0, 0}) {
+        return fail("legacy one-file source did not resolve directly to base for every mode");
+    }
+    const auto legacy_mabf = read_binary(legacy.cache_sidecar_path);
+    if (!mode_equal(legacy_mabf, 0, 1) || !mode_equal(legacy_mabf, 0, 2)) {
+        return fail("legacy one-file MABF changed mode payload compatibility");
+    }
+    const std::uint64_t legacy_key = legacy.cache_key;
+
+    if (!write_tone_wav(directory / "SONG.MODE1.WAV", 0.6, 9000.0)) {
+        return fail("failed to create Mode1 override fixture");
+    }
+    ff7rp::pipeline::LoadedSong mode1;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &mode1);
+    const auto mode1_mabf = read_binary(mode1.cache_sidecar_path);
+    if (!status.ok() || mode1.loaded_from_runtime_cache || mode1.cache_key == legacy_key ||
+        mode1.audio_sources.resolved_authored_indices != std::array<std::uint8_t, 3>{0, 1, 0} ||
+        mode_equal(mode1_mabf, 0, 1) || !mode_equal(mode1_mabf, 0, 2)) {
+        return fail("Mode1 override did not preserve direct Mode2-to-base fallback");
+    }
+    const std::uint64_t mode1_key = mode1.cache_key;
+    if (!write_tone_wav(directory / "SONG.MODE1.WAV", 0.6, 10000.0)) {
+        return fail("failed to mutate Mode1 override content");
+    }
+    ff7rp::pipeline::LoadedSong changed_mode1;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &changed_mode1);
+    if (!status.ok() || changed_mode1.loaded_from_runtime_cache || changed_mode1.cache_key == mode1_key) {
+        return fail("Mode1 override content did not invalidate cache identity");
+    }
+
+    if (!write_tone_wav(directory / "song.mode2.wav", 0.6, 15000.0)) {
+        return fail("failed to create Mode2 override fixture");
+    }
+    ff7rp::pipeline::LoadedSong both;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &both);
+    const auto both_mabf = read_binary(both.cache_sidecar_path);
+    if (!status.ok() || both.cache_key == changed_mode1.cache_key ||
+        both.audio_sources.resolved_authored_indices != std::array<std::uint8_t, 3>{0, 1, 2} ||
+        mode_equal(both_mabf, 0, 1) || mode_equal(both_mabf, 0, 2) || mode_equal(both_mabf, 1, 2)) {
+        return fail("independent Mode1/Mode2 overrides did not produce three resolved payloads");
+    }
+    const std::string both_manifest = read_text(both.cache_manifest_path);
+    if (both_manifest.find("mode0_resolved_role=base\n") == std::string::npos ||
+        both_manifest.find("mode1_resolved_role=mode1\n") == std::string::npos ||
+        both_manifest.find("mode2_resolved_role=mode2\n") == std::string::npos ||
+        both_manifest.find("mode1_direct_base_fallback=0\n") == std::string::npos ||
+        both_manifest.find("mode2_metronome=0\n") == std::string::npos) {
+        return fail("mode-specific manifest resolution is incomplete");
+    }
+    ff7rp::pipeline::LoadedSong both_cached;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &both_cached);
+    if (!status.ok() || !both_cached.loaded_from_runtime_cache ||
+        both_cached.audio_sources.resolved_authored_indices != std::array<std::uint8_t, 3>{0, 1, 2} ||
+        both_cached.audio.source_frame_count != both.audio.source_frame_count) {
+        return fail("mode resolution or base duration did not survive runtime-cache reload");
+    }
+
+    std::filesystem::remove(directory / "SONG.MODE1.WAV");
+    ff7rp::pipeline::LoadedSong mode2;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &mode2);
+    const auto mode2_mabf = read_binary(mode2.cache_sidecar_path);
+    if (!status.ok() || mode2.audio_sources.resolved_authored_indices !=
+            std::array<std::uint8_t, 3>{0, 0, 2} ||
+        !mode_equal(mode2_mabf, 0, 1) || mode_equal(mode2_mabf, 0, 2)) {
+        return fail("Mode2-only override cascaded through another mode instead of base");
+    }
+
+    std::filesystem::remove(directory / "song.mode2.wav");
+    ff7rp::pipeline::LoadedSong legacy_again;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &legacy_again);
+    if (!status.ok() || legacy_again.cache_key != legacy_key ||
+        read_binary(legacy_again.cache_sidecar_path) != legacy_mabf) {
+        return fail("removing overrides did not restore deterministic legacy identity and output");
+    }
+
+    const std::filesystem::path equal_directory = root / "EqualOverrides";
+    std::filesystem::create_directories(equal_directory);
+    if (!write_tone_wav(equal_directory / "song.wav", 0.6, 5000.0) ||
+        !write_tone_wav(equal_directory / "song.mode1.wav", 0.6, 5000.0) ||
+        !write_explicit_song_json(equal_directory / "song.json", "Equal Overrides", false)) {
+        return fail("failed to create byte-identical override fixture");
+    }
+    ff7rp::pipeline::LoadedSong equal_override;
+    status = ff7rp::pipeline::load_song_directory(equal_directory.string(), &equal_override);
+    if (!status.ok() || !mode_equal(read_binary(equal_override.cache_sidecar_path), 0, 1)) {
+        return fail("byte-identical authored override was rejected or forced distinct");
+    }
+
+    const std::filesystem::path mixed_directory = root / "MixedFormats";
+    const std::filesystem::path encoded_fixtures =
+        std::filesystem::path(__FILE__).parent_path() / "fixtures" / "encoded_audio";
+    std::filesystem::create_directories(mixed_directory);
+    std::error_code copy_error;
+    std::filesystem::copy_file(encoded_fixtures / "source.wav", mixed_directory / "song.wav",
+        std::filesystem::copy_options::overwrite_existing, copy_error);
+    if (!copy_error) {
+        std::filesystem::copy_file(encoded_fixtures / "fixture.mp3", mixed_directory / "song.mode1.mp3",
+            std::filesystem::copy_options::overwrite_existing, copy_error);
+    }
+    if (!copy_error) {
+        std::filesystem::copy_file(encoded_fixtures / "fixture.flac", mixed_directory / "song.mode2.flac",
+            std::filesystem::copy_options::overwrite_existing, copy_error);
+    }
+    if (copy_error || !write_explicit_song_json(mixed_directory / "song.json", "Mixed Formats", false)) {
+        return fail("failed to create mixed WAV/MP3/FLAC fixture");
+    }
+    ff7rp::pipeline::LoadedSong mixed;
+    status = ff7rp::pipeline::load_song_directory(mixed_directory.string(), &mixed);
+    if (!status.ok() || mixed.audio_sources.resolved_authored_indices !=
+            std::array<std::uint8_t, 3>{0, 1, 2} || mixed.audio.source_frame_count != 48000u) {
+        return fail("mixed WAV/MP3/FLAC roles did not decode to equal resolved geometry");
+    }
+
+    const auto expect_rejected = [&](const std::string& name,
+                                     const std::function<bool(const std::filesystem::path&)>& prepare,
+                                     const bool json_must_remain_absent = false) {
+        const std::filesystem::path rejected = root / name;
+        std::filesystem::create_directories(rejected);
+        if (!prepare(rejected)) return false;
+        ff7rp::pipeline::LoadedSong song;
+        const auto rejected_status = ff7rp::pipeline::load_song_directory(rejected.string(), &song);
+        return !rejected_status.ok() && !std::filesystem::exists(rejected / ".cache" / "song.mabf.bin") &&
+            !std::filesystem::exists(rejected / ".cache" / "manifest.json") &&
+            (!json_must_remain_absent || !std::filesystem::exists(rejected / "song.json"));
+    };
+    if (!expect_rejected("MissingBase", [](const auto& path) {
+            return write_tone_wav(path / "song.mode1.wav", 0.6);
+        }, true) ||
+        !expect_rejected("AmbiguousBase", [](const auto& path) {
+            return write_tone_wav(path / "song.wav", 0.6) && write_tone_wav(path / "song.mp3", 0.6);
+        }, true) ||
+        !expect_rejected("AmbiguousMode1", [](const auto& path) {
+            return write_tone_wav(path / "song.wav", 0.6) &&
+                write_tone_wav(path / "song.mode1.wav", 0.6) &&
+                write_tone_wav(path / "song.mode1.flac", 0.6);
+        }, true) ||
+        !expect_rejected("ForbiddenMode0", [](const auto& path) {
+            return write_tone_wav(path / "song.wav", 0.6) && write_tone_wav(path / "song.mode0.wav", 0.6);
+        }, true) ||
+        !expect_rejected("Mode1Duration", [](const auto& path) {
+            return write_tone_wav(path / "song.wav", 0.6) &&
+                write_tone_wav(path / "song.mode1.wav", 0.5) &&
+                write_explicit_song_json(path / "song.json", "Mismatch", false);
+        }) ||
+        !expect_rejected("Mode2Duration", [](const auto& path) {
+            return write_tone_wav(path / "song.wav", 0.6) &&
+                write_tone_wav(path / "song.mode2.wav", 0.7) &&
+                write_explicit_song_json(path / "song.json", "Mismatch", false);
+        })) {
+        return fail("ambiguous, missing, forbidden, or mismatched role input was published");
+    }
+    return 0;
+}
+
 int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
     const std::filesystem::path song_directory = root / "EnvelopeFixture";
     std::filesystem::create_directories(song_directory);
@@ -1659,7 +1819,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v39") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v40") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -2202,6 +2362,7 @@ int main() {
     if (run("normal_policy", [&] { return test_normal_chart_cache_policy_normalization(root.path()); }) != 0) return 1;
     if (run("extended_diagnostic", [&] { return test_extended_chart_diagnostic_cache_isolation(root.path()); }) != 0) return 1;
     if (run("adaptive_metronome", [&] { return test_adaptive_metronome_modes(root.path()); }) != 0) return 1;
+    if (run("mode_specific_audio", [&] { return test_mode_specific_audio_sources(root.path()); }) != 0) return 1;
     if (run("gain_envelope_hca", [&] { return test_gain_envelope_cache_and_hca(root.path()); }) != 0) return 1;
     if (run("limiter_manifest", [&] { return test_non_limiting_limiter_manifest_binding(root.path()); }) != 0) return 1;
     if (run("row_limit", [&] { return test_row_limit_omission(root.path()); }) != 0) return 1;
