@@ -23,7 +23,8 @@ struct RepublishCandidate {
     explicit operator bool() const noexcept { return static_cast<bool>(storage); }
 };
 struct Fixture {
-    game::NativeArrayTuple tuple{0x1000, 5, 5};
+    static constexpr int32_t native_count = 7;
+    game::NativeArrayTuple tuple{0x1000, native_count, native_count};
     game::UObjectLiveHandle identity{7, 70};
     std::shared_ptr<std::vector<uint64_t>> owner;
     std::shared_ptr<const game::SongRegistryStorage> owner_catalog;
@@ -57,6 +58,10 @@ struct Fixture {
     size_t trace_count = 0;
 
     void event(Event value) noexcept { trace[trace_count++] = value; }
+    game::NativeArrayTuple native_tuple() const noexcept
+    {
+        return {0x1000, native_count, native_count};
+    }
 } f;
 std::mutex prepare_mutex;
 std::condition_variable prepare_changed;
@@ -93,7 +98,7 @@ game::CatalogAdoptionResult attempt(void* widget = &f)
 bool exact_restore_fixture()
 {
     if (!f.owner) return false;
-    f.tuple = {0x1000, 5, 5};
+    f.tuple = f.native_tuple();
     f.owner.reset();
     f.owner_catalog.reset();
     f.owner_registry_generation = 0;
@@ -244,7 +249,7 @@ bool piano_list_first_custom_row(void* widget, const UObjectLiveHandle& identity
     if (f.stale_widget || widget != &f
         || identity.internal_index != f.identity.internal_index
         || identity.serial_number != f.identity.serial_number) return false;
-    first_custom_row = f.owner ? 5 : f.tuple.count;
+    first_custom_row = f.owner ? Fixture::native_count : f.tuple.count;
     return true;
 }
 
@@ -257,7 +262,7 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog(
         || identity.serial_number != f.identity.serial_number) return {};
     auto out = std::make_shared<PreparedPianoListCatalog>();
     out->source = f.tuple;
-    const int32_t native_count = f.owner ? 5 : f.tuple.count;
+    const int32_t native_count = f.owner ? Fixture::native_count : f.tuple.count;
     out->replacement = std::make_shared<std::vector<uint64_t>>(
         static_cast<size_t>(native_count) + replacement->size(), 0);
     out->target = {reinterpret_cast<uintptr_t>(out->replacement->data()),
@@ -493,20 +498,20 @@ int main()
     f.terminal = false;
     f.stale_widget = true;
     ok &= require(attempt() == game::CatalogAdoptionResult::Blocked
-            && f.tuple == game::NativeArrayTuple{0x1000, 5, 5}
+            && f.tuple == f.native_tuple()
             && game::registry().is_current(old_registry) && !f.owner,
         "stale widget mutated coordinator state");
     f.stale_widget = false;
 
     f.binding_unreadable = true;
     ok &= require(attempt() == game::CatalogAdoptionResult::Blocked
-            && f.tuple == game::NativeArrayTuple{0x1000, 5, 5} && !f.owner,
+            && f.tuple == f.native_tuple() && !f.owner,
         "unreadable embedded-list binding performed native writes");
     f.binding_unreadable = false;
     f.replace_binding_on_revalidate = true;
     ok &= require(attempt() == game::CatalogAdoptionResult::Blocked
             && f.binding_calls == 2
-            && f.tuple == game::NativeArrayTuple{0x1000, 5, 5} && !f.owner,
+            && f.tuple == f.native_tuple() && !f.owner,
         "replaced embedded-list binding performed native writes");
     f.replace_binding_on_revalidate = false;
 
@@ -608,7 +613,7 @@ int main()
                 == game::PianoListRepublishState::Pending
             && !f.owner,
         "exact restore fixture did not preserve immutable republish identity");
-    game::registry().set_active_selection(5, 0);
+    game::registry().set_active_selection(Fixture::native_count, 0);
     game::registry().clear_active_selection();
     const auto churned_registry = game::registry().registry_snapshot();
     ok &= require(churned_registry.generation != first_registry.generation
@@ -616,7 +621,7 @@ int main()
             && churned_registry.storage == first_registry.storage,
         "state-generation churn changed immutable catalog identity");
     const auto native_fallback_intact = [&] {
-        return f.tuple == game::NativeArrayTuple{0x1000, 5, 5}
+        return f.tuple == f.native_tuple()
             && !f.owner && !f.terminal
             && game::piano_list_catalog_republish_state()
                 == game::PianoListRepublishState::Pending;
@@ -680,7 +685,7 @@ int main()
     ok &= require(recoverable_native_fallback(list_contended_reopen),
         "list contention did not retain the native fallback candidate");
 
-    game::registry().set_active_selection(5, 0);
+    game::registry().set_active_selection(Fixture::native_count, 0);
     const bool republish_profile_frozen = game::registry().freeze_active_profile();
     f.coordinator_blocked = true;
     f.selection_blocked = true;
@@ -734,7 +739,7 @@ int main()
             && !weak1.expired(),
         "same unresolved prefix did not reject then accept without eager reconstruction");
 
-    game::registry().set_active_selection(5, 0);
+    game::registry().set_active_selection(Fixture::native_count, 0);
     const auto active_registry_before_block = game::registry().registry_snapshot();
     const auto active_audio_before_block = f.audio_catalog;
     const auto active_tuple_before_block = f.tuple;
@@ -768,7 +773,7 @@ int main()
         "blocked nonempty-catalog opens did not preserve deferred readiness");
     game::registry().clear_active_selection();
 
-    game::registry().set_active_selection(5, 0);
+    game::registry().set_active_selection(Fixture::native_count, 0);
     const bool profile_frozen = game::registry().freeze_active_profile();
     const auto frozen_registry_before_block = game::registry().registry_snapshot();
     const auto frozen_audio_before_block = f.audio_catalog;
@@ -824,6 +829,15 @@ int main()
             && game::piano_list_catalog_republish_state()
                 == game::PianoListRepublishState::None,
         "restored vanilla tuple did not publish the newer authoritative prefix");
+    const auto second_registry = game::registry().registry_snapshot();
+    ok &= require(second_registry.storage && second_registry.storage->size() == 2
+            && second_registry.by_visible_index(7)
+            && second_registry.by_visible_index(8)
+            && f.audio_catalog == second_registry.storage
+            && f.owner_catalog == second_registry.storage
+            && f.owner && f.owner->size() == 9
+            && f.tuple.count == 9 && f.tuple.capacity == 9,
+        "ownerless seven-row adoption did not publish coherent rows 7 and 8");
     ok &= require(readiness.snapshot().active_song_count == 2
             && !readiness.snapshot().catalog_update_pending,
         "newer successful adoption did not catch active count up");
@@ -835,6 +849,13 @@ int main()
 
     auto third_pending = game::prepare_pending_catalog(
         {song(5), song(6), song(7)}, prefix3);
+    const auto managed_owner_before_replacement = f.owner;
+    const auto retained_before_replacement = f.retained_count;
+    int32_t managed_boundary_before_replacement = -1;
+    ok &= require(game::piano_list_first_custom_row(
+                &f, f.identity, managed_boundary_before_replacement)
+            && managed_boundary_before_replacement == Fixture::native_count,
+        "managed catalog did not retain its original seven-row boundary");
     bool interleaved_lock_held = false;
     bool release_interleaved_lock = false;
     std::thread interleaved_holder([&] {
@@ -881,10 +902,46 @@ int main()
     prepare_changed.notify_all();
     interleaved_holder.join();
     interleaved_publication.join();
+    const auto managed_replacement_result = attempt();
+    const auto third_registry = game::registry().registry_snapshot();
     ok &= require(interleaved_publication_accepted
-            && attempt() == game::CatalogAdoptionResult::Adopted,
+            && managed_replacement_result == game::CatalogAdoptionResult::Adopted
+            && third_registry.storage && third_registry.storage->size() == 3
+            && third_registry.by_visible_index(7)
+            && third_registry.by_visible_index(8)
+            && third_registry.by_visible_index(9)
+            && !third_registry.by_visible_index(10)
+            && f.audio_catalog == third_registry.storage
+            && f.owner_catalog == third_registry.storage
+            && f.owner && f.owner != managed_owner_before_replacement
+            && f.owner->size() == 10
+            && f.tuple.count == 10 && f.tuple.capacity == 10
+            && f.retained_count == retained_before_replacement + 1,
         "interleaved newest-prefix publication was not adopted on immediate retry");
+    int32_t managed_boundary_after_replacement = -1;
+    ok &= require(game::piano_list_first_custom_row(
+                &f, f.identity, managed_boundary_after_replacement)
+            && managed_boundary_after_replacement == Fixture::native_count,
+        "managed replacement displaced the original seven-row boundary");
     third_pending.reset();
+
+    const auto managed_replacement_owner = f.owner;
+    const auto managed_replacement_audio = f.audio_catalog;
+    ok &= require(exact_restore_fixture()
+            && f.tuple == f.native_tuple() && !f.owner
+            && game::piano_list_catalog_republish_state()
+                == game::PianoListRepublishState::Pending
+            && game::registry().is_current(third_registry)
+            && f.audio_catalog == managed_replacement_audio,
+        "managed replacement rollback did not restore the original seven-row tuple");
+    ok &= require(attempt() == game::CatalogAdoptionResult::Republished
+            && f.owner && f.owner != managed_replacement_owner
+            && f.owner->size() == 10
+            && f.tuple.count == 10 && f.tuple.capacity == 10
+            && f.owner_catalog == third_registry.storage
+            && game::registry().is_current(third_registry)
+            && f.audio_catalog == managed_replacement_audio,
+        "managed replacement rollback did not preserve exact republish ownership");
 
     game::RejectedPendingCatalogRetry stale_retry;
     auto stale_prefix = prefix_after({}, 9);
