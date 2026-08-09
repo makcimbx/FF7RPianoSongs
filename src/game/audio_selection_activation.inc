@@ -842,28 +842,240 @@ bool consume_selection_activation_reservation(
     }
 }
 
+// Moved up unchanged from the later diagnostic block: the reservation refusal
+// ladder below needs it, and that block is a nested unnamed namespace, so a
+// forward declaration here would declare a second, distinct function.
+const char* selection_admission_substrate_live_failure_name(
+    const SelectionAdmissionSubstrateLiveFailure failure) noexcept
+{
+    switch (failure) {
+    case SelectionAdmissionSubstrateLiveFailure::None: return "none";
+    case SelectionAdmissionSubstrateLiveFailure::ProofInactive: return "proof_inactive";
+    case SelectionAdmissionSubstrateLiveFailure::ProofStateDrift: return "proof_state";
+    case SelectionAdmissionSubstrateLiveFailure::TransactionInvalid: return "transaction";
+    case SelectionAdmissionSubstrateLiveFailure::ControllerNull: return "controller_null";
+    case SelectionAdmissionSubstrateLiveFailure::ControllerPointerDrift: return "controller_pointer";
+    case SelectionAdmissionSubstrateLiveFailure::ControllerIdentityDrift: return "controller_identity";
+    case SelectionAdmissionSubstrateLiveFailure::ChainUnreadable: return "chain_read";
+    case SelectionAdmissionSubstrateLiveFailure::SoundUnreadable: return "sound_read";
+    case SelectionAdmissionSubstrateLiveFailure::RequestUnreadable: return "request_read";
+    case SelectionAdmissionSubstrateLiveFailure::StateUnreadable: return "state_read";
+    case SelectionAdmissionSubstrateLiveFailure::SoundNull: return "sound_null";
+    case SelectionAdmissionSubstrateLiveFailure::SoundIdentityUnreadable: return "sound_identity_read";
+    case SelectionAdmissionSubstrateLiveFailure::SlotBgmDrift: return "slot_bgm";
+    case SelectionAdmissionSubstrateLiveFailure::SoundPointerDrift: return "sound_pointer";
+    case SelectionAdmissionSubstrateLiveFailure::SoundIdentityDrift: return "sound_identity";
+    case SelectionAdmissionSubstrateLiveFailure::RequestDrift: return "request";
+    case SelectionAdmissionSubstrateLiveFailure::StateNotFour: return "state_four";
+    }
+    return "unknown";
+}
+
+// Names the first false term of bgm_playback_aggregate_menu_ready, walking
+// !exit_requested -> !exit_pending -> the ownership disjunction in the exact
+// order bgm_playback_aggregate_exit_ownership_present short-circuits them.
+// Called only after that predicate has already returned false, so it re-derives
+// a name and never contributes to the decision.
+const char* first_aggregate_menu_ready_failure_name(
+    const BgmPlaybackAggregateExitOwnershipFacts& f,
+    const bool exit_requested, const bool exit_pending) noexcept
+{
+    if (exit_requested) return "exit_requested";
+    if (exit_pending) return "exit_pending";
+    if (f.active_or_retained_borrower) return "active_or_retained_borrower";
+    if (f.unresolved_publication) return "unresolved_publication";
+    if (f.release_claim_owned) return "release_claim_owned";
+    if (f.rollback_owned) return "rollback_owned";
+    if (f.route_or_cleanup_owned) return "route_or_cleanup_owned";
+    if (f.observer_lease_in_flight) return "observer_lease_in_flight";
+    return "none";
+}
+
+// Mirrors canonical_substrate_route_predecessor_exact term for term, including
+// its normal-successor short circuit: on that branch bridge_stage_exact is the
+// whole predicate, so a failure there is reported under its own name rather
+// than being confused with the long-form ladder.
+const char* first_canonical_substrate_route_use_failure_name(
+    const CanonicalSubstrateResetLineageUseFacts& f) noexcept
+{
+    if (f.normal_successor) {
+        return f.bridge_stage_exact ? "none" : "successor_bridge_stage";
+    }
+    if (!f.bridge_stage_exact) return "bridge_stage";
+    if (!f.current_zero_idle) return "current_zero_idle";
+    if (!f.authority_phase_exact) return "authority_phase";
+    if (!f.authority_generation_valid) return "authority_generation";
+    if (!f.reset_route_valid) return "reset_route";
+    if (!f.reset_observation_exact) return "reset_observation";
+    if (!f.request_rebase_lineage_exact) return "request_rebase_lineage";
+    if (!f.reset_lifecycle_exact) return "reset_lifecycle";
+    if (!f.transaction_exact) return "transaction";
+    if (!f.source_exact) return "source";
+    if (!f.list_exit_exact) return "list_exit";
+    if (!f.proof_route_exact) return "proof_route";
+    if (!f.proof_lease_exact) return "proof_lease";
+    if (!f.proof_lifecycle_exact) return "proof_lifecycle";
+    if (!f.request_exact) return "request";
+    if (!f.canonical_token_exact) return "canonical_token";
+    if (!f.bridge_generation_exact) return "bridge_generation";
+    if (!f.bridge_release_exact) return "bridge_release";
+    if (!f.controller_exact) return "controller";
+    if (!f.controller_proof_exact) return "controller_proof";
+    if (!f.slot_bgm_exact) return "slot_bgm";
+    if (!f.sound_exact) return "sound";
+    if (!f.sound_identity_exact) return "sound_identity";
+    return "none";
+}
+
+// Mirrors the rejection disjunction of
+// commit_canonical_substrate_reservation_publication in its exact order, so a
+// state-side rejection is never reported under a facts-side name.
+const char* first_canonical_substrate_reservation_publication_failure_name(
+    const CanonicalSubstrateReservationPublicationFacts& f,
+    const CanonicalSubstrateReservationPublicationState& s,
+    const CanonicalSubstrateBridgeAuthority& reserved_bridge,
+    const bool reserve_reset_lineage) noexcept
+{
+    if (!f.reservation_machine_reserved) return "machine_not_reserved";
+    if (!f.reservation_generation_exact) return "reservation_generation";
+    if (!f.proof_exact) return "proof_drift";
+    if (!f.bridge_successor_exact) return "bridge_successor";
+    if (!f.reset_phase_exact) return "reset_phase";
+    if (f.expected_attempt_epoch == 0) return "attempt_epoch_zero";
+    if (f.current_attempt_epoch != f.expected_attempt_epoch) {
+        return "attempt_epoch_drift";
+    }
+    if (reserved_bridge.revocation_epoch != f.expected_attempt_epoch) {
+        return "reserved_bridge_epoch";
+    }
+    if (s.machine_state != SelectionActivationReservationState::Reserved) {
+        return "state_machine_state";
+    }
+    if (s.machine_generation == 0) return "state_machine_generation";
+    if (!canonical_substrate_bridge_available_authority_valid(s.bridge)) {
+        return "state_bridge_authority";
+    }
+    if (!canonical_substrate_bridge_reservation_successor_exact(
+            s.bridge, reserved_bridge)) {
+        return "state_bridge_successor";
+    }
+    if (reserve_reset_lineage
+        ? s.reset_phase != CanonicalSubstrateResetLineagePhase::Qualified
+        : s.reset_phase != CanonicalSubstrateResetLineagePhase::None) {
+        return "state_reset_phase";
+    }
+    return "none";
+}
+
 } // namespace
 
 bool reserve_selection_audio_activation(
     const SelectionSnapshot& expected_selection,
     const SelectionActivationListContext& list_context) noexcept
 {
+    // Refusal ladder.  Every exit other than the two `return true` paths is a
+    // refusal, so the reason defaults to "exception" and is cleared only on
+    // success: a `return false` added later cannot become silent by omission.
+    // Each rung below names the single condition that is actually false, in the
+    // order the original conjunctions and disjunctions short-circuited them.
+    // Fields are populated only once their stage is reached, and `first_failure`
+    // says which stage that was; everything a later rung reports was necessarily
+    // true at the earlier ones.
+    const char* refusal_first_failure = "exception";
+    const char* refusal_detail = "none";
+    uint64_t refusal_value = 0;
+    bool diagnostic_exit_requested = false;
+    bool diagnostic_exit_pending = false;
+    bool diagnostic_substrate_active = false;
+    uint64_t diagnostic_substrate_request = 0;
+    uint64_t diagnostic_substrate_route_generation = 0;
+    uint64_t diagnostic_substrate_rebase_route_generation = 0;
+    unsigned diagnostic_substrate_bridge_phase = 0;
+    unsigned diagnostic_substrate_reset_phase = 0;
+    uint64_t diagnostic_live_request = 0;
+    uint64_t diagnostic_route_generation = 0;
+    unsigned diagnostic_reservation_state = 0;
+    uint64_t diagnostic_reservation_generation = 0;
+    auto refusal_diagnostic = make_deferred_noexcept_action([&]() noexcept {
+        if (!refusal_first_failure) return;
+        try {
+            std::ostringstream out;
+            out << "[audio_sead] activation_reservation_rejected first_failure="
+                << refusal_first_failure
+                << " detail=" << refusal_detail
+                << " value=" << refusal_value
+                << " exit_requested=" << (diagnostic_exit_requested ? 1 : 0)
+                << " exit_pending=" << (diagnostic_exit_pending ? 1 : 0)
+                << " substrate_active=" << (diagnostic_substrate_active ? 1 : 0)
+                << " substrate_request=0x" << std::hex
+                << diagnostic_substrate_request << std::dec
+                << " substrate_route_gen=" << diagnostic_substrate_route_generation
+                << " substrate_rebase_route_gen="
+                << diagnostic_substrate_rebase_route_generation
+                << " substrate_bridge_phase=" << diagnostic_substrate_bridge_phase
+                << " substrate_reset_phase=" << diagnostic_substrate_reset_phase
+                << " live_request=0x" << std::hex << diagnostic_live_request
+                << std::dec
+                << " route_gen=" << diagnostic_route_generation
+                << " reservation_state=" << diagnostic_reservation_state
+                << " reservation_gen=" << diagnostic_reservation_generation;
+            core::log(core::LogLevel::Info, out.str());
+        } catch (...) {}
+    });
+    refusal_diagnostic.make_eligible();
     try {
         AudioCallbackScope callback_scope(AudioRouteCallbackKind::SelectionReservation);
-        if (!callback_scope || !expected_selection || !expected_selection.song
-            || !list_context
-                || expected_selection.song->id.empty()) {
+        if (!callback_scope) {
+            refusal_first_failure = "callback_scope_unavailable";
+            return false;
+        }
+        if (!expected_selection) {
+            refusal_first_failure = "expected_selection_invalid";
+            return false;
+        }
+        if (!expected_selection.song) {
+            refusal_first_failure = "expected_selection_song_null";
+            return false;
+        }
+        if (!list_context) {
+            refusal_first_failure = "list_context_invalid";
+            return false;
+        }
+        if (expected_selection.song->id.empty()) {
+            refusal_first_failure = "expected_selection_song_id_empty";
             return false;
         }
         const MenuSessionSnapshot menu_session = capture_ready_menu_session();
-        if (!menu_session || menu_session.widget != list_context.object
-            || menu_session.widget_identity.internal_index != list_context.internal_index
-            || menu_session.widget_identity.serial_number != list_context.serial_number)
+        if (!menu_session) {
+            refusal_first_failure = "menu_session_not_ready";
             return false;
+        }
+        if (menu_session.widget != list_context.object) {
+            refusal_first_failure = "menu_widget_pointer_drift";
+            return false;
+        }
+        if (menu_session.widget_identity.internal_index
+            != list_context.internal_index) {
+            refusal_first_failure = "menu_widget_index_drift";
+            refusal_value = menu_session.widget_identity.internal_index;
+            return false;
+        }
+        if (menu_session.widget_identity.serial_number
+            != list_context.serial_number) {
+            refusal_first_failure = "menu_widget_serial_drift";
+            refusal_value = menu_session.widget_identity.serial_number;
+            return false;
+        }
         {
             std::lock_guard<std::mutex> lock(g_audio_state_mutex);
-            if (g_onmemory_bank_cleanup_only.blocks_custom_routes()
-                || g_custom_activation_quarantine) return false;
+            if (g_onmemory_bank_cleanup_only.blocks_custom_routes()) {
+                refusal_first_failure = "cleanup_only_blocks_custom_routes";
+                return false;
+            }
+            if (g_custom_activation_quarantine) {
+                refusal_first_failure = "custom_activation_quarantine";
+                return false;
+            }
         }
 
         bool substrate_diagnostic_proposed = false;
@@ -897,18 +1109,37 @@ bool reserve_selection_audio_activation(
             g_audio_route_operations.mutex());
         const auto initial_ownership = snapshot_bgm_aggregate_exit_ownership(
             false, false);
+        // The two loads were already unconditional call arguments; naming them
+        // only fixes their previously unspecified evaluation order.
+        diagnostic_exit_requested =
+            g_bgm_aggregate_exit_requested.load(std::memory_order_acquire);
+        diagnostic_exit_pending =
+            g_bgm_aggregate_exit_pending.load(std::memory_order_acquire);
         if (!bgm_playback_aggregate_menu_ready(initial_ownership,
-                g_bgm_aggregate_exit_requested.load(std::memory_order_acquire),
-                g_bgm_aggregate_exit_pending.load(std::memory_order_acquire))) {
+                diagnostic_exit_requested, diagnostic_exit_pending)) {
+            refusal_first_failure = "aggregate_menu_not_ready_initial";
+            refusal_detail = first_aggregate_menu_ready_failure_name(
+                initial_ownership, diagnostic_exit_requested,
+                diagnostic_exit_pending);
             return false;
         }
         AggregateMutationLease aggregate_lease;
-        if (!aggregate_lease.active) return false;
+        if (!aggregate_lease.active) {
+            refusal_first_failure = "aggregate_mutation_lease_unavailable";
+            return false;
+        }
         const auto protected_ownership = snapshot_bgm_aggregate_exit_ownership(
             true, false);
+        diagnostic_exit_requested =
+            g_bgm_aggregate_exit_requested.load(std::memory_order_acquire);
+        diagnostic_exit_pending =
+            g_bgm_aggregate_exit_pending.load(std::memory_order_acquire);
         if (!bgm_playback_aggregate_menu_ready(protected_ownership,
-                g_bgm_aggregate_exit_requested.load(std::memory_order_acquire),
-                g_bgm_aggregate_exit_pending.load(std::memory_order_acquire))) {
+                diagnostic_exit_requested, diagnostic_exit_pending)) {
+            refusal_first_failure = "aggregate_menu_not_ready_protected";
+            refusal_detail = first_aggregate_menu_ready_failure_name(
+                protected_ownership, diagnostic_exit_requested,
+                diagnostic_exit_pending);
             return false;
         }
 
@@ -918,17 +1149,24 @@ bool reserve_selection_audio_activation(
         candidate.menu_session_generation = menu_session.generation;
         candidate.menu_controller = menu_session.controller;
         if (!selection_snapshot_exact(candidate.selection, expected_selection)) {
+            refusal_first_failure = "registry_selection_drift";
+            refusal_value = candidate.selection.generation;
             return false;
         }
         candidate.controller = lookup_current_bgm_controller();
         UObjectIdentity controller_identity{};
-        if (!candidate.controller
-            || !read_uobject_identity(candidate.controller, controller_identity)) {
+        if (!candidate.controller) {
+            refusal_first_failure = "bgm_controller_absent";
+            return false;
+        }
+        if (!read_uobject_identity(candidate.controller, controller_identity)) {
+            refusal_first_failure = "bgm_controller_identity_unreadable";
             return false;
         }
         candidate.controller_proof = controller_identity_proof(
             candidate.controller, controller_identity);
         if (!controller_identity_proof_valid(candidate.controller_proof)) {
+            refusal_first_failure = "bgm_controller_proof_invalid";
             return false;
         }
 
@@ -938,10 +1176,26 @@ bool reserve_selection_audio_activation(
             std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
             substrate_proof = g_bgm_canonical_substrate_proof;
         }
+        // Plain reads of the copy just taken; no predicate is evaluated here.
+        diagnostic_substrate_active = substrate_proof.active;
+        diagnostic_substrate_request = substrate_proof.request;
+        diagnostic_substrate_route_generation = substrate_proof.route_generation;
+        diagnostic_substrate_rebase_route_generation =
+            substrate_proof.request_rebase_route_generation;
+        diagnostic_substrate_bridge_phase =
+            static_cast<unsigned>(substrate_proof.bridge.phase);
+        diagnostic_substrate_reset_phase =
+            static_cast<unsigned>(substrate_proof.reset_lineage.phase);
         if (substrate_proof.active) {
+            SelectionAdmissionSubstrateLiveFacts live_facts;
             if (!canonical_substrate_active_sound_live_exact(
                     substrate_proof, candidate.controller,
-                    candidate.controller_proof)) {
+                    candidate.controller_proof, &live_facts)) {
+                refusal_first_failure = "substrate_live_drift";
+                refusal_detail = selection_admission_substrate_live_failure_name(
+                    first_selection_admission_substrate_live_failure(live_facts));
+                refusal_value = live_facts.observed_state;
+                diagnostic_live_request = live_facts.observed_request;
                 return false;
             }
             candidate.canonical_substrate_proof_exact = true;
@@ -965,36 +1219,86 @@ bool reserve_selection_audio_activation(
 
         {
             std::lock_guard<std::mutex> lock(g_audio_state_mutex);
-            if (!g_audio_route_installed.load(std::memory_order_acquire)
-                || g_audio_route_disabled.load(std::memory_order_acquire)
-                || g_frozen_profile_lease.active()
-                || native_audio_route_owned_locked()
-                || g_audio_route_state.list_cleanup_pending
-                || g_audio_route_state.phase != AudioRoutePhase::Idle
-                || g_audio_route_state.generation == UINT64_MAX
-                || g_next_audio_route_generation == UINT64_MAX
-                || g_onmemory_bank_cleanup_only.blocks_custom_routes()
-                || g_custom_activation_quarantine
-                || g_onmemory_bank_lifecycle.preflight_arm(
-                       true,
-                       g_audio_route_installed.load(std::memory_order_acquire),
-                       g_onmemory_bank_kind_lookup_available.load(std::memory_order_acquire),
-                       g_onmemory_bank_release_available.load(std::memory_order_acquire))
-                    != OnMemoryBankRouteDecision::Allowed) {
+            // Same disjuncts, same order, same short-circuiting: each rung is
+            // reached only when every rung above it was false, exactly as the
+            // original `||` chain evaluated them.  preflight_arm stays last and
+            // is still called at most once.
+            if (!g_audio_route_installed.load(std::memory_order_acquire)) {
+                refusal_first_failure = "route_not_installed";
                 return false;
             }
-            if (substrate_proof.active
-                && !canonical_substrate_route_predecessor_exact(
-                    canonical_substrate_route_use_facts(
-                        substrate_proof,
-                        g_audio_route_state.generation,
-                        g_audio_route_state.lease_identity,
-                        g_onmemory_bank_lifecycle.state_epoch(),
-                        g_canonical_substrate_reset_observation_generation,
-                        g_canonical_substrate_reset_lineage_generation,
-                        CanonicalSubstrateResetLineagePhase::Qualified,
-                        CanonicalSubstrateBridgePhase::Available))) {
+            if (g_audio_route_disabled.load(std::memory_order_acquire)) {
+                refusal_first_failure = "route_disabled";
                 return false;
+            }
+            if (g_frozen_profile_lease.active()) {
+                refusal_first_failure = "frozen_profile_lease_active";
+                return false;
+            }
+            if (native_audio_route_owned_locked()) {
+                refusal_first_failure = "native_route_owned";
+                return false;
+            }
+            if (g_audio_route_state.list_cleanup_pending) {
+                refusal_first_failure = "route_list_cleanup_pending";
+                return false;
+            }
+            if (g_audio_route_state.phase != AudioRoutePhase::Idle) {
+                refusal_first_failure = "route_phase_not_idle";
+                refusal_value = static_cast<uint64_t>(
+                    static_cast<unsigned>(g_audio_route_state.phase));
+                diagnostic_route_generation = g_audio_route_state.generation;
+                return false;
+            }
+            if (g_audio_route_state.generation == UINT64_MAX) {
+                refusal_first_failure = "route_generation_wrapped";
+                return false;
+            }
+            if (g_next_audio_route_generation == UINT64_MAX) {
+                refusal_first_failure = "next_route_generation_wrapped";
+                return false;
+            }
+            if (g_onmemory_bank_cleanup_only.blocks_custom_routes()) {
+                refusal_first_failure = "cleanup_only_blocks_custom_routes_armed";
+                return false;
+            }
+            if (g_custom_activation_quarantine) {
+                refusal_first_failure = "custom_activation_quarantine_armed";
+                return false;
+            }
+            const auto preflight = g_onmemory_bank_lifecycle.preflight_arm(
+                true,
+                g_audio_route_installed.load(std::memory_order_acquire),
+                g_onmemory_bank_kind_lookup_available.load(std::memory_order_acquire),
+                g_onmemory_bank_release_available.load(std::memory_order_acquire));
+            if (preflight != OnMemoryBankRouteDecision::Allowed) {
+                refusal_first_failure = "onmemory_preflight_denied";
+                refusal_value = static_cast<uint64_t>(
+                    static_cast<unsigned>(preflight));
+                return false;
+            }
+            if (substrate_proof.active) {
+                // canonical_substrate_route_use_facts was already evaluated only
+                // on this branch; naming the result lets the refusal report the
+                // single term that is false instead of the whole predicate.
+                const auto route_use_facts = canonical_substrate_route_use_facts(
+                    substrate_proof,
+                    g_audio_route_state.generation,
+                    g_audio_route_state.lease_identity,
+                    g_onmemory_bank_lifecycle.state_epoch(),
+                    g_canonical_substrate_reset_observation_generation,
+                    g_canonical_substrate_reset_lineage_generation,
+                    CanonicalSubstrateResetLineagePhase::Qualified,
+                    CanonicalSubstrateBridgePhase::Available);
+                if (!canonical_substrate_route_predecessor_exact(
+                        route_use_facts)) {
+                    refusal_first_failure = "substrate_route_predecessor_drift";
+                    refusal_detail =
+                        first_canonical_substrate_route_use_failure_name(
+                            route_use_facts);
+                    diagnostic_route_generation = g_audio_route_state.generation;
+                    return false;
+                }
             }
             if (substrate_proof.active) {
                 reserve_reset_lineage = !bgm_playback_exact_successor(
@@ -1002,29 +1306,48 @@ bool reserve_selection_audio_activation(
                     g_audio_route_state.generation);
             }
             candidate.sidecar = find_ready_sidecar_locked(*candidate.selection.song);
-            if (!candidate.sidecar) return false;
+            if (!candidate.sidecar) {
+                refusal_first_failure = "sidecar_not_ready";
+                return false;
+            }
             candidate.sidecar_header = candidate.sidecar->allocation.sead_header();
             candidate.sidecar_allocation_size
                 = candidate.sidecar->allocation.allocation_size();
             candidate.sidecar_mabf_size = candidate.sidecar->allocation.mabf_size();
-            if (!candidate.sidecar_header
-                || candidate.sidecar_allocation_size == 0
-                || candidate.sidecar_mabf_size == 0) {
+            if (!candidate.sidecar_header) {
+                refusal_first_failure = "sidecar_header_null";
+                return false;
+            }
+            if (candidate.sidecar_allocation_size == 0) {
+                refusal_first_failure = "sidecar_allocation_empty";
+                return false;
+            }
+            if (candidate.sidecar_mabf_size == 0) {
+                refusal_first_failure = "sidecar_mabf_empty";
                 return false;
             }
             candidate.route_generation = g_audio_route_state.generation;
             candidate.next_lease_generation = g_next_audio_route_generation;
             candidate.lifecycle_state_epoch = g_onmemory_bank_lifecycle.state_epoch();
+            diagnostic_route_generation = candidate.route_generation;
         }
 
         // Transaction lock order is reservation -> borrower. Rollback uses the
         // same order; no path nests borrower -> reservation.
         std::lock_guard<std::mutex> lock(g_selection_activation_reservation_mutex);
-        if (!menu_session_generation_exact(candidate.menu_session_generation, true))
+        diagnostic_reservation_state = static_cast<unsigned>(
+            g_selection_activation_reservation_machine.state());
+        diagnostic_reservation_generation =
+            g_selection_activation_reservation_machine.generation();
+        if (!menu_session_generation_exact(candidate.menu_session_generation, true)) {
+            refusal_first_failure = "menu_session_generation_drift";
+            refusal_value = candidate.menu_session_generation;
             return false;
+        }
         if (g_selection_activation_reservation_machine.state()
                 == SelectionActivationReservationState::Reserved
             && g_selection_activation_reservation.selection_handoff_confirmed) {
+            refusal_first_failure = "reservation_handoff_already_confirmed";
             return false;
         }
         if (g_selection_activation_reservation_machine.state()
@@ -1035,6 +1358,7 @@ bool reserve_selection_audio_activation(
                 == CanonicalSubstrateBridgePhase::Reserved) {
                 if (!g_selection_activation_reservation
                         .substrate_phase_attempt_active) {
+                    refusal_first_failure = "idempotent_substrate_attempt_inactive";
                     return false;
                 }
                 std::lock_guard<std::mutex> borrower_lock(
@@ -1043,17 +1367,21 @@ bool reserve_selection_audio_activation(
                         g_bgm_canonical_substrate_proof,
                         g_selection_activation_reservation
                             .substrate_reserved_proof)) {
+                    refusal_first_failure = "idempotent_substrate_proof_drift";
                     return false;
                 }
             }
+            refusal_first_failure = nullptr;
             return true;
         }
         if (g_selection_activation_reservation_machine.generation()
             == UINT64_MAX) {
+            refusal_first_failure = "reservation_generation_wrapped";
             return false;
         }
         if (g_selection_activation_reservation_machine.state()
             == SelectionActivationReservationState::Consumed) {
+            refusal_first_failure = "reservation_consumed";
             return false;
         }
         if (g_selection_activation_reservation_machine.state()
@@ -1066,7 +1394,10 @@ bool reserve_selection_audio_activation(
         const uint64_t publication_revocation_epoch =
             g_selection_activation_revocation_epoch.load(
                 std::memory_order_acquire);
-        if (publication_revocation_epoch == 0) return false;
+        if (publication_revocation_epoch == 0) {
+            refusal_first_failure = "revocation_epoch_zero";
+            return false;
+        }
         candidate.substrate_phase_attempt_revocation_epoch =
             publication_revocation_epoch;
         if (candidate.substrate_bridge.phase
@@ -1074,7 +1405,10 @@ bool reserve_selection_audio_activation(
             candidate.substrate_bridge.revocation_epoch =
                 publication_revocation_epoch;
         }
-        if (!g_selection_activation_reservation_machine.reserve()) return false;
+        if (!g_selection_activation_reservation_machine.reserve()) {
+            refusal_first_failure = "reservation_machine_reserve_failed";
+            return false;
+        }
         bool reservation_transaction_committed = false;
         auto rollback_reservation_transaction = make_deferred_noexcept_action(
             [&]() noexcept {
@@ -1085,6 +1419,7 @@ bool reserve_selection_audio_activation(
             });
         rollback_reservation_transaction.make_eligible();
         candidate.generation = g_selection_activation_reservation_machine.generation();
+        diagnostic_reservation_generation = candidate.generation;
         bool reservation_record_published = false;
         if (candidate.substrate_bridge.phase
                 == CanonicalSubstrateBridgePhase::Reserved) {
@@ -1118,6 +1453,14 @@ bool reserve_selection_audio_activation(
             if (!commit_canonical_substrate_reservation_publication(
                     publication_facts, candidate.substrate_bridge,
                     reserve_reset_lineage, publication_state)) {
+                // The commit rejects before it mutates state, so the state read
+                // back here is the one it judged.
+                refusal_first_failure = "substrate_reservation_publication_rejected";
+                refusal_detail =
+                    first_canonical_substrate_reservation_publication_failure_name(
+                        publication_facts, publication_state,
+                        candidate.substrate_bridge, reserve_reset_lineage);
+                refusal_value = publication_facts.current_attempt_epoch;
                 return false;
             }
             candidate.substrate_available_proof =
@@ -1147,6 +1490,7 @@ bool reserve_selection_audio_activation(
             substrate_diagnostic_proposed = true;
             deferred_substrate_diagnostic.make_eligible();
         }
+        refusal_first_failure = nullptr;
         return true;
     } catch (...) {
         return false;
@@ -2770,32 +3114,6 @@ const char* selection_admission_commit_failure_name(
     case SelectionAdmissionCommitFailure::PublicationNotReached: return "publication_not_reached";
     case SelectionAdmissionCommitFailure::ControllerBindFailed: return "controller_bind_failed";
     case SelectionAdmissionCommitFailure::Exception: return "exception";
-    }
-    return "unknown";
-}
-
-const char* selection_admission_substrate_live_failure_name(
-    const SelectionAdmissionSubstrateLiveFailure failure) noexcept
-{
-    switch (failure) {
-    case SelectionAdmissionSubstrateLiveFailure::None: return "none";
-    case SelectionAdmissionSubstrateLiveFailure::ProofInactive: return "proof_inactive";
-    case SelectionAdmissionSubstrateLiveFailure::ProofStateDrift: return "proof_state";
-    case SelectionAdmissionSubstrateLiveFailure::TransactionInvalid: return "transaction";
-    case SelectionAdmissionSubstrateLiveFailure::ControllerNull: return "controller_null";
-    case SelectionAdmissionSubstrateLiveFailure::ControllerPointerDrift: return "controller_pointer";
-    case SelectionAdmissionSubstrateLiveFailure::ControllerIdentityDrift: return "controller_identity";
-    case SelectionAdmissionSubstrateLiveFailure::ChainUnreadable: return "chain_read";
-    case SelectionAdmissionSubstrateLiveFailure::SoundUnreadable: return "sound_read";
-    case SelectionAdmissionSubstrateLiveFailure::RequestUnreadable: return "request_read";
-    case SelectionAdmissionSubstrateLiveFailure::StateUnreadable: return "state_read";
-    case SelectionAdmissionSubstrateLiveFailure::SoundNull: return "sound_null";
-    case SelectionAdmissionSubstrateLiveFailure::SoundIdentityUnreadable: return "sound_identity_read";
-    case SelectionAdmissionSubstrateLiveFailure::SlotBgmDrift: return "slot_bgm";
-    case SelectionAdmissionSubstrateLiveFailure::SoundPointerDrift: return "sound_pointer";
-    case SelectionAdmissionSubstrateLiveFailure::SoundIdentityDrift: return "sound_identity";
-    case SelectionAdmissionSubstrateLiveFailure::RequestDrift: return "request";
-    case SelectionAdmissionSubstrateLiveFailure::StateNotFour: return "state_four";
     }
     return "unknown";
 }
