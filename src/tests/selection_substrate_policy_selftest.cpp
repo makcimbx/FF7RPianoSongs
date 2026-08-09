@@ -1,5 +1,6 @@
 #include "game/selection_audio_policy.h"
 #include "game/canonical_substrate_policy.h"
+#include "game/audio_setup_publication_policy.h"
 #include "game/audio_sead.h"
 
 #include <array>
@@ -642,6 +643,32 @@ void test_selection_substrate_policy()
                 == CanonicalSubstrateListReturnResetDisposition::Rejected,
             "drifted zero/Idle readiness fact entered the idempotent path");
     }
+
+    int reset_marker_emissions = 0;
+    bool reset_marker_eligible = false;
+    {
+        auto marker = make_deferred_noexcept_action([&]() noexcept {
+            if (reset_marker_eligible) ++reset_marker_emissions;
+        });
+        marker.make_eligible();
+    }
+    require(reset_marker_emissions == 0,
+        "armed reset marker ignored its inner decision-eligibility gate");
+    {
+        auto marker = make_deferred_noexcept_action([&]() noexcept {
+            if (reset_marker_eligible) ++reset_marker_emissions;
+        });
+        marker.make_eligible();
+        reset_marker_eligible = true;
+    }
+    require(reset_marker_emissions == 1,
+        "eligible reset decision did not emit exactly one deferred marker");
+    {
+        auto marker = make_deferred_noexcept_action([]() { throw 1; });
+        marker.make_eligible();
+    }
+    require(reset_marker_emissions == 1,
+        "deferred marker exception escaped its noexcept destruction boundary");
 
     const CanonicalSubstrateResetLineageAuthority empty_reset{};
     require(canonical_substrate_reset_lineage_authority_empty(empty_reset)

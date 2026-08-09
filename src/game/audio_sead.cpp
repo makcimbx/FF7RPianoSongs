@@ -13990,7 +13990,7 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
         uint64_t revocation_epoch = 0;
     } reset_disposition_marker;
     auto deferred_reset_disposition_marker = make_deferred_noexcept_action(
-        [&]() noexcept {
+        [&]() {
             if (!reset_disposition_marker.eligible) return;
             static std::atomic_uint32_t s_reset_disposition_logs{0};
             if (s_reset_disposition_logs.fetch_add(
@@ -14023,6 +14023,7 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                 << " native_call_invoked=0 bank_release_invoked=0";
             core::log(core::LogLevel::Info, out.str());
         });
+    deferred_reset_disposition_marker.make_eligible();
     CanonicalSubstrateResetLineageMarker reset_lineage_marker;
     auto deferred_reset_lineage_marker = make_deferred_noexcept_action(
         [&]() noexcept {
@@ -14104,17 +14105,28 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     AudioRouteCleanupResult early_result;
     BgmCanonicalSubstrateProof reset_proof_snapshot;
     uint64_t reset_authority_generation_snapshot = 0;
+    uint64_t reset_revocation_epoch_snapshot = 0;
     {
-        std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
-        reset_proof_snapshot = g_bgm_canonical_substrate_proof;
-        reset_authority_generation_snapshot =
-            g_canonical_substrate_reset_lineage_generation;
-    }
-    const uint64_t reset_revocation_epoch_snapshot =
-        g_selection_activation_revocation_epoch.load(std::memory_order_acquire);
-    const auto& reset_authority_snapshot = reset_proof_snapshot.reset_lineage;
-    {
-        std::lock_guard<std::mutex> lock(g_audio_state_mutex);
+        // Route-operation authority is already held. Reservation ownership
+        // serializes every revocation-epoch writer while the proof/epoch pair
+        // is captured and the complete zero/Idle readiness decision is made.
+        // Borrower and audio locks are acquired separately in the established
+        // operation -> reservation -> borrower/audio order.
+        std::lock_guard<std::mutex> reservation_lock(
+            g_selection_activation_reservation_mutex);
+        {
+            std::lock_guard<std::mutex> borrower_lock(
+                g_bgm_playback_borrower_mutex);
+            reset_proof_snapshot = g_bgm_canonical_substrate_proof;
+            reset_authority_generation_snapshot =
+                g_canonical_substrate_reset_lineage_generation;
+        }
+        reset_revocation_epoch_snapshot =
+            g_selection_activation_revocation_epoch.load(
+                std::memory_order_acquire);
+        const auto& reset_authority_snapshot =
+            reset_proof_snapshot.reset_lineage;
+        std::lock_guard<std::mutex> audio_lock(g_audio_state_mutex);
         if (!g_audio_route_state.custom_resource_owned && !g_audio_route_state.list_cleanup_pending) {
             return_without_cleanup = true;
             early_result = apply_policy_locked(g_audio_route_state.lease_identity);
