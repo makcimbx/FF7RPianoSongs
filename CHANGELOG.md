@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.1 - 2026-08-09
+
+- Added separate fail-closed downloads for Final Fantasy VII Rebirth 1.004 and
+  1.005, backed by per-build executable identities, signatures, and RVA data.
+- Placed custom songs after the player's actual native piano-song rows instead
+  of assuming a fixed original-song count, including progressive catalog
+  replacement without duplicate or missing rows.
+- Hardened progressive startup and catalog adoption so recoverable contention
+  keeps the native menu usable while retaining the pending custom-song prefix.
+- Improved guarded selection, playback ownership, shared audio-bank lifetime,
+  cleanup, and diagnostics across custom/native transitions.
+- Extended deterministic build provenance, multi-build packaging, runtime-gate
+  identity checks, and rollback coverage for per-game-version artifacts.
+
 ## 0.1.0 - 2026-07-31
 
 - First standalone release.

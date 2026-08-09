@@ -1,7 +1,7 @@
 # FF7RPianoSongs
-<!-- current-release-version: 0.1.0 -->
+<!-- current-release-version: 0.1.1 -->
 
-**Version 0.1.0** · Windows x64 · MIT
+**Version 0.1.1** · Windows x64 · MIT
 
 [![Windows CI](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml)
 

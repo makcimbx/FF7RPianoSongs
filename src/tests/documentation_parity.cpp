@@ -540,7 +540,7 @@ bool validate_current_status(const fs::path& source_root, std::string* error_mes
         if (line.rfind("## ", 0) == 0u) sections.push_back(line.substr(3));
     }
     const std::vector<std::string> expected{
-        "Supported Now", "Known Limitations / 0.1.0 Release Scope", "Latest Verification Summary", "Artifact Disposition"};
+        "Supported Now", "Known Limitations / 0.1.1 Release Scope", "Latest Verification Summary", "Artifact Disposition"};
     return sections == expected
         || fail(error_message, "CurrentStatus.md must contain only the four canonical sections");
 }

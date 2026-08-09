@@ -181,7 +181,7 @@ bool test_release_authority_parser(std::string* error_message)
     const std::string canonical = buffer.str();
     ff7rp::tests::ReleaseAuthority release;
     if (!ff7rp::tests::parse_release_authority(canonical, &release, error_message)) return false;
-    if (release.version != "0.1.0") {
+    if (release.version != "0.1.1") {
         *error_message = "release authority did not expose the canonical public version";
         return false;
     }
@@ -208,7 +208,7 @@ bool test_release_authority_parser(std::string* error_message)
     }
     for (const std::string& bad : {"39", "v39", "01.0.0", "0.1", "0.1.0-beta"}) {
         std::string fixture = canonical;
-        if (!replace_once(&fixture, "\"version\": \"0.1.0\"", "\"version\": \"" + bad + "\"")) {
+        if (!replace_once(&fixture, "\"version\": \"0.1.1\"", "\"version\": \"" + bad + "\"")) {
             *error_message = "could not construct malformed release fixture";
             return false;
         }
