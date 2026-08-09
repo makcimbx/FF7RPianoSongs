@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.2 - 2026-08-09
+
+- Added optional `song.mode1.*` and `song.mode2.*` audio sources with direct
+  fallback to the required Mode0/base `song.*`, strict equal-timeline
+  validation, and deterministic role-aware cache invalidation.
+- Corrected generated metronome audio so clicks are present only in Mode0;
+  Mode1 and Mode2 now remain clean unless their own authored source differs.
+- Preserved custom-song activation readiness across redundant list-return
+  callbacks, fixing songs that appeared after progressive caching but could no
+  longer be selected.
+- Hardened three-mode MABF validation with exact per-mode HCA geometry,
+  resolved-source policy checks, and expanded cache/manifest test coverage.
+
 ## 0.1.1 - 2026-08-09
 
 - Added separate fail-closed downloads for Final Fantasy VII Rebirth 1.004 and
