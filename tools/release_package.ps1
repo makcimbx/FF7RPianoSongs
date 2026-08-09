@@ -127,6 +127,14 @@ function Get-ReleaseFileSha256([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Get-ReleaseTextSha256([string]$Text) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash(
+            [Text.Encoding]::UTF8.GetBytes($Text)))).Replace("-", "").ToLowerInvariant()
+    } finally { $sha.Dispose() }
+}
+
 function Assert-ReleaseLowercaseSha256([object]$Value, [string]$Description) {
     if ($Value -isnot [string] -or $Value -notmatch '^[0-9a-f]{64}$') {
         throw "$Description must be exactly 64 lowercase hexadecimal characters"
@@ -138,7 +146,7 @@ function Assert-ReleaseIdentity {
         [string]$IdentityPath, [object]$ReleaseAuthority,
         [string]$ArchivePath, [string]$AsiPath, [string]$ProvenancePath,
         [string]$ReleaseAuthorityPath, [string]$GeneratedReleaseHeaderPath,
-        [string]$SourceCommit
+        [string]$SourceCommit, [string]$ExpectedGeneratedReleaseHeaderSha256 = ""
     )
     try { $identity = Get-Content -LiteralPath $IdentityPath -Raw | ConvertFrom-Json }
     catch { throw "Release identity JSON is malformed: $($_.Exception.Message)" }
@@ -162,6 +170,12 @@ function Assert-ReleaseIdentity {
     }
     Assert-ReleaseLowercaseSha256 $identity.archive.sha256 "Release identity archive sha256"
     $archiveName = Split-Path -Leaf $ArchivePath
+    $generatedHeaderHash = if ([string]::IsNullOrEmpty($ExpectedGeneratedReleaseHeaderSha256)) {
+        Get-ReleaseFileSha256 $GeneratedReleaseHeaderPath
+    } else {
+        Assert-ReleaseLowercaseSha256 $ExpectedGeneratedReleaseHeaderSha256 "Expected generated release header sha256"
+        $ExpectedGeneratedReleaseHeaderSha256
+    }
     if ($identity.schema -cne "ff7rpianosongs.release-identity.v2" -or
         $identity.product -cne $ReleaseAuthority.product -or
         $identity.version -cne $ReleaseAuthority.version -or
@@ -175,10 +189,124 @@ function Assert-ReleaseIdentity {
         $identity.asi_sha256 -cne (Get-ReleaseFileSha256 $AsiPath) -or
         $identity.provenance_sha256 -cne (Get-ReleaseFileSha256 $ProvenancePath) -or
         $identity.release_authority_sha256 -cne (Get-ReleaseFileSha256 $ReleaseAuthorityPath) -or
-        $identity.generated_release_header_sha256 -cne (Get-ReleaseFileSha256 $GeneratedReleaseHeaderPath)) {
+        $identity.generated_release_header_sha256 -cne $generatedHeaderHash) {
         throw "Release identity does not exactly bind the release authority, package, provenance, archive, and source commit"
     }
     return $identity
+}
+
+function Assert-PublishedBuildProvenance {
+    param(
+        [string]$Root, [string]$ProvenancePath, [string]$AsiPath,
+        [object]$ReleaseAuthority, [string[]]$ExpectedProductionInputs
+    )
+    try { $record = Get-Content -LiteralPath $ProvenancePath -Raw | ConvertFrom-Json }
+    catch { throw "Published build provenance JSON is malformed: $($_.Exception.Message)" }
+    Assert-ReleaseExactProperties $record @(
+        "schema", "configuration", "dll", "toolchain", "cmake", "releaseIdentity",
+        "productionInputs", "productionInputSetSha256") "Published build provenance"
+    if ($record.schema -cne "ff7rpianosongs.build-provenance.v3" -or
+        $record.configuration -cne "Release") {
+        throw "Published build provenance must be the Release v3 schema"
+    }
+    Assert-ReleaseExactProperties $record.dll @("path", "sha256") "Published build provenance DLL"
+    Assert-ReleaseLowercaseSha256 $record.dll.sha256 "Published build provenance DLL sha256"
+    if ($record.dll.path -cne "bin/Release/FF7RPianoSongs.dll" -or
+        $record.dll.sha256 -cne (Get-ReleaseFileSha256 $AsiPath)) {
+        throw "Published ASI does not match its build provenance"
+    }
+    Assert-ReleaseExactProperties $record.toolchain @(
+        "visualStudioInstallationPath", "compilerPath", "compilerVersion", "compilerSha256",
+        "cmakePath", "cmakeVersion", "cmakeSha256", "generator", "generatorPlatform",
+        "generatorToolset") "Published build provenance toolchain"
+    foreach ($field in $record.toolchain.PSObject.Properties.Name) {
+        if ($field -notin @("compilerSha256", "cmakeSha256")) {
+            $record.toolchain.$field = Assert-ReleaseString $record.toolchain.$field `
+                "Published build provenance toolchain $field"
+        }
+    }
+    Assert-ReleaseLowercaseSha256 $record.toolchain.compilerSha256 "Published compiler sha256"
+    Assert-ReleaseLowercaseSha256 $record.toolchain.cmakeSha256 "Published CMake sha256"
+    Assert-ReleaseExactProperties $record.cmake @("cachePath", "cacheSha256") "Published build provenance CMake identity"
+    $record.cmake.cachePath = Assert-ReleaseString $record.cmake.cachePath "Published CMake cache path"
+    if ([string]::IsNullOrWhiteSpace($record.cmake.cachePath) -or
+        [IO.Path]::IsPathRooted($record.cmake.cachePath) -or $record.cmake.cachePath.Contains('\') -or
+        $record.cmake.cachePath.StartsWith('/') -or $record.cmake.cachePath.EndsWith('/') -or
+        @($record.cmake.cachePath.Split('/')) -contains '..' -or
+        @($record.cmake.cachePath.Split('/')) -contains '.') {
+        throw "Published CMake cache path is not normalized"
+    }
+    Assert-ReleaseLowercaseSha256 $record.cmake.cacheSha256 "Published CMake cache sha256"
+    Assert-ReleaseExactProperties $record.releaseIdentity @(
+        "authorityPath", "authoritySha256", "catalogId", "generatedHeaderPath",
+        "generatedHeaderSha256") "Published build provenance release identity"
+    foreach ($field in @("authoritySha256", "generatedHeaderSha256")) {
+        Assert-ReleaseLowercaseSha256 $record.releaseIdentity.$field "Published release identity $field"
+    }
+    foreach ($field in @("authorityPath", "catalogId", "generatedHeaderPath")) {
+        $record.releaseIdentity.$field = Assert-ReleaseString $record.releaseIdentity.$field `
+            "Published release identity $field"
+    }
+    if ($record.releaseIdentity.authorityPath -cne "release.json" -or
+        $record.releaseIdentity.generatedHeaderPath -cne "generated/release_identity.generated.h" -or
+        $record.releaseIdentity.catalogId -cne $ReleaseAuthority.supported_executable_catalog_id -or
+        $record.releaseIdentity.authoritySha256 -cne (Get-ReleaseFileSha256 (Join-Path $Root "release.json"))) {
+        throw "Published build provenance does not match the current release authority and target"
+    }
+    Assert-ReleaseLowercaseSha256 $record.productionInputSetSha256 "Published production input set sha256"
+    $actualInputs = @($record.productionInputs)
+    if ($actualInputs.Count -ne $ExpectedProductionInputs.Count) {
+        throw "Published production input inventory does not match current source authority"
+    }
+    $seen = @{}
+    $identity = ""
+    foreach ($input in $actualInputs) {
+        Assert-ReleaseExactProperties $input @("path", "sha256") "Published production input"
+        if ($input.path -isnot [string] -or [string]::IsNullOrWhiteSpace($input.path) -or
+            [IO.Path]::IsPathRooted($input.path) -or $input.path.Contains('\') -or
+            $input.path.StartsWith('/') -or $input.path.EndsWith('/') -or
+            @($input.path.Split('/')) -contains '..' -or @($input.path.Split('/')) -contains '.' -or
+            $seen.ContainsKey($input.path)) {
+            throw "Published production input path is malformed or duplicated: '$($input.path)'"
+        }
+        Assert-ReleaseLowercaseSha256 $input.sha256 "Published production input sha256"
+        $seen[$input.path] = $true
+        $source = Join-Path $Root $input.path
+        if (!(Test-Path -LiteralPath $source -PathType Leaf) -or
+            $input.sha256 -cne (Get-ReleaseFileSha256 $source)) {
+            throw "Published production input does not match current source: $($input.path)"
+        }
+        $identity += "$($input.path)`t$($input.sha256)`n"
+    }
+    if (@(Compare-Object -ReferenceObject @($ExpectedProductionInputs | Sort-Object) `
+            -DifferenceObject @($actualInputs.path | Sort-Object)).Count -ne 0 -or
+        $record.productionInputSetSha256 -cne (Get-ReleaseTextSha256 $identity)) {
+        throw "Published production input set identity does not match current source authority"
+    }
+    return $record
+}
+
+function Copy-ValidatedReleaseSiblings {
+    param(
+        [string]$ExistingSurface, [string]$StagingSurface,
+        [string]$SelectedBasename, [string[]]$DeclaredBasenames,
+        [scriptblock]$ValidateTarget
+    )
+    if (!(Test-Path -LiteralPath $ExistingSurface)) { return }
+    if (!(Test-Path -LiteralPath $ExistingSurface -PathType Container)) {
+        throw "Existing release surface is not a directory"
+    }
+    foreach ($entry in @(Get-ChildItem -LiteralPath $ExistingSurface -Force | Sort-Object Name)) {
+        if (!$entry.PSIsContainer -or ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            $DeclaredBasenames -cnotcontains $entry.Name) {
+            throw "Existing release surface contains a stale, foreign, or unsafe entry: $($entry.Name)"
+        }
+        if ($entry.Name -ceq $SelectedBasename) { continue }
+        $null = & $ValidateTarget $entry.FullName $entry.Name
+        $destination = Join-Path $StagingSurface $entry.Name
+        Copy-Item -LiteralPath $entry.FullName -Destination $destination -Recurse
+        $null = & $ValidateTarget $destination $entry.Name
+    }
 }
 
 function New-DeterministicZip {
@@ -250,9 +378,15 @@ function New-ReleaseArtifacts {
     [System.IO.File]::WriteAllText(
         $identityPath, (($identity | ConvertTo-Json -Depth 5) + "`n"),
         [System.Text.UTF8Encoding]::new($false))
+    $publishedProvenance = Join-Path $OutputDirectory "$($release.archive_basename).provenance.json"
+    Copy-Item -LiteralPath $ProvenancePath -Destination $publishedProvenance
+    if ((Get-ReleaseFileSha256 $publishedProvenance) -cne (Get-ReleaseFileSha256 $ProvenancePath)) {
+        throw "Published provenance sidecar does not match the build provenance"
+    }
     return [pscustomobject]@{
         Archive = $archivePath
         Checksum = $checksumPath
         Identity = $identityPath
+        Provenance = $publishedProvenance
     }
 }

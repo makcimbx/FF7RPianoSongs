@@ -16,6 +16,11 @@ try {
                 game_build = "1.005"
                 supported_executable_catalog_id = "ff7rebirth-steam-win64-6a16ced2"
                 archive_basename = "FF7RPianoSongs-0.1.0-win64-ff7r1.005"
+            },
+            [ordered]@{
+                game_build = "1.004"
+                supported_executable_catalog_id = "ff7rebirth-steam-win64-68fd6fde"
+                archive_basename = "FF7RPianoSongs-0.1.0-win64-ff7r1.004"
             }
         )
     } | ConvertTo-Json -Depth 5
@@ -23,7 +28,7 @@ try {
     [IO.File]::WriteAllText((Join-Path $fixture "package/release.json"), $releaseJson)
     [IO.File]::WriteAllText((Join-Path $fixture "src/game/rva_catalog.json"),
         '{"schema_version":3,"default_build":"ff7rebirth-steam-win64-6a16ced2",' +
-        '"builds":[{"id":"ff7rebirth-steam-win64-6a16ced2"}],"addresses":[]}')
+        '"builds":[{"id":"ff7rebirth-steam-win64-6a16ced2"},{"id":"ff7rebirth-steam-win64-68fd6fde"}],"addresses":[]}')
     $publicDocuments = @(
         "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md",
         "docs/SongFormat.md"
@@ -37,13 +42,37 @@ try {
     [IO.File]::WriteAllBytes($asi, [byte[]](0, 1, 2, 3, 255))
     [IO.File]::WriteAllText((Join-Path $fixture "package/End/Binaries/Win64/FF7RPianoSongs.ini"), "[General]`n")
     $provenance = Join-Path $fixture "provenance.json"
-    [IO.File]::WriteAllText($provenance, '{"fixture":true}')
     $generatedHeader = Join-Path $fixture "release_identity.generated.h"
     [IO.File]::WriteAllText($generatedHeader, "synthetic generated release identity`n")
+    $inputHash = Get-ReleaseFileSha256 (Join-Path $fixture "release.json")
+    $inputIdentity = "release.json`t$inputHash`n"
+    $fixtureProvenance = [ordered]@{
+        schema = "ff7rpianosongs.build-provenance.v3"
+        configuration = "Release"
+        dll = [ordered]@{ path = "bin/Release/FF7RPianoSongs.dll"; sha256 = Get-ReleaseFileSha256 $asi }
+        toolchain = [ordered]@{
+            visualStudioInstallationPath = "fixture"; compilerPath = "fixture-compiler"
+            compilerVersion = "fixture"; compilerSha256 = "1" * 64
+            cmakePath = "fixture-cmake"; cmakeVersion = "fixture"; cmakeSha256 = "2" * 64
+            generator = "fixture"; generatorPlatform = "x64"; generatorToolset = "fixture"
+        }
+        cmake = [ordered]@{ cachePath = "CMakeCache.txt"; cacheSha256 = "3" * 64 }
+        releaseIdentity = [ordered]@{
+            authorityPath = "release.json"; authoritySha256 = $inputHash
+            catalogId = "ff7rebirth-steam-win64-6a16ced2"
+            generatedHeaderPath = "generated/release_identity.generated.h"
+            generatedHeaderSha256 = Get-ReleaseFileSha256 $generatedHeader
+        }
+        productionInputs = @([ordered]@{ path = "release.json"; sha256 = $inputHash })
+        productionInputSetSha256 = Get-ReleaseTextSha256 $inputIdentity
+    }
+    [IO.File]::WriteAllText($provenance, ($fixtureProvenance | ConvertTo-Json -Depth 8))
     $commit = "0123456789abcdef0123456789abcdef01234567"
-    $a = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-a") $asi $provenance $generatedHeader $commit
-    $b = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-b") $asi $provenance $generatedHeader $commit
-    foreach ($name in @($a.Archive, $a.Checksum, $a.Identity)) {
+    $catalogA = "ff7rebirth-steam-win64-6a16ced2"
+    $catalogB = "ff7rebirth-steam-win64-68fd6fde"
+    $a = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-a") $asi $provenance $generatedHeader $commit $catalogA
+    $b = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-b") $asi $provenance $generatedHeader $commit $catalogA
+    foreach ($name in @($a.Archive, $a.Checksum, $a.Identity, $a.Provenance)) {
         $peer = Join-Path (Join-Path $fixture "out-b") (Split-Path -Leaf $name)
         if ((Get-ReleaseFileSha256 $name) -ne (Get-ReleaseFileSha256 $peer)) {
             throw "Repeated release artifact differs: $(Split-Path -Leaf $name)"
@@ -80,7 +109,7 @@ try {
         $identity.release_authority_sha256 -ne (Get-ReleaseFileSha256 (Join-Path $fixture "release.json")) -or
         $identity.generated_release_header_sha256 -ne (Get-ReleaseFileSha256 $generatedHeader) -or
         $identity.source_commit -ne $commit) { throw "Release identity hashes or commit are incorrect" }
-    $authority = Get-ReleaseAuthority $fixture
+    $authority = Get-ReleaseAuthority $fixture $catalogA
     $null = Assert-ReleaseIdentity $a.Identity $authority $a.Archive $asi $provenance `
         (Join-Path $fixture "release.json") $generatedHeader $commit
     $identityJson = Get-Content -LiteralPath $a.Identity -Raw
@@ -145,7 +174,7 @@ try {
         $bad.targets[0].archive_basename = "FF7RPianoSongs-$badVersion-win64-ff7r1.005"
         [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json -Depth 5))
         $accepted = $false
-        try { $null = Get-ReleaseAuthority $fixture; $accepted = $true } catch {}
+        try { $null = Get-ReleaseDocument $fixture; $accepted = $true } catch {}
         if ($accepted) { throw "Malformed public version was accepted: $badVersion" }
     }
     foreach ($mutation in @(
@@ -187,19 +216,105 @@ try {
         }
         [IO.File]::WriteAllText((Join-Path $fixture "release.json"), ($bad | ConvertTo-Json -Depth 5))
         $accepted = $false
-        try { $null = Get-ReleaseAuthority $fixture; $accepted = $true } catch {}
+        try { $null = Get-ReleaseDocument $fixture; $accepted = $true } catch {}
         if ($accepted) { throw "Malformed release metadata was accepted: $mutation" }
     }
     [IO.File]::WriteAllText((Join-Path $fixture "release.json"), $releaseJson)
-    $selected = Get-ReleaseAuthority $fixture "ff7rebirth-steam-win64-6a16ced2"
+    $selected = Get-ReleaseAuthority $fixture $catalogA
     if ($selected.game_build -cne "1.005" -or
         $selected.archive_basename -cne "FF7RPianoSongs-0.1.0-win64-ff7r1.005") {
         throw "Named release target selection returned the wrong authority"
     }
     $accepted = $false
-    try { $null = Get-ReleaseAuthority $fixture "ff7rebirth-steam-win64-68fd6fde"; $accepted = $true } catch {}
+    try { $null = Get-ReleaseAuthority $fixture "ff7rebirth-steam-win64-deadbeef"; $accepted = $true } catch {}
     if ($accepted) { throw "Release authority for an undeclared executable catalog ID was accepted" }
-    Write-Output "Release package self-test passed: exact minimal deterministic ZIP/checksum/identity and malformed metadata."
+
+    function Assert-FixtureTarget([string]$candidate, [string]$basename) {
+        $target = @((Get-ReleaseDocument $fixture).targets | Where-Object { $_.archive_basename -ceq $basename })
+        if ($target.Count -ne 1) { throw "Fixture target is not declared exactly once: $basename" }
+        $targetAuthority = Get-ReleaseAuthority $fixture $target[0].supported_executable_catalog_id
+        $archivePath = Join-Path $candidate "$basename.zip"
+        $checksumPath = "$archivePath.sha256"
+        $identityPath = Join-Path $candidate "$basename.release.json"
+        $provenancePath = Join-Path $candidate "$basename.provenance.json"
+        $expected = @("$basename.zip", "$basename.zip.sha256", "$basename.release.json", "$basename.provenance.json") | Sort-Object
+        $actual = @(Get-ChildItem -LiteralPath $candidate -File -Force | ForEach-Object Name | Sort-Object)
+        if (@(Compare-Object $expected $actual).Count -ne 0) { throw "Fixture release target inventory mismatch: $basename" }
+        $hash = Get-ReleaseFileSha256 $archivePath
+        if ([IO.File]::ReadAllText($checksumPath) -cne "$hash  $basename.zip`n") {
+            throw "Fixture release checksum mismatch: $basename"
+        }
+        $extract = Join-Path $testRoot "extract-$([Guid]::NewGuid().ToString('N'))"
+        try {
+            [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extract)
+            $archiveAsi = Join-Path $extract "End/Binaries/Win64/FF7RPianoSongs.asi"
+            $record = Assert-PublishedBuildProvenance $fixture $provenancePath $archiveAsi `
+                $targetAuthority @("release.json")
+            $null = Assert-ReleaseIdentity $identityPath $targetAuthority $archivePath $archiveAsi $provenancePath `
+                (Join-Path $extract "release.json") "" $commit $record.releaseIdentity.generatedHeaderSha256
+        } finally {
+            if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
+        }
+    }
+
+    $surface = Join-Path $fixture "sequential-release"
+    $stageA = Join-Path $fixture "sequential-stage-a"
+    $stageB = Join-Path $fixture "sequential-stage-b"
+    [IO.Directory]::CreateDirectory($stageA) | Out-Null
+    $targetAName = "FF7RPianoSongs-0.1.0-win64-ff7r1.005"
+    $targetBName = "FF7RPianoSongs-0.1.0-win64-ff7r1.004"
+    $null = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $stageA $targetAName) `
+        $asi $provenance $generatedHeader $commit $catalogA
+    Move-Item -LiteralPath $stageA -Destination $surface
+    [IO.Directory]::CreateDirectory($stageB) | Out-Null
+    $validateFixtureTarget = { param($candidate, $basename) Assert-FixtureTarget $candidate $basename }
+    Copy-ValidatedReleaseSiblings $surface $stageB $targetBName @($targetAName, $targetBName) $validateFixtureTarget
+    $provenanceB = Join-Path $fixture "provenance-b.json"
+    $fixtureProvenanceB = Get-Content -LiteralPath $provenance -Raw | ConvertFrom-Json
+    $fixtureProvenanceB.releaseIdentity.catalogId = $catalogB
+    [IO.File]::WriteAllText($provenanceB, ($fixtureProvenanceB | ConvertTo-Json -Depth 8))
+    $null = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $stageB $targetBName) `
+        $asi $provenanceB $generatedHeader $commit $catalogB
+    foreach ($name in @($targetAName, $targetBName)) { Assert-FixtureTarget (Join-Path $stageB $name) $name }
+    $finalDirectories = @(Get-ChildItem -LiteralPath $stageB -Directory -Force | ForEach-Object Name | Sort-Object)
+    $expectedDirectories = @($targetAName, $targetBName) | Sort-Object
+    if (($finalDirectories -join "`n") -cne ($expectedDirectories -join "`n")) {
+        throw "Sequential release staging did not retain the complete declared target inventory"
+    }
+
+    $surfaceWitness = @(Get-ChildItem -LiteralPath $surface -File -Recurse -Force | Sort-Object FullName |
+        ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($surface, $_.FullName))" }) -join "`n"
+    foreach ($rejection in @("stale", "foreign", "mismatched")) {
+        $badSurface = Join-Path $fixture "bad-$rejection"
+        Copy-Item -LiteralPath $surface -Destination $badSurface -Recurse
+        switch ($rejection) {
+            "stale" { Remove-Item -LiteralPath (Join-Path $badSurface "$targetAName/$targetAName.provenance.json") }
+            "foreign" { [IO.Directory]::CreateDirectory((Join-Path $badSurface "foreign-target")) | Out-Null }
+            "mismatched" {
+                $badIdentityPath = Join-Path $badSurface "$targetAName/$targetAName.release.json"
+                $badIdentity = Get-Content -LiteralPath $badIdentityPath -Raw | ConvertFrom-Json
+                $badIdentity.source_commit = "1" * 40
+                [IO.File]::WriteAllText($badIdentityPath, ($badIdentity | ConvertTo-Json -Depth 5))
+            }
+        }
+        $badWitness = @(Get-ChildItem -LiteralPath $badSurface -File -Recurse -Force | Sort-Object FullName |
+            ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($badSurface, $_.FullName))" }) -join "`n"
+        $rejectionStage = Join-Path $fixture "reject-stage-$rejection"
+        [IO.Directory]::CreateDirectory($rejectionStage) | Out-Null
+        $rejected = $false
+        try {
+            Copy-ValidatedReleaseSiblings $badSurface $rejectionStage $targetBName @($targetAName, $targetBName) $validateFixtureTarget
+        } catch { $rejected = $true }
+        $afterWitness = @(Get-ChildItem -LiteralPath $badSurface -File -Recurse -Force | Sort-Object FullName |
+            ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($badSurface, $_.FullName))" }) -join "`n"
+        if (!$rejected -or $afterWitness -cne $badWitness) {
+            throw "Invalid sibling was accepted or prior release surface was replaced: $rejection"
+        }
+    }
+    $surfaceWitnessAfter = @(Get-ChildItem -LiteralPath $surface -File -Recurse -Force | Sort-Object FullName |
+        ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($surface, $_.FullName))" }) -join "`n"
+    if ($surfaceWitnessAfter -cne $surfaceWitness) { throw "Sequential rejection tests changed the authoritative prior release surface" }
+    Write-Output "Release package self-test passed: deterministic target artifacts, exact identities, sequential aggregate inventory, rejection/non-replacement, and malformed metadata."
 } finally {
     if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
 }

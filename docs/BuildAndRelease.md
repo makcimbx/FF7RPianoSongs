@@ -179,11 +179,21 @@ version and is required once more than one target exists:
 ```
 
 The same command then creates `release/<archive-basename>/<archive-basename>.zip` with a
-sorted inventory and fixed ZIP timestamps, plus its `.zip.sha256` and `.release.json`
-sidecars. The identity sidecar binds the archive, ASI, build-provenance record, supported
-executable catalog identity, version, and clean source commit. It remains outside the ZIP to
-avoid a self-referential archive hash. Repeated generation from identical package bytes is
-byte-for-byte deterministic.
+sorted inventory and fixed ZIP timestamps, plus its `.zip.sha256`, `.release.json`, and
+`.provenance.json` sidecars. The identity sidecar binds the archive, ASI, published
+build-provenance record, supported executable catalog identity, version, and clean source
+commit. Sidecars remain outside the ZIP to avoid a self-referential archive hash. Repeated
+generation from identical package bytes is byte-for-byte deterministic.
+
+Run the command sequentially for every target declared by `release.json`. `package/` remains
+the exact selected-target staging tree, while `release/` is one aggregate publication surface:
+each successful run replaces the selected target and retains every previously produced sibling
+target. Before retention, each sibling is validated fail closed against the current release
+authority and clean commit, its declared directory and sidecar names, exact inventory, archive
+and checksum, packaged files, ASI hash, build-provenance catalog and production-input identity,
+and release identity. An undeclared entry or a stale, malformed, foreign, or mismatched sibling
+aborts staging without replacing either prior publication surface. After all declared targets
+have been staged, `release/` must contain exactly one validated directory per declared target.
 
 Archives for different game builds carry visually identical `FF7RPianoSongs.asi` files that
 differ only in the build they were compiled against. The startup gate fails closed on a
@@ -308,12 +318,13 @@ A publishable artifact requires all of the following:
 - the current blockers in [Current Status](CurrentStatus.md) are resolved;
 - required focused scenarios in [In-Game Validation](InGameValidation.md) pass on each supported game build, using the archive built for that build;
 - package contents match `package-docs.json` and contain no repository-only evidence or developer tooling;
-- release identity and checksum sidecars match the deterministic archive and clean source commit;
+- release identity, checksum, and published build-provenance sidecars match each deterministic archive and clean source commit;
 - the first-party MIT license and separate third-party notices are present.
 
 If staging fails before publication, the prior package remains in place. If a
 post-publication validation or retirement step fails, use only the exact
 `.package.previous-*`, `.package.failed-*`, or validated
 `.package.recovery-*.zip` path reported by the script; do not merge trees by
-hand. Release artifact publication follows the same directory transaction and
-reports corresponding `.release.*` recovery paths.
+hand. Release artifact publication covers the complete aggregate `release/`
+inventory in the same two-surface directory transaction and reports corresponding
+`.release.*` recovery paths.

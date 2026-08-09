@@ -599,13 +599,19 @@ function Get-ExpectedPackageInventory {
 }
 
 function Assert-PackageTree {
-    param([string]$Candidate)
+    param([string]$Candidate, [string]$ExpectedAsiPath = $Artifact)
     & $AuditTool $Root --staged-docs $Candidate
     if ($LASTEXITCODE -ne 0) {
         throw "Release audit failed for '$Candidate' with exit code $LASTEXITCODE"
     }
     $binaryRoot = Join-Path $Candidate $BinaryRelative
-    Assert-FilesEqual -Source $Artifact -Destination (Join-Path $binaryRoot "FF7RPianoSongs.asi")
+    $candidateAsi = Join-Path $binaryRoot "FF7RPianoSongs.asi"
+    if (!(Test-Path -LiteralPath $candidateAsi -PathType Leaf)) {
+        throw "Package ASI is missing: '$candidateAsi'"
+    }
+    if (![string]::IsNullOrEmpty($ExpectedAsiPath)) {
+        Assert-FilesEqual -Source $ExpectedAsiPath -Destination $candidateAsi
+    }
     Assert-FilesEqual -Source $Ini -Destination (Join-Path $binaryRoot "FF7RPianoSongs.ini")
     Assert-FilesEqual -Source (Join-Path $Root "release.json") -Destination (Join-Path $Candidate "release.json")
     foreach ($mapping in $DocumentMappings) {
@@ -622,65 +628,102 @@ function Assert-PackageTree {
 
 $ReleasePath = Join-Path $Root "release"
 function Assert-ReleaseTree {
-    param([string]$Candidate, [string]$PackageCandidate = $PackagePath)
-    $archiveName = "$($ReleaseAuthority.archive_basename).zip"
+    param(
+        [string]$Candidate, [object]$Authority,
+        [string]$PackageCandidate = ""
+    )
+    $archiveName = "$($Authority.archive_basename).zip"
     $archive = Join-Path $Candidate $archiveName
     $checksum = "$archive.sha256"
-    $identityPath = Join-Path $Candidate "$($ReleaseAuthority.archive_basename).release.json"
-    $expected = @($archiveName, "$archiveName.sha256", "$($ReleaseAuthority.archive_basename).release.json") | Sort-Object
+    $identityPath = Join-Path $Candidate "$($Authority.archive_basename).release.json"
+    $publishedProvenance = Join-Path $Candidate "$($Authority.archive_basename).provenance.json"
+    $expected = @(
+        $archiveName, "$archiveName.sha256", "$($Authority.archive_basename).release.json",
+        "$($Authority.archive_basename).provenance.json") | Sort-Object
     $actual = @(Get-RelativeFileInventory $Candidate)
     if (@(Compare-Object $expected $actual).Count -ne 0) { throw "Release artifact inventory mismatch" }
     $archiveHash = Get-ReleaseFileSha256 $archive
     if ([IO.File]::ReadAllText($checksum) -ne "$archiveHash  $archiveName`n") {
         throw "Release checksum sidecar does not match the archive"
     }
-    $packageAsi = Join-Path (Join-Path $PackageCandidate $BinaryRelative) "FF7RPianoSongs.asi"
-    $null = Assert-ReleaseIdentity $identityPath $ReleaseAuthority $archive $packageAsi $ProvenancePath `
-        (Join-Path $PackageCandidate "release.json") `
-        (Join-Path $BuildDir "generated/release_identity.generated.h") $SourceCommit
     $extract = Join-Path ([IO.Path]::GetTempPath()) ".ff7rp-release-verify-$PID-$([Guid]::NewGuid().ToString('N'))"
     try {
         [IO.Compression.ZipFile]::ExtractToDirectory($archive, $extract)
-        Assert-DirectoryTreesEqual $PackageCandidate $extract
+        Assert-PackageTree $extract ""
+        if (![string]::IsNullOrEmpty($PackageCandidate)) {
+            Assert-DirectoryTreesEqual $PackageCandidate $extract
+        }
+        $packageAsi = Join-Path (Join-Path $extract $BinaryRelative) "FF7RPianoSongs.asi"
+        $publishedRecord = Assert-PublishedBuildProvenance $Root $publishedProvenance $packageAsi `
+            $Authority (Get-ProductionInputRelativePaths $Root)
+        $null = Assert-ReleaseIdentity $identityPath $Authority $archive $packageAsi $publishedProvenance `
+            (Join-Path $extract "release.json") "" $SourceCommit `
+            $publishedRecord.releaseIdentity.generatedHeaderSha256
     } finally {
         if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
     }
 }
 
 function Assert-ReleaseSurface {
-    param([string]$Candidate, [string]$PackageCandidate = $PackagePath)
-    $expected = @($ReleaseAuthority.archive_basename)
-    $actual = @(Get-ChildItem -LiteralPath $Candidate -Force | ForEach-Object { $_.Name } | Sort-Object)
-    if (@(Compare-Object -ReferenceObject $expected -DifferenceObject $actual).Count -ne 0) {
-        throw "Release surface must contain exactly the packaged game-build directory"
+    param([string]$Candidate, [string]$PackageCandidate = "")
+    $declaredBasenames = @($ReleaseTargets | ForEach-Object { [string]$_.archive_basename })
+    $entries = @(Get-ChildItem -LiteralPath $Candidate -Force | Sort-Object Name)
+    if ($entries.Count -eq 0 -or @($entries | Where-Object {
+            !$_.PSIsContainer -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+            $declaredBasenames -cnotcontains $_.Name
+        }).Count -ne 0 -or $entries.Name -cnotcontains $ReleaseAuthority.archive_basename) {
+        throw "Release surface must contain only declared game-build directories and include the selected target"
     }
-    Assert-ReleaseTree (Join-Path $Candidate $ReleaseAuthority.archive_basename) $PackageCandidate
+    foreach ($entry in $entries) {
+        $target = @($ReleaseTargets | Where-Object { $_.archive_basename -ceq $entry.Name })
+        if ($target.Count -ne 1) { throw "Release target authority is ambiguous for '$($entry.Name)'" }
+        $authority = Get-ReleaseAuthority $Root ([string]$target[0].supported_executable_catalog_id)
+        $targetPackage = if ($entry.Name -ceq $ReleaseAuthority.archive_basename) { $PackageCandidate } else { "" }
+        Assert-ReleaseTree $entry.FullName $authority $targetPackage
+    }
 }
 
 $publicationToken = "$PID-$([Guid]::NewGuid().ToString('N'))"
 $packageStaging = Join-Path $Root ".package.staging-$publicationToken"
 $releaseStaging = Join-Path $Root ".release.staging-$publicationToken"
 $binaryRoot = Join-Path $packageStaging $BinaryRelative
-Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "FF7RPianoSongs.asi")
-Copy-ValidatedFile $Ini (Join-Path $binaryRoot "FF7RPianoSongs.ini")
-Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $packageStaging "release.json")
-foreach ($mapping in $DocumentMappings) {
-    Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $packageStaging $mapping.Destination)
-}
-Assert-PackageTree $packageStaging
-$null = New-ReleaseArtifacts $Root $packageStaging `
-    (Join-Path $releaseStaging $ReleaseAuthority.archive_basename) $Artifact $ProvenancePath `
-    (Join-Path $BuildDir "generated/release_identity.generated.h") $SourceCommit $ReleaseCatalogId
-Assert-ReleaseSurface $releaseStaging $packageStaging
-$publicationResult = Invoke-TwoSurfacePublication $PackagePath $ReleasePath $packageStaging $releaseStaging `
-    { param($packageCandidate, $releaseCandidate)
-        Assert-PackageTree $packageCandidate
-        Assert-ReleaseSurface $releaseCandidate $packageCandidate
-    } `
-    { param($packageCandidate, $releaseCandidate)
-        Assert-PackageTree $packageCandidate
-        Assert-ReleaseSurface $releaseCandidate $packageCandidate
+try {
+    Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "FF7RPianoSongs.asi")
+    Copy-ValidatedFile $Ini (Join-Path $binaryRoot "FF7RPianoSongs.ini")
+    Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $packageStaging "release.json")
+    foreach ($mapping in $DocumentMappings) {
+        Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $packageStaging $mapping.Destination)
     }
+    Assert-PackageTree $packageStaging
+    New-Item -ItemType Directory -Path $releaseStaging | Out-Null
+    $declaredBasenames = @($ReleaseTargets | ForEach-Object { [string]$_.archive_basename })
+    Copy-ValidatedReleaseSiblings $ReleasePath $releaseStaging $ReleaseAuthority.archive_basename `
+        $declaredBasenames {
+            param($candidate, $basename)
+            $target = @($ReleaseTargets | Where-Object { $_.archive_basename -ceq $basename })
+            if ($target.Count -ne 1) { throw "Release target authority is ambiguous for '$basename'" }
+            Assert-ReleaseTree $candidate `
+                (Get-ReleaseAuthority $Root ([string]$target[0].supported_executable_catalog_id)) ""
+        }
+    $null = New-ReleaseArtifacts $Root $packageStaging `
+        (Join-Path $releaseStaging $ReleaseAuthority.archive_basename) $Artifact $ProvenancePath `
+        (Join-Path $BuildDir "generated/release_identity.generated.h") $SourceCommit $ReleaseCatalogId
+    Assert-ReleaseSurface $releaseStaging $packageStaging
+    $publicationResult = Invoke-TwoSurfacePublication $PackagePath $ReleasePath $packageStaging $releaseStaging `
+        { param($packageCandidate, $releaseCandidate)
+            Assert-PackageTree $packageCandidate
+            Assert-ReleaseSurface $releaseCandidate $packageCandidate
+        } `
+        { param($packageCandidate, $releaseCandidate)
+            Assert-PackageTree $packageCandidate
+            Assert-ReleaseSurface $releaseCandidate $packageCandidate
+        }
+} catch {
+    foreach ($partial in @($packageStaging, $releaseStaging)) {
+        if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Recurse -Force }
+    }
+    throw
+}
 if (!$publicationResult.Committed) { throw "Two-surface publication returned without a committed pair" }
 foreach ($debt in $publicationResult.CleanupDebt) {
     Write-Warning "Validated publication committed; exact prior backup retained for explicit cleanup: $debt"
