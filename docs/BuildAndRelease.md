@@ -316,7 +316,7 @@ A publishable artifact requires all of the following:
 
 - catalog validation, Release build, full CTest, source audit, package staging, and staged audit pass;
 - the current blockers in [Current Status](CurrentStatus.md) are resolved;
-- required focused scenarios in [In-Game Validation](InGameValidation.md) pass on each supported game build, using the archive built for that build;
+- required focused scenarios in [In-Game Validation](InGameValidation.md) pass on each supported game build using the archive built for that build, unless their absence is explicitly accepted by the product owner and recorded as a version-scoped unqualified limitation in [Current Status](CurrentStatus.md); no evidence transfers between builds or artifacts;
 - package contents match `package-docs.json` and contain no repository-only evidence or developer tooling;
 - release identity, checksum, and published build-provenance sidecars match each deterministic archive and clean source commit;
 - the first-party MIT license and separate third-party notices are present.
