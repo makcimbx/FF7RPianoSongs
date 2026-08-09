@@ -398,10 +398,23 @@ bool try_rebase_ready_canonical_substrate_request(
         }
         AudioRouteState rebase_route;
         uint64_t rebase_lifecycle_epoch = 0;
+        // Observation only, taken from the snapshot this function already
+        // reads. A detached custom bank still held by the lifecycle is a
+        // custom release that has not run - the obligation the
+        // "borrower_closure ... custom_release_required=1" line reports when
+        // the aggregate closure defers that release to the canonical substrate
+        // path. Recording it lets the rebase marker say whether the rebase
+        // commits while a custom release is still outstanding.
+        bool rebase_custom_release_required = false;
+        unsigned rebase_lifecycle_phase = 0;
         {
             std::lock_guard<std::mutex> lock(g_audio_state_mutex);
             rebase_route = g_audio_route_state;
             rebase_lifecycle_epoch = g_onmemory_bank_lifecycle.state_epoch();
+            const auto rebase_lifecycle = g_onmemory_bank_lifecycle.active();
+            rebase_custom_release_required = static_cast<bool>(rebase_lifecycle);
+            rebase_lifecycle_phase =
+                static_cast<unsigned>(rebase_lifecycle.phase);
         }
 
         UObjectIdentity controller_identity{};
@@ -445,6 +458,7 @@ bool try_rebase_ready_canonical_substrate_request(
 
         const uint64_t old_request = retained.request;
         uint64_t new_request = 0;
+        unsigned commit_reset_phase = 0;
         {
             std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
             auto& current = g_bgm_canonical_substrate_proof;
@@ -492,13 +506,20 @@ bool try_rebase_ready_canonical_substrate_request(
             current.request_rebase_lease = rebase_route.lease_identity;
             current.request_rebase_lifecycle_epoch = rebase_lifecycle_epoch;
             new_request = commit_state.proof_request;
+            // Read back rather than assumed. The guard above refuses any phase
+            // other than None, so this records the phase the commit actually
+            // ran under and makes that structural constraint visible in the
+            // log instead of inferred from the source.
+            commit_reset_phase = static_cast<unsigned>(
+                current.reset_lineage.phase);
         }
 
         // The orchestration commit atomically advanced exactly one rearm epoch
         // together with the two linked request observations.
         marker = {true, old_request, new_request,
             retained.transaction_generation, retained.source_ordinal,
-            retained.sound_identity};
+            retained.sound_identity, commit_reset_phase,
+            rebase_custom_release_required, rebase_lifecycle_phase};
         return true;
     } catch (...) {
         return false;
@@ -1105,6 +1126,34 @@ bool reserve_selection_audio_activation(
                 });
             });
 
+        bool substrate_retired = false;
+        uint64_t substrate_retired_proof_route_generation = 0;
+        uint64_t substrate_retired_route_generation = 0;
+        unsigned substrate_retired_reset_phase = 0;
+        unsigned substrate_retired_bridge_phase = 0;
+        uint64_t substrate_retired_transaction_generation = 0;
+        uint64_t substrate_retired_source_ordinal = 0;
+        auto deferred_substrate_retirement = make_deferred_noexcept_action(
+            [&]() noexcept {
+                if (!substrate_retired) return;
+                try {
+                    std::ostringstream marker;
+                    marker
+                        << "[audio_sead] canonical_substrate_proof_retired"
+                        << " reason=route_predecessor_absent"
+                        << " proof_route_gen="
+                        << substrate_retired_proof_route_generation
+                        << " route_gen=" << substrate_retired_route_generation
+                        << " reset_phase=" << substrate_retired_reset_phase
+                        << " bridge_phase=" << substrate_retired_bridge_phase
+                        << " transaction_generation="
+                        << substrate_retired_transaction_generation
+                        << " source_ordinal=" << substrate_retired_source_ordinal
+                        << " released=none reverted=none";
+                    core::log(core::LogLevel::Info, marker.str());
+                } catch (...) {}
+            });
+
         std::unique_lock<std::recursive_mutex> operation_lock(
             g_audio_route_operations.mutex());
         const auto initial_ownership = snapshot_bgm_aggregate_exit_ownership(
@@ -1186,6 +1235,55 @@ bool reserve_selection_audio_activation(
             static_cast<unsigned>(substrate_proof.bridge.phase);
         diagnostic_substrate_reset_phase =
             static_cast<unsigned>(substrate_proof.reset_lineage.phase);
+        // Retirement, applied through the single property that states it:
+        // canonical_substrate_proof_route_predecessor_live. A proof whose
+        // observed route predecessor no longer exists satisfies neither branch
+        // of canonical_substrate_route_predecessor_exact, and the route can
+        // never return to the generation it names, so keeping it would refuse
+        // every subsequent activation. Discard it here, before it drives a
+        // native read, and let the next activation capture a fresh proof. A
+        // proof whose predecessor is still reachable is left untouched and is
+        // revalidated by the unchanged checks below.
+        //
+        // Only retained observations are discarded: neither the reset lineage
+        // nor the bridge authority carries an ownership token, so no bank
+        // release, native mutation, or open transaction is abandoned. The
+        // route generation cannot move underneath this test because every
+        // route transition runs under the operation lock acquired above. The
+        // diagnostic fields keep the values observed before retirement; the
+        // retirement marker emitted for this same call reports the action.
+        if (substrate_proof.active) {
+            uint64_t current_route_generation = 0;
+            {
+                std::lock_guard<std::mutex> lock(g_audio_state_mutex);
+                current_route_generation = g_audio_route_state.generation;
+            }
+            if (!canonical_substrate_proof_route_predecessor_live(
+                    substrate_proof.route_generation, current_route_generation,
+                    substrate_proof.reset_lineage.phase)) {
+                std::lock_guard<std::mutex> lock(g_bgm_playback_borrower_mutex);
+                // Retire only the proof this call observed; a concurrent
+                // replacement belongs to whoever published it.
+                if (canonical_substrate_proof_matches(
+                        g_bgm_canonical_substrate_proof, substrate_proof)) {
+                    substrate_retired_proof_route_generation =
+                        substrate_proof.route_generation;
+                    substrate_retired_route_generation = current_route_generation;
+                    substrate_retired_reset_phase = static_cast<unsigned>(
+                        substrate_proof.reset_lineage.phase);
+                    substrate_retired_bridge_phase = static_cast<unsigned>(
+                        substrate_proof.bridge.phase);
+                    substrate_retired_transaction_generation =
+                        substrate_proof.transaction_generation;
+                    substrate_retired_source_ordinal =
+                        substrate_proof.source_ordinal;
+                    g_bgm_canonical_substrate_proof = {};
+                    substrate_proof = {};
+                    substrate_retired = true;
+                    deferred_substrate_retirement.make_eligible();
+                }
+            }
+        }
         if (substrate_proof.active) {
             SelectionAdmissionSubstrateLiveFacts live_facts;
             if (!canonical_substrate_active_sound_live_exact(

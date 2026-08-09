@@ -162,6 +162,47 @@ constexpr bool canonical_substrate_reset_lineage_authority_empty(
         && canonical_empty_private_object_handle(authority.sound_identity);
 }
 
+// Liveness of the route predecessor a retained canonical substrate proof
+// observes, and therefore the retirement rule for the proof itself.
+//
+// A proof names exactly one route predecessor: the route generation observed
+// when the canonical relinquishment it describes was captured. That
+// predecessor is still reachable in exactly two ways, matching the two
+// branches of canonical_substrate_route_predecessor_exact below:
+//   - the current route generation is its exact successor, so the proof
+//     describes the generation the route just left; or
+//   - a reset-lineage authority has been established (phase != None), so the
+//     observation was carried across the route reset that followed it.
+// When neither holds, the generation the proof names was superseded by route
+// transitions the mod never observed and no later generation can restore it.
+// The predecessor no longer exists, the proof is dead, and it can only refuse
+// every subsequent activation.
+//
+// Retiring a dead proof discards retained observations and nothing else. The
+// reset lineage "carries no ownership token; all fields are retained
+// identity/lineage observations" and the bridge authority likewise never owns
+// the released custom token (see both authority headers above), so retirement
+// releases no bank, reverts no native mutation, and completes no lineage. It
+// is deliberately weaker than rebasing: it refuses to assert that the
+// unobserved intervening transitions were authenticated, and instead lets the
+// next activation capture a fresh proof from live state.
+//
+// The rule is strictly contained by the use predicate: whenever it reports
+// dead, normal_successor is false (it requires the same successor test) and
+// authority_phase_exact is false (it requires phase == Qualified), so
+// canonical_substrate_route_predecessor_exact would already have rejected the
+// proof on both branches. Retirement can never remove a usable proof.
+constexpr bool canonical_substrate_proof_route_predecessor_live(
+    const uint64_t proof_route_generation,
+    const uint64_t current_route_generation,
+    const CanonicalSubstrateResetLineagePhase authority_phase) noexcept
+{
+    return (proof_route_generation != 0
+               && proof_route_generation != UINT64_MAX
+               && current_route_generation == proof_route_generation + 1)
+        || authority_phase != CanonicalSubstrateResetLineagePhase::None;
+}
+
 constexpr bool canonical_substrate_bridge_authority_empty(
     const CanonicalSubstrateBridgeAuthority& authority) noexcept
 {

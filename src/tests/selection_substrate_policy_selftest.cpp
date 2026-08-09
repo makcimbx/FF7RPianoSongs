@@ -1041,6 +1041,86 @@ void test_selection_substrate_policy()
     require(!canonical_substrate_route_predecessor_exact(normal_successor),
         "normal successor accepted an unrelated Reserved bridge stage");
 
+    // Retirement rule. A retained proof stays usable only while the route
+    // predecessor it observed still exists. The captured 1.004 shape - a proof
+    // at route generation 14 read while the route sits idle at 0 with no
+    // reset-lineage authority - names a generation the route can never return
+    // to, so it must retire and let the next activation capture a fresh proof.
+    require(!canonical_substrate_proof_route_predecessor_live(
+                14, 0, CanonicalSubstrateResetLineagePhase::None),
+        "proof whose route predecessor no longer exists was treated as live");
+    // The retained-proof path must survive untouched: a proof the current
+    // generation exactly succeeds is live and keeps being revalidated.
+    require(canonical_substrate_proof_route_predecessor_live(
+                14, 15, CanonicalSubstrateResetLineagePhase::None),
+        "exact N-to-N+1 predecessor was retired instead of revalidated");
+    // An established reset lineage carries the observation across the reset.
+    // Neither established phase may retire, Reserved least of all: it is the
+    // in-flight half of a reservation transaction.
+    require(canonical_substrate_proof_route_predecessor_live(
+                14, 0, CanonicalSubstrateResetLineagePhase::Qualified),
+        "qualified reset lineage was retired");
+    require(canonical_substrate_proof_route_predecessor_live(
+                14, 0, CanonicalSubstrateResetLineagePhase::Reserved),
+        "reserved reset lineage was retired mid-transaction");
+    // The successor guards match bgm_playback_exact_successor term for term,
+    // and an advanced-but-unauthenticated lineage is not a predecessor.
+    require(!canonical_substrate_proof_route_predecessor_live(
+                14, 14, CanonicalSubstrateResetLineagePhase::None),
+        "proof route generation equal to the current one was treated as live");
+    require(!canonical_substrate_proof_route_predecessor_live(
+                14, 19, CanonicalSubstrateResetLineagePhase::None),
+        "unobserved multi-generation drift was treated as a live predecessor");
+    require(!canonical_substrate_proof_route_predecessor_live(
+                0, 1, CanonicalSubstrateResetLineagePhase::None),
+        "zero route generation was accepted as a predecessor");
+    require(!canonical_substrate_proof_route_predecessor_live(
+                UINT64_MAX, 0, CanonicalSubstrateResetLineagePhase::None),
+        "wrapped route generation was accepted as a predecessor");
+
+    // Containment. Retirement may never discard a proof that could still be
+    // used, so for every shape the rule calls dead, build the most generous
+    // use facts possible - every long-form term true - and require that
+    // canonical_substrate_route_predecessor_exact rejects it anyway. This is
+    // what stops the fix from degenerating into "retire and re-capture on
+    // every activation": any shape the predicate would accept must also be
+    // reported live.
+    struct SubstrateRetirementShape final {
+        uint64_t proof_route_generation;
+        uint64_t current_route_generation;
+        CanonicalSubstrateResetLineagePhase phase;
+    };
+    const SubstrateRetirementShape retirement_shapes[] = {
+        {14, 0, CanonicalSubstrateResetLineagePhase::None},
+        {14, 15, CanonicalSubstrateResetLineagePhase::None},
+        {14, 0, CanonicalSubstrateResetLineagePhase::Qualified},
+        {14, 0, CanonicalSubstrateResetLineagePhase::Reserved},
+        {14, 14, CanonicalSubstrateResetLineagePhase::None},
+        {14, 19, CanonicalSubstrateResetLineagePhase::None},
+        {15, 15, CanonicalSubstrateResetLineagePhase::Qualified},
+        {0, 1, CanonicalSubstrateResetLineagePhase::None},
+        {UINT64_MAX, 0, CanonicalSubstrateResetLineagePhase::None},
+    };
+    for (const auto& shape : retirement_shapes) {
+        CanonicalSubstrateResetLineageUseFacts generous;
+        for (const auto field : reset_use_fields) generous.*field = true;
+        generous.normal_successor =
+            shape.proof_route_generation != 0
+            && shape.proof_route_generation != UINT64_MAX
+            && shape.current_route_generation
+                == shape.proof_route_generation + 1
+            && shape.phase == CanonicalSubstrateResetLineagePhase::None;
+        generous.authority_phase_exact =
+            shape.phase == CanonicalSubstrateResetLineagePhase::Qualified;
+        if (canonical_substrate_proof_route_predecessor_live(
+                shape.proof_route_generation, shape.current_route_generation,
+                shape.phase)) {
+            continue;
+        }
+        require(!canonical_substrate_route_predecessor_exact(generous),
+            "retirement would have discarded a usable canonical substrate proof");
+    }
+
     // A denial before the state-4 edge remains fail-closed. The exact rebase
     // advances the production revocation epoch, making the same selection
     // retryable without a selection-generation change or timing delay.

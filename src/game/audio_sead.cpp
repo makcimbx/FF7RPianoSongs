@@ -10899,6 +10899,9 @@ struct CanonicalSubstrateRequestRebaseMarker final {
     uint64_t transaction_generation = 0;
     uint64_t source_ordinal = 0;
     UObjectLiveHandle sound_identity{};
+    unsigned reset_lineage_phase = 0;
+    bool custom_release_required = false;
+    unsigned lifecycle_phase = 0;
 };
 
 bool try_rebase_ready_canonical_substrate_request(
@@ -10933,7 +10936,18 @@ void __fastcall bgm_slot_play_detour(void* controller)
                     << " sound_serial="
                     << substrate_rebase_marker.sound_identity.serial_number
                     << " state=4 mutation_authorized=1 custom_token=0"
-                    << " canonical_token_preserved=1";
+                    << " canonical_token_preserved=1"
+                    // Separates the two accounts of a stale proof: a commit
+                    // taken while a custom release is still outstanding shows
+                    // the proof's subject was already invalidated, while a
+                    // clean commit shows the lineage fields advanced with no
+                    // authority established behind them.
+                    << " reset_lineage_phase="
+                    << substrate_rebase_marker.reset_lineage_phase
+                    << " custom_release_required="
+                    << (substrate_rebase_marker.custom_release_required ? 1 : 0)
+                    << " lifecycle_phase="
+                    << substrate_rebase_marker.lifecycle_phase;
                 core::log(core::LogLevel::Info, marker.str());
             }
         }
