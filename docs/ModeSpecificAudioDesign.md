@@ -95,5 +95,8 @@ Focused tests cover one-file compatibility, each override independently,
 all three distinct sources, mixed source formats, ambiguous role rejection,
 duration mismatch rejection, direct fallback, Mode0-only metronome placement,
 cache invalidation, deterministic MABF output, and unchanged runtime descriptor
-shape. In-game qualification must still traverse Mode0 to Mode1 to Mode2 and
-confirm the expected audible source for every tier.
+shape. Focused 1.005 Development qualification traversed Mode0 to Mode1 to
+Mode2 with three distinct authored sources and confirmed the expected audible
+source, Mode0-only metronome, and preserved synchronization. Warm-cache reuse,
+independent override-removal fallback, and broader mixed-codec corpus behavior
+remain separate qualification scopes.
