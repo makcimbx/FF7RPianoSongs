@@ -137,7 +137,8 @@ void log_sidecar_state(const SidecarRuntimeState& state)
     out << "[audio_sead_sidecar] key=\"" << state.key << "\""
         << " id=\"" << state.song_id << "\""
         << " status=" << state.status
-        << " allocation=0x" << reinterpret_cast<uintptr_t>(state.allocation.sead_header())
+        << " allocation=0x" << std::hex
+        << reinterpret_cast<uintptr_t>(state.allocation.sead_header())
         << " mabf=0x" << reinterpret_cast<uintptr_t>(state.allocation.mabf_bytes())
         << " mabf_size=0x" << state.allocation.mabf_size()
         << std::dec

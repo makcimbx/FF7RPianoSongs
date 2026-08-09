@@ -305,6 +305,7 @@ add_executable(catalog_adoption_selftest
     src/game/song_registry.cpp
     src/game/native_array_publication.cpp
     src/core/hooks.cpp
+    src/core/logging.cpp
     src/core/pe_image.cpp
     src/game/audio_production_wiring.cpp
     src/startup/startup_cache_progress.cpp
