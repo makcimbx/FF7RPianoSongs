@@ -98,7 +98,7 @@ Generated levels are independent profiles, can have sparse labels, and may be om
 - `level` is finite in `0..1` and must be greater than zero when enabled.
 - `beat_zero_offset_seconds` is finite in `-30..30`.
 
-The click is mixed into generated audio cache data; it does not alter chart timestamps or source-audio duration.
+When enabled, the click is mixed only into generated MABF `Mode0`; `Mode1` and `Mode2` contain the same clean processed source audio. When disabled, all three modes contain clean audio. Metronome processing does not alter chart timestamps or source-audio duration. Cache manifests record the effective mode mapping, so pre-correction manifests are rejected and rebuilt, including disabled caches whose numeric cache key remains unchanged.
 
 ## Gain And Loudness
 

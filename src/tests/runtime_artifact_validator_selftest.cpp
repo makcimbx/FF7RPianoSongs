@@ -52,11 +52,9 @@ ArtifactData make_artifact(const bool adaptive) {
     config.target_samples = 1;
     const std::vector<std::int16_t> clean_pcm(2, 0);
     const std::vector<std::int16_t> strong_pcm{12000, -9000};
-    const std::vector<std::int16_t> weak_pcm{3000, -2000};
     const auto clean = encode_hca_48k_stereo_256k(clean_pcm, config);
     const auto strong = adaptive ? encode_hca_48k_stereo_256k(strong_pcm, config) : clean;
-    const auto weak = adaptive ? encode_hca_48k_stereo_256k(weak_pcm, config) : clean;
-    const ff7rp::pipeline::MabfModeHcaPayloads modes{&strong, &weak, &clean};
+    const ff7rp::pipeline::MabfModeHcaPayloads modes{&strong, &clean, &clean};
     const auto built = ff7rp::pipeline::build_mabf_from_mode_hca(modes);
     if (!built.status.ok()) throw std::runtime_error("failed to build MABF fixture: " + built.status.message);
 
@@ -234,6 +232,22 @@ int main() {
         if (!expect(wrong_selection_result, false,
                 "mabf_validation:disabled metronome requires byte-identical clean Mode0/Mode1/Mode2 payloads",
                 {"mabf_read_started", "mabf_validation_started"}, "clean/adaptive validator selection")) {
+            return 7;
+        }
+
+        Fixture legacy_disabled_manifest = make_fixture(root, "legacy-disabled-manifest", clean);
+        const std::string current_mapping =
+            "metronome_adaptive_mode_mapping=mode0_clean,mode1_clean,mode2_clean";
+        const std::string legacy_mapping =
+            "metronome_adaptive_mode_mapping=mode0_strong_guide,mode1_weak_guide,mode2_clean";
+        const std::size_t mapping_offset = legacy_disabled_manifest.manifest.find(current_mapping);
+        if (mapping_offset == std::string::npos) return 7;
+        legacy_disabled_manifest.manifest.replace(mapping_offset, current_mapping.size(), legacy_mapping);
+        if (!write_text(legacy_disabled_manifest.song.cache_manifest_path, legacy_disabled_manifest.manifest) ||
+            !expect(validate(legacy_disabled_manifest), false, "manifest_size",
+                {"mabf_read_started", "mabf_validation_started", "mabf_hash_started",
+                    "manifest_read_started", "manifest_render_started"},
+                "legacy disabled manifest invalidation")) {
             return 7;
         }
 

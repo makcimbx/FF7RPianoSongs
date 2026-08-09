@@ -6,8 +6,8 @@
 #include <iostream>
 
 int main(int argc, char** argv) {
-    if (argc != 3 && argc != 5) {
-        std::cerr << "usage: hca_parity_fixture <clean.wav> <output.mabf.bin> [mode0.wav mode1.wav]\n";
+    if (argc != 3 && argc != 4) {
+        std::cerr << "usage: hca_parity_fixture <clean.wav> <output.mabf.bin> [mode0.wav]\n";
         return 2;
     }
 
@@ -18,18 +18,15 @@ int main(int argc, char** argv) {
         return 3;
     }
     ff7rp::pipeline::WavAudio mode0;
-    ff7rp::pipeline::WavAudio mode1;
-    if (argc == 5) {
+    if (argc == 4) {
         const auto mode0_status = ff7rp::pipeline::read_wav_file(argv[3], &mode0);
-        const auto mode1_status = ff7rp::pipeline::read_wav_file(argv[4], &mode1);
-        if (!mode0_status.ok() || !mode1_status.ok()) {
-            std::cerr << "adaptive input rejected: "
-                      << (!mode0_status.ok() ? mode0_status.message : mode1_status.message) << '\n';
+        if (!mode0_status.ok()) {
+            std::cerr << "Mode0 input rejected: " << mode0_status.message << '\n';
             return 3;
         }
     }
     const auto built = ff7rp::pipeline::build_audio_mabf(
-        audio, argc == 5 ? &mode0 : nullptr, argc == 5 ? &mode1 : nullptr, argc == 5);
+        audio, argc == 4 ? &mode0 : nullptr, argc == 4);
     if (!built.status.ok() || !built.release_valid) {
         std::cerr << "MABF generation failed: " << built.status.message << '\n';
         return 4;

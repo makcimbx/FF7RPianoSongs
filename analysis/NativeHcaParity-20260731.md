@@ -22,10 +22,12 @@ retoc.exe get pakchunk8-WindowsNoEditor.utoc <chunk-id> <temp>/bgm_piano_0N.uass
 AudioMog.exe <temp>/bgm_piano_0N.uasset
 dotnet build VgaudioDecode.csproj -c Release
 dotnet VgaudioDecode.dll <mode.hca> <decoded.wav>
-hca_parity_fixture.exe <clean.wav> <output.mabf.bin> [<mode0.wav> <mode1.wav>]
+hca_parity_fixture.exe <clean.wav> <output.mabf.bin> [<mode0.wav>]
 python tools/hca_parity_report.py inspect <asset> --offset 0x430 --extract-dir <temp>
 python tools/hca_parity_report.py compare <source.wav> <decoded.wav>
 ```
+
+The current fixture CLI follows the generated-song contract: an optional Mode0 input produces guide Mode0 with clean Mode1/Mode2. The distinct Mode1 inputs and generated hashes recorded by this historical run came from the superseded three-payload writer and are retained only as historical parity evidence.
 
 ## Native inventory and bounded loop search
 

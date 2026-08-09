@@ -203,16 +203,16 @@ int main() {
     // The oracle includes the generated runtime identity. It was regenerated
     // after the catalog's retained evidence path changed, without changing the
     // cache schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5201u, 0xfb351baaa42d3eeull, "comprehensive")) return 1;
+    if (!check_golden(comprehensive, source_config, 5189u, 0x2c833f4e635fadf6ull, "comprehensive")) return 1;
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3332u, 0x7a80ee4ecd21c5d8ull, "empty")) return 1;
+    if (!check_golden(empty, empty_source, 3320u, 0x141cd9e951189931ull, "empty")) return 1;
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3333u, 0xec352aa05f268cf6ull, "nonfinite")) return 1;
+    if (!check_golden(nonfinite, empty_source, 3321u, 0x435b9dc72afa6db3ull, "nonfinite")) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);

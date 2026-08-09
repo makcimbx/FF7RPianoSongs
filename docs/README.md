@@ -17,6 +17,7 @@ This index is for the repository source tree. The binary package intentionally c
 - [Current Status](CurrentStatus.md) records supported behavior, blockers, latest verification, and artifact disposition.
 - [In-Game Validation](InGameValidation.md) defines stable manual scenarios, acceptance criteria, and stop conditions.
 - [Architecture](Architecture.md) records durable ownership and lifecycle invariants.
+- [Mode-Specific Audio Design](ModeSpecificAudioDesign.md) records the approved, not-yet-implemented offline contract for optional Mode1 and Mode2 source overrides.
 - [RVA catalog](../src/game/rva_catalog.json) is the machine-readable inventory of supported game builds, addresses, and hooks. [Architecture](Architecture.md) documents its schema and the per-build generated trees.
 
 ## Reverse Engineering Evidence

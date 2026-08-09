@@ -28,7 +28,6 @@ std::vector<std::int16_t> pcm16_from_wav(const WavAudio& audio) {
 MabfBuildResult build_audio_mabf(
     const WavAudio& clean_audio,
     const WavAudio* metronome_mode0_audio,
-    const WavAudio* metronome_mode1_audio,
     const bool adaptive_metronome,
     const AudioArtifactBuildTrace& trace) {
     const auto report = [&](const char* stage) {
@@ -41,20 +40,18 @@ MabfBuildResult build_audio_mabf(
         config.bitrate = 256000;
         config.target_samples = clean_audio.frame_count();
 
-        report("hca_mode2_pcm_started");
+        report("hca_clean_pcm_started");
         const std::vector<std::int16_t> pcm = pcm16_from_wav(clean_audio);
-        report("hca_mode2_encode_started");
+        report("hca_clean_encode_started");
         const std::vector<std::uint8_t> clean_hca = encode_hca_48k_stereo_256k(pcm, config);
-        report("hca_mode2_ready");
+        report("hca_clean_ready");
         std::vector<std::uint8_t> mode0_hca;
-        std::vector<std::uint8_t> mode1_hca;
         if (adaptive_metronome) {
-            if (!metronome_mode0_audio || !metronome_mode1_audio ||
-                metronome_mode0_audio->frame_count() != clean_audio.frame_count() ||
-                metronome_mode1_audio->frame_count() != clean_audio.frame_count()) {
+            if (!metronome_mode0_audio ||
+                metronome_mode0_audio->frame_count() != clean_audio.frame_count()) {
                 MabfBuildResult result;
                 result.status = Status::error(StatusCode::MabfNotReleaseValid,
-                    "adaptive metronome mode audio is missing or has mismatched duration");
+                    "metronome Mode0 audio is missing or has mismatched duration");
                 return result;
             }
             report("hca_mode0_pcm_started");
@@ -62,15 +59,9 @@ MabfBuildResult build_audio_mabf(
             report("hca_mode0_encode_started");
             mode0_hca = encode_hca_48k_stereo_256k(mode0_pcm, config);
             report("hca_mode0_ready");
-            report("hca_mode1_pcm_started");
-            const std::vector<std::int16_t> mode1_pcm = pcm16_from_wav(*metronome_mode1_audio);
-            report("hca_mode1_encode_started");
-            mode1_hca = encode_hca_48k_stereo_256k(mode1_pcm, config);
-            report("hca_mode1_ready");
         }
         const std::vector<std::uint8_t>& mode0_or_clean = adaptive_metronome ? mode0_hca : clean_hca;
-        const std::vector<std::uint8_t>& mode1_or_clean = adaptive_metronome ? mode1_hca : clean_hca;
-        const MabfModeHcaPayloads mode_hca{&mode0_or_clean, &mode1_or_clean, &clean_hca};
+        const MabfModeHcaPayloads mode_hca{&mode0_or_clean, &clean_hca, &clean_hca};
         report("mabf_build_started");
         return build_mabf_from_mode_hca(mode_hca);
     } catch (const std::exception& error) {

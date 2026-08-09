@@ -21,11 +21,11 @@ constexpr std::size_t kFixtureFrames = 897u;
 constexpr std::size_t kGoldenMabfSize = 5680u;
 constexpr std::size_t kGoldenHcaSize = 1460u;
 constexpr std::uint64_t kCleanMabfDigest = 0x1e0cfc7e8b55d353ull;
-constexpr std::uint64_t kAdaptiveMabfDigest = 0x0d4667c0d86f092ull;
+constexpr std::uint64_t kAdaptiveMabfDigest = 0x64ec57582c3e8ad6ull;
 constexpr std::array<std::uint64_t, 3> kCleanModeDigests{
     0xf99ccb339309d017ull, 0xf99ccb339309d017ull, 0xf99ccb339309d017ull};
 constexpr std::array<std::uint64_t, 3> kAdaptiveModeDigests{
-    0x293cd44b48926192ull, 0xfd6e8380747338d7ull, 0xf99ccb339309d017ull};
+    0x293cd44b48926192ull, 0xf99ccb339309d017ull, 0xf99ccb339309d017ull};
 constexpr const char* kReleaseValidationNote =
     "Three-mode MABF assembled from explicit per-mode HCA payloads and the proven bgm09 scaffold.";
 
@@ -97,13 +97,12 @@ int golden_fail(const char* message, const MabfBuildResult& result) {
 }
 
 std::vector<std::string> clean_trace() {
-    return {"hca_mode2_pcm_started", "hca_mode2_encode_started", "hca_mode2_ready", "mabf_build_started"};
+    return {"hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready", "mabf_build_started"};
 }
 
 std::vector<std::string> adaptive_trace() {
-    return {"hca_mode2_pcm_started", "hca_mode2_encode_started", "hca_mode2_ready",
-        "hca_mode0_pcm_started", "hca_mode0_encode_started", "hca_mode0_ready",
-        "hca_mode1_pcm_started", "hca_mode1_encode_started", "hca_mode1_ready", "mabf_build_started"};
+    return {"hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready",
+        "hca_mode0_pcm_started", "hca_mode0_encode_started", "hca_mode0_ready", "mabf_build_started"};
 }
 
 } // namespace
@@ -118,7 +117,7 @@ int main() {
 
     std::vector<std::string> trace;
     MabfBuildResult result = ff7rp::pipeline::build_audio_mabf(
-        clean, nullptr, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
+        clean, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
     if (!result.status.ok() || !result.release_valid || result.used_placeholder_scaffold ||
         result.validation_note != kReleaseValidationNote) return fail("clean build flags changed");
     if (trace != clean_trace()) return fail("clean trace changed");
@@ -132,7 +131,7 @@ int main() {
 
     trace.clear();
     result = ff7rp::pipeline::build_audio_mabf(
-        clean, &strong, &weak, true, [&](const char* stage) { trace.emplace_back(stage); });
+        clean, &strong, true, [&](const char* stage) { trace.emplace_back(stage); });
     if (!result.status.ok() || !result.release_valid || result.used_placeholder_scaffold ||
         result.validation_note != kReleaseValidationNote) return fail("adaptive build flags changed");
     if (trace != adaptive_trace()) return fail("adaptive trace changed");
@@ -140,9 +139,8 @@ int main() {
     if (result.bytes.size() != kGoldenMabfSize || digest(result.bytes.data(), result.bytes.size()) != kAdaptiveMabfDigest ||
         read_u32_le(result.bytes, 0x448u) + ff7rp::pipeline::kMabfHcaHeaderSize != kGoldenHcaSize ||
         adaptive_modes != kAdaptiveModeDigests || adaptive_modes[0] == adaptive_modes[1] ||
-        adaptive_modes[0] == adaptive_modes[2] || adaptive_modes[1] == adaptive_modes[2] ||
-        mode_hca_equal(result.bytes, 0u, 1u) || mode_hca_equal(result.bytes, 0u, 2u) ||
-        mode_hca_equal(result.bytes, 1u, 2u)) {
+        adaptive_modes[1] != adaptive_modes[2] || mode_hca_equal(result.bytes, 0u, 1u) ||
+        !mode_hca_equal(result.bytes, 1u, 2u)) {
         return golden_fail("adaptive parent byte golden or mode order changed", result);
     }
     metadata = {};
@@ -150,12 +148,12 @@ int main() {
         !metadata_matches(metadata)) return fail("adaptive validator metadata changed");
 
     const std::vector<std::string> ready_trace{
-        "hca_mode2_pcm_started", "hca_mode2_encode_started", "hca_mode2_ready"};
+        "hca_clean_pcm_started", "hca_clean_encode_started", "hca_clean_ready"};
     trace.clear();
     result = ff7rp::pipeline::build_audio_mabf(
-        clean, nullptr, &weak, true, [&](const char* stage) { trace.emplace_back(stage); });
+        clean, nullptr, true, [&](const char* stage) { trace.emplace_back(stage); });
     if (result.status.code != StatusCode::MabfNotReleaseValid ||
-        result.status.message != "adaptive metronome mode audio is missing or has mismatched duration" ||
+        result.status.message != "metronome Mode0 audio is missing or has mismatched duration" ||
         !result.bytes.empty() || trace != ready_trace) return fail("missing-guide failure changed");
 
     WavAudio mismatched = weak;
@@ -163,17 +161,17 @@ int main() {
     const WavAudio mismatched_before = mismatched;
     trace.clear();
     result = ff7rp::pipeline::build_audio_mabf(
-        clean, &strong, &mismatched, true, [&](const char* stage) { trace.emplace_back(stage); });
+        clean, &mismatched, true, [&](const char* stage) { trace.emplace_back(stage); });
     if (result.status.code != StatusCode::MabfNotReleaseValid ||
-        result.status.message != "adaptive metronome mode audio is missing or has mismatched duration" ||
+        result.status.message != "metronome Mode0 audio is missing or has mismatched duration" ||
         !result.bytes.empty() || trace != ready_trace) return fail("mismatched-guide failure changed");
 
     const WavAudio zero;
     const WavAudio zero_before = zero;
     trace.clear();
     result = ff7rp::pipeline::build_audio_mabf(
-        zero, nullptr, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
-    const std::vector<std::string> zero_trace{"hca_mode2_pcm_started", "hca_mode2_encode_started"};
+        zero, nullptr, false, [&](const char* stage) { trace.emplace_back(stage); });
+    const std::vector<std::string> zero_trace{"hca_clean_pcm_started", "hca_clean_encode_started"};
     if (result.status.code != StatusCode::HcaUnavailable ||
         result.status.message != "native HCA encoder requires non-empty 48 kHz stereo PCM16 at 256 kbps" ||
         !result.bytes.empty() || trace != zero_trace) return fail("zero-frame HCA failure changed");

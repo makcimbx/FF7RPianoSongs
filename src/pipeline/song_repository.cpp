@@ -48,6 +48,7 @@ constexpr std::uint32_t kRuntimeCacheFormat = 13;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
 constexpr std::uint32_t kMaxRuntimeCacheProfiles = 32;
+constexpr const char* kMetronomeModeMapping = "metronome_modes=mode0_guide,mode1_clean,mode2_clean";
 
 std::string path_string(const std::filesystem::path& path);
 using cache_artifact_writer::clear_last_error;
@@ -546,7 +547,6 @@ Status build_audio_cache(
     LoadedSong* song,
     const SongConfig& source_config,
     const WavAudio* metronome_mode0_audio,
-    const WavAudio* metronome_mode1_audio,
     const SongLoadTrace& trace) {
     const auto report = [&](const char* stage) {
         if (trace) trace(stage);
@@ -555,8 +555,8 @@ Status build_audio_cache(
         return Status::error(StatusCode::InvalidArgument, "song must not be null");
     }
     try {
-        MabfBuildResult mabf = build_audio_mabf(song->audio, metronome_mode0_audio,
-            metronome_mode1_audio, song->config.metronome_enabled, trace);
+        MabfBuildResult mabf = build_audio_mabf(
+            song->audio, metronome_mode0_audio, song->config.metronome_enabled, trace);
         if (!mabf.status.ok()) {
             return mabf.status;
         }
@@ -724,11 +724,13 @@ Status load_song_directory(
     std::vector<std::string> cache_files{json_path};
     if (song.chart_from_midi) cache_files.push_back(song.midi_source_path);
     cache_files.push_back(song.audio_source_path);
-    status = fnv1a64_files_and_strings(
-        cache_files,
-        {kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
-            song.chart_policy_identity},
-        &song.cache_key);
+    std::vector<std::string> cache_identity{
+        kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
+        song.chart_policy_identity};
+    if (song.config.metronome_enabled) {
+        cache_identity.emplace_back(kMetronomeModeMapping);
+    }
+    status = fnv1a64_files_and_strings(cache_files, cache_identity, &song.cache_key);
     if (!status.ok()) {
         song.status = status;
         write_last_error(song.directory, status);
@@ -943,9 +945,7 @@ Status load_song_directory(
 
     advance(SongLoadProgressStage::BuildingAudioCache);
     WavAudio metronome_mode0_audio;
-    WavAudio metronome_mode1_audio;
     const WavAudio* metronome_mode0_audio_ptr = nullptr;
-    const WavAudio* metronome_mode1_audio_ptr = nullptr;
     if (song.config.metronome_enabled) {
         report("metronome_beats_started");
         std::vector<MetronomeBeat> beats;
@@ -985,12 +985,6 @@ Status load_song_directory(
             status = process_guide(
                 &metronome_mode0_audio, 1.0, MetronomeVoice::Strong, &metronome_stats);
         }
-        MetronomeStats mode1_stats;
-        if (status.ok()) {
-            report("metronome_mode1_processing_started");
-            status = process_guide(
-                &metronome_mode1_audio, 0.60, MetronomeVoice::Weak, &mode1_stats);
-        }
         if (!status.ok()) {
             song.status = status;
             write_last_error(song.directory, status);
@@ -1002,7 +996,6 @@ Status load_song_directory(
         song.metronome_first_beat_seconds = metronome_stats.first_beat_seconds;
         song.metronome_last_beat_seconds = metronome_stats.last_beat_seconds;
         metronome_mode0_audio_ptr = &metronome_mode0_audio;
-        metronome_mode1_audio_ptr = &metronome_mode1_audio;
         report("metronome_guides_ready");
     }
 
@@ -1037,7 +1030,7 @@ Status load_song_directory(
 
     song.status = Status::ok_status();
     song.hca_status = build_audio_cache(
-        &song, source_config, metronome_mode0_audio_ptr, metronome_mode1_audio_ptr, trace);
+        &song, source_config, metronome_mode0_audio_ptr, trace);
     if (!song.hca_status.ok()) {
         song.status = song.hca_status;
         write_last_error(song.directory, song.hca_status);

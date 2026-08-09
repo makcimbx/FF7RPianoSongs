@@ -1233,8 +1233,8 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
     constexpr std::uint64_t kExpectedCacheKey = 0xcd7f7a21e9b6083dull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x253defcf6daebf8eull;
-    constexpr std::size_t kExpectedNormalizedManifestBytes = 4780u;
+    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x9e6a66a7586f332full;
+    constexpr std::size_t kExpectedNormalizedManifestBytes = 4768u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=8d6270bd79225857";
     if (generated.cache_key != kExpectedCacheKey ||
         normalized_manifest_digest != kExpectedNormalizedManifestDigest ||
@@ -1511,6 +1511,23 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
         enabled.metronome_last_beat_seconds < enabled.metronome_first_beat_seconds) {
         return fail("adaptive metronome fixture did not produce beat diagnostics");
     }
+    const std::vector<std::string> enabled_cache_files{
+        (enabled_directory / "song.json").generic_string(),
+        (enabled_directory / "song.wav").generic_string()};
+    std::uint64_t legacy_cache_key = 0;
+    std::uint64_t corrected_cache_key = 0;
+    status = ff7rp::pipeline::fnv1a64_files_and_strings(enabled_cache_files,
+        {ff7rp::pipeline::kPipelineCacheVersion, "chart=json", enabled.chart_policy_identity},
+        &legacy_cache_key);
+    if (status.ok()) {
+        status = ff7rp::pipeline::fnv1a64_files_and_strings(enabled_cache_files,
+            {ff7rp::pipeline::kPipelineCacheVersion, "chart=json", enabled.chart_policy_identity,
+                "metronome_modes=mode0_guide,mode1_clean,mode2_clean"},
+            &corrected_cache_key);
+    }
+    if (!status.ok() || enabled.cache_key != corrected_cache_key || enabled.cache_key == legacy_cache_key) {
+        return fail("corrected metronome mode mapping did not invalidate the legacy enabled cache identity");
+    }
     const std::vector<std::uint8_t> enabled_mabf = read_binary(enabled.cache_sidecar_path);
     if (enabled_mabf.size() <= ff7rp::pipeline::kMabfHeaderSize ||
         (enabled_mabf.size() - ff7rp::pipeline::kMabfHeaderSize) % 3u != 0u) {
@@ -1527,8 +1544,16 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
             enabled_mabf.begin() + left_offset + enabled_hca_size,
             enabled_mabf.begin() + right_offset);
     };
-    if (mode_equal(0, 1) || mode_equal(0, 2) || mode_equal(1, 2)) {
-        return fail("adaptive MABF did not preserve distinct strong-guide, weak-guide, and clean payloads");
+    if (mode_equal(0, 1) || mode_equal(0, 2) || !mode_equal(1, 2)) {
+        return fail("enabled metronome did not preserve Mode0 guide with clean Mode1/Mode2 payloads");
+    }
+    ff7rp::pipeline::MabfArtifactMetadata enabled_metadata;
+    if (!ff7rp::pipeline::validate_adaptive_metronome_mabf(
+            enabled_mabf, enabled.audio.source_frame_count, &enabled_metadata).ok() ||
+        enabled_metadata.logical_source_frames != enabled.audio.source_frame_count ||
+        enabled_metadata.sample_rate != enabled.audio.sample_rate ||
+        enabled_metadata.channels != enabled.audio.channels) {
+        return fail("enabled metronome changed MABF duration or geometry");
     }
     status = ff7rp::pipeline::load_song_directory(disabled_directory.string(), &disabled);
     if (!status.ok()) return fail("disabled metronome fixture failed: " + status.message);

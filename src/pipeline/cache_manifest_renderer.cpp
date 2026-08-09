@@ -360,7 +360,11 @@ Status render_cache_manifest(const LoadedSong& song, const SongConfig& source_co
     }
     out << "\n";
     out << "metronome_enabled=" << (song.config.metronome_enabled ? 1 : 0) << "\n";
-    out << "metronome_adaptive_mode_mapping=mode0_strong_guide,mode1_weak_guide,mode2_clean\n";
+    out << "metronome_adaptive_mode_mapping="
+        << (song.config.metronome_enabled
+                ? "mode0_guide,mode1_clean,mode2_clean"
+                : "mode0_clean,mode1_clean,mode2_clean")
+        << "\n";
     out << "metronome_audio_baked=" << (song.config.metronome_enabled ? 1 : 0) << "\n";
     out << "metronome_level=" << song.config.metronome_level << "\n";
     out << "metronome_beat_zero_offset_seconds=" << song.config.metronome_beat_zero_offset_seconds << "\n";

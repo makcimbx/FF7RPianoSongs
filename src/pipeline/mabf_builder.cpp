@@ -312,9 +312,9 @@ Status validate_release_mabf(
                 bytes.begin() + offsets[right]);
     };
     if (mode_policy == MabfModePolicy::Adaptive) {
-        if (modes_equal(0, 1) || modes_equal(0, 2) || modes_equal(1, 2)) {
+        if (modes_equal(0, 1) || !modes_equal(1, 2)) {
             return Status::error(StatusCode::MabfNotReleaseValid,
-                "adaptive metronome requires distinct Mode0 strong-guide, Mode1 weak-guide, and Mode2 clean payloads");
+                "enabled metronome requires a distinct Mode0 guide and byte-identical clean Mode1/Mode2 payloads");
         }
     } else if (mode_policy == MabfModePolicy::Clean && (!modes_equal(0, 1) || !modes_equal(0, 2))) {
         return Status::error(StatusCode::MabfNotReleaseValid,
