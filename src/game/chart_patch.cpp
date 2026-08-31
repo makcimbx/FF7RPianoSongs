@@ -1562,18 +1562,20 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     if (!planned_ok) {
         static std::atomic_int s_plan_failure_logs{0};
         if (s_plan_failure_logs.fetch_add(1, std::memory_order_relaxed) < 32) {
-            const std::string reason = !layout_ok
-                ? (layout_reason.empty() ? "invalid_live_chart_layout" : layout_reason)
-                : !song ? "missing_song_descriptor"
-                : !profile ? "missing_difficulty_profile"
-                : plan_fail_reason.empty() ? "descriptor_chart_plan_failed"
-                                           : plan_fail_reason;
-            std::ostringstream out;
-            out << "[chart_patch] plan status=skipped reason=" << reason
-                << " song_id=" << (song ? song->id : "<none>")
-                << " difficulty=" << (profile ? profile->difficulty : 0)
-                << " layout_ok=" << (layout_ok ? 1 : 0);
-            core::log(core::LogLevel::Error, out.str());
+            chart_diagnostic_best_effort([&]() {
+                const std::string reason = !layout_ok
+                    ? (layout_reason.empty() ? "invalid_live_chart_layout" : layout_reason)
+                    : !song ? "missing_song_descriptor"
+                    : !profile ? "missing_difficulty_profile"
+                    : plan_fail_reason.empty() ? "descriptor_chart_plan_failed"
+                                               : plan_fail_reason;
+                std::ostringstream out;
+                out << "[chart_patch] plan status=skipped reason=" << reason
+                    << " song_id=" << (song ? song->id : "<none>")
+                    << " difficulty=" << (profile ? profile->difficulty : 0)
+                    << " layout_ok=" << (layout_ok ? 1 : 0);
+                core::log(core::LogLevel::Error, out.str());
+            });
         }
         return ChartExpandPreparationOutcome::NativePristine;
     }
