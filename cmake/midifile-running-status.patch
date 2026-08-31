@@ -1,0 +1,25 @@
+diff --git a/src/MidiFile.cpp b/src/MidiFile.cpp
+--- a/src/MidiFile.cpp
++++ b/src/MidiFile.cpp
+@@ -2829,0 +2830 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
++	uchar command = 0;
+@@ -2841 +2842,2 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-		if (runningCommand == 0) {
++		command = runningCommand;
++		if (command == 0) {
+@@ -2845 +2847 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-		if (runningCommand >= 0xf0) {
++		if (command >= 0xf0) {
+@@ -2852 +2854,2 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-		runningCommand = byte;
++		command = byte;
++		if (command < 0xf0) runningCommand = command;
+@@ -2856 +2859 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-	array.push_back(runningCommand);
++	array.push_back(command);
+@@ -2861 +2864 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-	switch (runningCommand & 0xf0) {
++	switch (command & 0xf0) {
+@@ -2897 +2900 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+-			switch (runningCommand) {
++			switch (command) {

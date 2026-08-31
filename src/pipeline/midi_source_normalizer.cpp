@@ -17,9 +17,10 @@ constexpr double kComparisonEpsilon = 1e-9;
 
 Status validate_midi_format(const std::string& path) {
     std::ifstream input(path, std::ios::binary);
-    std::array<unsigned char, 10> header{};
+    std::array<unsigned char, 14> header{};
     input.read(reinterpret_cast<char*>(header.data()), static_cast<std::streamsize>(header.size()));
-    if (input.gcount() != static_cast<std::streamsize>(header.size()) ||
+    const std::streamsize bytes_read = input.gcount();
+    if (bytes_read < 10 ||
         header[0] != 'M' || header[1] != 'T' || header[2] != 'h' || header[3] != 'd') {
         return Status::error(StatusCode::InvalidMidi, "MIDI file has no valid MThd header: " + path);
     }
@@ -29,6 +30,9 @@ Status validate_midi_format(const std::string& path) {
     if (header_size < 6u) {
         return Status::error(StatusCode::InvalidMidi, "MIDI header is shorter than the SMF header");
     }
+    if (bytes_read < static_cast<std::streamsize>(header.size())) {
+        return Status::error(StatusCode::InvalidMidi, "MIDI header is shorter than the SMF header");
+    }
     const int format = static_cast<int>((static_cast<unsigned int>(header[8]) << 8u) | header[9]);
     if (format == 2) {
         return Status::error(StatusCode::InvalidMidi,
@@ -36,6 +40,10 @@ Status validate_midi_format(const std::string& path) {
     }
     if (format != 0 && format != 1) {
         return Status::error(StatusCode::InvalidMidi, "unsupported MIDI format " + std::to_string(format));
+    }
+    const unsigned int division = (static_cast<unsigned int>(header[12]) << 8u) | header[13];
+    if ((division & 0x8000u) != 0u) {
+        return Status::error(StatusCode::InvalidMidi, "SMPTE MIDI timing is not supported");
     }
     return Status::ok_status();
 }

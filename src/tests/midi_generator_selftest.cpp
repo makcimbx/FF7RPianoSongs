@@ -197,6 +197,19 @@ std::vector<unsigned char> build_midi(
     return file;
 }
 
+std::vector<unsigned char> build_raw_track_midi(
+    const int division,
+    const std::vector<unsigned char>& track_data) {
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, division);
+    file.insert(file.end(), {'M', 'T', 'r', 'k'});
+    append_u32(&file, track_data.size());
+    file.insert(file.end(), track_data.begin(), track_data.end());
+    return file;
+}
+
 bool cleanup_temp_directory(
     ff7rp::tests::TemporaryDirectory* directory,
     std::string* error_message = nullptr)
@@ -599,6 +612,70 @@ int test_format_two_rejected() {
     const auto status = generate(midi.path(), fixture_config(), &notes, &stats);
     if (status.ok() || status.message.find("format 2") == std::string::npos) {
         return fail("format 2 MIDI was not rejected explicitly");
+    }
+    return 0;
+}
+
+int require_single_generated_note(
+    const std::vector<unsigned char>& bytes,
+    const std::string& expected_pitch,
+    const std::string& fixture_name) {
+    const TemporaryMidi midi(bytes);
+    std::vector<ff7rp::pipeline::Note> notes;
+    ff7rp::pipeline::MidiChartStats stats;
+    const auto status = generate(midi.path(), fixture_config(), &notes, &stats);
+    if (!status.ok()) return fail(fixture_name + " failed: " + status.message);
+    if (notes.size() != 1 || notes.front().pitch != expected_pitch ||
+        !notes.front().chord_id.empty() || notes.front().beat != 0.0 ||
+        notes.front().duration_beats != 0.25) {
+        return fail(fixture_name + " did not preserve its generated note semantics");
+    }
+    return 0;
+}
+
+int test_running_status_after_text_meta() {
+    return require_single_generated_note(build_raw_track_midi(480, {
+        0x00, 0x90, 0x3c, 0x64,
+        0x00, 0xff, 0x01, 0x01, 0x78,
+        0x83, 0x60, 0x3c, 0x00,
+        0x00, 0xff, 0x2f, 0x00,
+    }), "C4", "running status after text Meta");
+}
+
+int test_running_status_after_sysex() {
+    return require_single_generated_note(build_raw_track_midi(480, {
+        0x00, 0x90, 0x3e, 0x64,
+        0x00, 0xf0, 0x02, 0x7d, 0xf7,
+        0x83, 0x60, 0x3e, 0x00,
+        0x00, 0xff, 0x2f, 0x00,
+    }), "D4", "running status after SysEx");
+}
+
+int test_running_status_without_prior_channel_status_rejected() {
+    const TemporaryMidi midi(build_raw_track_midi(480, {
+        0x00, 0xff, 0x01, 0x01, 0x78,
+        0x00, 0x3c, 0x00,
+        0x00, 0xff, 0x2f, 0x00,
+    }));
+    std::vector<ff7rp::pipeline::Note> notes;
+    ff7rp::pipeline::MidiChartStats stats;
+    const auto status = generate(midi.path(), fixture_config(), &notes, &stats);
+    if (status.ok() || status.code != ff7rp::pipeline::StatusCode::InvalidMidi || !notes.empty()) {
+        return fail("running status without a prior channel status was not rejected");
+    }
+    return 0;
+}
+
+int test_smpte_division_rejected() {
+    MidiTrack track;
+    add_note(&track, 0, 40, 60);
+    const TemporaryMidi midi(build_midi(0, 0xe728, {track}));
+    std::vector<ff7rp::pipeline::Note> notes;
+    ff7rp::pipeline::MidiChartStats stats;
+    const auto status = generate(midi.path(), fixture_config(), &notes, &stats);
+    if (status.ok() || status.code != ff7rp::pipeline::StatusCode::InvalidMidi ||
+        status.message.find("SMPTE MIDI timing is not supported") == std::string::npos || !notes.empty()) {
+        return fail("true SMPTE division was not rejected explicitly");
     }
     return 0;
 }
@@ -1696,10 +1773,14 @@ int main(const int argc, char** argv) {
     }
     auto imported_fixtures = std::async(
         std::launch::async, [] { return run_imported_fixture_processes(); });
-    const std::array<std::pair<const char*, int (*)()>, 21> tests{{
+    const std::array<std::pair<const char*, int (*)()>, 25> tests{{
         {"chord_inference", test_chord_inference},
         {"alignment", test_alignment},
         {"format_two_rejected", test_format_two_rejected},
+        {"running_status_after_text_meta", test_running_status_after_text_meta},
+        {"running_status_after_sysex", test_running_status_after_sysex},
+        {"running_status_without_prior_channel_status_rejected", test_running_status_without_prior_channel_status_rejected},
+        {"smpte_division_rejected", test_smpte_division_rejected},
         {"crossing_voice_and_pitch_witness", test_crossing_voice_and_pitch_witness},
         {"anchor_based_humanization_boundary", test_anchor_based_humanization_boundary},
         {"joint_cooldown_and_collision_policy", test_joint_cooldown_and_collision_policy},

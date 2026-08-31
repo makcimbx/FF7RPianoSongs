@@ -314,8 +314,8 @@ int main() {
 
         const std::vector<std::pair<std::string, std::string>> parent_mismatch_cases{
             {"first-line",
-                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v40:"
-                "expected=version=ff7rpianosongs.pipeline.v40"},
+                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v41:"
+                "expected=version=ff7rpianosongs.pipeline.v41"},
             {"line-boundary",
                 "manifest_bytes:offset=36:actual=xache_key=123456789abcdef0:"
                 "expected=cache_key=123456789abcdef0"},

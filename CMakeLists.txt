@@ -153,6 +153,7 @@ add_custom_target(check_rva_catalog
 )
 
 include(FetchContent)
+find_package(Git REQUIRED)
 FetchContent_Declare(
     minhook
     GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
@@ -173,6 +174,11 @@ FetchContent_Declare(
     midifile
     GIT_REPOSITORY https://github.com/craigsapp/midifile.git
     GIT_TAG 98917df5b1bf0d6e8d4c0e5fff86d6b05343e793
+    PATCH_COMMAND "${CMAKE_COMMAND}"
+        "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+        "-DMIDIFILE_SOURCE_DIR=<SOURCE_DIR>"
+        "-DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/midifile-running-status.patch"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_midifile_patch.cmake"
 )
 FetchContent_MakeAvailable(midifile)
 
