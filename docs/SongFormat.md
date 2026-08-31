@@ -100,7 +100,7 @@ MIDI and named pitches are restricted to the playable piano range C1 through C7.
 
 ## MIDI Contract
 
-MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. Notes outside the pitch range, before the established audio lead-in, or after known source-audio duration do not become prompts.
+MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. For compatibility with common non-standard exports, a preceding channel running status may resume after a Meta or SysEx event; this exception does not extend to other system status bytes. Notes outside the pitch range, before the established audio lead-in, or after known source-audio duration do not become prompts.
 
 Generated levels are independent profiles, can have sparse labels, and may be omitted when no valid source-backed chart satisfies the calibrated constraints.
 

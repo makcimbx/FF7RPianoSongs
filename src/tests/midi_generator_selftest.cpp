@@ -666,6 +666,22 @@ int test_running_status_without_prior_channel_status_rejected() {
     return 0;
 }
 
+int test_running_status_after_unsupported_system_status_rejected() {
+    const TemporaryMidi midi(build_raw_track_midi(480, {
+        0x00, 0x90, 0x3c, 0x64,
+        0x00, 0xf1,
+        0x00, 0x3c, 0x00,
+        0x00, 0xff, 0x2f, 0x00,
+    }));
+    std::vector<ff7rp::pipeline::Note> notes;
+    ff7rp::pipeline::MidiChartStats stats;
+    const auto status = generate(midi.path(), fixture_config(), &notes, &stats);
+    if (status.ok() || status.code != ff7rp::pipeline::StatusCode::InvalidMidi || !notes.empty()) {
+        return fail("unsupported system status incorrectly preserved channel running status");
+    }
+    return 0;
+}
+
 int test_smpte_division_rejected() {
     MidiTrack track;
     add_note(&track, 0, 40, 60);
@@ -1773,13 +1789,14 @@ int main(const int argc, char** argv) {
     }
     auto imported_fixtures = std::async(
         std::launch::async, [] { return run_imported_fixture_processes(); });
-    const std::array<std::pair<const char*, int (*)()>, 25> tests{{
+    const std::array<std::pair<const char*, int (*)()>, 26> tests{{
         {"chord_inference", test_chord_inference},
         {"alignment", test_alignment},
         {"format_two_rejected", test_format_two_rejected},
         {"running_status_after_text_meta", test_running_status_after_text_meta},
         {"running_status_after_sysex", test_running_status_after_sysex},
         {"running_status_without_prior_channel_status_rejected", test_running_status_without_prior_channel_status_rejected},
+        {"running_status_after_unsupported_system_status_rejected", test_running_status_after_unsupported_system_status_rejected},
         {"smpte_division_rejected", test_smpte_division_rejected},
         {"crossing_voice_and_pitch_witness", test_crossing_voice_and_pitch_witness},
         {"anchor_based_humanization_boundary", test_anchor_based_humanization_boundary},

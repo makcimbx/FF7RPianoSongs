@@ -10,10 +10,13 @@ diff --git a/src/MidiFile.cpp b/src/MidiFile.cpp
 @@ -2845 +2847 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
 -		if (runningCommand >= 0xf0) {
 +		if (command >= 0xf0) {
-@@ -2852 +2854,2 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
+@@ -2852 +2854,5 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
 -		runningCommand = byte;
 +		command = byte;
 +		if (command < 0xf0) runningCommand = command;
++		else if (command != 0xf0 && command != 0xf7 && command != 0xff) {
++			runningCommand = 0;
++		}
 @@ -2856 +2859 @@ int MidiFile::extractMidiData(std::istream& input, std::vector<uchar>& array,
 -	array.push_back(runningCommand);
 +	array.push_back(command);
