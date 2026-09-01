@@ -1,5 +1,5 @@
 # Build And Release
-<!-- current-release-version: 0.1.2 -->
+<!-- current-release-version: 0.1.3 -->
 
 This is the canonical repository workflow. Commands are run from the repository
 root in PowerShell; no parent repository is required.
@@ -170,7 +170,7 @@ or developer tools are copied. Do not add a second document list.
 `release.json` declares one target per supported game build. Each target names its game
 version, the executable catalog identity that build is compiled against, and an archive
 basename derived as `<product>-<version>-<platform>-ff7r<game-version>`, so the 1.005 artifact
-publishes as `FF7RPianoSongs-0.1.2-win64-ff7r1.005`. Stage one archive per game build,
+publishes as `FF7RPianoSongs-0.1.3-win64-ff7r1.005`. Stage one archive per game build,
 selecting the same build the ASI was compiled for. `-GameBuild` here takes the target's game
 version and is required once more than one target exists:
 

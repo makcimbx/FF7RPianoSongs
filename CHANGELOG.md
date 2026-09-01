@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.3 - 2026-09-01
+
+- Added up to 32 ordered manually authored difficulty profiles per song, with
+  independent explicit notes, gameplay metadata, compilation, and cache
+  validation while preserving the existing single-chart format.
+- Kept the first authored profile as the default chart and exposed every
+  profile through the existing in-game difficulty selector with its actual
+  sparse difficulty label.
+- Fixed a fail-closed activation lockout after returning to and immediately
+  reopening the piano list during progressive song preparation.
+- Hardened redundant list-return handling so forward-only reservation epoch
+  changes remain idempotent only when native identity and audio ownership are
+  still exact.
+
 ## 0.1.2 - 2026-08-09
 
 - Added optional `song.mode1.*` and `song.mode2.*` audio sources with direct
