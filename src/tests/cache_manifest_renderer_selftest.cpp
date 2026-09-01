@@ -200,19 +200,19 @@ bool check_golden(
 int main() {
     SongConfig source_config;
     const LoadedSong comprehensive = comprehensive_song(&source_config);
-    // The oracle includes the generated runtime identity. It was regenerated
-    // after the catalog's retained evidence path changed, without changing the
-    // cache schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5593u, 0x610464f310a3b1a7ull, "comprehensive")) return 1;
+    // The oracle includes the generated pipeline cache identity. It was
+    // regenerated for authored difficulty profiles without changing the cache
+    // manifest schema or rendering algorithm.
+    if (!check_golden(comprehensive, source_config, 5593u, 0xa3f32f5d96666a21ull, "comprehensive")) return 1;
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3715u, 0x79c0258dba192daeull, "empty")) return 1;
+    if (!check_golden(empty, empty_source, 3715u, 0x5472df17229ee2f4ull, "empty")) return 1;
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3716u, 0x54802c1152827990ull, "nonfinite")) return 1;
+    if (!check_golden(nonfinite, empty_source, 3716u, 0x1e3bec8b249af73aull, "nonfinite")) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);
