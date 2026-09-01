@@ -37,6 +37,7 @@ function Get-TextSha256([string]$Text) {
 function Get-ProductionInputRelativePaths([string]$InputRoot) {
     $relative = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @("CMakeLists.txt", "build.ps1", "release.json",
+            "cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch",
             "cmake/release_identity.generated.h.in", "src/game/rva_catalog.json", "tools/generate_rva_catalog.py")) {
         $relative.Add($path)
     }

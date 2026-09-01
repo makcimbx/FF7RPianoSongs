@@ -33,6 +33,8 @@ function New-ProvenanceFixture {
         "CMakeLists.txt" = "fixture cmake input`n"
         "build.ps1" = "fixture build input`n"
         "release.json" = "{}`n"
+        "cmake/apply_midifile_patch.cmake" = "# fixture patch driver`n"
+        "cmake/midifile-running-status.patch" = "fixture dependency patch`n"
         "cmake/release_identity.generated.h.in" = "fixture template`n"
         "src/game/rva_catalog.json" = "{}`n"
         "tools/generate_rva_catalog.py" = "# fixture generator input`n"
@@ -49,6 +51,11 @@ function New-ProvenanceFixture {
     }
 
     $inputs = @(Get-ProductionInputRelativePaths $Root)
+    foreach ($required in @("cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch")) {
+        if ($inputs -cnotcontains $required) {
+            throw "Production input inventory omitted dependency patch input: $required"
+        }
+    }
     $inputRecords = @($inputs | ForEach-Object {
         [pscustomobject][ordered]@{
             path = $_

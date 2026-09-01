@@ -8,6 +8,9 @@
 - Kept the first authored profile as the default chart and exposed every
   profile through the existing in-game difficulty selector with its actual
   sparse difficulty label.
+- Expanded standards-compatible MIDI parsing to resume channel running status
+  after Meta and SysEx events when the preceding channel status remains valid;
+  affected song caches regenerate automatically under the new pipeline identity.
 - Fixed a fail-closed activation lockout after returning to and immediately
   reopening the piano list during progressive song preparation.
 - Hardened redundant list-return handling so forward-only reservation epoch

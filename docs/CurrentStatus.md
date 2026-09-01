@@ -19,7 +19,7 @@
 
 ## Latest Verification Summary
 
-The latest repository verification completed catalog validation, a clean Release build, the full CTest graph, source documentation/release audit, and transactional package staging with staged documentation parity. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
+The completed full repository verification preceding this release-candidate work belonged to the 0.1.2 release line and covered catalog validation, a clean Release build, the full CTest graph, source documentation/release audit, and transactional package staging with staged documentation parity. At the time this status was committed, exact-checkpoint canonical Release validation for 0.1.3 had not yet run; any later result applies only to the exact commit and artifact identities reported by the validator. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
 
 Focused development runtime qualification has passed custom-to-custom and custom-to-native-to-custom transitions, including canonical request rebasing, the native list-return route reset, immediate custom admission, a further custom switch, and verified custom cleanup after each song. This closes that transition-specific lifecycle defect, but does not replace the remaining retry, completion, abort, and broader teardown scenarios above.
 

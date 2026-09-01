@@ -133,6 +133,8 @@ function New-Fixture([string]$Root) {
         "CMakeLists.txt" = "fixture-cmake"
         "build.ps1" = "fixture-build"
         "release.json" = "{}"
+        "cmake/apply_midifile_patch.cmake" = "fixture-patch-driver"
+        "cmake/midifile-running-status.patch" = "fixture-dependency-patch"
         "cmake/release_identity.generated.h.in" = "fixture-template"
         "tools/generate_rva_catalog.py" = "fixture-generator"
         "build/CMakeCache.txt" = "fixture-cache"
@@ -144,6 +146,8 @@ function New-Fixture([string]$Root) {
     $inputPaths = @(
         "CMakeLists.txt",
         "build.ps1",
+        "cmake/apply_midifile_patch.cmake",
+        "cmake/midifile-running-status.patch",
         "cmake/release_identity.generated.h.in",
         "release.json",
         "src/game/rva_catalog.json",
