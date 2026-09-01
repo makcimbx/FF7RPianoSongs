@@ -555,15 +555,15 @@ void test_selection_substrate_policy()
     linked_reset.bgm = reinterpret_cast<void*>(static_cast<uintptr_t>(0x3000));
     linked_reset.sound = reinterpret_cast<void*>(static_cast<uintptr_t>(0x4000));
     linked_reset.sound_identity = {41, 43};
-    CanonicalSubstrateResetLineageCommitState reset_state{8, 50, 0, {}, 0, {}};
+    CanonicalSubstrateResetLineageCommitState reset_state{8, 3000, 0, {}, 0, {}};
     require(commit_canonical_substrate_reset_lineage(
                 reset_commit_facts, linked_reset, reset_state)
             && reset_state.authority_generation == 9
-            && reset_state.rearm_epoch == 51
+            && reset_state.rearm_epoch == 3001
             && reset_state.authority.phase
                 == CanonicalSubstrateResetLineagePhase::Qualified
             && reset_state.authority.generation == 9
-            && reset_state.authority.rearm_epoch == 51
+            && reset_state.authority.rearm_epoch == 3001
             && reset_state.request_lineage_route_generation == 5
             && reset_state.request_lineage_lease == linked_reset.reset_lease
             && reset_state.request_lineage_lifecycle_epoch == 17
@@ -614,7 +614,10 @@ void test_selection_substrate_policy()
         &CanonicalSubstrateAlreadyReadyFacts::authority_qualified,
         &CanonicalSubstrateAlreadyReadyFacts::authority_generation_exact,
         &CanonicalSubstrateAlreadyReadyFacts::reset_observation_exact,
-        &CanonicalSubstrateAlreadyReadyFacts::rearm_epoch_exact,
+        &CanonicalSubstrateAlreadyReadyFacts::revocation_epoch_covers_rearm,
+        &CanonicalSubstrateAlreadyReadyFacts::activation_reservation_absent,
+        &CanonicalSubstrateAlreadyReadyFacts::borrower_ownership_absent,
+        &CanonicalSubstrateAlreadyReadyFacts::live_substrate_exact,
         &CanonicalSubstrateAlreadyReadyFacts::activation_route_predecessor_exact,
     };
     for (const auto field : already_ready_fields) already_ready.*field = true;
@@ -625,17 +628,21 @@ void test_selection_substrate_policy()
     const uint64_t ready_observation =
         ready_authority.reset_observation_generation;
     const uint64_t ready_epoch = reset_state.rearm_epoch;
-    for (int callback = 0; callback < 2; ++callback) {
-        require(classify_canonical_substrate_list_return_reset(
-                    false, already_ready)
-                    == CanonicalSubstrateListReturnResetDisposition::AlreadyReady
-                && canonical_substrate_reset_lineage_authority_matches(
-                    ready_authority, reset_state.authority)
-                && reset_state.authority.reset_observation_generation
-                    == ready_observation
-                && reset_state.rearm_epoch == ready_epoch,
-            "exact zero/Idle callback mutated qualified reset readiness");
-    }
+    const uint64_t observed_revocation_epoch = 3051;
+    require(canonical_substrate_revocation_epoch_covers_rearm(
+                ready_epoch, observed_revocation_epoch)
+            && !canonical_substrate_revocation_epoch_covers_rearm(
+                ready_epoch, ready_epoch - 1),
+        "revocation epoch coverage accepted a predecessor or rejected drift");
+    require(classify_canonical_substrate_list_return_reset(false, already_ready)
+                == CanonicalSubstrateListReturnResetDisposition::AlreadyReady
+            && canonical_substrate_reset_lineage_authority_matches(
+                ready_authority, reset_state.authority)
+            && reset_state.authority.reset_observation_generation
+                == ready_observation
+            && reset_state.rearm_epoch == ready_epoch,
+        "empty/revoked epoch drift made redundant zero/Idle callback destructive");
+
     for (const auto field : already_ready_fields) {
         auto drift = already_ready;
         drift.*field = false;
@@ -643,6 +650,16 @@ void test_selection_substrate_policy()
                 == CanonicalSubstrateListReturnResetDisposition::Rejected,
             "drifted zero/Idle readiness fact entered the idempotent path");
     }
+
+    already_ready.activation_reservation_absent = false;
+    require(classify_canonical_substrate_list_return_reset(false, already_ready)
+            == CanonicalSubstrateListReturnResetDisposition::Rejected,
+        "active reservation entered redundant callback path");
+    already_ready.activation_reservation_absent = true;
+    already_ready.borrower_ownership_absent = false;
+    require(classify_canonical_substrate_list_return_reset(false, already_ready)
+            == CanonicalSubstrateListReturnResetDisposition::Rejected,
+        "active borrower ownership entered redundant callback path");
 
     int reset_marker_emissions = 0;
     bool reset_marker_eligible = false;
@@ -1102,6 +1119,11 @@ void test_selection_substrate_policy()
     for (const auto field : reset_use_fields) reset_use.*field = true;
     require(canonical_substrate_route_predecessor_exact(reset_use),
         "qualified zero-current reset predecessor was rejected");
+    SelectionActivationReservationMachine immediate_activation;
+    require(immediate_activation.reserve()
+            && immediate_activation.state()
+                == SelectionActivationReservationState::Reserved,
+        "idempotent callback did not leave immediate activation reservable");
     for (const auto field : reset_use_fields) {
         auto rejected = reset_use;
         rejected.*field = false;

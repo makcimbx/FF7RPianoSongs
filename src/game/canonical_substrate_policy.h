@@ -186,9 +186,18 @@ struct CanonicalSubstrateAlreadyReadyFacts {
     bool authority_qualified = false;
     bool authority_generation_exact = false;
     bool reset_observation_exact = false;
-    bool rearm_epoch_exact = false;
+    bool revocation_epoch_covers_rearm = false;
+    bool activation_reservation_absent = false;
+    bool borrower_ownership_absent = false;
+    bool live_substrate_exact = false;
     bool activation_route_predecessor_exact = false;
 };
+
+constexpr bool canonical_substrate_revocation_epoch_covers_rearm(
+    const uint64_t rearm_epoch, const uint64_t revocation_epoch) noexcept
+{
+    return rearm_epoch != 0 && revocation_epoch >= rearm_epoch;
+}
 
 constexpr CanonicalSubstrateListReturnResetDisposition
 classify_canonical_substrate_list_return_reset(
@@ -206,7 +215,10 @@ classify_canonical_substrate_list_return_reset(
             && f.native_route_unowned && f.cleanup_only_clear
             && f.quarantine_clear && f.authority_qualified
             && f.authority_generation_exact && f.reset_observation_exact
-            && f.rearm_epoch_exact && f.activation_route_predecessor_exact
+            && f.revocation_epoch_covers_rearm
+            && f.activation_reservation_absent
+            && f.borrower_ownership_absent && f.live_substrate_exact
+            && f.activation_route_predecessor_exact
         ? CanonicalSubstrateListReturnResetDisposition::AlreadyReady
         : CanonicalSubstrateListReturnResetDisposition::Rejected;
 }

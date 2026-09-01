@@ -14106,6 +14106,7 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     BgmCanonicalSubstrateProof reset_proof_snapshot;
     uint64_t reset_authority_generation_snapshot = 0;
     uint64_t reset_revocation_epoch_snapshot = 0;
+    bool reset_borrower_ownership_absent = false;
     {
         // Route-operation authority is already held and excludes rebase and
         // reset-qualification epoch writers. Reservation ownership excludes
@@ -14121,6 +14122,12 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
             reset_proof_snapshot = g_bgm_canonical_substrate_proof;
             reset_authority_generation_snapshot =
                 g_canonical_substrate_reset_lineage_generation;
+            reset_borrower_ownership_absent =
+                std::none_of(g_bgm_playback_borrowers.begin(),
+                    g_bgm_playback_borrowers.end(),
+                    [](const BgmPlaybackBorrowerRecord& record) {
+                        return record.active;
+                    });
         }
         reset_revocation_epoch_snapshot =
             g_selection_activation_revocation_epoch.load(
@@ -14170,10 +14177,30 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                     reset_authority_snapshot.reset_observation_generation != 0
                     && reset_authority_snapshot.reset_observation_generation
                         == g_canonical_substrate_reset_observation_generation;
-                const bool rearm_epoch_exact =
-                    reset_authority_snapshot.rearm_epoch != 0
-                    && reset_authority_snapshot.rearm_epoch
-                        == reset_revocation_epoch_snapshot;
+                const bool revocation_epoch_covers_rearm =
+                    canonical_substrate_revocation_epoch_covers_rearm(
+                        reset_authority_snapshot.rearm_epoch,
+                        reset_revocation_epoch_snapshot);
+                const auto reservation_state =
+                    g_selection_activation_reservation_machine.state();
+                const bool activation_reservation_absent =
+                    reservation_state != SelectionActivationReservationState::Reserved
+                    && reservation_state
+                        != SelectionActivationReservationState::Consumed;
+                void* const live_controller = lookup_current_bgm_controller();
+                UObjectIdentity live_controller_identity{};
+                const bool live_controller_identity_read = live_controller
+                    && read_uobject_identity(
+                        live_controller, live_controller_identity);
+                const ControllerIdentityProof live_controller_proof =
+                    live_controller_identity_read
+                    ? controller_identity_proof(
+                        live_controller, live_controller_identity)
+                    : ControllerIdentityProof{};
+                const bool live_substrate_exact = live_controller_identity_read
+                    && canonical_substrate_active_sound_live_exact(
+                        reset_proof_snapshot, live_controller,
+                        live_controller_proof);
                 const bool activation_route_predecessor_exact =
                     canonical_substrate_route_predecessor_exact(
                         canonical_substrate_route_use_facts(
@@ -14205,7 +14232,10 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                         == CanonicalSubstrateResetLineagePhase::Qualified,
                     reset_authority_generation_exact,
                     reset_observation_exact,
-                    rearm_epoch_exact,
+                    revocation_epoch_covers_rearm,
+                    activation_reservation_absent,
+                    reset_borrower_ownership_absent,
+                    live_substrate_exact,
                     activation_route_predecessor_exact,
                 };
                 const auto disposition =
