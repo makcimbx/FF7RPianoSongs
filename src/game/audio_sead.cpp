@@ -14106,14 +14106,14 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
     BgmCanonicalSubstrateProof reset_proof_snapshot;
     uint64_t reset_authority_generation_snapshot = 0;
     uint64_t reset_revocation_epoch_snapshot = 0;
-    bool reset_borrower_ownership_absent = false;
     {
         // Route-operation authority is already held and excludes rebase and
         // reset-qualification epoch writers. Reservation ownership excludes
-        // reservation/revocation writers while the proof/epoch pair is
-        // captured and the complete zero/Idle readiness decision is made.
-        // Borrower and audio locks are acquired separately in the established
-        // operation -> reservation -> borrower/audio order.
+        // reservation/revocation writers while the proof/epoch pair is captured.
+        // Native reads run without the borrower lock because they can re-enter
+        // playback callbacks. The commit then follows the established operation
+        // -> reservation -> borrower -> audio order and holds borrower ownership
+        // stable through the pure zero/Idle readiness classification.
         std::lock_guard<std::mutex> reservation_lock(
             g_selection_activation_reservation_mutex);
         {
@@ -14122,18 +14122,31 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
             reset_proof_snapshot = g_bgm_canonical_substrate_proof;
             reset_authority_generation_snapshot =
                 g_canonical_substrate_reset_lineage_generation;
-            reset_borrower_ownership_absent =
-                std::none_of(g_bgm_playback_borrowers.begin(),
-                    g_bgm_playback_borrowers.end(),
-                    [](const BgmPlaybackBorrowerRecord& record) {
-                        return record.active;
-                    });
         }
         reset_revocation_epoch_snapshot =
             g_selection_activation_revocation_epoch.load(
                 std::memory_order_acquire);
         const auto& reset_authority_snapshot =
             reset_proof_snapshot.reset_lineage;
+        void* const live_controller = lookup_current_bgm_controller();
+        UObjectIdentity live_controller_identity{};
+        const bool live_controller_identity_read = live_controller
+            && read_uobject_identity(live_controller, live_controller_identity);
+        const ControllerIdentityProof live_controller_proof =
+            live_controller_identity_read
+            ? controller_identity_proof(live_controller, live_controller_identity)
+            : ControllerIdentityProof{};
+        const bool live_substrate_exact = live_controller_identity_read
+            && canonical_substrate_active_sound_live_exact(
+                reset_proof_snapshot, live_controller, live_controller_proof);
+        std::unique_lock<std::mutex> borrower_lock(
+            g_bgm_playback_borrower_mutex);
+        const bool reset_borrower_ownership_absent =
+            std::none_of(g_bgm_playback_borrowers.begin(),
+                g_bgm_playback_borrowers.end(),
+                [](const BgmPlaybackBorrowerRecord& record) {
+                    return record.active;
+                });
         std::lock_guard<std::mutex> audio_lock(g_audio_state_mutex);
         if (!g_audio_route_state.custom_resource_owned && !g_audio_route_state.list_cleanup_pending) {
             return_without_cleanup = true;
@@ -14187,20 +14200,6 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                     reservation_state != SelectionActivationReservationState::Reserved
                     && reservation_state
                         != SelectionActivationReservationState::Consumed;
-                void* const live_controller = lookup_current_bgm_controller();
-                UObjectIdentity live_controller_identity{};
-                const bool live_controller_identity_read = live_controller
-                    && read_uobject_identity(
-                        live_controller, live_controller_identity);
-                const ControllerIdentityProof live_controller_proof =
-                    live_controller_identity_read
-                    ? controller_identity_proof(
-                        live_controller, live_controller_identity)
-                    : ControllerIdentityProof{};
-                const bool live_substrate_exact = live_controller_identity_read
-                    && canonical_substrate_active_sound_live_exact(
-                        reset_proof_snapshot, live_controller,
-                        live_controller_proof);
                 const bool activation_route_predecessor_exact =
                     canonical_substrate_route_predecessor_exact(
                         canonical_substrate_route_use_facts(
@@ -14241,6 +14240,7 @@ AudioRouteCleanupResult release_audio_route_on_piano_list_return_impl(
                 const auto disposition =
                     classify_canonical_substrate_list_return_reset(
                         early_reset_route.generation != 0, already_ready);
+                borrower_lock.unlock();
                 reset_disposition_marker = {true, disposition,
                     early_reset_route.generation, early_reset_route.generation,
                     g_canonical_substrate_reset_observation_generation,

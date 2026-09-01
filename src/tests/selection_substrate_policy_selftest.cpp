@@ -621,6 +621,7 @@ void test_selection_substrate_policy()
         &CanonicalSubstrateAlreadyReadyFacts::activation_route_predecessor_exact,
     };
     for (const auto field : already_ready_fields) already_ready.*field = true;
+    already_ready.revocation_epoch_covers_rearm = false;
     require(classify_canonical_substrate_list_return_reset(true, already_ready)
             == CanonicalSubstrateListReturnResetDisposition::Performed,
         "proof-4/canonical-5 reset was not classified as the real reset edge");
@@ -629,11 +630,19 @@ void test_selection_substrate_policy()
         ready_authority.reset_observation_generation;
     const uint64_t ready_epoch = reset_state.rearm_epoch;
     const uint64_t observed_revocation_epoch = 3051;
-    require(canonical_substrate_revocation_epoch_covers_rearm(
-                ready_epoch, observed_revocation_epoch)
-            && !canonical_substrate_revocation_epoch_covers_rearm(
-                ready_epoch, ready_epoch - 1),
-        "revocation epoch coverage accepted a predecessor or rejected drift");
+    already_ready.revocation_epoch_covers_rearm =
+        canonical_substrate_revocation_epoch_covers_rearm(
+            ready_epoch, observed_revocation_epoch);
+    auto predecessor_epoch = already_ready;
+    predecessor_epoch.revocation_epoch_covers_rearm =
+        canonical_substrate_revocation_epoch_covers_rearm(
+            ready_epoch, ready_epoch - 1);
+    require(already_ready.revocation_epoch_covers_rearm
+            && !predecessor_epoch.revocation_epoch_covers_rearm
+            && classify_canonical_substrate_list_return_reset(
+                false, predecessor_epoch)
+                == CanonicalSubstrateListReturnResetDisposition::Rejected,
+        "classifier accepted a predecessor or disconnected revocation epoch fact");
     require(classify_canonical_substrate_list_return_reset(false, already_ready)
                 == CanonicalSubstrateListReturnResetDisposition::AlreadyReady
             && canonical_substrate_reset_lineage_authority_matches(
