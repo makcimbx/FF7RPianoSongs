@@ -28,6 +28,8 @@ struct Attack {
     double rhythmic_quality = 0.0;
     bool fallback = false;
     std::string chord_id;
+    std::vector<std::string> ignore_sound_pitches;
+    std::vector<std::string> source_chord_pitches;
 };
 
 struct MidiMelodyTrackingResult {

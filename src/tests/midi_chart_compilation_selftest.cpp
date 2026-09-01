@@ -12,6 +12,7 @@
 #include "pipeline/midi_chart_generator.h"
 #include "pipeline/midi_chart_compilation.h"
 #include "pipeline/midi_source_normalizer.h"
+#include "pipeline/chart_compiler.h"
 #include "tests/test_support.h"
 
 namespace {
@@ -87,6 +88,7 @@ std::vector<unsigned char> oracle_midi_bytes() {
         const int tick = index * 240 + (index % 7 == 3 ? 9 : 0);
         add_note(&melody, tick, 180 + index % 4 * 30, 72 + (index * 5) % 12,
             86 + index % 5 * 8);
+        if (index == 10) add_note(&melody, tick + 32, 180, 73, 101);
         if (index % 4 == 0) {
             const int root = index % 8 == 0 ? 48 : 53;
             add_note(&harmony, tick + (index % 8 == 0 ? 0 : 6), 360, root, 82);
@@ -126,6 +128,65 @@ std::vector<unsigned char> profile_witness_midi_bytes() {
     return file;
 }
 
+std::vector<unsigned char> single_chord_midi_bytes(const std::initializer_list<int> pitches) {
+    std::vector<MidiEvent> melody;
+    std::vector<MidiEvent> harmony;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    for (int event = 0; event < 8; ++event) {
+        const int tick = event * 960;
+        add_note(&melody, tick, 360, 72 + event % 5, 104);
+        int velocity = 82;
+        for (const int pitch : pitches) add_note(&harmony, tick, 720, pitch, velocity--);
+    }
+
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 1);
+    append_u16(&file, 2);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    append_midi_track(&file, std::move(harmony));
+    return file;
+}
+
+std::vector<unsigned char> melody_fixture_midi_bytes(
+    const std::vector<int>& pitches, const int spacing_ticks) {
+    std::vector<MidiEvent> melody;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    for (std::size_t index = 0; index < pitches.size(); ++index) {
+        add_note(&melody, 1920 + static_cast<int>(index) * spacing_ticks,
+            std::min(180, spacing_ticks - 1), pitches[index], 100);
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    return file;
+}
+
+std::vector<unsigned char> profile_group_fixture_midi_bytes(const int fast_spacing_ticks) {
+    std::vector<MidiEvent> melody;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    for (int index = 0; index < 12; ++index) {
+        add_note(&melody, 1920 + index * 960, 240, 67 + index % 5, 84);
+    }
+    const std::vector<int> fast_pitches = fast_spacing_ticks == 105 ?
+        std::vector<int>{60, 62} : std::vector<int>{60, 62, 64, 65};
+    for (std::size_t index = 0; index < fast_pitches.size(); ++index) {
+        add_note(&melody, 14420 + static_cast<int>(index) * fast_spacing_ticks,
+            std::min(90, fast_spacing_ticks - 1), fast_pitches[index], 112);
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    return file;
+}
+
 class Fingerprint {
 public:
     void integer(const std::uint64_t value) {
@@ -144,6 +205,33 @@ private:
     }
     std::uint64_t value_ = 1469598103934665603ull;
 };
+
+std::vector<std::uint8_t> canonical_note_bytes(const std::vector<Note>& notes) {
+    std::vector<std::uint8_t> bytes;
+    const auto append_u64 = [&](const std::uint64_t value) {
+        for (unsigned shift = 0; shift < 64; shift += 8) {
+            bytes.push_back(static_cast<std::uint8_t>(value >> shift));
+        }
+    };
+    const auto append_string = [&](const std::string& value) {
+        append_u64(value.size());
+        bytes.insert(bytes.end(), value.begin(), value.end());
+    };
+    append_u64(notes.size());
+    for (const Note& note : notes) {
+        append_u64(std::bit_cast<std::uint64_t>(note.beat));
+        append_u64(std::bit_cast<std::uint64_t>(note.duration_beats));
+        append_string(note.pitch);
+        append_string(note.chord_id);
+        bytes.push_back(note.group_index);
+        bytes.push_back(note.alternate_monotone ? 1u : 0u);
+        append_u64(note.ignore_sound_pitches.size());
+        for (const std::string& value : note.ignore_sound_pitches) append_string(value);
+        append_u64(note.source_chord_pitches.size());
+        for (const std::string& value : note.source_chord_pitches) append_string(value);
+    }
+    return bytes;
+}
 
 void append_local_skills(Fingerprint* out, const MidiLocalSkillMetrics& value) {
     for (const auto item : value.maximum_window_actions) out->integer(item);
@@ -235,6 +323,12 @@ std::uint64_t fingerprint(const Observation& value) {
         out.number(note.duration_beats);
         out.text(note.pitch);
         out.text(note.chord_id);
+        out.integer(note.group_index);
+        out.integer(note.alternate_monotone ? 1u : 0u);
+        out.integer(note.ignore_sound_pitches.size());
+        for (const auto& pitch : note.ignore_sound_pitches) out.text(pitch);
+        out.integer(note.source_chord_pitches.size());
+        for (const auto& pitch : note.source_chord_pitches) out.text(pitch);
     }
     append_stats(&out, value.stats);
     return out.value();
@@ -268,29 +362,29 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 18> expected{{
-    {"manual-lv1", 9383096262780216318ull, 0, ""},
-    {"manual-lv2", 7109759233311411085ull, 0, ""},
-    {"manual-lv3", 8122122307668069772ull, 0, ""},
-    {"manual-lv4", 5950161371042300237ull, 0, ""},
-    {"manual-lv5", 13350672813022699901ull, 0, ""},
-    {"manual-lv6", 13496737671064658873ull, 0, ""},
-    {"baseline-lv1", 5365924001158309550ull, 0, ""},
-    {"baseline-lv2", 11379686865813140455ull, 0, ""},
-    {"baseline-lv3", 6791061375644652601ull, 0, ""},
-    {"baseline-lv4", 11285820997262723752ull, 0, ""},
-    {"baseline-lv5", 743413156355376538ull, 0, ""},
-    {"baseline-lv6", 13820618487773645762ull, 0, ""},
-    {"automatic-alignment", 6215222439694637483ull, 0, ""},
-    {"timing-domain-empty", 4679187137633012666ull, 7,
+    {"manual-lv1", 812876795192241011ull, 0, ""},
+    {"manual-lv2", 15657760307793846569ull, 0, ""},
+    {"manual-lv3", 2229671639194785098ull, 0, ""},
+    {"manual-lv4", 15842221501682194707ull, 0, ""},
+    {"manual-lv5", 18439861697433635978ull, 0, ""},
+    {"manual-lv6", 17145848053232314335ull, 0, ""},
+    {"baseline-lv1", 18251479632695410273ull, 0, ""},
+    {"baseline-lv2", 7582551267464411896ull, 0, ""},
+    {"baseline-lv3", 13079214097419897187ull, 0, ""},
+    {"baseline-lv4", 7857690322218724421ull, 0, ""},
+    {"baseline-lv5", 13756716813077710487ull, 0, ""},
+    {"baseline-lv6", 16762614854703495817ull, 0, ""},
+    {"automatic-alignment", 5522470204471226344ull, 0, ""},
+    {"timing-domain-empty", 12345897120421995243ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
         "preferred lower-profile action has no source candidate at its native frame"},
     {"visible-growth-bound", 3998143965459286508ull, 8,
         "difficulty target band exceeds the maximum adjacent visible-profile growth"},
-    {"selection-failure-witness", 3220803988927548756ull, 8,
+    {"selection-failure-witness", 17110472156722411997ull, 8,
         "no target-band state satisfies a coherent local-skill route"},
-    {"near-feasible-witness", 15971850738242019385ull, 8,
-        "near-feasible witness: rows=299 preferred=192 required_rows=297 required_preferred=192 "
+    {"near-feasible-witness", 16264490516427515963ull, 8,
+        "near-feasible witness: rows=294 preferred=192 required_rows=297 required_preferred=192 "
         "route=OneWingedAngel ratio=3.000000 margin=1.150000 dominant_skill=5 interval=global"},
 }};
 
@@ -316,8 +410,126 @@ int main(int argc, char** argv) {
         static_cast<std::streamsize>(witness_bytes.size()));
     witness_output.close();
     if (!witness_output) return fail("could not write synthetic profile witness MIDI");
+    const auto write_chord_fixture = [&](const char* name, const std::initializer_list<int> pitches) {
+        const std::filesystem::path path = temporary.path() / name;
+        const std::vector<unsigned char> fixture = single_chord_midi_bytes(pitches);
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+        return path;
+    };
+    const std::filesystem::path superset_path = write_chord_fixture("chord-superset.mid", {43, 47, 54});
+    const std::filesystem::path ambiguous_path = write_chord_fixture("chord-ambiguous.mid", {48, 52, 58});
+    const std::filesystem::path exact_path = write_chord_fixture("chord-exact.mid", {48, 52, 55});
+    const auto write_melody_fixture = [&](const char* name, const std::vector<int>& pitches, const int spacing) {
+        const std::filesystem::path path = temporary.path() / name;
+        const std::vector<unsigned char> fixture = melody_fixture_midi_bytes(pitches, spacing);
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+        return path;
+    };
+    const std::filesystem::path lower_context_path =
+        write_melody_fixture("lower-context.mid", {57, 60, 59}, 1920);
+    const std::filesystem::path upper_context_path =
+        write_melody_fixture("upper-context.mid", {62, 60, 64}, 1920);
+    const std::filesystem::path repeated_c_path =
+        write_melody_fixture("repeated-c.mid", {60, 60, 60}, 1920);
+    const auto write_group_fixture = [&](const char* name, const int spacing) {
+        const std::filesystem::path path = temporary.path() / name;
+        const std::vector<unsigned char> fixture = profile_group_fixture_midi_bytes(spacing);
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+        return path;
+    };
+    const std::filesystem::path profile_group_path = write_group_fixture("profile-group.mid", 105);
+    const std::filesystem::path multi_follower_path = write_group_fixture("multi-follower-group.mid", 35);
 
     const WavAudio no_audio;
+    const auto find_pitch = [](const Observation& observation, const std::string_view pitch) {
+        return std::find_if(observation.notes.begin(), observation.notes.end(), [&](const Note& note) {
+            return note.pitch == pitch;
+        });
+    };
+    const Observation lower_easy = generate(lower_context_path, no_audio, config_for(1));
+    const Observation lower_hard = generate(lower_context_path, no_audio, config_for(6));
+    const Observation upper_easy = generate(upper_context_path, no_audio, config_for(1));
+    const Observation upper_hard = generate(upper_context_path, no_audio, config_for(6));
+    if (!lower_easy.status.ok() || !lower_hard.status.ok() || !upper_easy.status.ok() || !upper_hard.status.ok() ||
+        find_pitch(lower_easy, "C4") == lower_easy.notes.end() ||
+        find_pitch(lower_hard, "C4") == lower_hard.notes.end() ||
+        !find_pitch(lower_easy, "C4")->alternate_monotone ||
+        !find_pitch(lower_hard, "C4")->alternate_monotone ||
+        find_pitch(upper_easy, "C4") == upper_easy.notes.end() ||
+        find_pitch(upper_hard, "C4") == upper_hard.notes.end() ||
+        find_pitch(upper_easy, "C4")->alternate_monotone ||
+        find_pitch(upper_hard, "C4")->alternate_monotone) {
+        return fail("contour planner did not preserve upper/lower-boundary identity across profiles");
+    }
+    const Observation repeated_c = generate(repeated_c_path, no_audio, config_for(6));
+    if (!repeated_c.status.ok() || repeated_c.notes.size() != 3u ||
+        std::any_of(repeated_c.notes.begin(), repeated_c.notes.end(), [](const Note& note) {
+            return note.pitch != "C4" || note.alternate_monotone;
+        })) {
+        return fail("contour planner did not resolve repeated eligible-note ties deterministically");
+    }
+    const Observation grouped_easy = generate(profile_group_path, no_audio, config_for(1));
+    const Observation grouped_easy_repeat = generate(profile_group_path, no_audio, config_for(1));
+    const Observation grouped_hard = generate(profile_group_path, no_audio, config_for(6));
+    const Observation multi_follower = generate(multi_follower_path, no_audio, config_for(1));
+    const Observation multi_follower_repeat = generate(multi_follower_path, no_audio, config_for(1));
+    bool easy_group_beyond_six_frames = false;
+    std::size_t largest_easy_group = 0;
+    std::size_t current_easy_group = 0;
+    std::uint8_t current_easy_group_id = 0;
+    std::size_t easy_required_actions = 0;
+    std::uint8_t previous_easy_group_id = 0;
+    for (std::size_t index = 1; index < grouped_easy.notes.size(); ++index) {
+        const Note& previous = grouped_easy.notes[index - 1];
+        const Note& current = grouped_easy.notes[index];
+        const long long previous_frame = static_cast<long long>(std::llround(previous.beat * 30.0));
+        const long long current_frame = static_cast<long long>(std::llround(current.beat * 30.0));
+        easy_group_beyond_six_frames = easy_group_beyond_six_frames ||
+            (current.group_index != 0 && current.group_index == previous.group_index &&
+                current_frame - previous_frame > 6);
+    }
+    for (const Note& note : multi_follower.notes) {
+        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_easy_group_id)) {
+            ++easy_required_actions;
+        }
+        previous_easy_group_id = note.group_index;
+        if (note.group_index != 0 && note.group_index == current_easy_group_id) {
+            ++current_easy_group;
+        } else {
+            current_easy_group_id = note.group_index;
+            current_easy_group = note.group_index == 0 ? 0u : 1u;
+        }
+        largest_easy_group = std::max(largest_easy_group, current_easy_group);
+    }
+    if (!grouped_easy.status.ok() || !grouped_hard.status.ok() ||
+        canonical_note_bytes(grouped_easy.notes) != canonical_note_bytes(grouped_easy_repeat.notes) ||
+        fingerprint(grouped_easy) != fingerprint(grouped_easy_repeat) || !easy_group_beyond_six_frames ||
+        !multi_follower.status.ok() ||
+        canonical_note_bytes(multi_follower.notes) != canonical_note_bytes(multi_follower_repeat.notes) ||
+        fingerprint(multi_follower) != fingerprint(multi_follower_repeat) || largest_easy_group < 4u ||
+        multi_follower.stats.selected_actions != easy_required_actions || grouped_easy.notes.size() != 14u ||
+        grouped_hard.notes.size() != 14u ||
+        grouped_hard.stats.selected_actions != grouped_hard.notes.size() ||
+        std::any_of(grouped_hard.notes.begin(), grouped_hard.notes.end(), [](const Note& note) {
+            return note.group_index != 0;
+        })) {
+        return fail("profile spacing did not deterministically automate only the easier fast passage: easy_rows=" +
+            std::to_string(grouped_easy.notes.size()) + " easy_group=" + std::to_string(largest_easy_group) +
+            " easy_actions=" + std::to_string(grouped_easy.stats.selected_actions) + " hard_rows=" +
+            std::to_string(grouped_hard.notes.size()) + " hard_actions=" +
+            std::to_string(grouped_hard.stats.selected_actions) + " easy_status=[" +
+            grouped_easy.status.message + "] hard_status=[" + grouped_hard.status.message + "] multi_rows=" +
+            std::to_string(multi_follower.notes.size()) + " multi_actions=" +
+            std::to_string(multi_follower.stats.selected_actions) + " multi_required=" +
+            std::to_string(easy_required_actions) + " beyond6=" +
+            std::to_string(easy_group_beyond_six_frames ? 1 : 0) + " easy_repeat=" +
+            std::to_string(fingerprint(grouped_easy) == fingerprint(grouped_easy_repeat) ? 1 : 0) +
+            " multi_repeat=" +
+            std::to_string(fingerprint(multi_follower) == fingerprint(multi_follower_repeat) ? 1 : 0));
+    }
     std::vector<std::pair<std::string, Observation>> observations;
     std::array<Observation, 6> manual;
     for (int difficulty = 1; difficulty <= 6; ++difficulty) {
@@ -325,6 +537,79 @@ int main(int argc, char** argv) {
             generate(midi_path, no_audio, config_for(difficulty));
         observations.emplace_back("manual-lv" + std::to_string(difficulty),
             manual[static_cast<std::size_t>(difficulty - 1)]);
+    }
+    bool observed_grouped_follower = false;
+    bool observed_exact_voicing = false;
+    for (const Observation& profile : manual) {
+        std::uint8_t previous_group = 0;
+        std::size_t required_actions = 0;
+        for (const Note& note : profile.notes) {
+            const bool follower = note.group_index != 0 && note.group_index == previous_group;
+            observed_grouped_follower = observed_grouped_follower || follower;
+            if (!note.pitch.empty() && !follower) ++required_actions;
+            if (!note.chord_id.empty()) {
+                ++required_actions;
+                observed_exact_voicing = observed_exact_voicing || !note.source_chord_pitches.empty();
+                if (!note.ignore_sound_pitches.empty()) return fail("generated IgnoreSound guessed without a verified mapping");
+            }
+            previous_group = note.group_index;
+        }
+        if (profile.status.ok() && profile.stats.selected_actions != required_actions) {
+            return fail("grouped follower was counted as a required action");
+        }
+    }
+    if (!observed_grouped_follower) return fail("fast representable right-hand follower was not grouped");
+    if (!observed_exact_voicing) return fail("exact source chord voicing was not preserved");
+    const Observation superset = generate(superset_path, no_audio, config_for(6));
+    const Observation repeated_superset = generate(superset_path, no_audio, config_for(6));
+    if (!superset.status.ok() || fingerprint(superset) != fingerprint(repeated_superset)) {
+        return fail("native chord-superset generation was not successful and deterministic");
+    }
+    const auto unique_superset = std::find_if(superset.notes.begin(), superset.notes.end(), [](const Note& note) {
+        return note.chord_id == "pca_G_Maj7";
+    });
+    if (unique_superset == superset.notes.end() ||
+        unique_superset->ignore_sound_pitches != std::vector<std::string>{"Dn3"} ||
+        unique_superset->source_chord_pitches != std::vector<std::string>{"G2", "B2", "F#3"}) {
+        return fail("unique native chord superset did not derive exact mapped IgnoreSound semantics");
+    }
+    SongConfig compiled_superset_config = config_for(6);
+    compiled_superset_config.bpm = 120.0;
+    compiled_superset_config.notes_provided = true;
+    compiled_superset_config.notes = superset.notes;
+    ff7rp::pipeline::CompiledChart compiled_superset;
+    const Status compiled_superset_status =
+        ff7rp::pipeline::compile_chart(compiled_superset_config, &compiled_superset);
+    if (!compiled_superset_status.ok() ||
+        std::none_of(compiled_superset.notes.begin(), compiled_superset.notes.end(), [](const auto& note) {
+            return note.chord_id == "pca_G_Maj7" &&
+                note.ignore_sound_ids == std::array<std::string, 3>{"Dn3", "", ""};
+        })) {
+        return fail("generated mapped IgnoreSound semantics did not compile: " + compiled_superset_status.message);
+    }
+    const Observation exact = generate(exact_path, no_audio, config_for(6));
+    const auto exact_match = std::find_if(exact.notes.begin(), exact.notes.end(), [](const Note& note) {
+        return note.chord_id == "pca_C";
+    });
+    if (!exact.status.ok() || exact_match == exact.notes.end() || !exact_match->ignore_sound_pitches.empty()) {
+        return fail("exact native chord matching changed when superset support was added");
+    }
+    const Observation ambiguous = generate(ambiguous_path, no_audio, config_for(6));
+    if (!ambiguous.status.ok() || std::any_of(ambiguous.notes.begin(), ambiguous.notes.end(), [](const Note& note) {
+            return note.chord_id == "pca_C_7" || note.chord_id == "pca_C_9";
+        })) {
+        return fail("ambiguous partial chord was guessed as a native superset");
+    }
+    for (std::size_t easier = 0; easier < manual.size(); ++easier) {
+        for (std::size_t harder = easier + 1; harder < manual.size(); ++harder) {
+            for (const Note& left : manual[easier].notes) {
+                const auto match = std::find_if(manual[harder].notes.begin(), manual[harder].notes.end(),
+                    [&](const Note& right) { return right.beat == left.beat && right.pitch == left.pitch; });
+                if (match != manual[harder].notes.end() && match->alternate_monotone != left.alternate_monotone) {
+                    return fail("alternate monotone identity changed across difficulty profiles");
+                }
+            }
+        }
     }
     for (int difficulty = 1; difficulty <= 6; ++difficulty) {
         const Observation& source = manual[static_cast<std::size_t>(difficulty - 1)];

@@ -1,10 +1,12 @@
 #include "chart_compiler.h"
+#include "native_chord_constituents.h"
 #include "pipeline_limits.h"
 
 #include <array>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <set>
 
 namespace ff7rp::pipeline {
 
@@ -44,6 +46,35 @@ bool parse_pitch_semitone(const std::string& pitch, int* out_semitone) {
 
     const int octave = pitch[octave_index] - '0';
     *out_semitone = octave * 12 + kNaturalSemitones[pitch[0] - 'A'] + accidental;
+    return true;
+}
+
+bool alternate_monotone_id(const std::string& base, std::string* out) {
+    if (!out || base.size() < 3u) return false;
+    const bool eligible = base.rfind("Cn", 0) == 0 || base.rfind("Cs", 0) == 0;
+    if (!eligible) return false;
+    *out = base + "_2";
+    return true;
+}
+
+bool resolve_verified_ignore_sound(const Note& note, std::array<std::string, 3>* out) {
+    if (!out || note.ignore_sound_pitches.empty() || note.ignore_sound_pitches.size() > out->size()) return false;
+    const NativeChordConstituents* chord = find_verified_native_chord(note.chord_id);
+    if (!chord) return false;
+    std::set<std::string_view> resolved;
+    for (std::size_t requested = 0; requested < note.ignore_sound_pitches.size(); ++requested) {
+        const std::string_view sound = note.ignore_sound_pitches[requested];
+        std::size_t matches = 0;
+        std::string_view canonical;
+        for (std::size_t constituent = 0; constituent < chord->sound_count; ++constituent) {
+            if (chord->sound_names[constituent] == sound) {
+                ++matches;
+                canonical = chord->sound_names[constituent];
+            }
+        }
+        if (matches != 1u || !resolved.insert(canonical).second) return false;
+        (*out)[requested] = std::string(canonical);
+    }
     return true;
 }
 
@@ -121,6 +152,9 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
 
     CompiledChart chart;
     chart.notes.reserve(config.notes.size());
+    std::set<std::uint8_t> closed_groups;
+    std::uint8_t active_group = 0;
+    std::size_t active_group_rows = 0;
     for (std::size_t i = 0; i < config.notes.size(); ++i) {
         const Note& source = config.notes[i];
         if (!std::isfinite(source.beat) || source.beat < 0.0 || !std::isfinite(source.duration_beats) || source.duration_beats <= 0.0) {
@@ -136,7 +170,25 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
         note.note_type = source.duration_beats >= 2.0 ? 2 : 3;
         note.dot_type = 0;
         note.camera_switch_timing = 0;
-        note.group_index = 0;
+        note.group_index = source.group_index;
+
+        if (source.group_index != active_group) {
+            if (active_group != 0 && active_group_rows < 2u) {
+                return Status::error(StatusCode::InvalidChart, "group_index run must contain at least two rows");
+            }
+            if (active_group != 0) closed_groups.insert(active_group);
+            active_group = source.group_index;
+            active_group_rows = active_group == 0 ? 0u : 1u;
+            if (active_group != 0 && closed_groups.count(active_group) != 0) {
+                return Status::error(StatusCode::InvalidChart, "group_index may identify only one contiguous run");
+            }
+        } else if (active_group != 0) {
+            ++active_group_rows;
+        }
+        if (source.group_index != 0 && (source.pitch.empty() || !source.chord_id.empty())) {
+            return Status::error(StatusCode::InvalidChart,
+                "group_index is supported only for right-hand monotone rows");
+        }
 
         if (!source.pitch.empty()) {
             Status status = pitch_to_monotone_id(source.pitch, &note.monotone_id);
@@ -144,8 +196,21 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
                 status.message += " at note index " + std::to_string(i);
                 return status;
             }
+            if (source.alternate_monotone && !alternate_monotone_id(note.monotone_id, &note.monotone_id)) {
+                return Status::error(StatusCode::UnsupportedPitch,
+                    "alternate monotone is supported only for C and C-sharp pitches at note index " +
+                    std::to_string(i));
+            }
+        }
+        if (!source.ignore_sound_pitches.empty() &&
+            !resolve_verified_ignore_sound(source, &note.ignore_sound_ids)) {
+            return Status::error(StatusCode::InvalidChart,
+                "ignore_sound must name unique exact constituents of the row's verified native chord");
         }
         chart.notes.push_back(std::move(note));
+    }
+    if (active_group != 0 && active_group_rows < 2u) {
+        return Status::error(StatusCode::InvalidChart, "group_index run must contain at least two rows");
     }
 
     DiagnosticChartRetention diagnostic;
@@ -186,6 +251,14 @@ std::uint64_t diagnostic_descriptor_hash(
         append(&note.duration_beats, sizeof(note.duration_beats));
         append_string(note.pitch);
         append_string(note.chord_id);
+        append(&note.group_index, sizeof(note.group_index));
+        append(&note.alternate_monotone, sizeof(note.alternate_monotone));
+        const std::uint64_t ignore_count = note.ignore_sound_pitches.size();
+        const std::uint64_t voicing_count = note.source_chord_pitches.size();
+        append(&ignore_count, sizeof(ignore_count));
+        for (const auto& pitch : note.ignore_sound_pitches) append_string(pitch);
+        append(&voicing_count, sizeof(voicing_count));
+        for (const auto& pitch : note.source_chord_pitches) append_string(pitch);
     };
     const auto append_compiled = [&](const ChartNote& note) {
         append(&note.beat, sizeof(note.beat));
@@ -198,6 +271,7 @@ std::uint64_t diagnostic_descriptor_hash(
         append(&note.dot_type, sizeof(note.dot_type));
         append(&note.camera_switch_timing, sizeof(note.camera_switch_timing));
         append(&note.group_index, sizeof(note.group_index));
+        for (const auto& id : note.ignore_sound_ids) append_string(id);
     };
     append_string(song_id);
     append(&difficulty, sizeof(difficulty));
@@ -225,13 +299,16 @@ bool diagnostic_charts_equal(
     const DiagnosticChartRetention& left, const DiagnosticChartRetention& right) {
     const auto source_equal = [](const Note& a, const Note& b) {
         return a.beat == b.beat && a.duration_beats == b.duration_beats &&
-            a.pitch == b.pitch && a.chord_id == b.chord_id;
+            a.pitch == b.pitch && a.chord_id == b.chord_id && a.group_index == b.group_index &&
+            a.alternate_monotone == b.alternate_monotone &&
+            a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches;
     };
     const auto compiled_equal = [](const ChartNote& a, const ChartNote& b) {
         return a.beat == b.beat && a.duration_beats == b.duration_beats &&
             a.pitch == b.pitch && a.time_str == b.time_str && a.monotone_id == b.monotone_id &&
             a.chord_id == b.chord_id && a.note_type == b.note_type && a.dot_type == b.dot_type &&
-            a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index;
+            a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index &&
+            a.ignore_sound_ids == b.ignore_sound_ids;
     };
     if (left.source_row_count != right.source_row_count ||
         left.native_prefix_row_count != right.native_prefix_row_count ||

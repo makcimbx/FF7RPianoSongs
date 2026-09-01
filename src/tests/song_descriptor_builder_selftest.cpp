@@ -30,7 +30,8 @@ bool chart_note_equal(const SongChartNote& left, const SongChartNote& right)
         left.note_type == right.note_type &&
         left.dot_type == right.dot_type &&
         left.camera_switch_timing == right.camera_switch_timing &&
-        left.group_index == right.group_index;
+        left.group_index == right.group_index &&
+        left.ignore_sound_ids == right.ignore_sound_ids;
 }
 
 bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfile& right)
@@ -89,6 +90,7 @@ ChartNote chart_note(
     note.dot_type = dot_type;
     note.camera_switch_timing = camera;
     note.group_index = group;
+    note.ignore_sound_ids = {"En2", "Gn2", ""};
     return note;
 }
 
@@ -160,8 +162,8 @@ SongDescriptor expected_full_descriptor()
     expected.score_thresholds = {11, 22, 33, 44};
     expected.mode_change_combo_counts = {7, 16};
     expected.chart_notes = {
-        {"1_25", "Cn4", "", 3, 1, 2, 3},
-        {"2_50", "", "pca_C", 4, 5, 6, 7},
+        {"1_25", "Cn4", "", 3, 1, 2, 3, {"En2", "Gn2", ""}},
+        {"2_50", "", "pca_C", 4, 5, 6, 7, {"En2", "Gn2", ""}},
     };
     expected.sidecar_path = L"cache/\u00c9tude.mabf";
     expected.default_profile_index = 0;

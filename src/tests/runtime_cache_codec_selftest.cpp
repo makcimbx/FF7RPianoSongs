@@ -13,8 +13,8 @@ namespace {
 
 using namespace ff7rp::pipeline;
 
-constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '3'};
-constexpr std::uint32_t kFormat = 13;
+constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
+constexpr std::uint32_t kFormat = 14;
 
 bool expect(const bool condition, const char* message) {
     if (!condition) std::cerr << message << '\n';
@@ -141,7 +141,15 @@ LoadedSong comprehensive_oracle_song() {
     song.config.bpm = 120.0;
     song.config.difficulty = 3;
     song.config.notes_provided = true;
-    song.config.notes = {{0.0, 1.0, "C4", "a"}, {1.5, 2.0, "E4", "b"}};
+    Note first{0.0, 1.0, "C4", ""};
+    first.group_index = 7;
+    first.alternate_monotone = true;
+    Note second{0.1, 1.0, "C#4", ""};
+    second.group_index = 7;
+    Note voiced{1.5, 2.0, "", "pca_C_7"};
+    voiced.ignore_sound_pitches = {"As2"};
+    voiced.source_chord_pitches = {"C3", "E3", "G3"};
+    song.config.notes = {first, second, voiced};
     if (!compile_chart(song.config, &song.chart).ok()) return {};
     LoadedDifficultyProfile profile;
     profile.config = song.config;
@@ -213,7 +221,8 @@ bool expect_parent_oracle(
     decoded.chart_policy_identity = song.chart_policy_identity;
     decoded.config = song.config;
     std::vector<std::uint8_t> round_trip;
-    return expect(decode_runtime_cache(bytes, kMagic, kFormat, &decoded), "parent-oracle fixture did not decode") &&
+    return expect(decode_runtime_cache(bytes, kMagic, kFormat, &decoded),
+            (std::string(name) + " parent-oracle fixture did not decode").c_str()) &&
         expect(encode_runtime_cache(decoded, kMagic, kFormat, &round_trip), "parent-oracle round-trip did not encode") &&
         expect(round_trip == bytes, "parent-oracle round-trip bytes changed");
 }
@@ -225,8 +234,8 @@ int main() {
     // built in a private temporary workspace. A test-only wrapper called the
     // parent's internal write_runtime_cache for these exact value constructors, then hashed
     // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
-    if (!expect_parent_oracle(comprehensive_oracle_song(), 2380u, 0x5ada3b1213dd62abull, "comprehensive") ||
-        !expect_parent_oracle(diagnostic_tail_oracle_song(), 104682u, 0xe63478ac0b3c1900ull, "diagnostic tail")) return 1;
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive") ||
+        !expect_parent_oracle(diagnostic_tail_oracle_song(), 127386u, 0x0fdf7cbfb6f772f2ull, "diagnostic tail")) return 1;
 
     const LoadedSong source = representative_song();
     std::vector<std::uint8_t> bytes;
@@ -234,8 +243,8 @@ int main() {
         !expect(encode_runtime_cache(source, kMagic, kFormat, &bytes), "encode failed")) return 1;
 
     const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
-    if (!expect(bytes.size() == 1572u, "encoded byte count changed") ||
-        !expect(hash == 0x22e27f9dfb2a2584ull, "encoded byte fixture changed")) {
+    if (!expect(bytes.size() == 1660u, "encoded byte count changed") ||
+        !expect(hash == 0x5e5f24ba16b3506eull, "encoded byte fixture changed")) {
         std::cerr << "actual bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
         return 1;
     }
@@ -290,7 +299,15 @@ int main() {
     const auto encoded_rejects = [&](LoadedSong candidate, const char* message) {
         std::vector<std::uint8_t> invalid_bytes;
         if (!encode_runtime_cache(candidate, kMagic, kFormat, &invalid_bytes)) return expect(false, "invalid fixture did not encode");
-        LoadedSong destination = decoded;
+        LoadedSong destination;
+        destination.id = candidate.id;
+        destination.cache_key = candidate.cache_key;
+        destination.accepted_chart_input_limit = candidate.accepted_chart_input_limit;
+        destination.published_chart_row_limit = candidate.published_chart_row_limit;
+        destination.chart_policy_enabled = candidate.chart_policy_enabled;
+        destination.chart_policy_generation = candidate.chart_policy_generation;
+        destination.chart_policy_identity = candidate.chart_policy_identity;
+        destination.config = candidate.config;
         return expect(!decode_runtime_cache(invalid_bytes, kMagic, kFormat, &destination), message);
     };
     LoadedSong invalid_semantics = source;
@@ -304,8 +321,12 @@ int main() {
     invalid_count.difficulty_profiles[0].config.notes = invalid_count.config.notes;
     LoadedSong invalid_length = source;
     invalid_length.config.title.assign((1u << 20u) + 1u, 'x');
+    LoadedSong invalid_ignore = comprehensive_oracle_song();
+    invalid_ignore.config.notes[2].ignore_sound_pitches = {"Fn2"};
+    invalid_ignore.difficulty_profiles[0].config.notes[2].ignore_sound_pitches = {"Fn2"};
     if (!encoded_rejects(std::move(invalid_semantics), "invalid semantic payload was accepted") ||
         !encoded_rejects(std::move(invalid_enum), "invalid chart enum was accepted") ||
+        !encoded_rejects(std::move(invalid_ignore), "invalid IgnoreSound cache mutation was accepted") ||
         !expect(!encode_runtime_cache(invalid_count, kMagic, kFormat, &bytes), "invalid note count was encoded") ||
         !expect(!encode_runtime_cache(invalid_length, kMagic, kFormat, &bytes), "oversized string was encoded")) return 1;
     return 0;

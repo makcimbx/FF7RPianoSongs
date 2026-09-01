@@ -447,6 +447,18 @@ struct RuntimeCursor {
     }
     void skip_string() { position += 4u + read_u32_le(bytes, position); }
     void skip_int_vector() { position += 4u + 4u * read_u32_le(bytes, position); }
+    void skip_string_vector() {
+        const std::uint32_t count = u32();
+        for (std::uint32_t index = 0; index < count; ++index) skip_string();
+    }
+    void skip_note() {
+        position += 16u;
+        skip_string();
+        skip_string();
+        position += 2u;
+        skip_string_vector();
+        skip_string_vector();
+    }
     void skip_config(RuntimeSectionOffsets* offsets = nullptr) {
         skip_string();
         skip_string();
@@ -461,11 +473,7 @@ struct RuntimeCursor {
         position += 4u + 16u * read_u32_le(bytes, position);
         position += 10u;
         const std::uint32_t notes = u32();
-        for (std::uint32_t index = 0; index < notes; ++index) {
-            position += 16u;
-            skip_string();
-            skip_string();
-        }
+        for (std::uint32_t index = 0; index < notes; ++index) skip_note();
     }
     void skip_chart(RuntimeSectionOffsets* offsets) {
         const std::uint32_t notes = u32();
@@ -480,6 +488,9 @@ struct RuntimeCursor {
             skip_string();
             skip_string();
             position += 16u;
+            skip_string();
+            skip_string();
+            skip_string();
         }
     }
     void skip_diagnostics(RuntimeSectionOffsets* offsets) {
@@ -508,9 +519,7 @@ struct RuntimeCursor {
         for (std::uint32_t index = 0; index < tails; ++index) {
             position += 4u;
             if (index == 0u && offsets) offsets->tail_source_beat = position;
-            position += 16u;
-            skip_string();
-            skip_string();
+            skip_note();
             if (index == 0u && offsets) offsets->tail_compiled_beat = position;
             position += 16u;
             skip_string();
@@ -518,6 +527,9 @@ struct RuntimeCursor {
             skip_string();
             skip_string();
             position += 16u;
+            skip_string();
+            skip_string();
+            skip_string();
         }
     }
 };
@@ -564,7 +576,8 @@ bool charts_equal(const ff7rp::pipeline::CompiledChart& a, const ff7rp::pipeline
         if (x.beat != y.beat || x.duration_beats != y.duration_beats || x.pitch != y.pitch ||
             x.time_str != y.time_str || x.monotone_id != y.monotone_id || x.chord_id != y.chord_id ||
             x.note_type != y.note_type || x.dot_type != y.dot_type ||
-            x.camera_switch_timing != y.camera_switch_timing || x.group_index != y.group_index) {
+            x.camera_switch_timing != y.camera_switch_timing || x.group_index != y.group_index ||
+            x.ignore_sound_ids != y.ignore_sound_ids) {
             return false;
         }
     }
@@ -597,7 +610,11 @@ bool configs_equal(const ff7rp::pipeline::SongConfig& a, const ff7rp::pipeline::
     for (std::size_t index = 0; index < a.notes.size(); ++index) {
         if (a.notes[index].beat != b.notes[index].beat ||
             a.notes[index].duration_beats != b.notes[index].duration_beats ||
-            a.notes[index].pitch != b.notes[index].pitch || a.notes[index].chord_id != b.notes[index].chord_id) return false;
+            a.notes[index].pitch != b.notes[index].pitch || a.notes[index].chord_id != b.notes[index].chord_id ||
+            a.notes[index].group_index != b.notes[index].group_index ||
+            a.notes[index].alternate_monotone != b.notes[index].alternate_monotone ||
+            a.notes[index].ignore_sound_pitches != b.notes[index].ignore_sound_pitches ||
+            a.notes[index].source_chord_pitches != b.notes[index].source_chord_pitches) return false;
     }
     return true;
 }
@@ -681,7 +698,11 @@ bool omissions_equal(
             const auto& expected = a[i].witness_notes[row];
             const auto& actual = b[i].witness_notes[row];
             if (expected.beat != actual.beat || expected.duration_beats != actual.duration_beats ||
-                expected.pitch != actual.pitch || expected.chord_id != actual.chord_id) return false;
+                expected.pitch != actual.pitch || expected.chord_id != actual.chord_id ||
+                expected.group_index != actual.group_index ||
+                expected.alternate_monotone != actual.alternate_monotone ||
+                expected.ignore_sound_pitches != actual.ignore_sound_pitches ||
+                expected.source_chord_pitches != actual.source_chord_pitches) return false;
         }
     }
     return true;
@@ -1255,10 +1276,10 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
-    constexpr std::uint64_t kExpectedCacheKey = 0xecc0a5f1605cbdd6ull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0xb8da886bc50cc2abull;
+    constexpr std::uint64_t kExpectedCacheKey = 0x3c8154f69d6c83acull;
+    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x2f86b7ae1c8c587cull;
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
-    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=8d6270bd79225857";
+    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=65b4d2930e70b47f";
     if (generated.cache_key != kExpectedCacheKey ||
         normalized_manifest_digest != kExpectedNormalizedManifestDigest ||
         manifest.size() != kExpectedNormalizedManifestBytes ||
@@ -1895,7 +1916,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v42") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v44") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||

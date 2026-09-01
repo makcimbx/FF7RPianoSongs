@@ -81,7 +81,8 @@ Minimal MIDI-backed example:
 
 ## Explicit Notes
 
-Each note permits only `beat`, `duration_beats`, `pitch`, and `chord_id`:
+Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
+`group_index`, `monotone_variant`, and `ignore_sound`:
 
 ```json
 {
@@ -96,6 +97,24 @@ Each note permits only `beat`, `duration_beats`, `pitch`, and `chord_id`:
 - Provide at least one of `pitch` or `chord_id`.
 - `pitch` must be a non-empty supported pitch name.
 - `chord_id` must be a valid native `pca_*` identifier.
+- `group_index` is an optional integer from 0 through 255. Zero or omission means
+  ungrouped. A nonzero value must identify one contiguous run of at least two
+  pitch-only rows; an identity cannot be reused later in the chart. The run's
+  first row is the required/scored action and later rows are grouped followers.
+- `monotone_variant` is optionally `"default"` or `"alternate"`. Omission is
+  `"default"`. `"alternate"` selects the verified `_2` identity and is accepted
+  only for C or C-sharp pitches; it does not change pitch.
+- `ignore_sound` is an optional array of one through three unique native
+  `SoundName` values on a chord-bearing row, for example `"En2"`. It filters
+  audible native chord constituents only and does not affect scoring. Each value
+  must be an exact case-sensitive member of the verified constituent list for
+  that `chord_id`. Asset spelling and octave are significant: enharmonic names,
+  octave substitutions, and nonmembers reject rather than being normalized.
+  Ninth assignments contain root, third, fifth, and ninth only; the template
+  seventh is not a native member and cannot be named in `ignore_sound`.
+
+Omitting all three fields preserves the behavior of existing schema-v2 songs.
+Unknown fields and malformed, ambiguous, or unsupported combinations are rejected.
 
 Playable charts are limited to 512 rows. Inputs above that boundary are not publishable; see [Compatibility and Limitations](../README.md#compatibility-and-limitations).
 
@@ -153,6 +172,18 @@ MIDI and named pitches are restricted to the playable piano range C1 through C7.
 MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. For compatibility with common non-standard exports, a preceding channel running status may resume after a Meta or SysEx event; this exception does not extend to other system status bytes. Notes outside the pitch range, before the established audio lead-in, or after known source-audio duration do not become prompts.
 
 Generated levels are independent profiles, can have sparse labels, and may be omitted when no valid source-backed chart satisfies the calibrated constraints.
+Generated charts deterministically group only distinct-frame right-hand events
+that form an uninterrupted run of adjacent spacing violations under the selected
+profile's own constraint. One root may own multiple followers; a playable gap or
+an intervening left-hand, mixed-hand, or non-monotone row ends the run. Generated
+charts plan eligible
+C/C-sharp `_2` identities from the complete canonical source contour before
+profile reduction, and retain exact source chord voicing for verified IgnoreSound
+derivation. Planner decisions are carried by exact MIDI source identity across
+profiles; no hash, ordinal alternation, or random generator participates. The verified table covers all
+non-null chord IDs used by native chord inference; generated IgnoreSound is
+emitted only for uniquely matched, root-position supersets and remains empty when
+that proof fails.
 
 ## Metronome
 

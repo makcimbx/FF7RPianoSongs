@@ -63,6 +63,12 @@ struct Note {
     double duration_beats = 0.0;
     std::string pitch;
     std::string chord_id;
+    std::uint8_t group_index = 0;
+    bool alternate_monotone = false;
+    // Author-facing pitches requested for muting, plus exact MIDI chord
+    // voicing retained for verified offline constituent resolution.
+    std::vector<std::string> ignore_sound_pitches;
+    std::vector<std::string> source_chord_pitches;
 };
 
 struct GainEnvelopePoint {
@@ -123,6 +129,7 @@ struct ChartNote {
     int dot_type = 0;
     int camera_switch_timing = 0;
     int group_index = 0;
+    std::array<std::string, 3> ignore_sound_ids{};
 };
 
 struct CompiledChart {

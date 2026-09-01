@@ -18,6 +18,8 @@
 #include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -63,6 +65,7 @@ struct DescriptorChartRow {
     int32_t dot_type = 0;
     int32_t camera_switch_timing = 0;
     int32_t group_index = 0;
+    std::array<std::string, 3> ignore_sound_ids{};
 };
 
 struct ChartMemoryLayout {
@@ -88,6 +91,7 @@ static_assert(sizeof(wchar_t) == 2);
 struct ChartNameResolver {
     bool (*resolve_monotone_id)(const std::string& monotone_id, uint64_t& packed_name) = nullptr;
     bool (*resolve_chord_id)(const std::string& chord_id, uint64_t& packed_name) = nullptr;
+    bool (*resolve_ignore_sound_id)(const std::string& ignore_sound_id, uint64_t& packed_name) = nullptr;
 };
 
 struct JournalEntry {
@@ -96,6 +100,25 @@ struct JournalEntry {
     std::vector<uint8_t> patched;
     std::string label;
     int32_t index = -1;
+};
+
+struct OwnedDescriptorChartArrays {
+    std::vector<std::array<wchar_t, 8>> time_texts;
+    std::vector<FrozenStringEntry> time_entries;
+    std::vector<uint64_t> ignore_sound_ids;
+    std::vector<uint64_t> monotone_ids;
+    std::vector<uint64_t> chord_ids;
+    std::vector<uint8_t> chord_note_types;
+    std::vector<uint8_t> chord_dot_types;
+    std::vector<uint8_t> monotone_note_types;
+    std::vector<uint8_t> monotone_dot_types;
+    std::vector<uint8_t> camera_switch_timings;
+    std::vector<uint8_t> group_indices;
+};
+
+struct PlannedDescriptorChartPatch {
+    std::shared_ptr<OwnedDescriptorChartArrays> arrays;
+    std::vector<JournalEntry> entries;
 };
 
 struct ChartPatchJournal {
@@ -109,6 +132,7 @@ struct ChartPatchJournal {
     size_t attempted_entries = 0;
     SelectionSnapshot selection{};
     AudioRouteLeaseIdentity admission_lease{};
+    std::shared_ptr<OwnedDescriptorChartArrays> arrays;
     std::vector<JournalEntry> entries;
 
     void clear()
@@ -123,6 +147,7 @@ struct ChartPatchJournal {
         attempted_entries = 0;
         selection = {};
         admission_lease = {};
+        arrays.reset();
         entries.clear();
     }
 };
@@ -138,17 +163,6 @@ FNameCtorFn g_chart_fname_ctor = nullptr;
 std::atomic_uintptr_t g_row_patch_wrapper{0};
 std::atomic_int g_row_patch_next_index{0};
 std::atomic_uintptr_t g_cached_pianoscore_object{0};
-std::vector<std::array<wchar_t, 8>> g_owned_time_texts;
-std::vector<FrozenStringEntry> g_owned_time_entries;
-std::vector<uint64_t> g_owned_monotone_ids;
-std::vector<uint64_t> g_owned_chord_ids;
-std::vector<uint8_t> g_owned_chord_note_types;
-std::vector<uint8_t> g_owned_chord_dot_types;
-std::vector<uint8_t> g_owned_monotone_note_types;
-std::vector<uint8_t> g_owned_monotone_dot_types;
-std::vector<uint8_t> g_owned_camera_switch_timings;
-std::vector<uint8_t> g_owned_group_indices;
-
 bool next_chart_audio_diagnostic_value(
     std::atomic_uint64_t& counter, uint64_t& out) noexcept
 {
@@ -378,6 +392,12 @@ struct has_group_index_member : std::false_type {};
 template <typename T>
 struct has_group_index_member<T, std::void_t<decltype(std::declval<const T&>().group_index)>> : std::true_type {};
 
+template <typename T, typename = void>
+struct has_ignore_sound_ids_member : std::false_type {};
+
+template <typename T>
+struct has_ignore_sound_ids_member<T, std::void_t<decltype(std::declval<const T&>().ignore_sound_ids)>> : std::true_type {};
+
 template <typename Note>
 bool chart_row_from_note(const Note& note, DescriptorChartRow& out)
 {
@@ -398,6 +418,9 @@ bool chart_row_from_note(const Note& note, DescriptorChartRow& out)
         }
         if constexpr (has_group_index_member<Note>::value) {
             out.group_index = static_cast<int32_t>(note.group_index);
+        }
+        if constexpr (has_ignore_sound_ids_member<Note>::value) {
+            out.ignore_sound_ids = note.ignore_sound_ids;
         }
         return !out.time_str.empty() && (!out.monotone_id.empty() || !out.chord_id.empty());
     } else {
@@ -855,9 +878,10 @@ bool plan_descriptor_chart_patch(
     const std::string& song_id,
     const ChartMemoryLayout& layout,
     const ChartNameResolver& resolver,
-    std::vector<JournalEntry>& out,
+    PlannedDescriptorChartPatch& out,
     std::string* fail_reason = nullptr)
 {
+    out = {};
     std::vector<DescriptorChartRow> rows;
     if (!build_descriptor_chart_rows(profile, rows)) {
         if (fail_reason) {
@@ -871,94 +895,113 @@ bool plan_descriptor_chart_patch(
     }
     if (!resolver.resolve_monotone_id
         || !resolver.resolve_chord_id
+        || !resolver.resolve_ignore_sound_id
         || rows.empty()
         || rows.size() > static_cast<size_t>(kMaxPatchedChartRows)
         || layout.time_header_index >= kObservedPianoScoreRowCounts.size()
         || layout.monotone_id_header_index >= kObservedPianoScoreRowCounts.size()) {
         if (fail_reason) {
-            *fail_reason = (!resolver.resolve_monotone_id || !resolver.resolve_chord_id) ? "missing_resolver" : "invalid_chart_layout";
+            *fail_reason = (!resolver.resolve_monotone_id || !resolver.resolve_chord_id
+                    || !resolver.resolve_ignore_sound_id)
+                ? "missing_resolver" : "invalid_chart_layout";
         }
         return false;
     }
 
-    out.clear();
-    out.reserve(kObservedPianoScoreRowCounts.size() * 3u);
-    g_owned_time_texts.clear();
-    g_owned_time_entries.clear();
-    g_owned_monotone_ids.clear();
-    g_owned_chord_ids.clear();
-    g_owned_chord_note_types.clear();
-    g_owned_chord_dot_types.clear();
-    g_owned_monotone_note_types.clear();
-    g_owned_monotone_dot_types.clear();
-    g_owned_camera_switch_timings.clear();
-    g_owned_group_indices.clear();
-    g_owned_time_texts.resize(rows.size());
-    g_owned_time_entries.resize(rows.size());
-    g_owned_monotone_ids.resize(rows.size());
-    g_owned_chord_ids.resize(rows.size());
-    g_owned_chord_note_types.resize(rows.size());
-    g_owned_chord_dot_types.resize(rows.size());
-    g_owned_monotone_note_types.resize(rows.size());
-    g_owned_monotone_dot_types.resize(rows.size());
-    g_owned_camera_switch_timings.resize(rows.size());
-    g_owned_group_indices.resize(rows.size());
+    constexpr size_t kIgnoreSoundSlotsPerRow = 3u;
+    if (rows.size() > std::numeric_limits<size_t>::max() / kIgnoreSoundSlotsPerRow) {
+        if (fail_reason) *fail_reason = "ignore_sound_count_overflow";
+        return false;
+    }
+    const size_t ignore_sound_count = rows.size() * kIgnoreSoundSlotsPerRow;
+    if (ignore_sound_count > static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+        if (fail_reason) *fail_reason = "ignore_sound_count_out_of_range";
+        return false;
+    }
+
+    auto arrays = std::make_shared<OwnedDescriptorChartArrays>();
+    std::vector<JournalEntry> entries;
+    entries.reserve(kObservedPianoScoreRowCounts.size() * 3u);
+    arrays->time_texts.resize(rows.size());
+    arrays->time_entries.resize(rows.size());
+    arrays->ignore_sound_ids.resize(ignore_sound_count);
+    arrays->monotone_ids.resize(rows.size());
+    arrays->chord_ids.resize(rows.size());
+    arrays->chord_note_types.resize(rows.size());
+    arrays->chord_dot_types.resize(rows.size());
+    arrays->monotone_note_types.resize(rows.size());
+    arrays->monotone_dot_types.resize(rows.size());
+    arrays->camera_switch_timings.resize(rows.size());
+    arrays->group_indices.resize(rows.size());
 
     for (size_t index = 0; index < rows.size(); ++index) {
         const DescriptorChartRow& row = rows[index];
-        if (row.time_str.empty() || row.time_str.size() + 1 > g_owned_time_texts[index].size()) {
+        if (row.time_str.empty() || row.time_str.size() + 1 > arrays->time_texts[index].size()) {
             if (fail_reason) {
                 *fail_reason = "invalid_time_string index=" + std::to_string(index);
             }
             return false;
         }
-        auto& text = g_owned_time_texts[index];
+        auto& text = arrays->time_texts[index];
         for (size_t char_index = 0; char_index < row.time_str.size(); ++char_index) {
             text[char_index] = static_cast<wchar_t>(static_cast<unsigned char>(row.time_str[char_index]));
         }
         text[row.time_str.size()] = L'\0';
-        g_owned_time_entries[index].data = reinterpret_cast<uint64_t>(text.data());
-        g_owned_time_entries[index].num = static_cast<int32_t>(row.time_str.size() + 1);
-        g_owned_time_entries[index].max = g_owned_time_entries[index].num;
+        arrays->time_entries[index].data = reinterpret_cast<uint64_t>(text.data());
+        arrays->time_entries[index].num = static_cast<int32_t>(row.time_str.size() + 1);
+        arrays->time_entries[index].max = arrays->time_entries[index].num;
 
-        if (!row.monotone_id.empty() && !resolver.resolve_monotone_id(row.monotone_id, g_owned_monotone_ids[index])) {
+        if (!row.monotone_id.empty() && !resolver.resolve_monotone_id(row.monotone_id, arrays->monotone_ids[index])) {
             if (fail_reason) {
                 *fail_reason = "note_resolve_failed index=" + std::to_string(index) + " monotone=" + row.monotone_id;
             }
             return false;
         }
-        if (!row.chord_id.empty() && !resolver.resolve_chord_id(row.chord_id, g_owned_chord_ids[index])) {
+        if (!row.chord_id.empty() && !resolver.resolve_chord_id(row.chord_id, arrays->chord_ids[index])) {
             if (fail_reason) {
                 *fail_reason = "chord_resolve_failed index=" + std::to_string(index) + " chord=" + row.chord_id;
             }
             return false;
         }
-        g_owned_chord_note_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
-        g_owned_chord_dot_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
-        g_owned_monotone_note_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
-        g_owned_monotone_dot_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
-        g_owned_camera_switch_timings[index] = static_cast<uint8_t>(std::clamp(row.camera_switch_timing, 0, 255));
-        g_owned_group_indices[index] = static_cast<uint8_t>(std::clamp(row.group_index, 0, 255));
+        for (size_t slot = 0; slot < kIgnoreSoundSlotsPerRow; ++slot) {
+            const std::string& ignore_sound_id = row.ignore_sound_ids[slot];
+            uint64_t& packed_name = arrays->ignore_sound_ids[index * kIgnoreSoundSlotsPerRow + slot];
+            if (!ignore_sound_id.empty()
+                && !resolver.resolve_ignore_sound_id(ignore_sound_id, packed_name)) {
+                if (fail_reason) {
+                    *fail_reason = "ignore_sound_resolve_failed index=" + std::to_string(index)
+                        + " slot=" + std::to_string(slot) + " name=" + ignore_sound_id;
+                }
+                return false;
+            }
+        }
+        arrays->chord_note_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
+        arrays->chord_dot_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
+        arrays->monotone_note_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
+        arrays->monotone_dot_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
+        arrays->camera_switch_timings[index] = static_cast<uint8_t>(std::clamp(row.camera_switch_timing, 0, 255));
+        arrays->group_indices[index] = static_cast<uint8_t>(std::clamp(row.group_index, 0, 255));
     }
 
     const int32_t patched_count = static_cast<int32_t>(rows.size());
     const auto append_owned_array = [&](size_t header_index, uint64_t data, int32_t count, const char* label) {
         const uintptr_t header = layout.chart_base + layout.row_header_base + header_index * 16u;
-        return append_field_patch(header, data, label, static_cast<int32_t>(header_index), out)
-            && append_field_patch(header + 8u, count, label, static_cast<int32_t>(header_index), out)
-            && append_field_patch(header + 12u, count, label, static_cast<int32_t>(header_index), out);
+        return append_field_patch(header, data, label, static_cast<int32_t>(header_index), entries)
+            && append_field_patch(header + 8u, count, label, static_cast<int32_t>(header_index), entries)
+            && append_field_patch(header + 12u, count, label, static_cast<int32_t>(header_index), entries);
     };
-    if (!append_owned_array(layout.time_header_index, reinterpret_cast<uint64_t>(g_owned_time_entries.data()), patched_count, "PianoScore.TimeStr_Array")
-        || !append_owned_array(kIgnoreSoundHeaderIndex, 0, 0, "PianoScore.IgnoreSound_Array")
-        || !append_owned_array(layout.monotone_id_header_index, reinterpret_cast<uint64_t>(g_owned_monotone_ids.data()), patched_count, "PianoScore.MonotoneID_Array")
-        || !append_owned_array(kChordIdHeaderIndex, reinterpret_cast<uint64_t>(g_owned_chord_ids.data()), patched_count, "PianoScore.ChordID_Array")
-        || !append_owned_array(kChordNoteTypeHeaderIndex, reinterpret_cast<uint64_t>(g_owned_chord_note_types.data()), patched_count, "PianoScore.ChordNoteType_Array")
-        || !append_owned_array(kChordDotTypeHeaderIndex, reinterpret_cast<uint64_t>(g_owned_chord_dot_types.data()), patched_count, "PianoScore.ChordDotType_Array")
-        || !append_owned_array(kMonotoneNoteTypeHeaderIndex, reinterpret_cast<uint64_t>(g_owned_monotone_note_types.data()), patched_count, "PianoScore.MonotoneNoteType_Array")
-        || !append_owned_array(kMonotoneDotTypeHeaderIndex, reinterpret_cast<uint64_t>(g_owned_monotone_dot_types.data()), patched_count, "PianoScore.MonotoneDotType_Array")
+    const int32_t ignore_sound_patched_count = static_cast<int32_t>(ignore_sound_count);
+    if (!append_owned_array(layout.time_header_index, reinterpret_cast<uint64_t>(arrays->time_entries.data()), patched_count, "PianoScore.TimeStr_Array")
+        || !append_owned_array(kIgnoreSoundHeaderIndex, reinterpret_cast<uint64_t>(arrays->ignore_sound_ids.data()), ignore_sound_patched_count, "PianoScore.IgnoreSound_Array")
+        || !append_owned_array(layout.monotone_id_header_index, reinterpret_cast<uint64_t>(arrays->monotone_ids.data()), patched_count, "PianoScore.MonotoneID_Array")
+        || !append_owned_array(kChordIdHeaderIndex, reinterpret_cast<uint64_t>(arrays->chord_ids.data()), patched_count, "PianoScore.ChordID_Array")
+        || !append_owned_array(kChordNoteTypeHeaderIndex, reinterpret_cast<uint64_t>(arrays->chord_note_types.data()), patched_count, "PianoScore.ChordNoteType_Array")
+        || !append_owned_array(kChordDotTypeHeaderIndex, reinterpret_cast<uint64_t>(arrays->chord_dot_types.data()), patched_count, "PianoScore.ChordDotType_Array")
+        || !append_owned_array(kMonotoneNoteTypeHeaderIndex, reinterpret_cast<uint64_t>(arrays->monotone_note_types.data()), patched_count, "PianoScore.MonotoneNoteType_Array")
+        || !append_owned_array(kMonotoneDotTypeHeaderIndex, reinterpret_cast<uint64_t>(arrays->monotone_dot_types.data()), patched_count, "PianoScore.MonotoneDotType_Array")
         || !append_owned_array(kStrengthHeaderIndex, 0, 0, "PianoScore.Strength_Array")
-        || !append_owned_array(kCameraSwitchTimingHeaderIndex, reinterpret_cast<uint64_t>(g_owned_camera_switch_timings.data()), patched_count, "PianoScore.CameraSwitchTiming_Array")
-        || !append_owned_array(kGroupIndexHeaderIndex, reinterpret_cast<uint64_t>(g_owned_group_indices.data()), patched_count, "PianoScore.GroupIndex_Array")) {
+        || !append_owned_array(kCameraSwitchTimingHeaderIndex, reinterpret_cast<uint64_t>(arrays->camera_switch_timings.data()), patched_count, "PianoScore.CameraSwitchTiming_Array")
+        || !append_owned_array(kGroupIndexHeaderIndex, reinterpret_cast<uint64_t>(arrays->group_indices.data()), patched_count, "PianoScore.GroupIndex_Array")) {
         if (fail_reason) {
             *fail_reason = "owned_array_patch_plan_failed";
         }
@@ -971,16 +1014,44 @@ bool plan_descriptor_chart_patch(
         out_log << "[chart_patch] plan status=ok song_id=" << song_id
             << " difficulty=" << profile.difficulty
             << " note_rows=" << rows.size()
+            << " ignore_sound_entries=" << ignore_sound_count
             << " time_rows=" << rows.size()
             << " skipped_time_rows=0"
             << " time_header=" << layout.time_header_index
             << " monotone_header=" << layout.monotone_id_header_index
-            << " entries=" << out.size();
+            << " entries=" << entries.size();
         core::log(core::LogLevel::Info, out_log.str());
     }
-    return !out.empty();
+    if (entries.empty()) return false;
+    out.arrays = std::move(arrays);
+    out.entries = std::move(entries);
+    return true;
 }
 
+bool try_plan_descriptor_chart_patch(
+    const SongDifficultyProfile& profile,
+    const std::string& song_id,
+    const ChartMemoryLayout& layout,
+    const ChartNameResolver& resolver,
+    PlannedDescriptorChartPatch& out,
+    std::string* fail_reason = nullptr) noexcept
+{
+    try {
+        return plan_descriptor_chart_patch(
+            profile, song_id, layout, resolver, out, fail_reason);
+    } catch (...) {
+        out = {};
+        if (fail_reason) {
+            try {
+                *fail_reason = "owned_array_allocation_or_plan_exception";
+            } catch (...) {
+            }
+        }
+        return false;
+    }
+}
+
+#ifndef FF7RP_CHART_PATCH_SELFTEST
 bool find_live_pianoscore_object(void*& object, ChartMemoryLayout& layout, std::string& reason)
 {
     object = nullptr;
@@ -1179,6 +1250,7 @@ bool append_chart_row_patch_plan(
 
     return true;
 }
+#endif
 
 enum class PlannedChartWriteResult : uint8_t {
     Applied,
@@ -1190,10 +1262,11 @@ PlannedChartWriteResult apply_planned_descriptor_chart_patch(
     uintptr_t score_object, uintptr_t chart_base,
     const SelectionSnapshot& selection,
     const AudioRouteLeaseIdentity admission_lease,
-    std::vector<JournalEntry> planned)
+    PlannedDescriptorChartPatch planned)
 {
     std::lock_guard<std::mutex> lock(g_chart_patch_mutex);
-    if (g_chart_patch_journal.active || !g_chart_patch_journal.entries.empty()) {
+    if (!planned.arrays || planned.entries.empty()
+        || g_chart_patch_journal.active || !g_chart_patch_journal.entries.empty()) {
         return PlannedChartWriteResult::Unresolved;
     }
     g_chart_patch_journal.active = true;
@@ -1201,7 +1274,8 @@ PlannedChartWriteResult apply_planned_descriptor_chart_patch(
     g_chart_patch_journal.chart_base = chart_base;
     g_chart_patch_journal.selection = selection;
     g_chart_patch_journal.admission_lease = admission_lease;
-    g_chart_patch_journal.entries = std::move(planned);
+    g_chart_patch_journal.arrays = std::move(planned.arrays);
+    g_chart_patch_journal.entries = std::move(planned.entries);
 
     for (const JournalEntry& entry : g_chart_patch_journal.entries) {
         const ChartWriteResult write = write_checked_bytes(entry);
@@ -1287,8 +1361,11 @@ bool restore_chart_patch_state(
             }
             const bool cancellation_committed
                 = !journal.audio_cancellation_required
+#ifndef FF7RP_CHART_PATCH_SELFTEST
                 || selection_audio_admission_cancellation_complete(
-                    journal.selection, journal.admission_lease);
+                    journal.selection, journal.admission_lease)
+#endif
+                ;
             if (clear_after_restore
                 && !chart_transaction_journal_may_clear(
                     journal.chart_restored,
@@ -1319,6 +1396,7 @@ bool restore_and_reset_chart_patch_state(
     return restore_chart_patch_state(reason, true, restored_selection);
 }
 
+#ifndef FF7RP_CHART_PATCH_SELFTEST
 bool restore_chart_and_cancel_audio(
     SelectionAudioAdmission& admission, const char* reason) noexcept
 {
@@ -1391,6 +1469,13 @@ ChartDescriptorReadiness descriptor_readiness(FNameCtorFn fname_ctor)
                     descriptor_ok = false;
                     ++readiness.unresolved_rows;
                 }
+                for (const std::string& ignore_sound_id : row.ignore_sound_ids) {
+                    if (!ignore_sound_id.empty()
+                        && !resolve_monotone_id_fname(fname_ctor, ignore_sound_id, packed)) {
+                        descriptor_ok = false;
+                        ++readiness.unresolved_rows;
+                    }
+                }
             }
             if (descriptor_ok) {
                 ++readiness.descriptors_resolvable;
@@ -1428,9 +1513,147 @@ void log_extended_chart_source_boundary(const std::vector<DescriptorChartRow>& r
     }
     core::log(core::LogLevel::Info, out.str());
 }
+#endif
 
 } // namespace
 
+#ifdef FF7RP_CHART_PATCH_SELFTEST
+bool chart_patch_ignore_sound_selftest()
+{
+    struct NativeArrayHeader {
+        uint64_t data = 0;
+        int32_t num = 0;
+        int32_t max = 0;
+    };
+    static_assert(sizeof(NativeArrayHeader) == 16);
+
+    (void)restore_and_reset_chart_patch_state("selftest_begin");
+    std::vector<uint8_t> chart_bytes(
+        kObservedPianoScoreRowCounts.size() * sizeof(NativeArrayHeader));
+    for (size_t index = 0; index < kObservedPianoScoreRowCounts.size(); ++index) {
+        NativeArrayHeader header{
+            0x10000000u + static_cast<uint64_t>(index) * 0x100u,
+            kObservedPianoScoreRowCounts[index],
+            kObservedPianoScoreRowCounts[index],
+        };
+        std::memcpy(chart_bytes.data() + index * sizeof(header), &header, sizeof(header));
+    }
+    const std::vector<uint8_t> original_chart = chart_bytes;
+
+    ChartMemoryLayout layout{};
+    layout.chart_base = reinterpret_cast<uintptr_t>(chart_bytes.data());
+    layout.chart_size = chart_bytes.size();
+    layout.row_header_base = 0;
+    layout.time_header_index = kTimeStrHeaderIndex;
+    layout.monotone_id_header_index = kMonotoneIdHeaderIndex;
+
+    ChartNameResolver resolver{};
+    const auto resolve = [](const std::string& name, uint64_t& packed) {
+        if (name == "Mono") packed = 0x1001u;
+        else if (name == "Chord") packed = 0x1002u;
+        else if (name == "A") packed = 0x2001u;
+        else if (name == "B") packed = 0x2002u;
+        else if (name == "C") packed = 0x2003u;
+        else return false;
+        return true;
+    };
+    resolver.resolve_monotone_id = resolve;
+    resolver.resolve_chord_id = resolve;
+    resolver.resolve_ignore_sound_id = resolve;
+
+    const auto make_profile = [](std::array<std::string, 3> first,
+                                 std::array<std::string, 3> second) {
+        SongDifficultyProfile profile;
+        profile.difficulty = 4;
+        profile.chart_notes.push_back(
+            {"00_00", "Mono", "Chord", 3, 0, 0, 7, std::move(first)});
+        profile.chart_notes.push_back(
+            {"00_25", "Mono", "Chord", 3, 0, 0, 8, std::move(second)});
+        return profile;
+    };
+    const auto fail = [&]() {
+        (void)restore_and_reset_chart_patch_state("selftest_failure");
+        return false;
+    };
+
+    PlannedDescriptorChartPatch planned;
+    std::string reason;
+    const SongDifficultyProfile root_profile = make_profile({"A", "", "C"}, {"", "B", ""});
+    if (!try_plan_descriptor_chart_patch(
+            root_profile, "selftest-root", layout, resolver, planned, &reason)
+        || !planned.arrays
+        || planned.arrays->ignore_sound_ids
+            != std::vector<uint64_t>({0x2001u, 0u, 0x2003u, 0u, 0x2002u, 0u})) {
+        return fail();
+    }
+    OwnedDescriptorChartArrays* const first_owner = planned.arrays.get();
+    const PlannedChartWriteResult first_write = apply_planned_descriptor_chart_patch(
+        0, layout.chart_base, {}, {}, std::move(planned));
+    NativeArrayHeader published{};
+    std::memcpy(&published,
+        chart_bytes.data() + kIgnoreSoundHeaderIndex * sizeof(published), sizeof(published));
+    if (first_write != PlannedChartWriteResult::Applied
+        || published.data != reinterpret_cast<uint64_t>(first_owner->ignore_sound_ids.data())
+        || published.num != 6 || published.max != 6
+        || g_chart_patch_journal.arrays.get() != first_owner) {
+        return fail();
+    }
+
+    SongDifficultyProfile missing_profile = root_profile;
+    missing_profile.chart_notes[0].ignore_sound_ids[1] = "Missing";
+    PlannedDescriptorChartPatch rejected;
+    if (try_plan_descriptor_chart_patch(
+            missing_profile, "selftest-missing", layout, resolver, rejected, &reason)
+        || rejected.arrays || !rejected.entries.empty()
+        || reason.find("ignore_sound_resolve_failed index=0 slot=1") != 0
+        || g_chart_patch_journal.arrays.get() != first_owner
+        || first_owner->ignore_sound_ids[4] != 0x2002u) {
+        return fail();
+    }
+    if (!restore_and_reset_chart_patch_state("selftest_root_restore")
+        || chart_bytes != original_chart) {
+        return fail();
+    }
+
+    const SongDifficultyProfile switched_profile = make_profile({"C", "A", ""}, {"", "", "B"});
+    if (!try_plan_descriptor_chart_patch(
+            switched_profile, "selftest-profile", layout, resolver, planned, &reason)
+        || planned.arrays->ignore_sound_ids
+            != std::vector<uint64_t>({0x2003u, 0x2001u, 0u, 0u, 0u, 0x2002u})
+        || apply_planned_descriptor_chart_patch(0, layout.chart_base, {}, {}, std::move(planned))
+            != PlannedChartWriteResult::Applied
+        || !restore_and_reset_chart_patch_state("selftest_profile_restore")
+        || chart_bytes != original_chart) {
+        return fail();
+    }
+
+    if (!try_plan_descriptor_chart_patch(
+            root_profile, "selftest-rollback", layout, resolver, planned, &reason)
+        || planned.entries.size() < 5u) {
+        return fail();
+    }
+    const uintptr_t drift_address = planned.entries[4].address;
+    uint8_t drift = 0;
+    if (!core::safe_read_field(reinterpret_cast<void*>(drift_address), 0, drift)) {
+        return fail();
+    }
+    ++drift;
+    if (!core::safe_write_bytes(reinterpret_cast<void*>(drift_address), &drift, sizeof(drift))) {
+        return fail();
+    }
+    const std::vector<uint8_t> drifted_chart = chart_bytes;
+    if (apply_planned_descriptor_chart_patch(0, layout.chart_base, {}, {}, std::move(planned))
+            != PlannedChartWriteResult::RolledBack
+        || chart_bytes != drifted_chart
+        || g_chart_patch_journal.active || !g_chart_patch_journal.entries.empty()
+        || g_chart_patch_journal.arrays) {
+        return fail();
+    }
+    return true;
+}
+#endif
+
+#ifndef FF7RP_CHART_PATCH_SELFTEST
 bool chart_audio_diagnostic_transaction_exact(
     const uint64_t selection_generation,
     const uint64_t route_generation,
@@ -1554,10 +1777,13 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     resolver.resolve_chord_id = [](const std::string& chord_id, uint64_t& packed_name) {
         return resolve_monotone_id_fname(g_chart_fname_ctor, chord_id, packed_name);
     };
-    std::vector<JournalEntry> planned;
+    resolver.resolve_ignore_sound_id = [](const std::string& ignore_sound_id, uint64_t& packed_name) {
+        return resolve_monotone_id_fname(g_chart_fname_ctor, ignore_sound_id, packed_name);
+    };
+    PlannedDescriptorChartPatch planned;
     std::string plan_fail_reason;
     const bool planned_ok = layout_ok && song && profile
-        && plan_descriptor_chart_patch(
+        && try_plan_descriptor_chart_patch(
             *profile, song->id, layout, resolver, planned, &plan_fail_reason);
     if (!planned_ok) {
         static std::atomic_int s_plan_failure_logs{0};
@@ -1888,5 +2114,6 @@ core::HookShutdownResult shutdown_chart_patch()
         release_uobject_identity_chart_consumer();
     });
 }
+#endif
 
 } // namespace ff7r::piano::game

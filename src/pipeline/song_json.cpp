@@ -434,6 +434,41 @@ Status parse_non_negative_integer(const JsonValue& object, const char* key, int*
     return Status::ok_status();
 }
 
+Status parse_optional_note_extensions(const JsonValue& object, Note* note, const std::size_t index) {
+    if (const JsonValue* group = find_member(object, "group_index")) {
+        if (group->type != JsonValue::Type::Number || !std::isfinite(group->number) ||
+            std::floor(group->number) != group->number || group->number < 0.0 || group->number > 255.0) {
+            return Status::error(StatusCode::InvalidJson,
+                "note group_index must be an integer between 0 and 255 at index " + std::to_string(index));
+        }
+        note->group_index = static_cast<std::uint8_t>(group->number);
+    }
+    if (const JsonValue* variant = find_member(object, "monotone_variant")) {
+        if (variant->type != JsonValue::Type::String ||
+            (variant->string != "default" && variant->string != "alternate")) {
+            return Status::error(StatusCode::InvalidJson,
+                "note monotone_variant must be 'default' or 'alternate' at index " + std::to_string(index));
+        }
+        note->alternate_monotone = variant->string == "alternate";
+    }
+    if (const JsonValue* ignores = find_member(object, "ignore_sound")) {
+        if (ignores->type != JsonValue::Type::Array || ignores->array.empty() || ignores->array.size() > 3u) {
+            return Status::error(StatusCode::InvalidJson,
+                "note ignore_sound must contain between 1 and 3 pitch names at index " + std::to_string(index));
+        }
+        for (const JsonValue& value : ignores->array) {
+            if (value.type != JsonValue::Type::String || value.string.empty() ||
+                std::find(note->ignore_sound_pitches.begin(), note->ignore_sound_pitches.end(), value.string) !=
+                    note->ignore_sound_pitches.end()) {
+                return Status::error(StatusCode::InvalidJson,
+                    "note ignore_sound must contain unique non-empty pitch strings at index " + std::to_string(index));
+            }
+            note->ignore_sound_pitches.push_back(value.string);
+        }
+    }
+    return Status::ok_status();
+}
+
 Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_provided) {
     const JsonValue* notes = find_member(root, "notes");
     if (!notes) {
@@ -458,8 +493,9 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
         }
 
         Note note;
-        Status status = reject_unknown_members(
-            note_object, {"beat", "duration_beats", "pitch", "chord_id"}, "note index " + std::to_string(i));
+        Status status = reject_unknown_members(note_object,
+            {"beat", "duration_beats", "pitch", "chord_id", "group_index", "monotone_variant", "ignore_sound"},
+            "note index " + std::to_string(i));
         if (!status.ok()) return status;
         status = require_number(note_object, "beat", &note.beat);
         if (!status.ok()) {
@@ -495,6 +531,8 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
                 }
             }
         }
+        status = parse_optional_note_extensions(note_object, &note, i);
+        if (!status.ok()) return status;
 
         if (!std::isfinite(note.beat) || note.beat < 0.0) {
             return Status::error(StatusCode::InvalidJson, "note beat must be non-negative at index " + std::to_string(i));
@@ -504,6 +542,14 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
         }
         if (note.pitch.empty() && note.chord_id.empty()) {
             return Status::error(StatusCode::InvalidJson, "note must contain pitch, chord_id, or both at index " + std::to_string(i));
+        }
+        if (note.alternate_monotone && note.pitch.empty()) {
+            return Status::error(StatusCode::InvalidJson,
+                "note monotone_variant requires pitch at index " + std::to_string(i));
+        }
+        if (!note.ignore_sound_pitches.empty() && note.chord_id.empty()) {
+            return Status::error(StatusCode::InvalidJson,
+                "note ignore_sound requires chord_id at index " + std::to_string(i));
         }
         if (previous_beat > note.beat) {
             return Status::error(StatusCode::InvalidJson, "notes must be sorted by non-decreasing beat; invalid note index " + std::to_string(i));

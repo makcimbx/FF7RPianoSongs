@@ -43,8 +43,8 @@
 namespace ff7rp::pipeline {
 namespace {
 
-constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '3'};
-constexpr std::uint32_t kRuntimeCacheFormat = 13;
+constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
+constexpr std::uint32_t kRuntimeCacheFormat = 14;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
 
@@ -88,9 +88,11 @@ int round_to_hundred(const int value) {
 
 void finalize_gameplay_metadata(SongConfig& config) {
     int scoring_actions = 0;
+    std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
-        if (!note.pitch.empty()) ++scoring_actions;
+        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) ++scoring_actions;
         if (!note.chord_id.empty()) ++scoring_actions;
+        previous_group = note.group_index;
     }
     scoring_actions = std::max(1, scoring_actions);
 
@@ -203,12 +205,14 @@ struct ProfileActionCounts {
 
 ProfileActionCounts profile_action_counts(const SongConfig& config) {
     ProfileActionCounts counts;
+    std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
-        const bool right = !note.pitch.empty();
+        const bool right = !note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group);
         const bool left = !note.chord_id.empty();
         counts.right += right ? 1u : 0u;
         counts.left += left ? 1u : 0u;
         counts.dual += right && left ? 1u : 0u;
+        previous_group = note.group_index;
     }
     return counts;
 }
@@ -248,6 +252,7 @@ void normalized_profile_actions(
     const SongConfig& config,
     ProfileActionMultiset* identities,
     ProfileSlotMultiset* slots) {
+    std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
         const auto append = [&](const std::uint8_t hand, const std::string& value) {
             const std::uint64_t beat = double_identity(note.beat);
@@ -255,8 +260,9 @@ void normalized_profile_actions(
             ++(*identities)[{beat, duration, hand, value}];
             ++(*slots)[{beat, duration, hand}];
         };
-        if (!note.pitch.empty()) append(0, note.pitch);
+        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) append(0, note.pitch);
         if (!note.chord_id.empty()) append(1, note.chord_id);
+        previous_group = note.group_index;
     }
 }
 
@@ -437,20 +443,24 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
                 d.dominant_skill_is_global != local.dominant_skill_is_global ||
                 d.satisfied_route_name != local.satisfied_route_name) return false;
         }
+        SongConfig complete_config = profile.config;
+        for (const auto& row : profile.diagnostic_chart.tail_rows) complete_config.notes.push_back(row.source);
+        CompiledChart expected_complete_chart;
+        DiagnosticChartRetention expected_diagnostic;
+        if (!compile_chart(complete_config, &expected_complete_chart, &expected_diagnostic,
+                complete_config.notes.size()).ok() ||
+            expected_diagnostic.tail_rows.size() != profile.diagnostic_chart.tail_rows.size()) return false;
         double previous_tail_beat = profile.config.notes.empty() ? -1.0 : profile.config.notes.back().beat;
-        for (const DiagnosticChartTailRow& row : profile.diagnostic_chart.tail_rows) {
+        for (std::size_t tail_index = 0; tail_index < profile.diagnostic_chart.tail_rows.size(); ++tail_index) {
+            const DiagnosticChartTailRow& row = profile.diagnostic_chart.tail_rows[tail_index];
+            const DiagnosticChartTailRow& expected = expected_diagnostic.tail_rows[tail_index];
             const double seconds = row.source.beat * 60.0 / profile.config.bpm;
-            std::string monotone;
             if (!std::isfinite(seconds) || seconds < profile.config.midi_minimum_lead_in_seconds - 1.0 / 60.0 ||
                 seconds > duration + 1.0 / 60.0 || row.source.beat < previous_tail_beat ||
-                row.compiled.beat != row.source.beat || row.compiled.duration_beats != row.source.duration_beats ||
-                row.compiled.pitch != row.source.pitch || row.compiled.chord_id != row.source.chord_id ||
-                row.compiled.time_str != beat_to_time_str(row.source.beat, profile.config.bpm) ||
-                row.compiled.note_type != (row.source.duration_beats >= 2.0 ? 2 : 3) ||
-                row.compiled.dot_type != 0 || row.compiled.camera_switch_timing != 0 || row.compiled.group_index != 0 ||
-                (!row.source.pitch.empty() && (!pitch_to_monotone_id(row.source.pitch, &monotone).ok() ||
-                    row.compiled.monotone_id != monotone)) ||
-                (row.source.pitch.empty() && !row.compiled.monotone_id.empty())) return false;
+                row.source_row != expected.source_row ||
+                !diagnostic_charts_equal(
+                    DiagnosticChartRetention{1u, 1u, {row}, 0u},
+                    DiagnosticChartRetention{1u, 1u, {expected}, 0u})) return false;
             previous_tail_beat = row.source.beat;
         }
         if (index == 0) {

@@ -19,6 +19,7 @@ struct SongChartNote {
     int32_t dot_type = 0;
     int32_t camera_switch_timing = 0;
     int32_t group_index = 0;
+    std::array<std::string, 3> ignore_sound_ids{};
 };
 
 struct SongDifficultyProfile {

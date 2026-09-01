@@ -104,6 +104,15 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - Runtime behavior is descriptor-driven; parallel ad-hoc song state is not authoritative.
 - Selected-index detail rendering owns one thread-local descriptor/profile scope around the exact native callback, including explicit profile refresh. Title, duration, note count, and the cataloged menu-detail ScoreInfo caller consume this scope first; playback is consulted only when no menu scope exists. Temporary ScoreInfo rows are retained by the outer scope and released when that callback returns.
 - Cache reuse requires matching source identity, semantic configuration, generated profile data, format metadata, and structural validation.
+- Pipeline cache identity v44 and runtime-cache format 14 include authored group,
+  monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
+  profile-witness, and diagnostic semantics. Older artifacts are invalidated
+  rather than interpreted under the new layout. Version 44 also identifies the
+  canonical-contour monotone planner and profile-derived grouping policy.
+- The offline pipeline owns an immutable exact-spelling constituent table for all
+  63 non-null chord IDs supported by MIDI chord inference. IgnoreSound resolution
+  consults only that evidence table; it neither reads game memory nor constructs
+  native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
 - Diagnostic input acceptance does not imply playable runtime publication.
 - Failure never publishes a partial descriptor or partially replaces the active package directory.

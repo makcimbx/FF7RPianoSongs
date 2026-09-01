@@ -13,6 +13,10 @@
 #include <string>
 #include <vector>
 
+namespace ff7r::piano::game {
+bool chart_patch_ignore_sound_selftest();
+}
+
 namespace {
 
 using ff7r::piano::game::synthetic_model::BuildRequest;
@@ -425,6 +429,7 @@ int main()
         {"synthetic_copy_isolation", test_synthetic_copy_isolation},
         {"synthetic_boundary_semantics", test_synthetic_boundary_semantics},
         {"synthetic_rollback_and_guards", test_rollback_and_guards},
+        {"chart_patch_ignore_sound", ff7r::piano::game::chart_patch_ignore_sound_selftest},
         {"shipping_specs", test_shipping_specs},
         {"fixture_tool_contract", test_fixture_tool_contract},
     };

@@ -1,5 +1,6 @@
 #include "core/generated/build_identity.generated.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/native_chord_constituents.h"
 #include "pipeline/cache.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/song_json.h"
@@ -12,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -343,8 +345,80 @@ int main()
     if (chart.notes[0].camera_switch_timing != 0 || chart.notes[1].camera_switch_timing != 0 || chart.notes[2].camera_switch_timing != 0) {
         return fail("custom chart unexpectedly requests per-note camera switches");
     }
+    for (std::size_t index = 0; index < config.notes.size(); ++index) {
+        if (config.notes[index].group_index != 0 || config.notes[index].alternate_monotone ||
+            !config.notes[index].ignore_sound_pitches.empty() ||
+            !config.notes[index].source_chord_pitches.empty() || chart.notes[index].group_index != 0 ||
+            !chart.notes[index].ignore_sound_ids[0].empty() || !chart.notes[index].ignore_sound_ids[1].empty() ||
+            !chart.notes[index].ignore_sound_ids[2].empty()) {
+            return fail("omitted note extensions changed schema-v2 chart behavior");
+        }
+    }
     if (chart.notes[0].note_type != 3 || chart.notes[1].note_type != 2) {
         return fail("unexpected note type mapping");
+    }
+    std::size_t three_sound_chords = 0;
+    std::size_t four_sound_chords = 0;
+    std::set<std::string_view> verified_chord_ids;
+    for (const auto& chord : ff7rp::pipeline::kVerifiedNativeChordConstituents) {
+        if (!verified_chord_ids.insert(chord.chord_id).second) return fail("verified chord table contains duplicate IDs");
+        if (chord.sound_count == 3u) ++three_sound_chords;
+        else if (chord.sound_count == 4u) ++four_sound_chords;
+        else return fail("verified chord table contains an unsupported constituent count");
+        std::set<std::string_view> sounds;
+        for (std::size_t sound = 0; sound < chord.sound_count; ++sound) {
+            if (chord.sound_names[sound].empty() || !sounds.insert(chord.sound_names[sound]).second) {
+                return fail("verified chord table contains empty or duplicate constituents");
+            }
+        }
+    }
+    if (verified_chord_ids.size() != 63u || three_sound_chords != 40u || four_sound_chords != 23u) {
+        return fail("verified chord table coverage changed");
+    }
+    const char* extended_notes_json = R"json({
+        "schema":"ff7rpianosongs.song.v2","title":"Extended notes","bpm":120,"notes":[
+            {"beat":0,"duration_beats":0.25,"pitch":"C4","group_index":17,"monotone_variant":"alternate"},
+            {"beat":0.05,"duration_beats":0.25,"pitch":"C#4","group_index":17}
+        ]})json";
+    ff7rp::pipeline::SongConfig extended_config;
+    ff7rp::pipeline::CompiledChart extended_chart;
+    status = ff7rp::pipeline::parse_song_json_string(extended_notes_json, &extended_config);
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(extended_config, &extended_chart).ok() ||
+        extended_chart.notes.size() != 2u || extended_chart.notes[0].monotone_id != "Cn4_2" ||
+        extended_chart.notes[1].monotone_id != "Cs4" || extended_chart.notes[0].group_index != 17 ||
+        extended_chart.notes[1].group_index != 17) {
+        return fail("extended note semantics did not parse and compile exactly");
+    }
+    const char* ignore_sound_json = R"json({
+        "schema":"v2","title":"Exact ignores","bpm":120,"notes":[
+            {"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En2"]},
+            {"beat":1,"duration_beats":1,"chord_id":"pca_C_7","ignore_sound":["Cn2","En2","Gn2"]}
+        ]})json";
+    ff7rp::pipeline::SongConfig ignore_config;
+    ff7rp::pipeline::CompiledChart ignore_chart;
+    status = ff7rp::pipeline::parse_song_json_string(ignore_sound_json, &ignore_config);
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(ignore_config, &ignore_chart).ok() ||
+        ignore_chart.notes[0].ignore_sound_ids != std::array<std::string, 3>{"En2", "", ""} ||
+        ignore_chart.notes[1].ignore_sound_ids != std::array<std::string, 3>{"Cn2", "En2", "Gn2"}) {
+        return fail("exact verified IgnoreSound members did not compile");
+    }
+    for (const char* invalid_note_semantics : {
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"D4","monotone_variant":"alternate"}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4","group_index":256}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4","group_index":1}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["Fn2"]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["Fb2"]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C_9","ignore_sound":["As2"]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C_7","ignore_sound":["Cn2","En2","Gn2","As2"]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["C4","C4"]}]})json"}) {
+        ff7rp::pipeline::SongConfig rejected;
+        ff7rp::pipeline::CompiledChart rejected_chart;
+        status = ff7rp::pipeline::parse_song_json_string(invalid_note_semantics, &rejected);
+        if (status.ok() && ff7rp::pipeline::compile_chart(rejected, &rejected_chart).ok()) {
+            return fail("malformed or unsupported note semantics were accepted: " +
+                std::string(invalid_note_semantics));
+        }
     }
     if (ff7rp::pipeline::beat_to_time_str(154.84, 60.0) != "154_50"
         || ff7rp::pipeline::beat_to_time_str(0.999, 60.0) != "01_00") {

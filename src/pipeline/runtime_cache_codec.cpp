@@ -161,6 +161,40 @@ bool read_gain_envelope(RuntimeCacheReader& in, std::vector<GainEnvelopePoint>* 
     return validate_gain_envelope(*points).ok();
 }
 
+bool write_string_vector(RuntimeCacheWriter& out, const std::vector<std::string>& values,
+    const std::size_t maximum) {
+    if (values.size() > maximum || !out.pod(static_cast<std::uint32_t>(values.size()))) return false;
+    for (const auto& value : values) if (!out.string(value)) return false;
+    return true;
+}
+
+bool read_string_vector(RuntimeCacheReader& in, std::vector<std::string>* values,
+    const std::size_t maximum) {
+    std::uint32_t count = 0;
+    if (!values || !in.pod(&count) || count > maximum) return false;
+    values->assign(count, {});
+    for (auto& value : *values) if (!in.string(&value)) return false;
+    return true;
+}
+
+bool write_note(RuntimeCacheWriter& out, const Note& note) {
+    const std::uint8_t alternate = note.alternate_monotone ? 1u : 0u;
+    return out.pod(note.beat) && out.pod(note.duration_beats) && out.string(note.pitch) &&
+        out.string(note.chord_id) && out.pod(note.group_index) && out.pod(alternate) &&
+        write_string_vector(out, note.ignore_sound_pitches, 3u) &&
+        write_string_vector(out, note.source_chord_pitches, 16u);
+}
+
+bool read_note(RuntimeCacheReader& in, Note* note) {
+    std::uint8_t alternate = 0;
+    if (!note || !in.pod(&note->beat) || !in.pod(&note->duration_beats) || !in.string(&note->pitch) ||
+        !in.string(&note->chord_id) || !in.pod(&note->group_index) || !in.pod(&alternate) || alternate > 1u ||
+        !read_string_vector(in, &note->ignore_sound_pitches, 3u) ||
+        !read_string_vector(in, &note->source_chord_pitches, 16u)) return false;
+    note->alternate_monotone = alternate != 0;
+    return true;
+}
+
 bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
     if (!out.string(config.schema) || !out.string(config.title) || !out.pod(config.bpm) ||
         !out.pod(static_cast<std::int32_t>(config.difficulty)) ||
@@ -183,7 +217,7 @@ bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
     if (!out.bytes(flags.data(), flags.size()) || config.notes.size() > kMaxRuntimeCacheNotes ||
         !out.pod(static_cast<std::uint32_t>(config.notes.size()))) return false;
     for (const auto& note : config.notes) {
-        if (!out.pod(note.beat) || !out.pod(note.duration_beats) || !out.string(note.pitch) || !out.string(note.chord_id)) return false;
+        if (!write_note(out, note)) return false;
     }
     return true;
 }
@@ -215,7 +249,7 @@ bool read_song_config(RuntimeCacheReader& in, SongConfig* config) {
     if (!in.pod(&count) || count > kMaxRuntimeCacheNotes) return false;
     config->notes.assign(count, {});
     for (auto& note : config->notes) {
-        if (!in.pod(&note.beat) || !in.pod(&note.duration_beats) || !in.string(&note.pitch) || !in.string(&note.chord_id)) return false;
+        if (!read_note(in, &note)) return false;
     }
     return true;
 }
@@ -227,6 +261,7 @@ bool write_compiled_chart(RuntimeCacheWriter& out, const CompiledChart& chart) {
             !out.string(note.time_str) || !out.string(note.monotone_id) || !out.string(note.chord_id)) return false;
         for (const std::int32_t value : std::array<std::int32_t, 4>{note.note_type, note.dot_type,
                 note.camera_switch_timing, note.group_index}) if (!out.pod(value)) return false;
+        for (const auto& id : note.ignore_sound_ids) if (!out.string(id)) return false;
     }
     return true;
 }
@@ -243,6 +278,7 @@ bool read_compiled_chart(RuntimeCacheReader& in, CompiledChart* chart) {
         for (auto& value : values) if (!in.pod(&value)) return false;
         note.note_type = values[0]; note.dot_type = values[1];
         note.camera_switch_timing = values[2]; note.group_index = values[3];
+        for (auto& id : note.ignore_sound_ids) if (!in.string(&id)) return false;
     }
     return true;
 }
@@ -254,12 +290,12 @@ bool write_diagnostic_chart(RuntimeCacheWriter& out, const DiagnosticChartRetent
         !out.pod(static_cast<std::uint32_t>(diagnostic.native_prefix_row_count)) ||
         !out.pod(static_cast<std::uint32_t>(diagnostic.tail_rows.size())) || !out.pod(diagnostic.descriptor_hash)) return false;
     for (const auto& row : diagnostic.tail_rows) {
-        if (!out.pod(static_cast<std::uint32_t>(row.source_row)) || !out.pod(row.source.beat) ||
-            !out.pod(row.source.duration_beats) || !out.string(row.source.pitch) || !out.string(row.source.chord_id) ||
+        if (!out.pod(static_cast<std::uint32_t>(row.source_row)) || !write_note(out, row.source) ||
             !out.pod(row.compiled.beat) || !out.pod(row.compiled.duration_beats) || !out.string(row.compiled.pitch) ||
             !out.string(row.compiled.time_str) || !out.string(row.compiled.monotone_id) || !out.string(row.compiled.chord_id)) return false;
         for (const std::int32_t value : std::array<std::int32_t, 4>{row.compiled.note_type, row.compiled.dot_type,
                 row.compiled.camera_switch_timing, row.compiled.group_index}) if (!out.pod(value)) return false;
+        for (const auto& id : row.compiled.ignore_sound_ids) if (!out.string(id)) return false;
     }
     return true;
 }
@@ -274,8 +310,7 @@ bool read_diagnostic_chart(RuntimeCacheReader& in, DiagnosticChartRetention* dia
     diagnostic->tail_rows.assign(tail, {});
     for (auto& row : diagnostic->tail_rows) {
         std::uint32_t source_row = 0;
-        if (!in.pod(&source_row) || !in.pod(&row.source.beat) || !in.pod(&row.source.duration_beats) ||
-            !in.string(&row.source.pitch) || !in.string(&row.source.chord_id) || !in.pod(&row.compiled.beat) ||
+        if (!in.pod(&source_row) || !read_note(in, &row.source) || !in.pod(&row.compiled.beat) ||
             !in.pod(&row.compiled.duration_beats) || !in.string(&row.compiled.pitch) ||
             !in.string(&row.compiled.time_str) || !in.string(&row.compiled.monotone_id) || !in.string(&row.compiled.chord_id)) return false;
         row.source_row = source_row;
@@ -283,6 +318,7 @@ bool read_diagnostic_chart(RuntimeCacheReader& in, DiagnosticChartRetention* dia
         for (auto& value : values) if (!in.pod(&value)) return false;
         row.compiled.note_type = values[0]; row.compiled.dot_type = values[1];
         row.compiled.camera_switch_timing = values[2]; row.compiled.group_index = values[3];
+        for (auto& id : row.compiled.ignore_sound_ids) if (!in.string(&id)) return false;
     }
     return true;
 }
@@ -395,13 +431,17 @@ bool read_profile_diagnostics(RuntimeCacheReader& in, DifficultyProfileDiagnosti
 #undef FF7RP_DIAGNOSTIC_SIZE_FIELDS
 
 bool notes_equal(const Note& a, const Note& b) {
-    return a.beat == b.beat && a.duration_beats == b.duration_beats && a.pitch == b.pitch && a.chord_id == b.chord_id;
+    return a.beat == b.beat && a.duration_beats == b.duration_beats && a.pitch == b.pitch &&
+        a.chord_id == b.chord_id && a.group_index == b.group_index &&
+        a.alternate_monotone == b.alternate_monotone &&
+        a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches;
 }
 bool chart_notes_equal(const ChartNote& a, const ChartNote& b) {
     return a.beat == b.beat && a.duration_beats == b.duration_beats && a.pitch == b.pitch &&
         a.time_str == b.time_str && a.monotone_id == b.monotone_id && a.chord_id == b.chord_id &&
         a.note_type == b.note_type && a.dot_type == b.dot_type &&
-        a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index;
+        a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index &&
+        a.ignore_sound_ids == b.ignore_sound_ids;
 }
 bool song_configs_equal_impl(const SongConfig& a, const SongConfig& b) {
     if (a.schema != b.schema || a.title != b.title || a.bpm != b.bpm || a.difficulty != b.difficulty ||
@@ -464,12 +504,18 @@ bool valid_config_and_chart(const SongConfig& config, const CompiledChart& chart
             compiled.pitch != source.pitch || compiled.chord_id != source.chord_id ||
             compiled.time_str != beat_to_time_str(source.beat, config.bpm) ||
             compiled.note_type != (source.duration_beats >= 2.0 ? 2 : 3) || compiled.dot_type != 0 ||
-            compiled.camera_switch_timing != 0 || compiled.group_index != 0) return false;
-        std::string monotone;
-        if (!source.pitch.empty() && (!pitch_to_monotone_id(source.pitch, &monotone).ok() ||
-            compiled.monotone_id != monotone)) return false;
-        if (source.pitch.empty() && !compiled.monotone_id.empty()) return false;
+            compiled.camera_switch_timing != 0) return false;
         previous = source.beat;
+    }
+    CompiledChart expected;
+    SongConfig compilable = config;
+    if (compilable.diagnostic_extended_chart_fixture && compilable.notes.size() == kMaxChartRows) {
+        compilable.diagnostic_extended_chart_fixture = false;
+    }
+    if (!compile_chart(compilable, &expected, nullptr, kMaxRuntimeCacheNotes).ok() ||
+        expected.notes.size() > chart.notes.size()) return false;
+    for (std::size_t index = 0; index < expected.notes.size(); ++index) {
+        if (!chart_notes_equal(expected.notes[index], chart.notes[index])) return false;
     }
     return true;
 }
@@ -590,7 +636,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         !std::isfinite(song->loudness_input_peak_dbfs) || !std::isfinite(song->loudness_output_peak_dbfs) ||
         !std::isfinite(song->loudness_applied_gain_db) || !std::isfinite(song->gain_envelope_max_gain_db) ||
         !std::isfinite(song->gain_envelope_min_gain_db) || !std::isfinite(song->metronome_first_beat_seconds) ||
-        !std::isfinite(song->metronome_last_beat_seconds) || !valid_config_and_chart(song->config, song->chart)) return false;
+        !std::isfinite(song->metronome_last_beat_seconds)) return false;
+    if (!valid_config_and_chart(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
     song->audio.stereo_samples.clear(); song->chart_from_midi = midi != 0;
     song->loudness_normalized = normalized != 0; song->loudness_gain_applied = gain != 0;
@@ -612,8 +659,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         if (!read_song_config(in, &profile.config) || !read_compiled_chart(in, &profile.chart) ||
             !read_profile_diagnostics(in, &profile.diagnostics) || !read_diagnostic_chart(in, &profile.diagnostic_chart) ||
             !in.pod(&hash) || hash == 0 || hash != profile_semantic_hash_impl(profile) ||
-            !valid_cached_profile(song->id, song->chart_policy_enabled, profile) ||
-            !valid_config_and_chart(profile.config, profile.chart)) return false;
+            !valid_cached_profile(song->id, song->chart_policy_enabled, profile)) return false;
+        if (!valid_config_and_chart(profile.config, profile.chart)) return false;
     }
     if (!song_configs_equal_impl(song->config, song->difficulty_profiles.front().config) ||
         !compiled_charts_equal(song->chart, song->difficulty_profiles.front().chart)) return false;

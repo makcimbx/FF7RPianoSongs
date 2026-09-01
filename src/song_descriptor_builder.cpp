@@ -56,6 +56,7 @@ game::SongDescriptor build_song_descriptor(
         chart_note.dot_type = note.dot_type;
         chart_note.camera_switch_timing = note.camera_switch_timing;
         chart_note.group_index = note.group_index;
+        chart_note.ignore_sound_ids = note.ignore_sound_ids;
         descriptor.chart_notes.push_back(std::move(chart_note));
     }
     descriptor.sidecar_path = core::widen(song.cache_sidecar_path);
@@ -80,7 +81,7 @@ game::SongDescriptor build_song_descriptor(
         profile.chart_notes.reserve(source_profile.chart.notes.size());
         for (const auto& note : source_profile.chart.notes) {
             profile.chart_notes.push_back({note.time_str, note.monotone_id, note.chord_id, note.note_type,
-                note.dot_type, note.camera_switch_timing, note.group_index});
+                note.dot_type, note.camera_switch_timing, note.group_index, note.ignore_sound_ids});
         }
         profile.diagnostic_source_rows = source_profile.diagnostic_chart.source_row_count;
         profile.diagnostic_native_prefix_rows = source_profile.diagnostic_chart.native_prefix_row_count;

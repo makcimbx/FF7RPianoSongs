@@ -490,13 +490,14 @@ add_executable(extended_chart_selftest
     src/tools/extended_chart_fixture_tool.cpp
     src/core/logging.cpp
     src/core/pe_image.cpp
+    src/game/chart_patch.cpp
     src/game/hook_specs.cpp
     src/game/synthetic_extended_chart_model.cpp
 )
 add_dependencies(extended_chart_selftest check_rva_catalog)
 ff7rp_apply_cpp_policy(extended_chart_selftest OMIT_FP_PRECISE)
 target_compile_definitions(extended_chart_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
-    FF7RP_EXTENDED_CHART_FIXTURE_LIBRARY)
+    FF7RP_EXTENDED_CHART_FIXTURE_LIBRARY FF7RP_CHART_PATCH_SELFTEST)
 target_include_directories(extended_chart_selftest PRIVATE "src")
 ff7rp_use_generated_catalog(extended_chart_selftest)
 add_executable(runtime_lifecycle_selftest
