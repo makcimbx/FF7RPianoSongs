@@ -59,12 +59,11 @@ The cache key must include, in fixed mode order:
 - the resolved metronome placement and audio-processing policy;
 - the existing chart and semantic configuration identity.
 
-Pipeline cache identity is `ff7rpianosongs.pipeline.v41`, so older one-source
-artifacts cannot masquerade as mode-aware artifacts and caches produced before
-the current MIDI compatibility boundary are regenerated. The manifest records
-the resolved filename and fallback state for Mode0, Mode1, and Mode2, plus the
-resulting mode geometry. Aggregate MABF structural and digest validation stays
-authoritative.
+Pipeline cache identity is versioned so older one-source artifacts cannot
+masquerade as mode-aware artifacts and caches produced before the current source
+compatibility boundary are regenerated. The manifest records the resolved
+filename and fallback state for Mode0, Mode1, and Mode2, plus the resulting mode
+geometry. Aggregate MABF structural and digest validation stays authoritative.
 
 Source-role facts remain offline-only. The runtime-cache binary shape and global
 MABF binary format are unchanged.

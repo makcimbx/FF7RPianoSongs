@@ -18,7 +18,6 @@ namespace {
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheString = 1u << 20;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
-constexpr std::uint32_t kMaxRuntimeCacheProfiles = 32;
 constexpr std::size_t kRuntimeCacheEnvelopeBytes = 40u;
 
 class RuntimeCacheWriter {
@@ -533,7 +532,7 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
         !out.pod(song.metronome_beat_count) || !out.pod(song.metronome_downbeat_count) ||
         !out.pod(song.metronome_first_beat_seconds) || !out.pod(song.metronome_last_beat_seconds) ||
         !write_song_config(out, song.config) || !write_compiled_chart(out, song.chart) ||
-        song.difficulty_profiles.size() > kMaxRuntimeCacheProfiles ||
+        song.difficulty_profiles.size() > kMaximumDifficultyProfiles ||
         !out.pod(static_cast<std::uint32_t>(song.difficulty_profiles.size()))) return false;
     for (const auto& profile : song.difficulty_profiles) {
         const auto hash = profile_semantic_hash_impl(profile);
@@ -542,7 +541,7 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
             !write_profile_diagnostics(out, profile.diagnostics) || !write_diagnostic_chart(out, profile.diagnostic_chart) ||
             hash == 0 || !out.pod(hash)) return false;
     }
-    if (song.difficulty_profile_omissions.size() > kMaxRuntimeCacheProfiles ||
+    if (song.difficulty_profile_omissions.size() > kMaximumDifficultyProfiles ||
         !out.pod(static_cast<std::uint32_t>(song.difficulty_profile_omissions.size()))) return false;
     for (const auto& omission : song.difficulty_profile_omissions) {
         SongConfig witness;
@@ -606,7 +605,7 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
             (song->config.midi_audio_alignment_seconds + 0.007)) > 1e-12) ||
         !song->config.midi_audio_alignment_provided || !song->config.midi_audio_offset_provided)) return false;
     std::uint32_t profiles = 0;
-    if (!in.pod(&profiles) || profiles == 0 || profiles > kMaxRuntimeCacheProfiles) return false;
+    if (!in.pod(&profiles) || profiles == 0 || profiles > kMaximumDifficultyProfiles) return false;
     song->difficulty_profiles.assign(profiles, {});
     for (auto& profile : song->difficulty_profiles) {
         std::uint64_t hash = 0;
@@ -622,7 +621,7 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         if (song->difficulty_profiles[i - 1].config.difficulty >= song->difficulty_profiles[i].config.difficulty) return false;
     }
     std::uint32_t omissions = 0;
-    if (!in.pod(&omissions) || omissions > kMaxRuntimeCacheProfiles) return false;
+    if (!in.pod(&omissions) || omissions > kMaximumDifficultyProfiles) return false;
     song->difficulty_profile_omissions.assign(omissions, {});
     for (std::size_t i = 0; i < omissions; ++i) {
         auto& omission = song->difficulty_profile_omissions[i];

@@ -416,6 +416,24 @@ Status parse_int_array(const JsonValue& root, const char* key, std::vector<int>*
     return Status::ok_status();
 }
 
+Status parse_non_negative_integer(const JsonValue& object, const char* key, int* out) {
+    const JsonValue* value = find_member(object, key);
+    if (!value) {
+        return Status::error(StatusCode::InvalidJson, std::string("missing required field '") + key + "'");
+    }
+    if (value->type != JsonValue::Type::Number) {
+        return Status::error(StatusCode::InvalidJson, std::string("field '") + key + "' must be a number");
+    }
+    const double rounded = std::round(value->number);
+    if (std::fabs(value->number - rounded) > 0.000001 || rounded < 0.0 ||
+        rounded > static_cast<double>(std::numeric_limits<int>::max())) {
+        return Status::error(StatusCode::InvalidJson,
+            std::string("field '") + key + "' must be a non-negative integer");
+    }
+    *out = static_cast<int>(rounded);
+    return Status::ok_status();
+}
+
 Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_provided) {
     const JsonValue* notes = find_member(root, "notes");
     if (!notes) {
@@ -599,7 +617,7 @@ Status validate_schema(const JsonValue& root, SongConfig* out_config) {
         {"schema", "title", "bpm", "difficulty", "score_thresholds", "mode_change_combo_counts",
             "midi_audio_offset_seconds", "midi_audio_alignment_seconds", "midi_minimum_lead_in_seconds",
             "loudness_normalization", "loudness_target_lufs", "loudness_peak_ceiling_dbfs",
-            "gain_envelope", "metronome", "notes", "diagnostic_extended_chart_fixture"},
+            "gain_envelope", "metronome", "notes", "profiles", "diagnostic_extended_chart_fixture"},
         "song root");
     if (!keys.ok()) return keys;
     const JsonValue* schema = find_member(root, "schema");
@@ -622,9 +640,9 @@ Status validate_schema(const JsonValue& root, SongConfig* out_config) {
 
 } // namespace
 
-Status parse_song_json_string(const std::string& json, SongConfig* out_config) {
-    if (!out_config) {
-        return Status::error(StatusCode::InvalidArgument, "out_config must not be null");
+Status parse_song_json_string(const std::string& json, ParsedSongSource* out_source) {
+    if (!out_source) {
+        return Status::error(StatusCode::InvalidArgument, "out_source must not be null");
     }
 
     JsonValue root;
@@ -660,16 +678,9 @@ Status parse_song_json_string(const std::string& json, SongConfig* out_config) {
         config.bpm_provided = true;
     }
 
-    if (const JsonValue* difficulty = find_member(root, "difficulty")) {
-        if (difficulty->type != JsonValue::Type::Number) {
-            return Status::error(StatusCode::InvalidJson, "field 'difficulty' must be a number");
-        }
-        const double rounded = std::round(difficulty->number);
-        if (std::fabs(difficulty->number - rounded) > 0.000001 || rounded < 0.0 ||
-            rounded > static_cast<double>(std::numeric_limits<int>::max())) {
-            return Status::error(StatusCode::InvalidJson, "field 'difficulty' must be a non-negative integer");
-        }
-        config.difficulty = static_cast<int>(rounded);
+    if (find_member(root, "difficulty")) {
+        status = parse_non_negative_integer(root, "difficulty", &config.difficulty);
+        if (!status.ok()) return status;
     }
 
     config.score_thresholds_provided = find_member(root, "score_thresholds") != nullptr;
@@ -752,17 +763,80 @@ Status parse_song_json_string(const std::string& json, SongConfig* out_config) {
         }
         config.diagnostic_extended_chart_fixture = fixture->boolean;
     }
+    std::vector<AuthoredDifficultyProfile> authored_profiles;
+    if (const JsonValue* profiles = find_member(root, "profiles")) {
+        if (find_member(root, "notes") || find_member(root, "difficulty")) {
+            return Status::error(StatusCode::InvalidJson,
+                "field 'profiles' cannot coexist with root 'notes' or 'difficulty'");
+        }
+        if (profiles->type != JsonValue::Type::Array) {
+            return Status::error(StatusCode::InvalidJson, "field 'profiles' must be an array");
+        }
+        if (profiles->array.empty() || profiles->array.size() > kMaximumDifficultyProfiles) {
+            return Status::error(StatusCode::InvalidJson,
+                "field 'profiles' must contain between 1 and 32 profiles");
+        }
+        if (!config.bpm_provided) {
+            return Status::error(StatusCode::InvalidJson,
+                "field 'bpm' is required when explicit profiles are provided");
+        }
+        authored_profiles.reserve(profiles->array.size());
+        int previous_difficulty = -1;
+        for (std::size_t index = 0; index < profiles->array.size(); ++index) {
+            const JsonValue& profile_object = profiles->array[index];
+            status = reject_unknown_members(
+                profile_object, {"difficulty", "notes"}, "profile index " + std::to_string(index));
+            if (!status.ok()) return status;
+            AuthoredDifficultyProfile profile;
+            status = parse_non_negative_integer(profile_object, "difficulty", &profile.difficulty);
+            if (!status.ok()) {
+                status.message += " in profile index " + std::to_string(index);
+                return status;
+            }
+            bool notes_provided = false;
+            status = parse_notes(profile_object, &profile.notes, &notes_provided);
+            if (!status.ok()) {
+                status.message += " in profile index " + std::to_string(index);
+                return status;
+            }
+            if (!notes_provided) {
+                return Status::error(StatusCode::InvalidJson,
+                    "missing required field 'notes' in profile index " + std::to_string(index));
+            }
+            if (profile.difficulty <= previous_difficulty) {
+                return Status::error(StatusCode::InvalidJson,
+                    "profile difficulties must be unique and strictly increasing; invalid profile index " +
+                    std::to_string(index));
+            }
+            previous_difficulty = profile.difficulty;
+            authored_profiles.push_back(std::move(profile));
+        }
+        config.difficulty = authored_profiles.front().difficulty;
+        config.notes = authored_profiles.front().notes;
+        config.notes_provided = true;
+    }
     if (config.diagnostic_extended_chart_fixture &&
-        (!config.notes_provided || config.notes.size() != 520u)) {
+        (!authored_profiles.empty() || !config.notes_provided || config.notes.size() != 520u)) {
         return Status::error(StatusCode::InvalidJson,
-            "diagnostic_extended_chart_fixture requires exactly 520 explicit notes");
+            "diagnostic_extended_chart_fixture requires exactly 520 root explicit notes");
     }
 
-    *out_config = std::move(config);
+    out_source->config = std::move(config);
+    out_source->authored_profiles = std::move(authored_profiles);
     return Status::ok_status();
 }
 
-Status load_song_json_file(const std::string& path, SongConfig* out_config) {
+Status parse_song_json_string(const std::string& json, SongConfig* out_config) {
+    if (!out_config) {
+        return Status::error(StatusCode::InvalidArgument, "out_config must not be null");
+    }
+    ParsedSongSource source;
+    Status status = parse_song_json_string(json, &source);
+    if (status.ok()) *out_config = std::move(source.config);
+    return status;
+}
+
+Status load_song_json_file(const std::string& path, ParsedSongSource* out_source) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
         return Status::error(StatusCode::NotFound, "failed to open song JSON: " + path);
@@ -773,10 +847,20 @@ Status load_song_json_file(const std::string& path, SongConfig* out_config) {
     if (!file.good() && !file.eof()) {
         return Status::error(StatusCode::IoError, "failed to read song JSON: " + path);
     }
-    Status status = parse_song_json_string(buffer.str(), out_config);
+    Status status = parse_song_json_string(buffer.str(), out_source);
     if (!status.ok()) {
         status.message = path + ": " + status.message;
     }
+    return status;
+}
+
+Status load_song_json_file(const std::string& path, SongConfig* out_config) {
+    if (!out_config) {
+        return Status::error(StatusCode::InvalidArgument, "out_config must not be null");
+    }
+    ParsedSongSource source;
+    Status status = load_song_json_file(path, &source);
+    if (status.ok()) *out_config = std::move(source.config);
     return status;
 }
 

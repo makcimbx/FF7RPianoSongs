@@ -98,6 +98,20 @@ struct SongConfig {
     std::vector<Note> notes;
 };
 
+inline constexpr std::size_t kMaximumDifficultyProfiles = 32u;
+
+struct AuthoredDifficultyProfile {
+    int difficulty = 1;
+    std::vector<Note> notes;
+};
+
+// Parsed source-only data. Authored profiles remain outside SongConfig so they
+// are not recursively copied into each compiled/runtime profile.
+struct ParsedSongSource {
+    SongConfig config;
+    std::vector<AuthoredDifficultyProfile> authored_profiles;
+};
+
 struct ChartNote {
     double beat = 0.0;
     double duration_beats = 0.0;

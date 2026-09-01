@@ -39,7 +39,11 @@ duration. Every override is decoded/resampled through the same 48 kHz stereo
 path and must have exactly the base logical frame count. A mismatch rejects the
 song; the pipeline never trims, pads, stretches, loops, or retimes an override.
 
-A song may provide explicit `notes`, a MIDI file, or both; explicit notes remain authoritative and are not reduced by the MIDI generator. Malformed existing JSON, conflicting audio inputs, and other invalid or ambiguous folders fail closed and are omitted from the game list.
+A song may provide one explicit root `notes` chart, multiple explicit `profiles`, a
+MIDI file, or an explicit chart plus an incidental MIDI file. Explicit charts are
+authoritative and are not reduced or replaced by the MIDI generator. Malformed
+existing JSON, conflicting audio inputs, and other invalid or ambiguous folders
+fail closed and are omitted from the game list.
 
 ## JSON Root
 
@@ -51,6 +55,7 @@ Unknown fields are rejected. The root accepts these fields:
 | `title` | Required non-empty string. |
 | `bpm` | Finite `30..300`. Required when timing cannot be obtained from MIDI. |
 | `difficulty` | Non-negative integer used by an explicit chart. |
+| `profiles` | Optional non-empty array of explicit difficulty profiles described below. Cannot coexist with root `difficulty` or `notes`. |
 | `score_thresholds` | Optional non-empty, nondecreasing array of non-negative integers for an explicit chart; defaults to `[0,1200,2400,3600]`. |
 | `mode_change_combo_counts` | Optional non-empty, nondecreasing array of non-negative integer combo boundaries; defaults to `[8,16]`. |
 | `midi_audio_offset_seconds` | Optional finite `-1..1` second correction. |
@@ -93,6 +98,51 @@ Each note permits only `beat`, `duration_beats`, `pitch`, and `chord_id`:
 - `chord_id` must be a valid native `pca_*` identifier.
 
 Playable charts are limited to 512 rows. Inputs above that boundary are not publishable; see [Compatibility and Limitations](../README.md#compatibility-and-limitations).
+
+## Explicit Difficulty Profiles
+
+Use `profiles` when one song should expose multiple manually authored charts
+without duplicating its folder or audio. Each profile permits exactly
+`difficulty` and `notes`:
+
+```json
+{
+  "schema": "ff7rpianosongs.song.v2",
+  "title": "Example Song",
+  "bpm": 120,
+  "profiles": [
+    {
+      "difficulty": 0,
+      "notes": [
+        { "beat": 0, "duration_beats": 1, "pitch": "C4" }
+      ]
+    },
+    {
+      "difficulty": 3,
+      "notes": [
+        { "beat": 0, "duration_beats": 1, "pitch": "C4" },
+        { "beat": 1, "duration_beats": 1, "chord_id": "pca_C" }
+      ]
+    }
+  ]
+}
+```
+
+- Provide from 1 through 32 profiles.
+- Difficulty labels must be unique, non-negative integers in strictly increasing
+  order. Labels may be sparse.
+- Every `notes` array follows the same explicit-note contract and 512-row
+  publishable limit above.
+- Root `bpm` is required and shared by all profiles. Scoring thresholds, mode
+  change combo counts, audio processing, gain, metronome, and MIDI timing policy
+  also remain root-owned shared settings; profile objects cannot override them.
+- When shared `score_thresholds` or `mode_change_combo_counts` are omitted, the
+  pipeline derives each profile's values independently from that profile's action
+  count and difficulty.
+- The first authored profile is the default chart. Its config and compiled chart
+  also remain the song's root/default descriptor values.
+- `profiles` cannot coexist with root `difficulty` or root `notes`. An incidental
+  `song.mid` or `song.midi` is ignored when explicit profiles are present.
 
 ## Pitch Contract
 

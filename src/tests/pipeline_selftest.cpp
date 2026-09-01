@@ -251,6 +251,60 @@ int main()
     if (!config.bpm_provided || !config.score_thresholds_provided || !config.mode_change_combo_counts_provided) {
         return fail("explicit gameplay metadata was not marked as provided");
     }
+    const char* profiles_json = R"json({
+        "schema": "ff7rpianosongs.song.v2",
+        "title": "Authored Profiles",
+        "bpm": 120,
+        "profiles": [
+            { "difficulty": 0, "notes": [
+                { "beat": 0, "duration_beats": 1, "pitch": "C4" }
+            ] },
+            { "difficulty": 3, "notes": [
+                { "beat": 0, "duration_beats": 1, "pitch": "C4" },
+                { "beat": 1, "duration_beats": 1, "chord_id": "pca_C" }
+            ] }
+        ]
+    })json";
+    ff7rp::pipeline::ParsedSongSource profiled_source;
+    status = ff7rp::pipeline::parse_song_json_string(profiles_json, &profiled_source);
+    if (!status.ok() || profiled_source.authored_profiles.size() != 2u ||
+        profiled_source.authored_profiles[0].difficulty != 0 ||
+        profiled_source.authored_profiles[1].difficulty != 3 ||
+        profiled_source.config.difficulty != 0 || profiled_source.config.notes.size() != 1u ||
+        !profiled_source.config.notes_provided || !profiled_source.config.bpm_provided) {
+        return fail("authored profiles did not parse into an ordered source container");
+    }
+    ff7rp::pipeline::SongConfig compatible_profile_config;
+    status = ff7rp::pipeline::parse_song_json_string(profiles_json, &compatible_profile_config);
+    if (!status.ok() || compatible_profile_config.difficulty != 0 ||
+        compatible_profile_config.notes.size() != 1u) {
+        return fail("SongConfig parser compatibility did not project the first authored profile");
+    }
+    for (const char* invalid_profiles : {
+            R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[]})json",
+            R"json({"schema":"v2","title":"bad","profiles":[{"difficulty":0,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"difficulty":0,"profiles":[{"difficulty":1,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}],"profiles":[{"difficulty":1,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[{"difficulty":0}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[{"difficulty":2,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]},{"difficulty":2,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[{"difficulty":2,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]},{"difficulty":1,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]}]})json",
+            R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[{"difficulty":0,"notes":[],"title":"nested"}]})json"}) {
+        ff7rp::pipeline::ParsedSongSource rejected;
+        if (ff7rp::pipeline::parse_song_json_string(invalid_profiles, &rejected).ok()) {
+            return fail("invalid authored profiles were accepted: " + std::string(invalid_profiles));
+        }
+    }
+    std::ostringstream too_many_profiles;
+    too_many_profiles << R"json({"schema":"v2","title":"bad","bpm":120,"profiles":[)json";
+    for (std::size_t index = 0; index <= ff7rp::pipeline::kMaximumDifficultyProfiles; ++index) {
+        if (index) too_many_profiles << ',';
+        too_many_profiles << "{\"difficulty\":" << index
+            << R"json(,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4"}]})json";
+    }
+    too_many_profiles << "]}";
+    if (ff7rp::pipeline::parse_song_json_string(too_many_profiles.str(), &profiled_source).ok()) {
+        return fail("authored profile capacity was not enforced");
+    }
     for (const char* invalid_json : {
             R"json({"schema":"v2","title":"one","title":"two"})json",
             R"json({"schema":"v2","title":"bad","difficulty":2147483648})json",

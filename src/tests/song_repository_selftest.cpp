@@ -266,6 +266,28 @@ bool write_explicit_song_json(
     return static_cast<bool>(out);
 }
 
+bool write_authored_profiles_song_json(const std::filesystem::path& path) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out << "{\n"
+        << "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
+        << "  \"title\": \"Authored Profile Integration\",\n"
+        << "  \"bpm\": 120,\n"
+        << "  \"loudness_normalization\": false,\n"
+        << "  \"profiles\": [\n";
+    for (const auto [profile, difficulty, rows] :
+            std::array<std::array<int, 3>, 2>{{{{0, 0, 4}}, {{1, 4, 8}}}}) {
+        out << "    { \"difficulty\": " << difficulty << ", \"notes\": [\n";
+        for (int row = 0; row < rows; ++row) {
+            out << "      { \"beat\": " << row
+                << ", \"duration_beats\": 1, \"pitch\": \"C4\" }"
+                << (row + 1 == rows ? "\n" : ",\n");
+        }
+        out << "    ] }" << (profile == 0 ? ",\n" : "\n");
+    }
+    out << "  ]\n}\n";
+    return static_cast<bool>(out);
+}
+
 bool write_diagnostic_song_json(const std::filesystem::path& path) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << "{\n  \"schema\": \"ff7rpianosongs.song.v2\",\n"
@@ -1232,8 +1254,8 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
-    constexpr std::uint64_t kExpectedCacheKey = 0x5779dbce2e1865e8ull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x35cf322143d58479ull;
+    constexpr std::uint64_t kExpectedCacheKey = 0xecc0a5f1605cbdd6ull;
+    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0xb8da886bc50cc2abull;
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=8d6270bd79225857";
     if (generated.cache_key != kExpectedCacheKey ||
@@ -1872,7 +1894,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v41") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v42") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -1925,6 +1947,55 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         invalidated.config.gain_envelope[0].gain_db != 3.0 ||
         manifest_line(second_manifest, "cache_key") == first_key || second_mabf == first_mabf) {
         return fail("gain-envelope JSON change did not invalidate cache and reach encoded MABF audio");
+    }
+    return 0;
+}
+
+int test_authored_profiles(const std::filesystem::path& root) {
+    const std::filesystem::path song_directory = root / "AuthoredProfiles";
+    std::filesystem::create_directories(song_directory);
+    if (!write_silent_wav(song_directory / "song.wav", 5.0) ||
+        !write_authored_profiles_song_json(song_directory / "song.json") ||
+        !write_bytes(song_directory / "song.mid", {0xffu, 0x00u})) {
+        return fail("failed to create authored-profile fixture");
+    }
+    ff7rp::pipeline::LoadedSong generated;
+    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &generated);
+    if (!status.ok() || generated.loaded_from_runtime_cache || generated.chart_from_midi ||
+        !generated.midi_source_path.empty() || generated.difficulty_profiles.size() != 2u ||
+        generated.config.difficulty != 0 || generated.chart.notes.size() != 4u ||
+        !configs_equal(generated.config, generated.difficulty_profiles.front().config) ||
+        !charts_equal(generated.chart, generated.difficulty_profiles.front().chart)) {
+        return fail("authored profiles did not publish first-profile root invariants: " + status.message);
+    }
+    const auto& first = generated.difficulty_profiles[0];
+    const auto& second = generated.difficulty_profiles[1];
+    if (first.config.difficulty != 0 || second.config.difficulty != 4 ||
+        first.chart.notes.size() != 4u || second.chart.notes.size() != 8u ||
+        first.config.score_thresholds == second.config.score_thresholds ||
+        first.config.mode_change_combo_counts == second.config.mode_change_combo_counts ||
+        first.diagnostics.selected_actions != 4u || second.diagnostics.selected_actions != 8u ||
+        first.diagnostics.scheduled_rows != 4u || second.diagnostics.scheduled_rows != 8u ||
+        second.diagnostics.retained_actions != 4u || second.diagnostics.added_actions != 4u ||
+        second.diagnostics.removed_actions != 0u || second.diagnostics.replaced_actions != 0u ||
+        second.diagnostics.overlap_ratio != 1.0 || !second.diagnostics.nested_from_previous) {
+        return fail("authored profile metadata or deterministic comparison diagnostics changed");
+    }
+    ff7rp::pipeline::LoadedSong cached;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
+    if (!status.ok() || !cached.loaded_from_runtime_cache || cached.difficulty_profiles.size() != 2u ||
+        !configs_equal(cached.config, generated.config) || !charts_equal(cached.chart, generated.chart)) {
+        return fail("authored profiles did not survive runtime-cache reuse unchanged");
+    }
+    for (std::size_t index = 0; index < generated.difficulty_profiles.size(); ++index) {
+        if (!configs_equal(cached.difficulty_profiles[index].config,
+                generated.difficulty_profiles[index].config) ||
+            !charts_equal(cached.difficulty_profiles[index].chart,
+                generated.difficulty_profiles[index].chart) ||
+            !diagnostics_equal(cached.difficulty_profiles[index].diagnostics,
+                generated.difficulty_profiles[index].diagnostics)) {
+            return fail("authored profile cache round trip changed profile semantics");
+        }
     }
     return 0;
 }
@@ -2409,6 +2480,7 @@ int main() {
     if (run("atomic_default_json", [&] { return test_atomic_default_song_json_creation(root.path()); }) != 0) return 1;
     if (run("bounded_discovery", [&] { return test_bounded_discovery_order_and_cache_race(root.path()); }) != 0) return 1;
     if (run("profile_comparison", test_dual_action_profile_comparison) != 0) return 1;
+    if (run("authored_profiles", [&] { return test_authored_profiles(root.path()); }) != 0) return 1;
     if (run("growth_cache_manifest", [&] { return test_growth_cache_and_manifest(root.path()); }) != 0) return 1;
     if (run("dense_collision_cache", [&] { return test_dense_collision_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("offline_goldens", [&] { return test_offline_artifact_goldens(root.path()); }) != 0) return 1;

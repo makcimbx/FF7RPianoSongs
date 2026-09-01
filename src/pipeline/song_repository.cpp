@@ -47,7 +47,6 @@ constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '3'};
 constexpr std::uint32_t kRuntimeCacheFormat = 13;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
-constexpr std::uint32_t kMaxRuntimeCacheProfiles = 32;
 
 std::string path_string(const std::filesystem::path& path);
 using cache_artifact_writer::clear_last_error;
@@ -715,13 +714,15 @@ Status load_song_directory(
             return status;
         }
     }
-    status = load_song_json_file(json_path, &song.config);
+    ParsedSongSource parsed_source;
+    status = load_song_json_file(json_path, &parsed_source);
     if (!status.ok()) {
         song.status = status;
         write_last_error(song.directory, status);
         *out_song = std::move(song);
         return status;
     }
+    song.config = parsed_source.config;
     report("config_ready");
     advance(SongLoadProgressStage::ValidatingCache);
 
@@ -967,34 +968,55 @@ Status load_song_directory(
             *out_song = std::move(song);
             return status;
         }
-        DiagnosticChartRetention diagnostic;
-        status = compile_chart(song.config, &song.chart, &diagnostic, song.accepted_chart_input_limit);
-        if (!status.ok()) {
-            song.status = status;
-            write_last_error(song.directory, status);
-            *out_song = std::move(song);
-            return status;
+        const std::size_t profile_count = parsed_source.authored_profiles.empty()
+            ? 1u : parsed_source.authored_profiles.size();
+        song.difficulty_profiles.reserve(profile_count);
+        for (std::size_t index = 0; index < profile_count; ++index) {
+            LoadedDifficultyProfile profile;
+            profile.config = parsed_source.config;
+            if (!parsed_source.authored_profiles.empty()) {
+                profile.config.difficulty = parsed_source.authored_profiles[index].difficulty;
+                profile.config.notes = parsed_source.authored_profiles[index].notes;
+                profile.config.notes_provided = true;
+            }
+            status = compile_chart(profile.config, &profile.chart, &profile.diagnostic_chart,
+                song.accepted_chart_input_limit);
+            if (!status.ok()) {
+                song.status = status;
+                write_last_error(song.directory, status);
+                *out_song = std::move(song);
+                return status;
+            }
+            if (profile.diagnostic_chart.present()) {
+                profile.config.notes.resize(kMaxChartRows);
+                profile.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
+                    song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+            }
+            finalize_gameplay_metadata(profile.config);
+            const ProfileActionCounts counts = profile_action_counts(profile.config);
+            profile.diagnostics.selected_actions = counts.right + counts.left;
+            profile.diagnostics.scheduled_rows = profile.chart.notes.size();
+            const MidiJointStrainMetrics strain =
+                analyze_midi_joint_strain(profile.config.notes, profile.config.bpm);
+            profile.diagnostics.joint_strain_p95 = strain.p95;
+            profile.diagnostics.joint_strain_peak = strain.peak;
+            if (index == 0u) {
+                profile.diagnostics.overlap_ratio = 1.0;
+                profile.diagnostics.nested_from_previous = true;
+            } else {
+                const ProfileActionComparison comparison = compare_profiles(
+                    song.difficulty_profiles.back().config, profile.config);
+                profile.diagnostics.retained_actions = comparison.retained;
+                profile.diagnostics.replaced_actions = comparison.replaced;
+                profile.diagnostics.removed_actions = comparison.removed;
+                profile.diagnostics.added_actions = comparison.added;
+                profile.diagnostics.overlap_ratio = comparison.overlap;
+                profile.diagnostics.nested_from_previous = comparison.nested;
+            }
+            song.difficulty_profiles.push_back(std::move(profile));
         }
-        if (diagnostic.present()) {
-            song.config.notes.resize(kMaxChartRows);
-            diagnostic.descriptor_hash = diagnostic_descriptor_hash(
-                song.id, song.config.difficulty, song.chart, diagnostic);
-        }
-        finalize_gameplay_metadata(song.config);
-        DifficultyProfileDiagnostics diagnostics;
-        diagnostics.selected_actions = profile_action_counts(song.config).right +
-            profile_action_counts(song.config).left;
-        diagnostics.scheduled_rows = song.chart.notes.size();
-        diagnostics.overlap_ratio = 1.0;
-        const MidiJointStrainMetrics strain = analyze_midi_joint_strain(song.config.notes, song.config.bpm);
-        diagnostics.joint_strain_p95 = strain.p95;
-        diagnostics.joint_strain_peak = strain.peak;
-        LoadedDifficultyProfile profile;
-        profile.config = song.config;
-        profile.chart = song.chart;
-        profile.diagnostics = diagnostics;
-        profile.diagnostic_chart = std::move(diagnostic);
-        song.difficulty_profiles.push_back(std::move(profile));
+        song.config = song.difficulty_profiles.front().config;
+        song.chart = song.difficulty_profiles.front().chart;
         report("json_chart_compile_ready");
     }
 
