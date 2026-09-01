@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <locale>
 #include <mutex>
 #include <sstream>
@@ -275,11 +276,11 @@ bool write_authored_profiles_song_json(const std::filesystem::path& path) {
         << "  \"loudness_normalization\": false,\n"
         << "  \"profiles\": [\n";
     for (const auto [profile, difficulty, rows] :
-            std::array<std::array<int, 3>, 2>{{{{0, 0, 4}}, {{1, 4, 8}}}}) {
+            std::array<std::array<int, 3>, 2>{{{{0, 0, 4}}, {{1, std::numeric_limits<int>::max(), 20}}}}) {
         out << "    { \"difficulty\": " << difficulty << ", \"notes\": [\n";
         for (int row = 0; row < rows; ++row) {
-            out << "      { \"beat\": " << row
-                << ", \"duration_beats\": 1, \"pitch\": \"C4\" }"
+            out << "      { \"beat\": " << row * 0.25
+                << ", \"duration_beats\": 0.125, \"pitch\": \"C4\" }"
                 << (row + 1 == rows ? "\n" : ",\n");
         }
         out << "    ] }" << (profile == 0 ? ",\n" : "\n");
@@ -1970,13 +1971,14 @@ int test_authored_profiles(const std::filesystem::path& root) {
     }
     const auto& first = generated.difficulty_profiles[0];
     const auto& second = generated.difficulty_profiles[1];
-    if (first.config.difficulty != 0 || second.config.difficulty != 4 ||
-        first.chart.notes.size() != 4u || second.chart.notes.size() != 8u ||
+    if (first.config.difficulty != 0 || second.config.difficulty != std::numeric_limits<int>::max() ||
+        first.chart.notes.size() != 4u || second.chart.notes.size() != 20u ||
         first.config.score_thresholds == second.config.score_thresholds ||
         first.config.mode_change_combo_counts == second.config.mode_change_combo_counts ||
-        first.diagnostics.selected_actions != 4u || second.diagnostics.selected_actions != 8u ||
-        first.diagnostics.scheduled_rows != 4u || second.diagnostics.scheduled_rows != 8u ||
-        second.diagnostics.retained_actions != 4u || second.diagnostics.added_actions != 4u ||
+        second.config.mode_change_combo_counts != std::vector<int>({10, 20}) ||
+        first.diagnostics.selected_actions != 4u || second.diagnostics.selected_actions != 20u ||
+        first.diagnostics.scheduled_rows != 4u || second.diagnostics.scheduled_rows != 20u ||
+        second.diagnostics.retained_actions != 4u || second.diagnostics.added_actions != 16u ||
         second.diagnostics.removed_actions != 0u || second.diagnostics.replaced_actions != 0u ||
         second.diagnostics.overlap_ratio != 1.0 || !second.diagnostics.nested_from_previous) {
         return fail("authored profile metadata or deterministic comparison diagnostics changed");

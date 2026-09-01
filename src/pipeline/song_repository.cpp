@@ -105,7 +105,8 @@ void finalize_gameplay_metadata(SongConfig& config) {
     }
     if (!config.mode_change_combo_counts_provided) {
         const int action_based = std::clamp(static_cast<int>(std::lround(scoring_actions * 0.05)), 5, 15);
-        const int difficulty_based = std::clamp(5 + 2 * (config.difficulty - 1), 5, 15);
+        const auto scaled_difficulty = 5LL + 2LL * (static_cast<long long>(config.difficulty) - 1LL);
+        const int difficulty_based = static_cast<int>(std::clamp(scaled_difficulty, 5LL, 15LL));
         int first = (action_based + difficulty_based + 1) / 2;
         first = std::clamp(first, 1, std::max(1, scoring_actions / 2));
         const int second = std::min(scoring_actions, std::max(first + 1, first * 2));
