@@ -1610,17 +1610,19 @@ bool chart_patch_ignore_sound_selftest()
         return false;
     };
 
-    const auto make_event_profile = [](const size_t row_count,
+    const auto make_event_profile = [](const size_t grouped_monotone_rows,
                                        const size_t dual_hand_rows,
                                        const bool grouped,
                                        const int difficulty) {
         SongDifficultyProfile profile;
         profile.difficulty = difficulty;
+        const size_t row_count = grouped_monotone_rows + dual_hand_rows;
         profile.chart_notes.reserve(row_count);
         for (size_t index = 0; index < row_count; ++index) {
+            const bool dual_hand = index >= grouped_monotone_rows;
             profile.chart_notes.push_back({
-                "00_00", "Mono", index < dual_hand_rows ? "Chord" : "",
-                3, 0, 0, grouped ? 1 : 0, {},
+                "00_00", "Mono", dual_hand ? "Chord" : "",
+                3, 0, 0, grouped && !dual_hand ? 1 : 0, {},
             });
         }
         return profile;
@@ -1628,8 +1630,8 @@ bool chart_patch_ignore_sound_selftest()
 
     SongDescriptor boundary_song;
     boundary_song.id = "selftest-event-boundary";
-    boundary_song.profiles.push_back(make_event_profile(256u, 256u, true, 1));
-    boundary_song.profiles.push_back(make_event_profile(257u, 256u, true, 2));
+    boundary_song.profiles.push_back(make_event_profile(2u, 255u, true, 1));
+    boundary_song.profiles.push_back(make_event_profile(3u, 255u, true, 2));
 
     PlannedDescriptorChartPatch boundary_plan;
     std::string boundary_reason;
@@ -1652,7 +1654,7 @@ bool chart_patch_ignore_sound_selftest()
             boundary_song.profiles[1], boundary_song.id, layout, rejecting_resolver,
             boundary_plan, &boundary_reason)
         || boundary_plan.arrays || !boundary_plan.entries.empty()
-        || boundary_reason != "native_event_link_stability_guard row_count=257 event_count=513 native_stable_link_capacity=512 grouping_present=1"
+        || boundary_reason != "native_event_link_stability_guard row_count=258 event_count=513 native_stable_link_capacity=512 grouping_present=1"
         || chart_bytes != original_chart
         || g_chart_patch_journal.active || g_chart_patch_journal.attempted_entries != 0
         || g_chart_patch_journal.arrays || !g_chart_patch_journal.entries.empty()) {
@@ -1660,7 +1662,7 @@ bool chart_patch_ignore_sound_selftest()
     }
 
     const SongDifficultyProfile ungrouped_513
-        = make_event_profile(257u, 256u, false, 3);
+        = make_event_profile(1u, 256u, false, 3);
     if (!try_plan_descriptor_chart_patch(
             ungrouped_513, "selftest-ungrouped-513", layout, resolver,
             boundary_plan, &boundary_reason)
