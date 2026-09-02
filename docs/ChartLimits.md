@@ -2,19 +2,21 @@
 
 ## Playable Limit
 
-Publishable explicit and generated charts contain at most 512 rows. The pipeline rejects or omits anything that cannot produce a valid chart within that boundary. Runtime list, selection, UI, scoring, duration, completion, and audio behavior never consume diagnostic tail rows.
+Ordinary publishable explicit and generated charts contain at most 512 rows. The only exception is the dormant exact-build experiment below. The pipeline rejects or omits anything else that cannot produce a valid chart within the ordinary boundary.
 
 ## Diagnostic Input
 
-The codebase contains a guarded read-only experiment that can accept one exact diagnostic fixture above the playable boundary. It publishes only the native prefix and records bounded evidence about the retained source tail. Enabling `Experimental.ExtendedCharts` does not raise the playable limit.
+The existing exactly-520-row fixture remains read-only: it publishes only the native 512-row prefix and retains eight diagnostic rows.
+
+On verified game build 1.005 only, `Experimental.ExtendedCharts=1` also requests one restricted exactly-513-row experiment. All 513 rows must be monotone-only, ungrouped, strength-zero, and contain no chord, camera, or IgnoreSound state. The native parser builds the first 512 events; an exact parser reserve-call hook pre-reserves 513 stable slots and the outer expansion detour constructs one tail event before committing count 513 last. Capacity is bounded by the existing 1024-row diagnostic-input safety limit before byte-size arithmetic. The evidence distinguishes the two constructor lookup paths but does not prove a universal numeric path or assignment range for every monotone; the complete prefix must therefore share one exact constructor-resolved `+0x49` path, and the tail must match it and a playable assignment observed in that parser-built prefix. Missing helpers, signatures, callback-vtable identity, build identity, or transaction identity leave mutation unavailable and preserve ordinary 512-row behavior. Build 1.004 has no research helper metadata and fails closed.
 
 The diagnostic path is restricted by executable identity, exact helper prologues, per-song policy identity, cache identity, and fail-closed fallback. A mismatch restores ordinary 512-row acceptance.
 
 ## Authoring Rule
 
-- Keep explicit `notes` arrays at or below 512 rows.
+- Keep ordinary explicit `notes` arrays at or below 512 rows.
 - Expect an independently generated MIDI level to be omitted when its valid minimum exceeds 512 rows.
-- Do not split, stream, or append chart rows at runtime.
+- Do not treat this restricted fixture as general extended-chart support.
 - Do not publish diagnostic fixtures as songs.
 
 ## Why The Boundary Remains

@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -36,6 +37,7 @@ struct SongDifficultyProfile {
     std::uint64_t diagnostic_descriptor_hash = 0;
     std::uint64_t diagnostic_policy_generation = 0;
     bool diagnostic_loaded_from_runtime_cache = false;
+    std::optional<SongChartNote> diagnostic_tail_note;
 };
 
 struct SongDescriptor;

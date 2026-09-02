@@ -20,6 +20,7 @@
 #include <cstring>
 #include <future>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -135,6 +136,79 @@ void test_shutdown_order_and_failures()
                 "remove_getter", "remove_use", "remove_helper",
                 "remove_index", "clear_selection"}),
         "five-hook selection teardown did not disable/drain/remove transactionally");
+
+    HookCallbackGate reserve_gate;
+    reserve_gate.open();
+    std::optional<HookCallbackGate::Lease> forwarding_callback;
+    std::promise<void> callback_entered;
+    auto entered = callback_entered.get_future();
+    auto reserve_shutdown = std::async(std::launch::async, [&] {
+        return ff7r::piano::core::disable_then_close_and_drain(reserve_gate, [&] {
+            events.push_back("disable_reserve");
+            forwarding_callback.emplace(reserve_gate.try_enter());
+            require(static_cast<bool>(*forwarding_callback),
+                "reserve gate closed before shared hook disable");
+            callback_entered.set_value();
+            return true;
+        }, std::chrono::milliseconds(1000));
+    });
+    entered.wait();
+    const auto close_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (reserve_gate.accepting() && std::chrono::steady_clock::now() < close_deadline) {
+        std::this_thread::yield();
+    }
+    require(!reserve_gate.accepting(), "reserve callback gate did not close after hook disable");
+    forwarding_callback.reset();
+    require(reserve_shutdown.get(), "reserve disable/close/drain sequence failed");
+    require(!reserve_gate.try_enter(), "reserve callback gate reopened after shutdown");
+
+    reserve_gate.open();
+    auto held_on_failure = reserve_gate.try_enter();
+    require(!ff7r::piano::core::disable_then_close_and_drain(reserve_gate,
+                [&] { events.push_back("disable_reserve_failed"); return false; },
+                std::chrono::milliseconds(1000)),
+        "reserve disable failure reported success");
+    require(reserve_gate.accepting() && reserve_gate.callbacks_in_flight() == 1,
+        "disable failure closed or drained the still-installed reserve detour gate");
+    auto retry_forward = reserve_gate.try_enter();
+    require(static_cast<bool>(retry_forward) && reserve_gate.callbacks_in_flight() == 2,
+        "forward-only callback was not accounted after reserve disable failure");
+    auto successful_retry = std::async(std::launch::async, [&] {
+        return ff7r::piano::core::disable_then_close_and_drain(reserve_gate,
+            [&] { events.push_back("disable_reserve_retry"); return true; },
+            std::chrono::milliseconds(1000));
+    });
+    const auto retry_close_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+    while (reserve_gate.accepting() && std::chrono::steady_clock::now() < retry_close_deadline) {
+        std::this_thread::yield();
+    }
+    require(!reserve_gate.accepting() && reserve_gate.callbacks_in_flight() == 2,
+        "successful retry did not disable before closing and draining reserve callbacks");
+    held_on_failure = {};
+    retry_forward = {};
+    require(successful_retry.get(), "successful reserve shutdown retry did not drain");
+    events.push_back("remove_reserve_retry");
+    require(events.size() >= 3
+            && events[events.size() - 3] == "disable_reserve_failed"
+            && events[events.size() - 2] == "disable_reserve_retry"
+            && events.back() == "remove_reserve_retry",
+        "reserve retry removed before successful disable/close/drain");
+
+    HookCallbackGate outer_gate;
+    outer_gate.open();
+    reserve_gate.open();
+    events.clear();
+    const auto coordinated = ff7r::piano::core::shutdown_gated_hooks(outer_gate, {
+        {[&] { events.push_back("disable_outer"); return true; },
+         [&] { events.push_back("remove_outer"); return true; }},
+        {[&] { return ff7r::piano::core::disable_then_close_and_drain(reserve_gate,
+                    [&] { events.push_back("disable_reserve"); return true; }); },
+         [&] { events.push_back("remove_reserve"); return true; }},
+    }, {}, {});
+    require(coordinated.ok()
+            && events == std::vector<std::string>({
+                "disable_outer", "disable_reserve", "remove_outer", "remove_reserve"}),
+        "outer expand was not disabled before shared reserve teardown");
 }
 
 void test_paused_callback_timeout()

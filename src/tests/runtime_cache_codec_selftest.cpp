@@ -237,6 +237,31 @@ int main() {
     if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive") ||
         !expect_parent_oracle(diagnostic_tail_oracle_song(), 127386u, 0x0fdf7cbfb6f772f2ull, "diagnostic tail")) return 1;
 
+    LoadedSong playable_513 = diagnostic_tail_oracle_song();
+    auto& retained_513 = playable_513.difficulty_profiles.front().diagnostic_chart;
+    retained_513.source_row_count = 513;
+    retained_513.tail_rows.resize(1);
+    retained_513.descriptor_hash = diagnostic_descriptor_hash(playable_513.id,
+        playable_513.difficulty_profiles.front().config.difficulty,
+        playable_513.difficulty_profiles.front().chart, retained_513);
+    std::vector<std::uint8_t> playable_513_bytes;
+    LoadedSong playable_513_decoded;
+    playable_513_decoded.id = playable_513.id;
+    playable_513_decoded.cache_key = playable_513.cache_key;
+    playable_513_decoded.accepted_chart_input_limit = playable_513.accepted_chart_input_limit;
+    playable_513_decoded.published_chart_row_limit = playable_513.published_chart_row_limit;
+    playable_513_decoded.chart_policy_enabled = playable_513.chart_policy_enabled;
+    playable_513_decoded.chart_policy_generation = playable_513.chart_policy_generation;
+    playable_513_decoded.chart_policy_identity = playable_513.chart_policy_identity;
+    playable_513_decoded.config = playable_513.config;
+    if (!expect(encode_runtime_cache(playable_513, kMagic, kFormat, &playable_513_bytes),
+            "exact-513 retained tail did not encode")
+        || !expect(decode_runtime_cache(playable_513_bytes, kMagic, kFormat, &playable_513_decoded),
+            "exact-513 retained tail did not decode")
+        || !expect(playable_513_decoded.difficulty_profiles.front().diagnostic_chart.source_row_count == 513
+            && playable_513_decoded.difficulty_profiles.front().diagnostic_chart.tail_rows.size() == 1,
+            "exact-513 retained tail changed during cache round trip")) return 1;
+
     const LoadedSong source = representative_song();
     std::vector<std::uint8_t> bytes;
     if (!expect(!source.id.empty(), "representative chart setup failed") ||

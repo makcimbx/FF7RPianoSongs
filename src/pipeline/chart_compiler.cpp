@@ -3,6 +3,7 @@
 #include "pipeline_limits.h"
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -140,14 +141,16 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
             " rows, above the accepted chart input limit of " + std::to_string(row_limit));
     }
     const bool has_diagnostic_tail = config.notes.size() > kMaxChartRows;
+    const bool playable_513_fixture = config.notes.size() == kPlayable513ChartRows;
+    const bool diagnostic_520_fixture = config.notes.size() == 520u;
     if (has_diagnostic_tail && (!config.diagnostic_extended_chart_fixture || !out_diagnostic ||
-        config.notes.size() != 520u || row_limit < config.notes.size())) {
+        (!playable_513_fixture && !diagnostic_520_fixture) || row_limit < config.notes.size())) {
         return Status::error(StatusCode::ChartRowLimitExceeded,
-            "over-limit input is restricted to the explicit exactly-520 diagnostic fixture");
+            "over-limit input is restricted to the explicit exactly-513 playable experiment or exactly-520 diagnostic fixture");
     }
-    if (config.diagnostic_extended_chart_fixture && config.notes.size() != 520u) {
+    if (config.diagnostic_extended_chart_fixture && !playable_513_fixture && !diagnostic_520_fixture) {
         return Status::error(StatusCode::InvalidChart,
-            "diagnostic_extended_chart_fixture requires exactly 520 source rows");
+            "diagnostic_extended_chart_fixture requires exactly 513 or 520 source rows");
     }
 
     CompiledChart chart;
@@ -211,6 +214,19 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
     }
     if (active_group != 0 && active_group_rows < 2u) {
         return Status::error(StatusCode::InvalidChart, "group_index run must contain at least two rows");
+    }
+    if (playable_513_fixture) {
+        for (std::size_t index = 0; index < chart.notes.size(); ++index) {
+            const ChartNote& note = chart.notes[index];
+            if (note.monotone_id.empty() || !note.chord_id.empty() || note.group_index != 0
+                || note.camera_switch_timing != 0
+                || std::any_of(note.ignore_sound_ids.begin(), note.ignore_sound_ids.end(),
+                    [](const std::string& id) { return !id.empty(); })) {
+                return Status::error(StatusCode::InvalidChart,
+                    "exactly-513 experiment requires monotone-only ungrouped rows without IgnoreSound or camera cues at note index "
+                    + std::to_string(index));
+            }
+        }
     }
 
     DiagnosticChartRetention diagnostic;

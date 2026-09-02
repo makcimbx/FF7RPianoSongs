@@ -562,6 +562,30 @@ int main()
     if (ff7rp::pipeline::diagnostic_charts_equal(diagnostic, mutated_diagnostic)) {
         return fail("mutated diagnostic descriptor identity was accepted");
     }
+
+    std::ostringstream playable_json;
+    playable_json << "{\"schema\":\"ff7rpianosongs.song.v2\",\"title\":\"Playable 513\","
+                  << "\"bpm\":120,\"difficulty\":2,\"diagnostic_extended_chart_fixture\":true,\"notes\":[";
+    for (std::size_t row = 0; row < 513u; ++row) {
+        if (row) playable_json << ',';
+        playable_json << "{\"beat\":" << row * 0.25
+                      << ",\"duration_beats\":0.125,\"pitch\":\"C4\"}";
+    }
+    playable_json << "]}";
+    status = ff7rp::pipeline::parse_song_json_string(playable_json.str(), &fixture_config);
+    if (!status.ok() || fixture_config.notes.size() != 513u) return fail("exact 513 fixture did not parse");
+    status = ff7rp::pipeline::compile_chart(fixture_config, &chart, &diagnostic);
+    diagnostic.descriptor_hash = ff7rp::pipeline::diagnostic_descriptor_hash("playable-513", 2, chart, diagnostic);
+    if (!status.ok() || chart.notes.size() != 512u || diagnostic.source_row_count != 513u
+        || diagnostic.tail_rows.size() != 1u || diagnostic.tail_rows.front().source_row != 512u
+        || diagnostic.descriptor_hash == 0) return fail("exact 513 fixture was not retained as 512+1: status=" + status.message
+            + " chart=" + std::to_string(chart.notes.size()) + " source=" + std::to_string(diagnostic.source_row_count)
+            + " tail=" + std::to_string(diagnostic.tail_rows.size()) + " hash=" + std::to_string(diagnostic.descriptor_hash));
+    auto prohibited = fixture_config;
+    prohibited.notes.back().chord_id = "C";
+    if (ff7rp::pipeline::compile_chart(prohibited, &chart, &diagnostic).ok())
+        return fail("513 fixture with chord did not fail closed");
+
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     std::string invalid_fixture = fixture_json.str();
     const std::size_t marker = invalid_fixture.rfind(",{");

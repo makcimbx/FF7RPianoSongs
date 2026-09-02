@@ -123,6 +123,13 @@ HookShutdownResult shutdown_gated_hooks(
     std::chrono::milliseconds drain_timeout = std::chrono::milliseconds(2000));
 
 HookTeardownOperation teardown_operation(RawRvaHook& hook);
+
+// Shared helpers may receive unrelated callbacks. Disable the detour while its
+// callback gate is still admitting/accounting calls, then close and drain it.
+bool disable_then_close_and_drain(
+    HookCallbackGate& gate,
+    const std::function<bool()>& disable,
+    std::chrono::milliseconds drain_timeout = std::chrono::milliseconds(2000));
 bool restore_native_state_transactionally(const std::vector<NativeRestoreOperation>& operations);
 bool aggregate_shutdown_results(const std::vector<HookShutdownResult>& results);
 

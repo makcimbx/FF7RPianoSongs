@@ -56,7 +56,7 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.Enabled` | `0` or nonzero | Disables or enables the mod. |
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
-| `Experimental.ExtendedCharts` | `0` or nonzero | Diagnostic only; it does not raise the playable chart limit. Keep it at `0`. |
+| `Experimental.ExtendedCharts` | `0` or nonzero | Dormant exact-1.005 research path for one restricted 513-row fixture; 520 remains diagnostic-only. Keep it at `0`. |
 
 To rebuild one song, exit the game and delete only that song's `.cache/` directory. Never distribute or copy `.cache/` data between machines or mod versions.
 

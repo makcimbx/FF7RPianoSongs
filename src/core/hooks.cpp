@@ -274,6 +274,17 @@ HookTeardownOperation teardown_operation(RawRvaHook& hook)
     };
 }
 
+bool disable_then_close_and_drain(HookCallbackGate& gate,
+    const std::function<bool()>& disable, const std::chrono::milliseconds drain_timeout)
+{
+    const bool disabled = disable && disable();
+    // If the detour may still be installed, admission must remain continuously
+    // open so every forwarding callback receives a lease for a later retry.
+    if (!disabled) return false;
+    gate.close();
+    return gate.drain(drain_timeout);
+}
+
 bool restore_native_state_transactionally(const std::vector<NativeRestoreOperation>& operations)
 {
     for (const auto& operation : operations) {

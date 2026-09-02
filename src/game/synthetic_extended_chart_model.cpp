@@ -1,158 +1,83 @@
 #include "game/synthetic_extended_chart_model.h"
 
-#include <algorithm>
 #include <cmath>
-#include <new>
 
 namespace ff7r::piano::game::synthetic_model {
 namespace {
-
-bool append_event(const SourceRow& row, std::size_t source_row, bool chord,
-    std::vector<Event>& events)
-{
-    Event event;
-    event.source_row = source_row;
-    event.chord = chord;
-    event.camera_transition = row.camera_transition;
-    event.owned_values = row.owned_values;
-    events.push_back(std::move(event));
-    return true;
+bool restricted(const std::vector<SourceRow>& rows) {
+    if (rows.size() != kPlayableRows) return false;
+    float previous = -1;
+    bool prefix_assignments[256]{};
+    uint8_t prefix_lookup_path = 2;
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        const auto& row = rows[index];
+        if (!row.monotone || row.chord || row.group || row.camera_transition || row.ignore_sound
+            || row.strength != 0 || row.fname == 0 || row.assignment == 8 || row.lookup_path > 1
+            || !std::isfinite(row.time) || row.time < previous) return false;
+        if (index < kNativeRows) {
+            if (index && row.lookup_path != prefix_lookup_path) return false;
+            if (!index) prefix_lookup_path = row.lookup_path;
+            prefix_assignments[row.assignment] = true;
+        }
+        previous = row.time;
+    }
+    return rows.back().lookup_path == prefix_lookup_path
+        && prefix_assignments[rows.back().assignment];
+}
 }
 
-bool fail_at(FailurePoint actual, const BuildRequest& request, std::size_t step = 0)
-{
-    return actual == request.failure_point && step == request.failure_step;
+Result run(const BuildRequest& request, Chart& chart) {
+    Result result;
+    const bool gate = request.rows && request.experiment_enabled && request.verified_1005
+        && request.exact_caller && request.exact_header && request.exact_thread
+        && request.depth_one && request.exact_generation && request.global_claim
+        && restricted(*request.rows);
+    if (!gate) { result.forwarded = true; return result; }
+    result.substituted = true;
+    if (request.second_reserve_hit) { result.forwarded = true; return result; }
+    if (request.reserve_capacity < kPlayableRows || request.reserve_capacity > 1024) return result;
+
+    chart.storage.clear(); chart.storage.reserve(request.reserve_capacity); chart.capacity = request.reserve_capacity;
+    for (std::size_t i = 0; i < kNativeRows; ++i)
+        chart.storage.push_back({i, static_cast<uint32_t>(2 * i), (*request.rows)[i].time, true});
+    chart.count = kNativeRows; chart.max_time = request.rows->at(kNativeRows - 1).time;
+    if (request.failure == FailurePoint::PrefixValidation) return result;
+    result.prefix_validated = true;
+    if (request.failure == FailurePoint::FNameFind) return result;
+
+    chart.storage.push_back({kNativeRows, 1024, request.rows->back().time, false});
+    chart.tail_constructor_entered = true; result.tail_constructed = true;
+    const auto cleanup = [&] { chart.storage.resize(kNativeRows); chart.tail_destructed = true; };
+    if (request.failure == FailurePoint::Constructor || request.failure == FailurePoint::ConstructorValidation) {
+        cleanup(); return result;
+    }
+    if (request.failure == FailurePoint::CallbackBuild || request.failure == FailurePoint::CallbackValidation) {
+        cleanup(); return result;
+    }
+    chart.storage.back().callback_valid = true; result.callback_validated = true;
+    const float old_max = chart.max_time; chart.max_time = request.rows->back().time;
+    if (request.failure == FailurePoint::MaxTimeValidation) {
+        chart.max_time = old_max; cleanup(); result.max_restore_proved = true; return result;
+    }
+    if (request.failure == FailurePoint::MaxTimeRestoreFailure) {
+        cleanup(); result.route_blocked = true; return result;
+    }
+    chart.count = kPlayableRows; result.count_committed = true;
+    if (request.failure == FailurePoint::PostCountExternalDrift) {
+        chart.count = 77; chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    if (request.failure == FailurePoint::PostCountRestoreFailure) {
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    if (request.failure == FailurePoint::PostCountValidation) {
+        chart.count = kNativeRows; result.count_restore_proved = true;
+        chart.max_time = old_max; result.max_restore_proved = true;
+        cleanup(); result.rolled_back = true; return result;
+    }
+    return result;
 }
 
-} // namespace
-
-bool links_are_internal(const Chart& chart)
-{
-    for (const Event& event : chart.events) {
-        if ((event.parent != kNoEvent && event.parent >= chart.events.size())
-            || (event.successor != kNoEvent && event.successor >= chart.events.size())) {
-            return false;
-        }
-    }
-    return true;
+void model_next_parser_reset(Chart& chart) {
+    chart.storage.clear(); chart.count = 0; chart.capacity = 0;
 }
-
-bool build_transactionally(const BuildRequest& request, Chart* destination)
-{
-    if (!destination || !request.rows || request.maximum_rows == 0
-        || request.maximum_rows > kExperimentalMaximumRows
-        || request.rows->empty() || request.rows->size() > request.maximum_rows
-        || request.rows->size() <= kNativeMaximumRows
-        || request.native_prefix_rows > request.rows->size()
-        || request.native_prefix_rows != kNativeMaximumRows
-        || !request.experiment_enabled || !request.persistent_caller
-        || !request.active_custom_descriptor
-        || request.playback_active || request.another_chart_active) {
-        return false;
-    }
-
-    std::size_t event_count = 0;
-    double previous_time = -1.0;
-    for (const SourceRow& row : *request.rows) {
-        if (!std::isfinite(row.time) || row.time < 0.0 || row.time < previous_time
-            || (!row.monotone && !row.chord)) {
-            return false;
-        }
-        const std::size_t additions = static_cast<std::size_t>(row.monotone)
-            + static_cast<std::size_t>(row.chord);
-        if (event_count > request.maximum_rows * 2u - additions) {
-            return false;
-        }
-        event_count += additions;
-        previous_time = row.time;
-    }
-
-    try {
-        Chart candidate;
-        candidate.times.reserve(request.rows->size());
-        if (fail_at(FailurePoint::AfterTimeReserve, request)) {
-            return false;
-        }
-        candidate.events.reserve(event_count);
-        if (fail_at(FailurePoint::AfterEventReserve, request)) {
-            return false;
-        }
-
-        std::size_t constructed = 0;
-        for (std::size_t i = 0; i < request.native_prefix_rows; ++i) {
-            const SourceRow& row = (*request.rows)[i];
-            candidate.times.push_back(row.time);
-            if (row.monotone) {
-                append_event(row, i, false, candidate.events);
-                if (fail_at(FailurePoint::AfterNativeEventConstruction, request, constructed++)) {
-                    return false;
-                }
-            }
-            if (row.chord) {
-                append_event(row, i, true, candidate.events);
-                if (fail_at(FailurePoint::AfterNativeEventConstruction, request, constructed++)) {
-                    return false;
-                }
-            }
-        }
-        constructed = 0;
-        for (std::size_t i = request.native_prefix_rows; i < request.rows->size(); ++i) {
-            const SourceRow& row = (*request.rows)[i];
-            candidate.times.push_back(row.time);
-            if (row.monotone) {
-                append_event(row, i, false, candidate.events);
-                if (fail_at(FailurePoint::AfterTailEventConstruction, request, constructed++)) {
-                    return false;
-                }
-            }
-            if (row.chord) {
-                append_event(row, i, true, candidate.events);
-                if (fail_at(FailurePoint::AfterTailEventConstruction, request, constructed++)) {
-                    return false;
-                }
-            }
-        }
-
-        std::size_t group_root = kNoEvent;
-        std::size_t linked = 0;
-        uint32_t active_group = 0;
-        for (std::size_t i = 0; i < candidate.events.size(); ++i) {
-            const uint32_t group = (*request.rows)[candidate.events[i].source_row].group;
-            if (group == 0) {
-                active_group = 0;
-                group_root = kNoEvent;
-                continue;
-            }
-            if (group != active_group || group_root == kNoEvent) {
-                active_group = group;
-                group_root = i;
-                continue;
-            }
-
-            Event& root = candidate.events[group_root];
-            Event& child = candidate.events[i];
-            child.parent = group_root;
-            child.successor = root.successor;
-            root.successor = i;
-            if (fail_at(FailurePoint::AfterLink, request, linked++)) {
-                return false;
-            }
-        }
-
-        candidate.max_time = candidate.times.back();
-        candidate.displayed_note_count = request.rows->size();
-        if (!links_are_internal(candidate)
-            || candidate.times.capacity() < request.rows->size()
-            || candidate.events.capacity() < event_count
-            || fail_at(FailurePoint::BeforePublish, request)) {
-            return false;
-        }
-        candidate.published = true;
-        *destination = std::move(candidate);
-        return true;
-    } catch (const std::bad_alloc&) {
-        return false;
-    }
-}
-
 } // namespace ff7r::piano::game::synthetic_model

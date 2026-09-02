@@ -1,4 +1,5 @@
 #include "song_json.h"
+#include "pipeline_limits.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -862,9 +863,10 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
         config.notes_provided = true;
     }
     if (config.diagnostic_extended_chart_fixture &&
-        (!authored_profiles.empty() || !config.notes_provided || config.notes.size() != 520u)) {
+        (!authored_profiles.empty() || !config.notes_provided
+            || (config.notes.size() != kPlayable513ChartRows && config.notes.size() != 520u))) {
         return Status::error(StatusCode::InvalidJson,
-            "diagnostic_extended_chart_fixture requires exactly 520 root explicit notes");
+            "diagnostic_extended_chart_fixture requires exactly 513 or 520 root explicit notes");
     }
 
     out_source->config = std::move(config);

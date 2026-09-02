@@ -1,4 +1,5 @@
 #include "song_descriptor_builder.h"
+#include "pipeline/pipeline_limits.h"
 
 #include <array>
 #include <cmath>
@@ -45,6 +46,7 @@ bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfil
         left.diagnostic_native_prefix_rows != right.diagnostic_native_prefix_rows ||
         left.diagnostic_tail_rows != right.diagnostic_tail_rows ||
         left.diagnostic_descriptor_hash != right.diagnostic_descriptor_hash ||
+        left.diagnostic_tail_note.has_value() != right.diagnostic_tail_note.has_value() ||
         left.diagnostic_policy_generation != right.diagnostic_policy_generation ||
         left.diagnostic_loaded_from_runtime_cache != right.diagnostic_loaded_from_runtime_cache) {
         return false;
@@ -52,6 +54,8 @@ bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfil
     for (std::size_t i = 0; i < left.chart_notes.size(); ++i) {
         if (!chart_note_equal(left.chart_notes[i], right.chart_notes[i])) return false;
     }
+    if (left.diagnostic_tail_note
+        && !chart_note_equal(*left.diagnostic_tail_note, *right.diagnostic_tail_note)) return false;
     return true;
 }
 
@@ -107,6 +111,14 @@ LoadedDifficultyProfile profile_fixture(int difficulty, double bpm, const ChartN
     profile.diagnostic_chart.native_prefix_row_count = static_cast<std::size_t>(difficulty + 90);
     profile.diagnostic_chart.tail_rows.resize(2);
     profile.diagnostic_chart.descriptor_hash = 0xabc000u + static_cast<std::uint64_t>(difficulty);
+    if (difficulty == 1) {
+        profile.diagnostic_chart.source_row_count = 513;
+        profile.diagnostic_chart.native_prefix_row_count = 512;
+        profile.diagnostic_chart.tail_rows.resize(1);
+        profile.diagnostic_chart.tail_rows[0].source_row = 512;
+        profile.diagnostic_chart.tail_rows[0].compiled = chart_note("64_0", "Cn4", "", 7, 2, 0, 0);
+        profile.diagnostic_chart.tail_rows[0].compiled.ignore_sound_ids = {"", "", ""};
+    }
     return profile;
 }
 
@@ -176,12 +188,14 @@ SongDescriptor expected_full_descriptor()
         profile.score_thresholds = {difficulty, difficulty + 10, difficulty + 20, difficulty + 30};
         profile.mode_change_combo_counts = {difficulty + 1, 16};
         profile.chart_notes = {difficulty == 1 ? expected.chart_notes[0] : expected.chart_notes[1]};
-        profile.diagnostic_source_rows = static_cast<std::size_t>(difficulty + 100);
-        profile.diagnostic_native_prefix_rows = static_cast<std::size_t>(difficulty + 90);
-        profile.diagnostic_tail_rows = 2;
+        profile.diagnostic_source_rows = difficulty == 1 ? 513u : static_cast<std::size_t>(difficulty + 100);
+        profile.diagnostic_native_prefix_rows = difficulty == 1 ? 512u : static_cast<std::size_t>(difficulty + 90);
+        profile.diagnostic_tail_rows = difficulty == 1 ? 1u : 2u;
         profile.diagnostic_descriptor_hash = 0xabc000u + static_cast<std::uint64_t>(difficulty);
         profile.diagnostic_policy_generation = 0x1122334455667788ull;
         profile.diagnostic_loaded_from_runtime_cache = true;
+        if (difficulty == 1) profile.diagnostic_tail_note = SongChartNote{
+            "64_0", "Cn4", "", 7, 2, 0, 0, {"", "", ""}};
         expected.profiles.push_back(std::move(profile));
     }
     return expected;
@@ -203,6 +217,24 @@ int main()
     if (!descriptor_equal(actual, expected)) {
         return fail("field-complete descriptor golden mismatch");
     }
+
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    LoadedSong playable = full_fixture();
+    playable.chart_policy_generation = ff7rp::pipeline::chart_row_policy_generation();
+    auto prefix = chart_note("0_00", "Cn4", "", 3, 0, 0, 0);
+    prefix.ignore_sound_ids = {"", "", ""};
+    playable.difficulty_profiles.resize(1);
+    playable.difficulty_profiles.front().chart.notes.assign(512, prefix);
+    SongDescriptor playable_descriptor = ff7r::piano::build_song_descriptor(playable, 17);
+    if (playable_descriptor.profiles.front().note_count != 513
+        || !playable_descriptor.profiles.front().diagnostic_tail_note) {
+        return fail("exact eligible 513 descriptor did not publish its immutable tail");
+    }
+    playable.difficulty_profiles.front().chart.notes.front().chord_id = "pca_C";
+    if (ff7r::piano::build_song_descriptor(playable, 17).profiles.front().note_count != 512) {
+        return fail("ineligible 513 descriptor published a generalized count");
+    }
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
 
     LoadedSong cache_variant = full;
     cache_variant.cache_key ^= 0xffffu;

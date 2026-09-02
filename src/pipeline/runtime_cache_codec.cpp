@@ -525,8 +525,11 @@ bool valid_cached_profile(const std::string& song_id, const bool extended, const
         profile.config.notes.size() != profile.chart.notes.size()) return false;
     const auto& diagnostic = profile.diagnostic_chart;
     if (!diagnostic.present()) return !profile.config.diagnostic_extended_chart_fixture;
-    if (!extended || !profile.config.diagnostic_extended_chart_fixture || diagnostic.source_row_count != 520u ||
-        diagnostic.native_prefix_row_count != kMaxChartRows || diagnostic.tail_rows.size() != 8u ||
+    const bool supported_retention =
+        (diagnostic.source_row_count == kPlayable513ChartRows && diagnostic.tail_rows.size() == 1u)
+        || (diagnostic.source_row_count == 520u && diagnostic.tail_rows.size() == 8u);
+    if (!extended || !profile.config.diagnostic_extended_chart_fixture || !supported_retention ||
+        diagnostic.native_prefix_row_count != kMaxChartRows ||
         profile.chart.notes.size() != kMaxChartRows) return false;
     for (std::size_t i = 0; i < diagnostic.tail_rows.size(); ++i) {
         if (diagnostic.tail_rows[i].source_row != kMaxChartRows + i) return false;
