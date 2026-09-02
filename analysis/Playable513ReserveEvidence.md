@@ -685,9 +685,11 @@ It is not approval to reserve 1,024 or 2,048 events or to append general tails:
 
 The first fixture must request 513 and append exactly one monotone event.
 
-## Implementation And Runtime Nonclaims
+## Historical Pre-implementation And Runtime Nonclaims
 
-This evidence does **not** establish that:
+At the original evidence checkpoint, this evidence did **not** establish the
+following. The accepted focused runtime qualification at the end of this record
+supersedes only the items it explicitly observed:
 
 - the current repository contains the required reserve hook, TLS context, catalog
   records, immutable tail carriage, or 513 publication policy;
@@ -1021,3 +1023,52 @@ instructions establishing the callback capture and shared publication.
 This result does **not** establish native class names, cross-thread quiescence,
 exact controller-destruction/list-exit timing, allocator-fault recovery, a
 successful playable row 513, or compatibility with another executable build.
+
+## 2026-09-02 Accepted Focused Runtime Qualification
+
+The restricted path was subsequently implemented, independently reviewed, and
+qualified in focused Development session:
+
+```text
+checkpoint: 88f1f99ae4a6d52c88c07aaa4f8736384c29beb0
+session:    20260902T175102Z-a761305b6d59
+ASI SHA-256: 835bc4282fd20387b7759024352e3312712d1c7cb2b21651c1cb9e6b2eead945
+game SHA-256: 752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc
+catalog: ff7rebirth-steam-win64-6a16ced2
+disposition: Keep
+```
+
+Immutable session evidence established this exact sequence:
+
+1. The warm v44/runtime-format-14 cache retained source/prefix/tail counts
+   `513/512/1` for the restricted fixture.
+2. Guarded selection and chart/audio admission completed without a failed
+   predicate.
+3. Synchronous native authority validated the non-UObject controller capture,
+   reciprocal chart relation, shared control block, embedded event header, and
+   activation identities.
+4. The parser reserve callback was hit exactly once, changed the request from
+   512 to 513, and returned capacity 540.
+5. Native expansion produced the expected 512-event prefix. Prefix, tail event,
+   callback state, and maximum time then validated before count 513 committed
+   last. No rollback was required.
+6. The successful PlaySetup lifecycle transition advanced from epoch 1 to 2 and
+   the exact playback identity published the pending result. Native score
+   counters were `512,1,0,0`, matching the user's observed 512 misses plus one
+   success and proving a total of 513 events.
+7. Natural completion succeeded. A subsequent ordinary song invalidated the
+   extended token at replacement expansion, published 290 ordinary rows/events,
+   and restored chart and audio behavior. Bounded deferred cleanup retired to
+   `custom_absent`, `exit_cleanup_complete`, and `aggregate_exit_complete`.
+
+The first failed predicate in the restricted 513 chain was none. The retained
+log contains no extended rollback, unresolved ownership, external drift,
+corruption, or terminal rejection. The runtime-gate session was finalized as
+`Accepted` with Development `Keep`.
+
+This qualification is deliberately narrow. It does not establish allocator or
+SEH recovery, cross-thread quiescence, arbitrary capacities, multiple appended
+rows, chord, IgnoreSound, group, camera, or mixed-event tails, build 1.004,
+packaged-artifact behavior, or Release readiness. The exact 520-row fixture
+remains diagnostic-only, and ordinary explicit/MIDI publication remains capped
+at 512 until a separately reviewed generalization is implemented and qualified.
