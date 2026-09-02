@@ -1835,7 +1835,8 @@ void finish_chart_audio_diagnostic_transaction(
             g_chart_audio_diagnostic_transaction = {};
         }
         log_chart_audio_diagnostic_transaction("terminal", terminal);
-        extended_chart_activation_terminal(terminal.generation, outcome);
+        extended_chart_activation_terminal(
+            terminal.generation, terminal.route_lifecycle_epoch, outcome);
     } catch (...) {
     }
 }
@@ -1934,6 +1935,7 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     SelectionAudioAdmissionAuthority captured_authority;
     (void)capture_selection_audio_admission_authority(admission, captured_authority);
     if (diagnostic) {
+        diagnostic->route_lifecycle_epoch = captured_authority.route_lifecycle_epoch;
         diagnostic->wrapper = reinterpret_cast<uintptr_t>(wrapper);
         diagnostic->chart_row = reinterpret_cast<uintptr_t>(chart_row);
         (void)capture_selection_audio_admission_diagnostic(
@@ -2044,6 +2046,9 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
             }
             if (superseded.generation != 0) {
                 log_chart_audio_diagnostic_transaction("terminal", superseded);
+                extended_chart_activation_terminal(superseded.generation,
+                    superseded.route_lifecycle_epoch,
+                    ChartAudioDiagnosticTerminalOutcome::Superseded);
             }
         }
     }

@@ -3,12 +3,13 @@
 #include "core/logging.h"
 #include "core/hooks.h"
 #include "core/pe_image.h"
-#include "game/duration.h"
+#include "core/generated/build_identity.generated.h"
 #include "game/audio_sead.h"
 #include "game/extended_chart_runtime_specs.h"
 #include "game/hook_specs.h"
 #include "game/generated/rvas.generated.h"
 #include "game/song_registry.h"
+#include "game/runtime_layouts.h"
 #include "pipeline/pipeline_limits.h"
 
 #include <algorithm>
@@ -72,8 +73,8 @@ struct Transaction {
     std::uint64_t registry_generation = 0;
     std::uint64_t policy_generation = 0;
     std::uint64_t descriptor_hash = 0;
-    std::uint64_t owner_generation = 0;
-    void* owner = nullptr;
+    void* controller = nullptr;
+    void* controller_control_block = nullptr;
     ChartAudioExpandTlsSnapshot tls{};
     SelectionAudioAdmissionAuthority authority{};
 };
@@ -91,15 +92,26 @@ struct Committed513 {
     std::uint64_t route_generation = 0;
     std::uint64_t lease_generation = 0;
     std::uint64_t song_key = 0;
-    std::uint64_t owner_generation = 0;
-    void* owner = nullptr;
-    void* wrapper = nullptr;
-    void* chart_row = nullptr;
-    EventHeader* header = nullptr;
-    void* allocation = nullptr;
-    int32_t capacity = 0;
     std::uint64_t activation_generation = 0;
     std::uint64_t preparation_ordinal = 0;
+    std::uint64_t route_lifecycle_epoch = 0;
+};
+
+struct ActivationSerialState {
+    bool valid = false;
+    std::uint64_t generation = 0;
+    std::uint64_t route_lifecycle_epoch = 0;
+    std::uint64_t preparation_ordinal = 0;
+    bool failed = false;
+};
+
+// Diagnostic activation generations are process-monotonic. Keep failure
+// evidence independently of transaction/token publication so a terminal that
+// wins before begin cannot be forgotten. Lifecycle qualification prevents an
+// old route lifetime from blocking a distinct lifetime.
+struct FailedActivationWatermark {
+    bool valid = false;
+    std::uint64_t generation = 0;
     std::uint64_t route_lifecycle_epoch = 0;
 };
 
@@ -114,6 +126,8 @@ core::RawRvaHook g_reserve_hook;
 core::HookCallbackGate g_reserve_gate;
 std::mutex g_committed_mutex;
 Committed513 g_committed;
+ActivationSerialState g_activation_serial;
+FailedActivationWatermark g_failed_activation_watermark;
 
 template <typename T>
 bool read_at(const void* base, std::size_t offset, T& value) {
@@ -143,18 +157,43 @@ bool eligible_profile(const SongDifficultyProfile& profile) {
         && std::all_of(profile.chart_notes.begin(), profile.chart_notes.end(), restricted_note);
 }
 
+bool read_controller_binding(void* chart, void*& controller, void*& control_block)
+{
+    controller = nullptr;
+    control_block = nullptr;
+    void* reciprocal_chart = nullptr;
+    return chart
+        && core::safe_read_field(chart,
+            runtime_layouts::PianoScoreWrapper::controller_capture, controller)
+        && controller
+        && core::safe_read_field(controller,
+            runtime_layouts::PianoChartController::chart, reciprocal_chart)
+        && reciprocal_chart == chart
+        && core::safe_read_field(controller,
+            runtime_layouts::PianoChartController::chart_control_block, control_block)
+        && control_block;
+}
+
 bool exact_identity(const Transaction& tx, void* wrapper, void* chart_row, uintptr_t caller_rva) {
-    const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
-    return tx.active && tx.wrapper == wrapper && tx.chart_row == chart_row
+    void* controller = nullptr;
+    void* control_block = nullptr;
+    void* side = nullptr;
+    const uintptr_t chart_address = reinterpret_cast<uintptr_t>(wrapper);
+    const bool header_exact = chart_address != 0
+        && chart_address <= std::numeric_limits<uintptr_t>::max() - kHeaderOffset
+        && tx.expected_header == reinterpret_cast<EventHeader*>(chart_address + kHeaderOffset);
+    return tx.active && tx.claimed && g_global_claim.load(std::memory_order_acquire)
+        && tx.wrapper == wrapper && tx.chart_row == chart_row
         && tx.caller_rva == caller_rva && caller_rva == rva::PersistentChartExpandCaller
         && selection_audio_admission_authority_matches(tx.authority)
         && tx.authority.selection.song == tx.song && tx.authority.selection.profile == tx.profile
         && tx.authority.selection.generation == tx.registry_generation
         && tx.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
         && tx.profile && tx.profile->diagnostic_descriptor_hash == tx.descriptor_hash
-        && owner.owner_observed && owner.chart_read_succeeded && owner.owner == tx.owner
-        && owner.chart == wrapper && owner.generation == tx.owner_generation
-        && owner.registry_generation == tx.registry_generation;
+        && core::safe_read_field(chart_row, kSideOffset, side) && side == tx.side
+        && header_exact && read_controller_binding(wrapper, controller, control_block)
+        && controller == tx.controller
+        && control_block == tx.controller_control_block;
 }
 
 bool parse_time(const std::string& text, float fps, float& value) {
@@ -281,9 +320,23 @@ bool exact_unowned_tail(const Transaction& tx, void* wrapper, void* chart_row,
         && memory_writable(tail, kEventSize);
 }
 
-void publish_committed_513(const Transaction& tx)
+bool publish_committed_513(const Transaction& tx)
 {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
+    const bool terminalized = g_failed_activation_watermark.valid
+        && g_failed_activation_watermark.route_lifecycle_epoch
+            == tx.authority.route_lifecycle_epoch
+        && tx.authority.activation_generation
+            <= g_failed_activation_watermark.generation;
+    if (terminalized || !g_activation_serial.valid
+        || g_activation_serial.generation != tx.authority.activation_generation
+        || g_activation_serial.route_lifecycle_epoch != tx.authority.route_lifecycle_epoch
+        || g_activation_serial.preparation_ordinal != tx.authority.preparation_ordinal
+        || g_activation_serial.failed) {
+        core::log(core::LogLevel::Error,
+            "[extended_chart] committed_513=rejected reason=failed_activation_terminal rollback=synchronous");
+        return false;
+    }
     g_committed = {};
     g_committed.pending = true;
     g_committed.storage = tx.authority.selection.storage;
@@ -296,16 +349,10 @@ void publish_committed_513(const Transaction& tx)
     g_committed.route_generation = tx.tls.route_generation;
     g_committed.lease_generation = tx.tls.lease_generation;
     g_committed.song_key = tx.tls.song_key;
-    g_committed.owner_generation = tx.owner_generation;
-    g_committed.owner = tx.owner;
-    g_committed.wrapper = tx.wrapper;
-    g_committed.chart_row = tx.chart_row;
-    g_committed.header = tx.expected_header;
-    g_committed.allocation = tx.reserved_data;
-    g_committed.capacity = tx.reserved_capacity;
     g_committed.activation_generation = tx.authority.activation_generation;
     g_committed.preparation_ordinal = tx.authority.preparation_ordinal;
     g_committed.route_lifecycle_epoch = tx.authority.route_lifecycle_epoch;
+    return true;
 }
 
 bool committed_selection_matches_locked(const SelectionSnapshot& selection)
@@ -326,7 +373,15 @@ bool committed_playback_matches_locked(const PlaybackSnapshot& playback)
         && playback.token.registry_generation == g_committed.registry_generation
         && playback.token.route_generation == g_committed.route_generation
         && playback.token.lease_generation == g_committed.lease_generation
-        && playback.token.song_key == g_committed.song_key;
+        && playback.token.song_key == g_committed.song_key
+        && selection_audio_route_lifecycle_epoch_matches(
+            g_committed.route_lifecycle_epoch)
+        && g_activation_serial.valid && !g_activation_serial.failed
+        && g_activation_serial.generation == g_committed.activation_generation
+        && g_activation_serial.route_lifecycle_epoch
+            == g_committed.route_lifecycle_epoch
+        && g_activation_serial.preparation_ordinal
+            == g_committed.preparation_ordinal;
 }
 
 bool playback_absent(const PlaybackSnapshot& playback)
@@ -367,7 +422,8 @@ void __fastcall reserve_detour(EventHeader* header, int32_t requested) noexcept 
             && reserved.capacity <= kMaximumEventCapacity) {
             tx.reserved_data = reserved.data;
             tx.reserved_capacity = reserved.capacity;
-            core::log(core::LogLevel::Info, "[extended_chart] reserve_hit=1 substitution=513 reserve_validated=1");
+            core::log(core::LogLevel::Info,
+                "[extended_chart] phase=reserve reserve_hit=1 substitution=513 reserve_validated=1 controller_reciprocal=exact header_relation=exact authority_source=selection_admission+synchronous_native");
         } else {
             tx.reserve_mismatch = true;
             core::log(core::LogLevel::Error,
@@ -400,6 +456,19 @@ bool validate_shipping_helpers(HMODULE exe_module, std::string& mismatch)
 
 bool validate_research_helpers(HMODULE module, std::string& mismatch) {
     const uintptr_t base = reinterpret_cast<uintptr_t>(module);
+    constexpr std::string_view kExactBuild = "ff7rebirth-steam-win64-6a16ced2";
+    constexpr std::array<uint8_t, 5> kExactExpandCall{0xe8, 0xb1, 0xf1, 0x01, 0x00};
+    if (core::generated::kBuildId != kExactBuild
+        || !rva::PersistentChartExpandCaller
+        || runtime_layouts::PianoScoreWrapper::controller_capture != 0x118
+        || runtime_layouts::PianoChartController::chart != 0xf48
+        || runtime_layouts::PianoChartController::chart_control_block != 0xf50
+        || !core::bytes_equal(reinterpret_cast<const uint8_t*>(
+                base + rva::PersistentChartExpandCaller - kExactExpandCall.size()),
+            std::vector<uint8_t>(kExactExpandCall.begin(), kExactExpandCall.end()))) {
+        mismatch = "persistent_chart_capture_layout_exact_1005";
+        return false;
+    }
     constexpr const char* ids[] = {"piano_event_vector_reserve", "piano_event_vector_reserve_call",
         "piano_event_callback_build", "piano_event_result_callback"};
     for (const char* id : ids) {
@@ -493,7 +562,6 @@ void invalidate_extended_chart_commit(const char* reason) noexcept {
         std::ostringstream out;
         out << "[extended_chart] committed_513=invalidated reason="
             << (reason ? reason : "unspecified")
-            << " owner_generation=" << g_committed.owner_generation
             << " registry_generation=" << g_committed.registry_generation
             << " policy_generation=" << g_committed.policy_generation
             << " selection_generation=" << g_committed.selection_generation
@@ -507,21 +575,53 @@ void invalidate_extended_chart_commit(const char* reason) noexcept {
 }
 
 void extended_chart_activation_terminal(const std::uint64_t activation_generation,
+    const std::uint64_t route_lifecycle_epoch,
     const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
 {
-    if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
-        || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) return;
-    std::lock_guard<std::mutex> lock(g_committed_mutex);
-    if (!(g_committed.pending || g_committed.active)
-        || g_committed.activation_generation != activation_generation) return;
-    core::log(core::LogLevel::Info,
-        "[extended_chart] committed_513=invalidated reason=activation_terminal");
-    g_committed = {};
+    try {
+        if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
+            || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) return;
+        std::lock_guard<std::mutex> lock(g_committed_mutex);
+        const bool recorded = !g_failed_activation_watermark.valid
+            || activation_generation > g_failed_activation_watermark.generation;
+        if (recorded) {
+            g_failed_activation_watermark = {
+                true, activation_generation, route_lifecycle_epoch};
+        }
+        const bool exact_serial = g_activation_serial.valid
+            && g_activation_serial.generation == activation_generation
+            && g_activation_serial.route_lifecycle_epoch == route_lifecycle_epoch;
+        if (exact_serial) g_activation_serial.failed = true;
+        const bool invalidated_after_publication =
+            (g_committed.pending || g_committed.active)
+            && g_committed.activation_generation == activation_generation
+            && g_committed.route_lifecycle_epoch == route_lifecycle_epoch;
+        if (invalidated_after_publication) g_committed = {};
+        std::ostringstream out;
+        out << "[extended_chart] activation_terminal=failed_recorded"
+            << " activation_generation=" << activation_generation
+            << " route_lifecycle_epoch=" << route_lifecycle_epoch
+            << " outcome=" << static_cast<unsigned>(outcome)
+            << " watermark_recorded=" << recorded
+            << " exact_current=" << exact_serial;
+        core::log(core::LogLevel::Info, out.str());
+        if (invalidated_after_publication) {
+            core::log(core::LogLevel::Info,
+                "[extended_chart] committed_513=invalidated reason=activation_terminal terminal_order=after_publication");
+        }
+    } catch (...) {
+        // Terminal diagnostics must not unwind through native audio callbacks.
+    }
 }
 
 ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, bool requested)
 {
     invalidate_extended_chart_commit("configuration_change");
+    {
+        std::lock_guard<std::mutex> lock(g_committed_mutex);
+        g_activation_serial = {};
+        g_failed_activation_watermark = {};
+    }
     ExtendedChartSupport support;
     support.requested = requested;
     if (!requested) {
@@ -610,12 +710,9 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
         || transaction.depth != 1 || !transaction.original_inflight
         || caller_rva != rva::PersistentChartExpandCaller
         || !wrapper || !chart_row) return;
-    const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
     const SelectionSnapshot& selection = authority.selection;
     if (!selection_audio_admission_authority_matches(authority)
         || !selection.song || !selection.profile || !eligible_profile(*selection.profile)
-        || !owner.owner_observed || !owner.chart_read_succeeded || owner.chart != wrapper
-        || owner.registry_generation != selection.generation
         || transaction.generation != authority.activation_generation
         || transaction.selection_generation != selection.generation
         || transaction.route_generation != authority.token.route_generation
@@ -624,17 +721,50 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     bool expected = false;
     if (!g_global_claim.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return;
     void* side = nullptr;
-    if (!core::safe_read_field(chart_row, kSideOffset, side) || !side) {
+    void* controller = nullptr;
+    void* control_block = nullptr;
+    const uintptr_t chart_address = reinterpret_cast<uintptr_t>(wrapper);
+    if (!core::safe_read_field(chart_row, kSideOffset, side) || !side
+        || !read_controller_binding(wrapper, controller, control_block)
+        || chart_address > std::numeric_limits<uintptr_t>::max() - kHeaderOffset) {
         g_global_claim.store(false, std::memory_order_release); return;
     }
-    g_transaction = {true, true, false, false, wrapper, chart_row, side, caller_rva,
-        reinterpret_cast<EventHeader*>(static_cast<uint8_t*>(wrapper) + kHeaderOffset),
-        nullptr, 0, selection.song, selection.profile, selection.generation,
-        ff7rp::pipeline::chart_row_policy_generation(), selection.profile->diagnostic_descriptor_hash,
-        owner.generation, owner.owner, transaction, authority};
+    {
+        std::lock_guard<std::mutex> lock(g_committed_mutex);
+        const bool terminalized = g_failed_activation_watermark.valid
+            && g_failed_activation_watermark.route_lifecycle_epoch
+                == authority.route_lifecycle_epoch
+            && authority.activation_generation
+                <= g_failed_activation_watermark.generation;
+        if (terminalized || (g_activation_serial.valid
+            && authority.activation_generation <= g_activation_serial.generation)) {
+            g_global_claim.store(false, std::memory_order_release);
+            return;
+        }
+        g_activation_serial = {true, authority.activation_generation,
+            authority.route_lifecycle_epoch, authority.preparation_ordinal, false};
+    }
+    g_transaction = {};
+    g_transaction.active = true;
+    g_transaction.claimed = true;
+    g_transaction.wrapper = wrapper;
+    g_transaction.chart_row = chart_row;
+    g_transaction.side = side;
+    g_transaction.caller_rva = caller_rva;
+    g_transaction.expected_header = reinterpret_cast<EventHeader*>(chart_address + kHeaderOffset);
+    g_transaction.song = selection.song;
+    g_transaction.profile = selection.profile;
+    g_transaction.registry_generation = selection.generation;
+    g_transaction.policy_generation = ff7rp::pipeline::chart_row_policy_generation();
+    g_transaction.descriptor_hash = selection.profile->diagnostic_descriptor_hash;
+    g_transaction.controller = controller;
+    g_transaction.controller_control_block = control_block;
+    g_transaction.tls = transaction;
+    g_transaction.authority = authority;
     std::ostringstream out;
-    out << "[extended_chart] transaction=admitted owner_generation=" << owner.generation
-        << " authority_source=selection_admission registry_generation=" << selection.generation
+    out << "[extended_chart] transaction=admitted authority_source=selection_admission+synchronous_native"
+        << " controller_capture=exact reciprocal=exact header_relation=exact"
+        << " registry_generation=" << selection.generation
         << " policy_generation=" << g_transaction.policy_generation
         << " descriptor_hash=" << g_transaction.descriptor_hash;
     core::log(core::LogLevel::Info, out.str());
@@ -654,7 +784,6 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         std::ostringstream out;
         out << "[extended_chart] mutation_available=1 count_commit=unknown rollback=preserved"
             << " custom_route=blocked failure=" << reason
-            << " owner_generation=" << tx.owner_generation
             << " registry_generation=" << tx.registry_generation
             << " policy_generation=" << tx.policy_generation;
         core::log(core::LogLevel::Error, out.str());
@@ -665,7 +794,6 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         out << "[extended_chart] mutation_available=1 reserve_hit=" << tx.reserve_hit
             << " substitution=" << (tx.reserve_hit && !tx.reserve_mismatch)
             << " count_commit=none rollback=none failure=" << reason
-            << " owner_generation=" << tx.owner_generation
             << " registry_generation=" << tx.registry_generation
             << " policy_generation=" << tx.policy_generation;
         core::log(core::LogLevel::Error, out.str());
@@ -673,6 +801,8 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     };
     if (!tx.reserve_hit || tx.reserve_mismatch || !exact_identity(tx, wrapper, chart_row, caller_rva))
         return reject("reserve_or_identity");
+    core::log(core::LogLevel::Info,
+        "[extended_chart] phase=post_original authority_source=selection_admission+synchronous_native controller_capture_stable=1 reciprocal=exact header_relation=exact");
     EventHeader header{};
     std::size_t event_bytes = 0;
     if (!core::safe_copy_bytes(tx.expected_header, &header, sizeof(header)) || header.data != tx.reserved_data
@@ -767,10 +897,13 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         && read_at(wrapper, kMaxTimeOffset, committed_max) && committed_max == new_max
         && event_valid(tail, wrapper, tx.side, 1024, tail_time, note, tail_name, true)
         && exact_identity(tx, wrapper, chart_row, caller_rva)) {
-        publish_committed_513(tx);
-        success = true;
-        core::log(core::LogLevel::Info, "[extended_chart] prefix_validated=1 tail_constructed=1 callback_validated=1 count_commit=513 committed_513=pending rollback=none");
-        return finish();
+        if (publish_committed_513(tx)) {
+            success = true;
+            core::log(core::LogLevel::Info, "[extended_chart] prefix_validated=1 tail_constructed=1 callback_validated=1 count_commit=513 committed_513=pending rollback=none authority_source=selection_admission+synchronous_native");
+            return finish();
+        }
+        core::log(core::LogLevel::Error,
+            "[extended_chart] count_commit=513 publication=rejected reason=failed_terminal rollback=required");
     }
     EventHeader live{};
     float live_max = 0;
@@ -834,6 +967,11 @@ void clear_extended_chart_runtime_state() noexcept {
     g_admissions.store(false, std::memory_order_release);
     g_reserve_gate.close();
     g_original_reserve = nullptr; g_api = {}; g_module = nullptr; g_research_valid = false;
+    {
+        std::lock_guard<std::mutex> lock(g_committed_mutex);
+        g_activation_serial = {};
+        g_failed_activation_watermark = {};
+    }
     ff7rp::pipeline::configure_chart_row_limit(
         ff7rp::pipeline::experimental_extended_charts_requested(), false, false);
 }

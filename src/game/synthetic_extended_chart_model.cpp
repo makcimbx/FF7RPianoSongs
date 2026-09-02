@@ -31,8 +31,14 @@ Result run(const BuildRequest& request, Chart& chart) {
     const bool gate = request.rows && request.experiment_enabled && request.verified_1005
         && request.exact_caller && request.exact_header && request.exact_thread
         && request.depth_one && request.exact_generation && request.global_claim
+        && request.controller_capture_read && request.controller_nonnull
+        && request.control_block_nonnull && request.reciprocal_pre && request.header_pre
         && restricted(*request.rows);
     if (!gate) { result.forwarded = true; return result; }
+    if (!request.reciprocal_reserve || !request.header_reserve) {
+        result.forwarded = true;
+        return result;
+    }
     result.substituted = true;
     if (request.second_reserve_hit) { result.forwarded = true; return result; }
     if (request.reserve_capacity < kPlayableRows || request.reserve_capacity > 1024) return result;
@@ -41,6 +47,7 @@ Result run(const BuildRequest& request, Chart& chart) {
     for (std::size_t i = 0; i < kNativeRows; ++i)
         chart.storage.push_back({i, static_cast<uint32_t>(2 * i), (*request.rows)[i].time, true});
     chart.count = kNativeRows; chart.max_time = request.rows->at(kNativeRows - 1).time;
+    if (!request.reciprocal_post || !request.header_post) return result;
     if (request.failure == FailurePoint::PrefixValidation) return result;
     result.prefix_validated = true;
     if (request.failure == FailurePoint::FNameFind) return result;
@@ -97,13 +104,51 @@ void model_next_parser_reset(Chart& chart) {
     chart.storage.clear(); chart.count = 0; chart.capacity = 0;
 }
 
-void model_expansion_begin(PublicationState& state) { state = {}; }
+void model_expansion_begin(PublicationState& state) {
+    state.pending = false; state.active = false; state.identity = {};
+}
+
+bool model_transaction_begin(const PublicationState& state,
+    const CommitIdentity& identity)
+{
+    return !state.failed_terminal
+        || state.failed_lifecycle_epoch != identity.route_lifecycle_epoch
+        || identity.activation_generation > state.failed_generation;
+}
+
+bool model_publish_result(Result& result, Chart& chart, const CommitIdentity& identity,
+    PublicationState& state)
+{
+    if (state.failed_terminal
+        && state.failed_lifecycle_epoch == identity.route_lifecycle_epoch
+        && state.failed_generation >= identity.activation_generation) {
+        if (result.count_committed && chart.count == kPlayableRows) {
+            chart.count = kNativeRows;
+            chart.storage.resize(kNativeRows);
+            chart.tail_destructed = true;
+            result.rolled_back = true;
+            result.count_restore_proved = true;
+            result.max_restore_proved = true;
+        }
+        state.pending = false; state.active = false; state.identity = {};
+        return false;
+    }
+    if (result.count_committed && !result.rolled_back && !result.route_blocked) {
+        state.pending = true; state.active = false; state.identity = identity;
+        return true;
+    }
+    state.pending = false; state.active = false; state.identity = {};
+    return false;
+}
 
 void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state)
 {
-    state = result.count_committed && !result.rolled_back && !result.route_blocked
-        ? PublicationState{true, false, identity} : PublicationState{};
+    if (result.count_committed && !result.rolled_back && !result.route_blocked) {
+        state.pending = true; state.active = false; state.identity = identity;
+    } else {
+        state.pending = false; state.active = false; state.identity = {};
+    }
 }
 
 std::size_t model_published_count(PublicationState& state,
@@ -122,9 +167,8 @@ std::size_t model_published_count(PublicationState& state,
         && a.lease_generation == b.lease_generation && a.song_key == b.song_key
         && a.descriptor_hash == b.descriptor_hash
         && a.activation_generation == b.activation_generation
-        && a.owner_generation == b.owner_generation && a.owner == b.owner
-        && a.wrapper == b.wrapper && a.chart == b.chart && a.header == b.header
-        && a.allocation == b.allocation;
+        && a.preparation_ordinal == b.preparation_ordinal
+        && a.route_lifecycle_epoch == b.route_lifecycle_epoch;
     if (!matches) state = {};
     if (matches && state.pending) {
         state.pending = false;
@@ -155,5 +199,23 @@ std::size_t model_presentation_published_count(PublicationState& state,
 }
 
 void model_shutdown(PublicationState& state) { state = {}; }
+void model_configuration_reset(PublicationState& state) { state = {}; }
 void model_activation_abort(PublicationState& state) { state = {}; }
+
+void model_terminal(PublicationState& state, const std::uint64_t generation,
+    const std::uint64_t lifecycle_epoch, const TerminalOutcome outcome)
+{
+    if (outcome == TerminalOutcome::ExpandFinished || outcome == TerminalOutcome::AudioPublished)
+        return;
+    if (!state.failed_terminal || generation > state.failed_generation) {
+        state.failed_terminal = true;
+        state.failed_generation = generation;
+        state.failed_lifecycle_epoch = lifecycle_epoch;
+    }
+    if ((state.pending || state.active)
+        && state.identity.activation_generation == generation
+        && state.identity.route_lifecycle_epoch == lifecycle_epoch) {
+        state.pending = false; state.active = false; state.identity = {};
+    }
+}
 } // namespace ff7r::piano::game::synthetic_model

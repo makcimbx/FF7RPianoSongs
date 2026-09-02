@@ -72,18 +72,17 @@ struct CommitIdentity {
     std::uint64_t song_key = 1;
     std::uint64_t descriptor_hash = 1;
     std::uint64_t activation_generation = 1;
-    std::uint64_t owner_generation = 1;
-    std::uint64_t owner = 1;
-    std::uint64_t wrapper = 1;
-    std::uint64_t chart = 1;
-    std::uint64_t header = 1;
-    std::uint64_t allocation = 1;
+    std::uint64_t preparation_ordinal = 1;
+    std::uint64_t route_lifecycle_epoch = 1;
 };
 
 struct PublicationState {
     bool pending = false;
     bool active = false;
     CommitIdentity identity{};
+    bool failed_terminal = false;
+    std::uint64_t failed_generation = 0;
+    std::uint64_t failed_lifecycle_epoch = 0;
 };
 
 struct BuildRequest {
@@ -97,6 +96,15 @@ struct BuildRequest {
     bool exact_generation = true;
     bool global_claim = true;
     bool second_reserve_hit = false;
+    bool controller_capture_read = true;
+    bool controller_nonnull = true;
+    bool control_block_nonnull = true;
+    bool reciprocal_pre = true;
+    bool reciprocal_reserve = true;
+    bool reciprocal_post = true;
+    bool header_pre = true;
+    bool header_reserve = true;
+    bool header_post = true;
     std::size_t reserve_capacity = kPlayableRows;
     FailurePoint failure = FailurePoint::None;
 };
@@ -118,6 +126,10 @@ struct Result {
 Result run(const BuildRequest& request, Chart& chart);
 void model_next_parser_reset(Chart& chart);
 void model_expansion_begin(PublicationState& state);
+bool model_transaction_begin(const PublicationState& state,
+    const CommitIdentity& identity);
+bool model_publish_result(Result& result, Chart& chart,
+    const CommitIdentity& identity, PublicationState& state);
 void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state);
 std::size_t model_published_count(PublicationState& state,
@@ -126,6 +138,10 @@ std::size_t model_published_count(PublicationState& state,
 std::size_t model_presentation_published_count(PublicationState& state,
     const CommitIdentity& menu, const CommitIdentity* playback, bool profile_eligible);
 void model_shutdown(PublicationState& state);
+void model_configuration_reset(PublicationState& state);
 void model_activation_abort(PublicationState& state);
+enum class TerminalOutcome { ExpandFinished, AudioPublished, AudioFailed, StopFailed, Superseded, ListExit };
+void model_terminal(PublicationState& state, std::uint64_t generation,
+    std::uint64_t lifecycle_epoch, TerminalOutcome outcome);
 
 } // namespace ff7r::piano::game::synthetic_model

@@ -4367,6 +4367,17 @@ bool selection_audio_admission_authority_matches(
     }
 }
 
+bool selection_audio_route_lifecycle_epoch_matches(
+    const std::uint64_t route_lifecycle_epoch) noexcept
+{
+    try {
+        return route_lifecycle_epoch != 0
+            && g_onmemory_bank_lifecycle.state_epoch() == route_lifecycle_epoch;
+    } catch (...) {
+        return false;
+    }
+}
+
 bool cancel_selection_audio_admission(
     SelectionAudioAdmission& admission) noexcept
 {

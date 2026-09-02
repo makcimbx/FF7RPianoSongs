@@ -68,6 +68,7 @@ struct ChartAudioDiagnosticTransaction final {
     bool active = false;
     uint64_t generation = 0;
     uint64_t preparation_ordinal = 0;
+    uint64_t route_lifecycle_epoch = 0;
     uintptr_t wrapper = 0;
     uintptr_t chart_row = 0;
     uint8_t preparation_outcome = 0;

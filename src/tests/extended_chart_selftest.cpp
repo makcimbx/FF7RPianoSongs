@@ -117,8 +117,35 @@ bool test_forwarding_and_restrictions()
     auto excessive_capacity = extended_request(rows);
     excessive_capacity.reserve_capacity = 1025;
     const auto capacity_result = ff7r::piano::game::synthetic_model::run(excessive_capacity, chart);
-    return result.substituted && result.forwarded && !result.count_committed
-        && capacity_result.substituted && !capacity_result.count_committed;
+    if (!(result.substituted && result.forwarded && !result.count_committed
+            && capacity_result.substituted && !capacity_result.count_committed)) return false;
+
+    // The synchronous controller is deliberately modeled as a non-UObject. Only
+    // safe capture/reciprocal/header relations authorize mutation.
+    for (int failure = 0; failure < 7; ++failure) {
+        auto request = extended_request(rows);
+        if (failure == 0) request.controller_capture_read = false;
+        if (failure == 1) request.controller_nonnull = false;
+        if (failure == 2) request.control_block_nonnull = false;
+        if (failure == 3) request.reciprocal_pre = false;
+        if (failure == 4) request.header_pre = false;
+        if (failure == 5) request.reciprocal_reserve = false;
+        if (failure == 6) request.header_reserve = false;
+        Chart rejected;
+        const auto rejected_result = ff7r::piano::game::synthetic_model::run(request, rejected);
+        if (!rejected_result.forwarded || rejected_result.count_committed
+            || rejected.tail_constructor_entered) return false;
+    }
+    for (int failure = 0; failure < 2; ++failure) {
+        auto request = extended_request(rows);
+        if (failure == 0) request.reciprocal_post = false;
+        if (failure == 1) request.header_post = false;
+        Chart rejected;
+        const auto rejected_result = ff7r::piano::game::synthetic_model::run(request, rejected);
+        if (!rejected_result.substituted || rejected_result.count_committed
+            || rejected.tail_constructor_entered || rejected.count != 512) return false;
+    }
+    return true;
 }
 
 bool test_failure_cleanup_and_drift()
@@ -262,6 +289,81 @@ bool test_committed_publication_state()
     model_publish_result(success, identity, state);
     model_shutdown(state);
     return model_published_count(state, identity, true) == 512;
+}
+
+bool test_terminal_publication_order()
+{
+    using namespace ff7r::piano::game::synthetic_model;
+    const auto rows = make_rows(513);
+    const CommitIdentity identity{};
+
+    // A failed terminal is authoritative even if it wins before transaction
+    // registration: no reserve call or native mutation may begin for N.
+    PublicationState before_state;
+    model_terminal(before_state, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioFailed);
+    Chart before_begin_chart;
+    if (model_transaction_begin(before_state, identity)
+        || before_begin_chart.count != 0 || !before_begin_chart.storage.empty()) return false;
+
+    // Failure between begin and publication rejects the native commit and uses
+    // the already-proven synchronous rollback path.
+    PublicationState between_state;
+    if (!model_transaction_begin(between_state, identity)) return false;
+    Chart before_chart;
+    Result before = run(extended_request(rows), before_chart);
+    model_terminal(between_state, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioFailed);
+    if (model_publish_result(before, before_chart, identity, between_state)
+        || !before.rolled_back || before_chart.count != 512
+        || !before_chart.tail_destructed) return false;
+
+    for (const TerminalOutcome outcome : {TerminalOutcome::AudioFailed,
+             TerminalOutcome::StopFailed, TerminalOutcome::Superseded,
+             TerminalOutcome::ListExit}) {
+        Chart after_chart;
+        Result after = run(extended_request(rows), after_chart);
+        PublicationState after_state;
+        if (!model_publish_result(after, after_chart, identity, after_state)) return false;
+        model_terminal(after_state, identity.activation_generation,
+            identity.route_lifecycle_epoch, outcome);
+        if (after_state.pending || after_state.active) return false;
+    }
+
+    PublicationState ordered;
+    model_terminal(ordered, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioFailed);
+    CommitIdentity next = identity;
+    ++next.activation_generation;
+    ++next.preparation_ordinal;
+    if (!model_transaction_begin(ordered, next)) return false;
+    Chart next_chart;
+    Result next_result = run(extended_request(rows), next_chart);
+    if (!model_publish_result(next_result, next_chart, next, ordered)) return false;
+    model_terminal(ordered, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::ListExit);
+    if (!ordered.pending) return false;
+
+    PublicationState success_terminal;
+    model_terminal(success_terminal, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::ExpandFinished);
+    model_terminal(success_terminal, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished);
+    if (!model_transaction_begin(success_terminal, identity)) return false;
+    Chart success_chart;
+    Result success = run(extended_request(rows), success_chart);
+    if (!model_publish_result(success, success_chart, identity, success_terminal)
+        || !success_terminal.pending) return false;
+
+    model_terminal(success_terminal, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::StopFailed);
+    model_configuration_reset(success_terminal);
+    if (!model_transaction_begin(success_terminal, identity)) return false;
+    model_terminal(success_terminal, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::StopFailed);
+    model_shutdown(success_terminal);
+    return model_transaction_begin(success_terminal, identity)
+        && !success_terminal.pending && !success_terminal.active;
 }
 
 bool test_shipping_specs()
@@ -435,6 +537,7 @@ int main()
         {"forwarding_and_restrictions", test_forwarding_and_restrictions},
         {"failure_cleanup_and_drift", test_failure_cleanup_and_drift},
         {"committed_publication_state", test_committed_publication_state},
+        {"terminal_publication_order", test_terminal_publication_order},
         {"chart_patch_ignore_sound", ff7r::piano::game::chart_patch_ignore_sound_selftest},
         {"shipping_specs", test_shipping_specs},
         {"fixture_tool_contract", test_fixture_tool_contract},

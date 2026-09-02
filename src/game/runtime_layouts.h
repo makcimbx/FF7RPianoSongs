@@ -91,7 +91,14 @@ struct PianoMusicList {
 };
 
 struct PianoScoreWrapper {
+    static constexpr uintptr_t event_header = 0x80;
     static constexpr uintptr_t copied_row_count = 0x88;
+    static constexpr uintptr_t controller_capture = 0x118;
+};
+
+struct PianoChartController {
+    static constexpr uintptr_t chart = 0xf48;
+    static constexpr uintptr_t chart_control_block = 0xf50;
 };
 
 struct PianoCompletionOwner {

@@ -34,6 +34,7 @@ void abort_extended_chart_transaction() noexcept;
 void invalidate_extended_chart_commit(const char* reason) noexcept;
 void extended_chart_activation_terminal(
     std::uint64_t activation_generation,
+    std::uint64_t route_lifecycle_epoch,
     ChartAudioDiagnosticTerminalOutcome outcome) noexcept;
 core::HookTeardownOperation extended_chart_reserve_teardown_operation();
 void clear_extended_chart_runtime_state() noexcept;

@@ -481,19 +481,16 @@ void __fastcall chart_expand_detour(
         activation_authority);
     if (!authority_exact || !song || !profile
         || caller_rva != rva::PersistentChartExpandCaller) {
-        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_selection");
         return;
     }
 
     int32_t note_count = 0;
     if (!core::safe_read_field(wrapper, runtime_layouts::PianoScoreWrapper::copied_row_count, note_count)) {
-        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_count_read");
         return;
     }
     const bool playable_513_count = note_count == 513 && extended_513_committed
         && authority_exact;
     if (!valid_note_count(note_count) && !playable_513_count) {
-        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_count_identity");
         return;
     }
     float max_event_seconds = 0.0f;
@@ -522,11 +519,11 @@ void __fastcall chart_expand_detour(
         profile->diagnostic_native_prefix_rows == ff7rp::pipeline::kMaxChartRows &&
         profile->diagnostic_tail_rows == 1u && profile->diagnostic_descriptor_hash != 0 &&
         profile->chart_notes.size() == ff7rp::pipeline::kMaxChartRows;
+    const bool synchronous_513_identity = exact_513_playable && authority_exact;
     const bool identity_valid = !diagnostic_profile ||
         (registry_identity_stable && ff7rp::pipeline::experimental_extended_charts_enabled() &&
             profile->diagnostic_policy_generation == ff7rp::pipeline::chart_row_policy_generation() &&
-            (exact_520_diagnostic || exact_513_playable) &&
-            capture_identity_valid);
+            ((exact_520_diagnostic && capture_identity_valid) || synchronous_513_identity));
     if (diagnostic_profile || ff7rp::pipeline::experimental_extended_charts_requested()) {
         const uintptr_t owner_address = reinterpret_cast<uintptr_t>(owner.owner);
         const uintptr_t owner_chart_field = owner_address != 0 &&
@@ -542,6 +539,8 @@ void __fastcall chart_expand_detour(
             << " descriptor_policy_generation=" << profile->diagnostic_policy_generation
             << " registry_generation=" << snapshot.generation
             << " registry_identity_stable=" << registry_identity_stable
+            << " authority_source=" << (synchronous_513_identity
+                ? "selection_admission+synchronous_native" : "retained_completion_owner")
             << " owner_generation=" << owner.generation
             << " owner_registry_generation=" << owner.registry_generation
             << " cache_source=" << (profile->diagnostic_loaded_from_runtime_cache ? "runtime" : "generated")
@@ -566,13 +565,20 @@ void __fastcall chart_expand_detour(
             identity.str());
     }
     if (!identity_valid || !log_chart_event_plan(wrapper, note_count, profile, capture_id)) {
-        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_event_identity");
+        return;
+    }
+    if (synchronous_513_identity) {
+        // The exact-513 ownership proof is complete inside the synchronous TLS
+        // transaction. Do not promote its native chart/controller pointers into
+        // the asynchronous completion-capture path; late completion-owner
+        // observations remain diagnostics and cannot revoke the immutable token.
+        core::log(core::LogLevel::Info,
+            "[extended_chart_identity] status=proven authority_source=selection_admission+synchronous_native completion_owner_required=0 native_pointer_retained=0");
         return;
     }
     const float target_seconds = completion_target_seconds(song, profile, max_event_seconds);
     if (!max_event_valid || !std::isfinite(target_seconds) || target_seconds <= 0.0f
         || !capture_identity_valid) {
-        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_completion_identity");
         return;
     }
     auto capture = std::make_shared<const CompletionCapture>(CompletionCapture{
