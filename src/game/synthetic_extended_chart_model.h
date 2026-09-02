@@ -16,6 +16,7 @@ inline constexpr std::size_t kPlayableRows = kMinPlayableRows; // 513 regression
 
 struct SourceRow {
     float time = 0;
+    bool time_parse_valid = true;
     bool monotone = true;
     bool chord = false;
     uint32_t group = 0;
@@ -63,6 +64,20 @@ enum class FailurePoint {
     PostCountValidation,
     PostCountRestoreFailure,
     PostCountExternalDrift,
+};
+
+enum class RejectionReason {
+    None,
+    EarlyGate,
+    PreflightFName,
+    ReserveAuthority,
+    ReserveCapacity,
+    PostAuthority,
+    PostFpsRead,
+    PostFpsInvalid,
+    PrefixValidation,
+    TailTimeParse,
+    TailTimeOrder,
 };
 
 struct CommitIdentity {
@@ -115,6 +130,9 @@ struct BuildRequest {
     bool header_pre = true;
     bool header_reserve = true;
     bool header_post = true;
+    bool pre_original_fps_valid = true; // Deliberately non-authoritative.
+    bool post_original_fps_read = true;
+    bool post_original_fps_valid = true;
     std::size_t reserve_capacity = 0; // Zero asks the model for the native expected capacity.
     std::size_t failure_tail_index = 0;
     FailurePoint failure = FailurePoint::None;
@@ -134,6 +152,8 @@ struct Result {
     bool max_restore_proved = false;
     std::size_t target_count = 0;
     std::size_t constructed_tail_count = 0;
+    RejectionReason rejection_reason = RejectionReason::None;
+    std::size_t rejection_tail_index = static_cast<std::size_t>(-1);
 };
 
 std::size_t expected_capacity(std::size_t target_count);

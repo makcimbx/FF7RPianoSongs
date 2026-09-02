@@ -59,7 +59,7 @@ struct RuntimeApi {
 
 struct EventPlan {
     const SongChartNote* note = nullptr;
-    float time = 0.0f;
+    float time = 0.0f; // Set exactly once from the parser-published post-original FPS.
     uint64_t fname = 0;
     uint32_t ordinal = 0;
 };
@@ -861,54 +861,70 @@ bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error)
 void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transaction,
     const SelectionAudioAdmissionAuthority& authority,
     void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
+    int32_t diagnostic_target_count = 0;
+    const auto reject = [&](const char* reason,
+        const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) noexcept {
+        try {
+            std::ostringstream out;
+            out << "[extended_chart] transaction=rejected phase=begin reason=" << reason
+                << " target_count=" << diagnostic_target_count;
+            if (tail_index != (std::numeric_limits<std::size_t>::max)())
+                out << " tail_index=" << tail_index;
+            core::log(core::LogLevel::Error, out.str());
+        } catch (...) {
+            // Diagnostics are best-effort and never cross the native detour boundary.
+        }
+    };
     if (g_transaction.active) {
         g_transaction.reserve_mismatch = true;
-        core::log(core::LogLevel::Error,
-            "[extended_chart] mutation_available=0 failure=nested_outer_transaction");
+        reject("nested_outer_transaction");
         return;
     }
     abort_extended_chart_transaction();
-    if (!g_admissions.load(std::memory_order_acquire) || !transaction.active
-        || transaction.depth != 1 || !transaction.original_inflight
-        || caller_rva != rva::PersistentChartExpandCaller
-        || !wrapper || !chart_row) return;
+    if (!g_admissions.load(std::memory_order_acquire)) return reject("admission_closed");
+    if (!transaction.active || transaction.depth != 1 || !transaction.original_inflight)
+        return reject("tls_scope_mismatch");
+    if (caller_rva != rva::PersistentChartExpandCaller) return reject("caller_mismatch");
+    if (!wrapper || !chart_row) return reject("native_argument_missing");
     const SelectionSnapshot& selection = authority.selection;
-    if (!selection_audio_admission_authority_matches(authority)
-        || !selection.song || !selection.profile || !eligible_profile(*selection.profile)
-        || transaction.generation != authority.activation_generation
+    if (!selection_audio_admission_authority_matches(authority))
+        return reject("selection_admission_mismatch");
+    if (!selection.song || !selection.profile) return reject("selection_missing");
+    diagnostic_target_count = selection.profile->note_count;
+    if (!eligible_profile(*selection.profile)) return reject("profile_ineligible");
+    if (transaction.generation != authority.activation_generation
         || transaction.selection_generation != selection.generation
         || transaction.route_generation != authority.token.route_generation
         || transaction.lease_generation != authority.token.lease_generation
-        || transaction.song_key != authority.token.song_key) return;
+        || transaction.song_key != authority.token.song_key)
+        return reject("activation_identity_mismatch");
     const int32_t target_count = selection.profile->note_count;
     int32_t expected_capacity = 0;
     bool large_regime = false;
-    float fps = 0.0f;
     std::vector<EventPlan> plans;
     try {
-        if (!expected_event_capacity(target_count, expected_capacity, large_regime)
-            || !read_at(wrapper, kFrameRateOffset, fps) || !std::isfinite(fps) || fps <= 0)
-            return;
+        if (!expected_event_capacity(target_count, expected_capacity, large_regime))
+            return reject("target_capacity_invalid");
         const std::size_t tail_count = static_cast<std::size_t>(target_count)
             - kNativeEventCount;
         plans.reserve(tail_count);
-        float previous = 0.0f;
-        if (!parse_time(selection.profile->chart_notes.back().time_str, fps, previous)) return;
         for (std::size_t i = 0; i < tail_count; ++i) {
             const std::size_t row = kNativeEventCount + i;
-            if (row > std::numeric_limits<uint32_t>::max() / 2u) return;
+            if (row > std::numeric_limits<uint32_t>::max() / 2u)
+                return reject("tail_ordinal_overflow", i);
             const SongChartNote& note = selection.profile->extended_chart_tail_notes[i];
             EventPlan plan{&note, 0.0f, 0, static_cast<uint32_t>(row * 2u)};
-            if (!restricted_note(note) || !parse_time(note.time_str, fps, plan.time)
-                || plan.time < previous || !resolve_name(note.monotone_id, plan.fname)) return;
-            previous = plan.time;
+            if (!restricted_note(note)) return reject("tail_shape_invalid", i);
+            if (!resolve_name(note.monotone_id, plan.fname))
+                return reject("tail_fname_find_failed", i);
             plans.push_back(plan);
         }
     } catch (...) {
-        return;
+        return reject("preflight_exception");
     }
     bool expected = false;
-    if (!g_global_claim.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return;
+    if (!g_global_claim.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
+        return reject("global_claim_busy");
     void* side = nullptr;
     void* controller = nullptr;
     void* control_block = nullptr;
@@ -916,7 +932,8 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     if (!core::safe_read_field(chart_row, kSideOffset, side) || !side
         || !read_controller_binding(wrapper, controller, control_block)
         || chart_address > std::numeric_limits<uintptr_t>::max() - kHeaderOffset) {
-        g_global_claim.store(false, std::memory_order_release); return;
+        g_global_claim.store(false, std::memory_order_release);
+        return reject("synchronous_native_authority_failed");
     }
     {
         std::lock_guard<std::mutex> lock(g_committed_mutex);
@@ -928,7 +945,8 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
         if (terminalized || (g_activation_serial.valid
             && authority.activation_generation <= g_activation_serial.generation)) {
             g_global_claim.store(false, std::memory_order_release);
-            return;
+            return reject(terminalized
+                ? "activation_already_terminalized" : "activation_generation_stale");
         }
         g_activation_serial = {true, authority.activation_generation,
             authority.route_lifecycle_epoch, authority.preparation_ordinal, false};
@@ -954,16 +972,21 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     g_transaction.expected_capacity = expected_capacity;
     g_transaction.large_allocation_regime = large_regime;
     g_transaction.plans = std::move(plans);
-    std::ostringstream out;
-    out << "[extended_chart] transaction=admitted authority_source=selection_admission+synchronous_native"
-        << " controller_capture=exact reciprocal=exact header_relation=exact"
-        << " registry_generation=" << selection.generation
-        << " policy_generation=" << g_transaction.policy_generation
-        << " descriptor_hash=" << g_transaction.descriptor_hash;
-    out << " target_count=" << target_count
-        << " tail_count=" << g_transaction.plans.size()
-        << " allocation_regime=" << (large_regime ? "large" : "small");
-    core::log(core::LogLevel::Info, out.str());
+    try {
+        std::ostringstream out;
+        out << "[extended_chart] transaction=admitted authority_source=selection_admission+synchronous_native"
+            << " controller_capture=exact reciprocal=exact header_relation=exact"
+            << " registry_generation=" << selection.generation
+            << " policy_generation=" << g_transaction.policy_generation
+            << " descriptor_hash=" << g_transaction.descriptor_hash
+            << " target_count=" << target_count
+            << " tail_count=" << g_transaction.plans.size()
+            << " allocation_regime=" << (large_regime ? "large" : "small")
+            << " time_authority=post_original_pending";
+        core::log(core::LogLevel::Info, out.str());
+    } catch (...) {
+        // Diagnostics are best-effort and never cross the native detour boundary.
+    }
 }
 
 bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
@@ -985,14 +1008,21 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         core::log(core::LogLevel::Error, out.str());
         return finish();
     };
-    const auto reject = [&](const char* reason) {
-        std::ostringstream out;
-        out << "[extended_chart] mutation_available=1 reserve_hit=" << tx.reserve_hit
-            << " substitution=" << (tx.reserve_hit && !tx.reserve_mismatch)
-            << " count_commit=none rollback=none failure=" << reason
-            << " registry_generation=" << tx.registry_generation
-            << " policy_generation=" << tx.policy_generation;
-        core::log(core::LogLevel::Error, out.str());
+    const auto reject = [&](const char* reason,
+        const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) {
+        try {
+            std::ostringstream out;
+            out << "[extended_chart] mutation_available=1 reserve_hit=" << tx.reserve_hit
+                << " substitution=" << (tx.reserve_hit && !tx.reserve_mismatch)
+                << " count_commit=none rollback=none failure=" << reason
+                << " registry_generation=" << tx.registry_generation
+                << " policy_generation=" << tx.policy_generation;
+            if (tail_index != (std::numeric_limits<std::size_t>::max)())
+                out << " tail_index=" << tail_index;
+            core::log(core::LogLevel::Error, out.str());
+        } catch (...) {
+            // Diagnostics are best-effort and cannot change rejection semantics.
+        }
         return finish();
     };
     if (!tx.reserve_hit || tx.reserve_mismatch || !exact_identity(tx, wrapper, chart_row, caller_rva))
@@ -1007,9 +1037,10 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         || !event_extent_bytes(header.capacity, event_bytes) || !memory_writable(header.data, event_bytes))
         return reject("prefix_header");
     float fps = 0, old_max = 0;
-    if (!read_at(wrapper, kFrameRateOffset, fps) || !std::isfinite(fps) || fps <= 0
-        || !read_at(wrapper, kMaxTimeOffset, old_max) || !std::isfinite(old_max))
-        return reject("chart_time_state");
+    if (!read_at(wrapper, kFrameRateOffset, fps)) return reject("post_fps_read_failed");
+    if (!std::isfinite(fps) || fps <= 0) return reject("post_fps_invalid");
+    if (!read_at(wrapper, kMaxTimeOffset, old_max) || !std::isfinite(old_max))
+        return reject("post_max_time_invalid");
     float prefix_max = 0, previous = 0;
     // The evidence proves sentinel 8, not a general numeric range. Use only assignment
     // values already produced by this exact parser-built monotone prefix.
@@ -1031,6 +1062,16 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         previous = time; prefix_max = std::max(prefix_max, time);
     }
     if (old_max != prefix_max) return reject("prefix_max_time");
+    // The parser writes chart FPS only after its reserve call. Decode every tail
+    // from that post-original value before constructing the first tail event.
+    for (std::size_t i = 0; i < tx.plans.size(); ++i) {
+        EventPlan& plan = tx.plans[i];
+        if (!parse_time(plan.note->time_str, fps, plan.time))
+            return reject("tail_time_parse_failed", i);
+        if (plan.time < previous) return reject("tail_time_not_monotonic", i);
+        previous = plan.time;
+    }
+    const float new_max = std::max(old_max, previous);
     const auto cleanup_slot = [&](const std::size_t index) {
         void* slot = nullptr;
         if (!exact_private_tail_slot(tx, wrapper, chart_row, caller_rva, index, slot)) return false;
@@ -1115,7 +1156,6 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         }
         return true;
     };
-    const float new_max = std::max(old_max, tx.plans.back().time);
     float current_max = 0;
     if (!tails_valid(512)
         || !read_at(wrapper, kMaxTimeOffset, current_max) || current_max != old_max)

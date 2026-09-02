@@ -7,20 +7,18 @@ namespace ff7r::piano::game::synthetic_model {
 namespace {
 bool restricted(const std::vector<SourceRow>& rows) {
     if (rows.size() < kMinPlayableRows || rows.size() > kMaxPlayableRows) return false;
-    float previous = -1;
     bool prefix_assignments[256]{};
     uint8_t prefix_lookup_path = 2;
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const auto& row = rows[index];
         if (!row.monotone || row.chord || row.group || row.camera_transition || row.ignore_sound
-            || row.strength != 0 || row.fname == 0 || row.assignment == 8 || row.lookup_path > 1
-            || !std::isfinite(row.time) || row.time < previous) return false;
+            || row.strength != 0 || row.fname == 0 || row.assignment == 8 || row.lookup_path > 1)
+            return false;
         if (index < kNativeRows) {
             if (index && row.lookup_path != prefix_lookup_path) return false;
             if (!index) prefix_lookup_path = row.lookup_path;
             prefix_assignments[row.assignment] = true;
         }
-        previous = row.time;
     }
     for (std::size_t index = kNativeRows; index < rows.size(); ++index) {
         if (rows[index].lookup_path != prefix_lookup_path
@@ -45,21 +43,28 @@ std::size_t expected_capacity(const std::size_t target_count)
 
 Result run(const BuildRequest& request, Chart& chart) {
     Result result;
+    const auto reject = [&](const RejectionReason reason,
+        const std::size_t tail_index = static_cast<std::size_t>(-1)) {
+        result.rejection_reason = reason;
+        result.rejection_tail_index = tail_index;
+    };
     const bool gate = request.rows && request.experiment_enabled && request.verified_1005
         && request.exact_caller && request.exact_header && request.exact_thread
         && request.depth_one && request.exact_generation && request.global_claim
         && request.controller_capture_read && request.controller_nonnull
         && request.control_block_nonnull && request.reciprocal_pre && request.header_pre
         && restricted(*request.rows);
-    if (!gate) { result.forwarded = true; return result; }
+    if (!gate) { result.forwarded = true; reject(RejectionReason::EarlyGate); return result; }
     result.target_count = request.rows->size();
     // Native production preflights every tail FName before reserve substitution.
     if (request.failure == FailurePoint::FNameFind) {
         result.forwarded = true;
+        reject(RejectionReason::PreflightFName, 0);
         return result;
     }
     if (!request.reciprocal_reserve || !request.header_reserve) {
         result.forwarded = true;
+        reject(RejectionReason::ReserveAuthority);
         return result;
     }
     result.substituted = true;
@@ -67,15 +72,52 @@ Result run(const BuildRequest& request, Chart& chart) {
     const std::size_t required_capacity = expected_capacity(result.target_count);
     const std::size_t actual_capacity = request.reserve_capacity
         ? request.reserve_capacity : required_capacity;
-    if (!required_capacity || actual_capacity != required_capacity) return result;
+    if (!required_capacity || actual_capacity != required_capacity) {
+        reject(RejectionReason::ReserveCapacity);
+        return result;
+    }
 
     chart.storage.clear(); chart.storage.reserve(actual_capacity); chart.capacity = actual_capacity;
     for (std::size_t i = 0; i < kNativeRows; ++i)
         chart.storage.push_back({i, static_cast<uint32_t>(2 * i), (*request.rows)[i].time, true});
     chart.count = kNativeRows; chart.max_time = request.rows->at(kNativeRows - 1).time;
-    if (!request.reciprocal_post || !request.header_post) return result;
-    if (request.failure == FailurePoint::PrefixValidation) return result;
+    if (!request.reciprocal_post || !request.header_post) {
+        reject(RejectionReason::PostAuthority);
+        return result;
+    }
+    if (!request.post_original_fps_read) {
+        reject(RejectionReason::PostFpsRead);
+        return result;
+    }
+    if (!request.post_original_fps_valid) {
+        reject(RejectionReason::PostFpsInvalid);
+        return result;
+    }
+    if (request.failure == FailurePoint::PrefixValidation) {
+        reject(RejectionReason::PrefixValidation);
+        return result;
+    }
     result.prefix_validated = true;
+
+    // Production decodes all tail times from the parser-published post-original
+    // FPS before constructing the first tail. Pre-original FPS is ignored.
+    float previous = request.rows->at(kNativeRows - 1).time;
+    if (!std::isfinite(previous)) {
+        reject(RejectionReason::PrefixValidation);
+        return result;
+    }
+    for (std::size_t i = 0; i < result.target_count - kNativeRows; ++i) {
+        const SourceRow& row = request.rows->at(kNativeRows + i);
+        if (!row.time_parse_valid || !std::isfinite(row.time)) {
+            reject(RejectionReason::TailTimeParse, i);
+            return result;
+        }
+        if (row.time < previous) {
+            reject(RejectionReason::TailTimeOrder, i);
+            return result;
+        }
+        previous = row.time;
+    }
 
     const auto cleanup = [&] {
         for (std::size_t row = chart.storage.size(); row > kNativeRows; --row)

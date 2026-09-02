@@ -24,6 +24,7 @@ using ff7r::piano::game::synthetic_model::Chart;
 using ff7r::piano::game::synthetic_model::CommitIdentity;
 using ff7r::piano::game::synthetic_model::FailurePoint;
 using ff7r::piano::game::synthetic_model::PublicationState;
+using ff7r::piano::game::synthetic_model::RejectionReason;
 using ff7r::piano::game::synthetic_model::SourceRow;
 
 std::vector<SourceRow> make_rows(std::size_t count)
@@ -154,6 +155,58 @@ bool test_preflight_and_partial_reverse_cleanup()
     const Result uncertain_result = run(non_tail, uncertain);
     return uncertain_result.route_blocked && !uncertain.tail_destructed
         && uncertain.ownership_preserved && !uncertain_result.count_committed;
+}
+
+bool test_post_parser_time_authority()
+{
+    using namespace ff7r::piano::game::synthetic_model;
+    for (const std::size_t target : {std::size_t{513}, std::size_t{8192}}) {
+        const auto rows = make_rows(target);
+        BuildRequest request = extended_request(rows);
+        request.pre_original_fps_valid = false; // Stale/uninitialized is irrelevant.
+        Chart chart;
+        const Result result = run(request, chart);
+        if (!result.substituted || !result.count_committed || chart.count != target
+            || result.rejection_reason != RejectionReason::None) return false;
+    }
+
+    const auto rows = make_rows(1024);
+    for (const bool unreadable : {true, false}) {
+        BuildRequest request = extended_request(rows);
+        request.post_original_fps_read = !unreadable;
+        request.post_original_fps_valid = unreadable;
+        Chart chart;
+        const Result result = run(request, chart);
+        const RejectionReason expected = unreadable
+            ? RejectionReason::PostFpsRead : RejectionReason::PostFpsInvalid;
+        if (!result.substituted || result.rejection_reason != expected
+            || result.tail_constructed || result.count_committed
+            || chart.tail_constructor_entered || chart.max_write_count != 0
+            || chart.count != kNativeRows || chart.storage.size() != kNativeRows)
+            return false;
+    }
+
+    const std::size_t tail_count = rows.size() - kNativeRows;
+    for (const std::size_t index : {tail_count / 2, tail_count - 1}) {
+        auto invalid_rows = rows;
+        invalid_rows[kNativeRows + index].time_parse_valid = false;
+        Chart chart;
+        const Result result = run(extended_request(invalid_rows), chart);
+        if (result.rejection_reason != RejectionReason::TailTimeParse
+            || result.rejection_tail_index != index || result.tail_constructed
+            || result.count_committed || chart.max_write_count != 0
+            || chart.storage.size() != kNativeRows) return false;
+    }
+
+    auto unordered = rows;
+    unordered[kNativeRows].time = unordered[kNativeRows - 1].time - 1.0f;
+    Chart unordered_chart;
+    const Result unordered_result = run(extended_request(unordered), unordered_chart);
+    return unordered_result.rejection_reason == RejectionReason::TailTimeOrder
+        && unordered_result.rejection_tail_index == 0
+        && !unordered_result.tail_constructed && !unordered_result.count_committed
+        && unordered_chart.max_write_count == 0
+        && unordered_chart.storage.size() == kNativeRows;
 }
 
 bool test_forwarding_and_restrictions()
@@ -662,6 +715,7 @@ int main()
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
         {"count_driven_capacity_and_bounds", test_count_driven_capacity_and_bounds},
         {"preflight_and_partial_reverse_cleanup", test_preflight_and_partial_reverse_cleanup},
+        {"post_parser_time_authority", test_post_parser_time_authority},
         {"forwarding_and_restrictions", test_forwarding_and_restrictions},
         {"failure_cleanup_and_drift", test_failure_cleanup_and_drift},
         {"committed_publication_state", test_committed_publication_state},
