@@ -83,6 +83,10 @@ struct PublicationState {
     bool failed_terminal = false;
     std::uint64_t failed_generation = 0;
     std::uint64_t failed_lifecycle_epoch = 0;
+    bool successful_transition = false;
+    std::uint64_t successful_generation = 0;
+    std::uint64_t successful_lifecycle_epoch_before = 0;
+    std::uint64_t successful_lifecycle_epoch_after = 0;
 };
 
 struct BuildRequest {
@@ -142,6 +146,7 @@ void model_configuration_reset(PublicationState& state);
 void model_activation_abort(PublicationState& state);
 enum class TerminalOutcome { ExpandFinished, AudioPublished, AudioFailed, StopFailed, Superseded, ListExit };
 void model_terminal(PublicationState& state, std::uint64_t generation,
-    std::uint64_t lifecycle_epoch, TerminalOutcome outcome);
+    std::uint64_t lifecycle_epoch, TerminalOutcome outcome,
+    std::uint64_t successful_lifecycle_epoch = 0);
 
 } // namespace ff7r::piano::game::synthetic_model

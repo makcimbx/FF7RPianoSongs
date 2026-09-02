@@ -169,7 +169,16 @@ std::size_t model_published_count(PublicationState& state,
         && a.activation_generation == b.activation_generation
         && a.preparation_ordinal == b.preparation_ordinal
         && a.route_lifecycle_epoch == b.route_lifecycle_epoch;
-    if (!matches) state = {};
+    if (!matches) {
+        state.pending = false; state.active = false; state.identity = {};
+        return kNativeRows;
+    }
+    const bool lifecycle_succeeded = state.successful_transition
+        && state.successful_generation == a.activation_generation
+        && state.successful_lifecycle_epoch_before == a.route_lifecycle_epoch
+        && a.route_lifecycle_epoch != UINT64_MAX
+        && state.successful_lifecycle_epoch_after == a.route_lifecycle_epoch + 1;
+    if (matches && !lifecycle_succeeded) return kNativeRows;
     if (matches && state.pending) {
         state.pending = false;
         state.active = true;
@@ -182,7 +191,7 @@ std::size_t model_presentation_published_count(PublicationState& state,
 {
     if (!playback) return kNativeRows;
     if (model_published_count(state, *playback, profile_eligible) != kPlayableRows) {
-        state = {};
+        state.pending = false; state.active = false; state.identity = {};
         return kNativeRows;
     }
     const auto& committed = state.identity;
@@ -194,7 +203,9 @@ std::size_t model_presentation_published_count(PublicationState& state,
         && menu.song == playback->song && menu.profile == playback->profile
         && menu.selection_generation == playback->selection_generation
         && menu.registry_generation == playback->registry_generation;
-    if (!matches) state = {};
+    if (!matches) {
+        state.pending = false; state.active = false; state.identity = {};
+    }
     return matches ? kPlayableRows : kNativeRows;
 }
 
@@ -203,9 +214,22 @@ void model_configuration_reset(PublicationState& state) { state = {}; }
 void model_activation_abort(PublicationState& state) { state = {}; }
 
 void model_terminal(PublicationState& state, const std::uint64_t generation,
-    const std::uint64_t lifecycle_epoch, const TerminalOutcome outcome)
+    const std::uint64_t lifecycle_epoch, const TerminalOutcome outcome,
+    const std::uint64_t successful_lifecycle_epoch)
 {
-    if (outcome == TerminalOutcome::ExpandFinished || outcome == TerminalOutcome::AudioPublished)
+    if (outcome == TerminalOutcome::AudioPublished) {
+        if (lifecycle_epoch != 0 && lifecycle_epoch != UINT64_MAX
+            && successful_lifecycle_epoch == lifecycle_epoch + 1
+            && (!state.successful_transition
+                || generation > state.successful_generation)) {
+            state.successful_transition = true;
+            state.successful_generation = generation;
+            state.successful_lifecycle_epoch_before = lifecycle_epoch;
+            state.successful_lifecycle_epoch_after = successful_lifecycle_epoch;
+        }
+        return;
+    }
+    if (outcome == TerminalOutcome::ExpandFinished)
         return;
     if (!state.failed_terminal || generation > state.failed_generation) {
         state.failed_terminal = true;
@@ -216,6 +240,13 @@ void model_terminal(PublicationState& state, const std::uint64_t generation,
         && state.identity.activation_generation == generation
         && state.identity.route_lifecycle_epoch == lifecycle_epoch) {
         state.pending = false; state.active = false; state.identity = {};
+    }
+    if (state.successful_transition && state.successful_generation == generation
+        && state.successful_lifecycle_epoch_before == lifecycle_epoch) {
+        state.successful_transition = false;
+        state.successful_generation = 0;
+        state.successful_lifecycle_epoch_before = 0;
+        state.successful_lifecycle_epoch_after = 0;
     }
 }
 } // namespace ff7r::piano::game::synthetic_model

@@ -284,6 +284,9 @@ void log_chart_audio_play_setup_diagnostic(
                 : "unavailable")
             << " routed_play_claimed=" << diagnostic.routed_play_claimed
             << " publication_succeeded=" << diagnostic.publication_succeeded
+            << " lifecycle_transition_exact=" << diagnostic.lifecycle_transition_exact
+            << " lifecycle_epoch_before=" << diagnostic.lifecycle_epoch_before
+            << " lifecycle_epoch_after=" << diagnostic.lifecycle_epoch_after
             << " substrate_bridge=" << diagnostic.substrate_bridge
             << " substrate_bridge_generation="
             << diagnostic.substrate_bridge_generation

@@ -115,6 +115,13 @@ struct FailedActivationWatermark {
     std::uint64_t route_lifecycle_epoch = 0;
 };
 
+struct SuccessfulLifecycleTransition {
+    bool valid = false;
+    std::uint64_t generation = 0;
+    std::uint64_t lifecycle_epoch_before = 0;
+    std::uint64_t lifecycle_epoch_after = 0;
+};
+
 thread_local Transaction g_transaction;
 std::atomic_bool g_global_claim{false};
 std::atomic_bool g_admissions{false};
@@ -128,6 +135,7 @@ std::mutex g_committed_mutex;
 Committed513 g_committed;
 ActivationSerialState g_activation_serial;
 FailedActivationWatermark g_failed_activation_watermark;
+SuccessfulLifecycleTransition g_successful_lifecycle_transition;
 
 template <typename T>
 bool read_at(const void* base, std::size_t offset, T& value) {
@@ -374,8 +382,14 @@ bool committed_playback_matches_locked(const PlaybackSnapshot& playback)
         && playback.token.route_generation == g_committed.route_generation
         && playback.token.lease_generation == g_committed.lease_generation
         && playback.token.song_key == g_committed.song_key
-        && selection_audio_route_lifecycle_epoch_matches(
-            g_committed.route_lifecycle_epoch)
+        && g_committed.route_lifecycle_epoch != UINT64_MAX
+        && g_successful_lifecycle_transition.valid
+        && g_successful_lifecycle_transition.generation
+            == g_committed.activation_generation
+        && g_successful_lifecycle_transition.lifecycle_epoch_before
+            == g_committed.route_lifecycle_epoch
+        && g_successful_lifecycle_transition.lifecycle_epoch_after
+            == g_committed.route_lifecycle_epoch + 1
         && g_activation_serial.valid && !g_activation_serial.failed
         && g_activation_serial.generation == g_committed.activation_generation
         && g_activation_serial.route_lifecycle_epoch
@@ -576,11 +590,29 @@ void invalidate_extended_chart_commit(const char* reason) noexcept {
 
 void extended_chart_activation_terminal(const std::uint64_t activation_generation,
     const std::uint64_t route_lifecycle_epoch,
-    const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
+    const ChartAudioDiagnosticTerminalOutcome outcome,
+    const std::uint64_t successful_lifecycle_epoch) noexcept
 {
     try {
         if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
-            || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) return;
+            || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) {
+            if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
+                && route_lifecycle_epoch != 0
+                && route_lifecycle_epoch != UINT64_MAX
+                && successful_lifecycle_epoch == route_lifecycle_epoch + 1) {
+                std::lock_guard<std::mutex> lock(g_committed_mutex);
+                if (!g_successful_lifecycle_transition.valid
+                    || activation_generation
+                        > g_successful_lifecycle_transition.generation) {
+                    g_successful_lifecycle_transition = {true,
+                        activation_generation, route_lifecycle_epoch,
+                        successful_lifecycle_epoch};
+                }
+                core::log(core::LogLevel::Info,
+                    "[extended_chart] activation_terminal=audio_published lifecycle_transition=exact");
+            }
+            return;
+        }
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         const bool recorded = !g_failed_activation_watermark.valid
             || activation_generation > g_failed_activation_watermark.generation;
@@ -592,6 +624,12 @@ void extended_chart_activation_terminal(const std::uint64_t activation_generatio
             && g_activation_serial.generation == activation_generation
             && g_activation_serial.route_lifecycle_epoch == route_lifecycle_epoch;
         if (exact_serial) g_activation_serial.failed = true;
+        if (g_successful_lifecycle_transition.valid
+            && g_successful_lifecycle_transition.generation == activation_generation
+            && g_successful_lifecycle_transition.lifecycle_epoch_before
+                == route_lifecycle_epoch) {
+            g_successful_lifecycle_transition = {};
+        }
         const bool invalidated_after_publication =
             (g_committed.pending || g_committed.active)
             && g_committed.activation_generation == activation_generation
@@ -621,6 +659,7 @@ ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, boo
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         g_activation_serial = {};
         g_failed_activation_watermark = {};
+        g_successful_lifecycle_transition = {};
     }
     ExtendedChartSupport support;
     support.requested = requested;
@@ -971,6 +1010,7 @@ void clear_extended_chart_runtime_state() noexcept {
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         g_activation_serial = {};
         g_failed_activation_watermark = {};
+        g_successful_lifecycle_transition = {};
     }
     ff7rp::pipeline::configure_chart_row_limit(
         ff7rp::pipeline::experimental_extended_charts_requested(), false, false);

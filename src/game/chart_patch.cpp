@@ -1817,7 +1817,8 @@ void chart_audio_diagnostic_expand_completed(
 
 void finish_chart_audio_diagnostic_transaction(
     const ChartAudioDiagnosticTransaction& transaction,
-    const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
+    const ChartAudioDiagnosticTerminalOutcome outcome,
+    const uint64_t successful_lifecycle_epoch) noexcept
 {
     ChartAudioDiagnosticTransaction terminal;
     try {
@@ -1836,7 +1837,8 @@ void finish_chart_audio_diagnostic_transaction(
         }
         log_chart_audio_diagnostic_transaction("terminal", terminal);
         extended_chart_activation_terminal(
-            terminal.generation, terminal.route_lifecycle_epoch, outcome);
+            terminal.generation, terminal.route_lifecycle_epoch, outcome,
+            successful_lifecycle_epoch);
     } catch (...) {
     }
 }

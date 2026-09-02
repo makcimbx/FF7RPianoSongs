@@ -115,6 +115,9 @@ struct ChartAudioPlaySetupDiagnostic final {
         ControllerAudioChainReadFailure::None;
     bool routed_play_claimed = false;
     bool publication_succeeded = false;
+    bool lifecycle_transition_exact = false;
+    uint64_t lifecycle_epoch_before = 0;
+    uint64_t lifecycle_epoch_after = 0;
     bool entry_captured = false;
 };
 

@@ -219,6 +219,13 @@ bool test_committed_publication_state()
     model_publish_result(success, identity, state);
     if (model_published_count(state, identity, true, false) != 512
         || !state.pending || state.active) return false;
+    // Playback may already be visible, but publication remains 512 until the
+    // synchronized successful PlaySetup lifecycle transition is handed off.
+    if (model_published_count(state, identity, true) != 512
+        || !state.pending || state.active) return false;
+    model_terminal(state, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        identity.route_lifecycle_epoch + 1);
     if (model_published_count(state, identity, true) != 513
         || state.pending || !state.active) return false;
 
@@ -344,16 +351,37 @@ bool test_terminal_publication_order()
         identity.route_lifecycle_epoch, TerminalOutcome::ListExit);
     if (!ordered.pending) return false;
 
+    // Success may arrive before the native pending token. The exact pre->post
+    // epoch advancement is immutable handoff evidence and converges later.
     PublicationState success_terminal;
     model_terminal(success_terminal, identity.activation_generation,
         identity.route_lifecycle_epoch, TerminalOutcome::ExpandFinished);
     model_terminal(success_terminal, identity.activation_generation,
-        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished);
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        identity.route_lifecycle_epoch + 1);
     if (!model_transaction_begin(success_terminal, identity)) return false;
     Chart success_chart;
     Result success = run(extended_request(rows), success_chart);
     if (!model_publish_result(success, success_chart, identity, success_terminal)
-        || !success_terminal.pending) return false;
+        || model_published_count(success_terminal, identity, true) != 513) return false;
+
+    // Invalid advancement and success for a different generation cannot
+    // activate the pending token.
+    PublicationState lifecycle_mismatch;
+    Chart mismatch_chart;
+    Result mismatch_result = run(extended_request(rows), mismatch_chart);
+    if (!model_publish_result(mismatch_result, mismatch_chart, identity,
+            lifecycle_mismatch)) return false;
+    model_terminal(lifecycle_mismatch, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        identity.route_lifecycle_epoch + 2);
+    if (model_published_count(lifecycle_mismatch, identity, true) != 512
+        || !lifecycle_mismatch.pending) return false;
+    model_terminal(lifecycle_mismatch, identity.activation_generation + 1,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        identity.route_lifecycle_epoch + 1);
+    if (model_published_count(lifecycle_mismatch, identity, true) != 512
+        || !lifecycle_mismatch.pending) return false;
 
     model_terminal(success_terminal, identity.activation_generation,
         identity.route_lifecycle_epoch, TerminalOutcome::StopFailed);

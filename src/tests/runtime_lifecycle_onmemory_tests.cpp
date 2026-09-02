@@ -1406,7 +1406,11 @@ void test_onmemory_bank_sequential_lifecycle()
     const auto established = committed_state.commit_play_setup_qualification(
         establish.snapshot, sound, canonical_value, 20, 2);
     require(established.decision == OnMemoryBankRouteDecision::Allowed
-            && established.first_failure == OnMemoryBankPlaySetupCommitFailure::None,
+            && established.first_failure == OnMemoryBankPlaySetupCommitFailure::None
+            && established.prior_state_epoch == establish.snapshot.state_epoch
+            && established.prior_state_epoch != UINT64_MAX
+            && established.committed_state_epoch
+                == established.prior_state_epoch + 1,
         "successful commit reported a failure leaf");
     const auto reuse = committed_state.snapshot_play_setup(
         true, true, true, true, sound, canonical_value, 21);

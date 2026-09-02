@@ -6610,7 +6610,10 @@ void __fastcall play_setup_detour(void* sound, float arg1, float arg2, uint64_t 
                 transaction,
                 chart_diagnostic.publication_succeeded
                     ? ChartAudioDiagnosticTerminalOutcome::AudioPublished
-                    : ChartAudioDiagnosticTerminalOutcome::AudioFailed);
+                    : ChartAudioDiagnosticTerminalOutcome::AudioFailed,
+                chart_diagnostic.publication_succeeded
+                    && chart_diagnostic.lifecycle_transition_exact
+                    ? chart_diagnostic.lifecycle_epoch_after : 0);
         }
     });
     if (chart_diagnostic.proposed) {
@@ -7058,6 +7061,16 @@ void __fastcall play_setup_detour(void* sound, float arg1, float arg2, uint64_t 
                 armed_route.generation,
                 queried_canonical_kind);
             bank_preflight_decision = bank_diagnostic.commit.decision;
+            chart_diagnostic.lifecycle_epoch_before =
+                bank_diagnostic.commit.prior_state_epoch;
+            chart_diagnostic.lifecycle_epoch_after =
+                bank_diagnostic.commit.committed_state_epoch;
+            chart_diagnostic.lifecycle_transition_exact =
+                bank_preflight_decision == OnMemoryBankRouteDecision::Allowed
+                && chart_diagnostic.lifecycle_epoch_before != 0
+                && chart_diagnostic.lifecycle_epoch_before != UINT64_MAX
+                && chart_diagnostic.lifecycle_epoch_after
+                    == chart_diagnostic.lifecycle_epoch_before + 1;
             if (bank_preflight_decision == OnMemoryBankRouteDecision::Allowed
                 && bank_snapshot.deferred_canonical_establishment) {
                 g_unpublished_audio_setup.substrate_bridge.phase =

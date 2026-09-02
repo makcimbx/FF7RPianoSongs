@@ -4360,19 +4360,7 @@ bool selection_audio_admission_authority_matches(
     try {
         return authority.exact && authority.selection && authority.selection.storage
             && authority.token.valid()
-            && g_onmemory_bank_lifecycle.state_epoch() == authority.route_lifecycle_epoch
             && registry().selection_guard_matches(authority.selection, authority.token);
-    } catch (...) {
-        return false;
-    }
-}
-
-bool selection_audio_route_lifecycle_epoch_matches(
-    const std::uint64_t route_lifecycle_epoch) noexcept
-{
-    try {
-        return route_lifecycle_epoch != 0
-            && g_onmemory_bank_lifecycle.state_epoch() == route_lifecycle_epoch;
     } catch (...) {
         return false;
     }

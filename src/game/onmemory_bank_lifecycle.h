@@ -279,6 +279,8 @@ struct OnMemoryBankPlaySetupCommitResult {
     OnMemoryBankCanonicalRebaseFacts canonical_rebase_facts{};
     OnMemoryBankCanonicalRebaseFailure canonical_rebase_first_failure =
         OnMemoryBankCanonicalRebaseFailure::None;
+    uint64_t prior_state_epoch = 0;
+    uint64_t committed_state_epoch = 0;
 
     constexpr operator OnMemoryBankRouteDecision() const noexcept { return decision; }
 };
@@ -1625,7 +1627,9 @@ public:
             canonical_.validation_epoch,
         };
         rearm_authority_ = {};
+        result.prior_state_epoch = state_epoch_;
         ++state_epoch_;
+        result.committed_state_epoch = state_epoch_;
         result.decision = OnMemoryBankRouteDecision::Allowed;
         result.first_failure = OnMemoryBankPlaySetupCommitFailure::None;
         return result;

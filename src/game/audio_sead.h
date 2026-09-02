@@ -222,8 +222,6 @@ bool capture_selection_audio_admission_authority(
     SelectionAudioAdmissionAuthority& out) noexcept;
 bool selection_audio_admission_authority_matches(
     const SelectionAudioAdmissionAuthority& authority) noexcept;
-bool selection_audio_route_lifecycle_epoch_matches(
-    std::uint64_t route_lifecycle_epoch) noexcept;
 bool selection_audio_admission_cancellation_complete(
     const SelectionSnapshot& selection,
     const AudioRouteLeaseIdentity& lease) noexcept;
