@@ -5,9 +5,12 @@ row-513 scoped-reserve path to more than one native tail event. It is an
 engineering evidence record, not a product contract, implementation, release
 claim, or authorization to expose an arbitrary chart limit.
 
-The only next implementation scope supported here is exact 513 and exact 520,
-with one monotone event per source row. The 798-row case is a subsequent bounded
-experiment target. The allocator ceiling of 910 events is not a product promise.
+The recovered allocator evidence supports both the small- and large-allocation
+branches. Request 910 is only the final small-pool request, not a native maximum.
+The lead Integration decision retained here is a generic, explicitly bounded
+513-through-8192 monotone-only substrate. The value 8192 is a product
+resource/abuse policy and qualification boundary, not a theoretical allocator
+or engine maximum.
 
 ## Evidence Classes And Identities
 
@@ -15,6 +18,7 @@ experiment target. The allocator ceiling of 910 events is not a product promise.
 
 ```text
 multi-tail research baseline: 485c093b85e687a442d6a1f67977e5a2c361ee2a
+large-branch retention baseline: 198ff82629cf20a255ca18151eab64d8c3a6d0e3
 accepted row-513 checkpoint: 88f1f99ae4a6d52c88c07aaa4f8736384c29beb0
 ```
 
@@ -66,9 +70,9 @@ multiple tails or another requested capacity.
   `FSizeTableEntry::FillSizeTable` sources explain the runtime-initialized size
   tables used by the recovered helper. Those sources are tooling evidence, not
   executable identity by themselves.
-- **Bounded inference**: the calculated 520, 798, and 910 capacities and the
-  multi-tail transaction below combine the direct helper logic with the matching
-  allocator table algorithm. They remain runtime-unvalidated where stated.
+- **Bounded inference**: product safety and workload conclusions combine direct
+  helper/native-consumer evidence with checked arithmetic. Capacities above the
+  accepted 513 request remain runtime-unvalidated where stated.
 - Catalog entries are repository migration records unless this file identifies
   their semantics as independently recovered static evidence.
 
@@ -102,22 +106,28 @@ native request: 512 elements
 The helper:
 
 1. Computes raw bytes as `requested_capacity * 0x90`.
-2. For raw bytes at or below `0x20000`, quantizes through the active
+2. Compares the active allocator's quantizer vtable slot with Binned3 target
+   `FUN_141993F30` / RVA `0x01993F30`. A different allocator uses its virtual
+   quantizer and is outside the calculated Binned3 contract below.
+3. For raw bytes at or below `0x20000`, quantizes through the active
    FMallocBinned3 small-pool tables.
-3. Above `0x20000`, enters the large-allocation/granularity branch.
-4. Divides the quantized byte count by `0x90` to obtain the stored vector
-   capacity. If that would be less than the request, it uses its fail-fast
-   overflow disposition rather than a smaller usable capacity.
-5. Writes the stored capacity at header `+0x0C`, reallocates/copies through the
-   native allocator path, and preserves the existing vector prefix when called
-   on a nonempty vector.
+4. Above `0x20000`, code at `0x142AD3F82..0x142AD3F9C` aligns the request upward
+   with `DAT_148F38238`. Matching-build initializer `FUN_1443EF8EC` writes the
+   literal `0x10000` to that global at `0x1443EF9C1`; this 64-KiB granularity is
+   direct executable evidence.
+5. Divides the quantized byte count by `0x90` to obtain the stored vector
+   capacity. If the signed low-32-bit result would be less than the requested
+   count, it substitutes `INT32_MAX`; it never deliberately publishes a smaller
+   positive capacity.
+6. Writes the stored capacity at header `+0x0C`, recomputes allocation bytes as
+   `stored_capacity * 0x90`, and reallocates through the active allocator.
 
 The event-vector header is separate from the event allocation. There is no
 per-vector header or per-event metadata added to the helper's byte request.
 Allocator slab/page metadata is allocator-owned and does not subtract from the
 stored event capacity.
 
-### Quantization evidence
+### Small-pool quantization evidence
 
 The matching allocator algorithm uses:
 
@@ -131,18 +141,62 @@ large small-pool classes: 4 KiB increments through 131,072 bytes
 The executable's size-class arrays are initialized at runtime and are zero in
 the static image. The exact helper accesses those arrays using the same
 size-to-index and reversed-size-table structure as the retained Unreal reference
-source. Therefore 513 is runtime measured; the other rows in the table are
-calculated static/reference results pending their named runtime experiments.
+source. That reference source corroborates the table-generation algorithm but is
+not executable identity. Request 513 is runtime measured; the other small-pool
+rows below are calculated pending runtime qualification.
+
+### Recovered large-allocation branch
+
+For the expected Binned3 allocator, requests whose raw bytes exceed `0x20000`
+use:
+
+```text
+raw_bytes       = int64(requested_capacity) * 0x90
+quantized_bytes = align_up(raw_bytes, 0x10000)
+stored_capacity = floor(quantized_bytes / 0x90)
+allocator_bytes = int64(stored_capacity) * 0x90
+```
+
+The specialized Binned3 realloc branch starts at `0x142AD42CC` and compares the
+allocator realloc slot with `FUN_141993F90` / RVA `0x01993F90`.
+
+- A fresh allocation calls `FUN_141993A30` / RVA `0x01993A30` at
+  `0x142AD4406`.
+- The malloc path enforces at least 16-byte alignment, aligns the requested bytes
+  to that value, then rounds the OS extent upward to 64 KiB.
+- `FUN_140E6CA00` reserves virtual address space and the malloc path commits the
+  exact rounded extent with `VirtualAlloc(..., MEM_COMMIT, PAGE_READWRITE)`.
+- The returned event pointer is the allocation base. Binned3 metadata is stored
+  separately in allocator mapping/hash structures; there is no inline header to
+  subtract from vector capacity.
+- For an existing large allocation, metadata is resolved under the allocator
+  lock with `FUN_141428A14`. An allocation may remain in place only when the new
+  request still fits the same OS allocation class. Otherwise the helper allocates
+  a replacement, copies `min(old_requested_bytes, new_requested_bytes)` through
+  the native memcpy path, and frees the old allocation through
+  `FUN_1419932C8` / RVA `0x019932C8`.
+- Large free validates allocator canary `0x17EA5678`, retires the separate
+  metadata, and releases the allocation through `FUN_140E6B02C`, which calls
+  `VirtualFree(base, 0, MEM_RELEASE)`.
+
+Reservation, commit, alignment, or pointer-validation failure reaches native
+fatal/OOM helper `FUN_142217240`. No recoverable null return, C++ exception, or
+SEH contract was recovered. Allocation failure is therefore not a mod rollback
+case and is one reason for an explicit bounded product cap.
 
 ### Capacity table
 
-| Request | Raw event bytes | Quantized class | Stored capacity | Evidence/disposition |
-| ---: | ---: | ---: | ---: | --- |
-| 513 | `0x12090` / 73,872 | `0x13000` / 77,824 | 540 | Runtime observed and accepted. |
-| 520 | `0x12480` / 74,880 | `0x13000` / 77,824 | 540 | Calculated; same exact class as accepted 513. |
-| 798 | `0x1C0E0` / 114,912 | `0x1D000` / 118,784 | 824 | Calculated bounded target; not runtime-qualified. |
-| 910 | `0x1FFE0` / 131,040 | `0x20000` / 131,072 | 910 | Calculated final small-pool request; 32 class bytes remain. |
-| 911 | `0x20070` / 131,184 | large branch | not applicable here | First request beyond the small-pool threshold. |
+| Request | Raw bytes | Quantized/OS bytes | Stored capacity | Helper bytes | Slack | Evidence |
+| ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 513 | `0x12090` / 73,872 | `0x13000` / 77,824 | 540 | `0x12FC0` / 77,760 | 64 | Runtime observed and accepted. |
+| 520 | `0x12480` / 74,880 | `0x13000` / 77,824 | 540 | `0x12FC0` / 77,760 | 64 | Calculated; same exact class as accepted 513. |
+| 798 | `0x1C0E0` / 114,912 | `0x1D000` / 118,784 | 824 | `0x1CF80` / 118,656 | 128 | Calculated; not runtime-qualified. |
+| 910 | `0x1FFE0` / 131,040 | `0x20000` / 131,072 | 910 | `0x1FFE0` / 131,040 | 32 | Calculated final small-pool request. |
+| 911 | `0x20070` / 131,184 | `0x30000` / 196,608 | 1365 | `0x2FFD0` / 196,560 | 48 | First large-branch request. |
+| 1024 | `0x24000` / 147,456 | `0x30000` / 196,608 | 1365 | `0x2FFD0` / 196,560 | 48 | Large branch. |
+| 2048 | `0x48000` / 294,912 | `0x50000` / 327,680 | 2275 | `0x4FFB0` / 327,600 | 80 | Large branch. |
+| 4096 | `0x90000` / 589,824 | `0x90000` / 589,824 | 4096 | `0x90000` / 589,824 | 0 | Large branch. |
+| 8192 | `0x120000` / 1,179,648 | `0x120000` / 1,179,648 | 8192 | `0x120000` / 1,179,648 | 0 | Large branch. |
 
 For clarity:
 
@@ -152,24 +206,61 @@ For clarity:
   accepted 513, but not necessarily the same size class.
 - Request 798 maps to capacity 824 (`824 * 0x90 == 0x1CF80`), leaving 128 class
   bytes. It is a scenario-driven target, not a supported limit.
-- Request 910 is a hard matching-build branch ceiling, not a recommended chart
-  size. Request 911 and every larger request are outside this design.
+- Request 910 is only the final small-pool request. Crossing to request 911
+  changes allocator regime but does not change the vector ABI or ownership.
+- Request 8192 is the lead-selected bounded product safety policy. It is not a
+  recovered native maximum and does not authorize a larger request.
 
-The first multi-tail candidate should require the exact 1.005 executable and
-record the actual returned capacity. For exact 513 and 520, an unexpected value
-other than 540 is a fail-closed allocator-class mismatch, not permission to
-continue merely because the capacity is numerically large enough.
+Every candidate must require the exact 1.005 executable and record the actual
+returned capacity. The generic correctness gate requires
+`target_count <= capacity <= 8192`, exact tracked allocation identity, and a
+proved writable extent. Large-branch requests can additionally compare against
+the direct formula above; the maximum-bound qualification requires exact
+`8192 -> 8192`. A mismatched named-fixture capacity fails closed.
 
-## First Implementation Scope
+### Remote numeric and metadata hazards
 
-Only these two source/prefix/tail shapes are admitted:
+The vector request, count, and capacity fields are signed 32-bit. Multiplication
+by `0x90` is performed in 64-bit arithmetic. At `INT32_MAX`, the 64-KiB-aligned
+quotient has low value `0x80000000`; the helper's signed comparison substitutes
+`INT32_MAX` and requests `INT32_MAX * 0x90` bytes. This does not overflow 64-bit
+arithmetic, but it is not a usable allocation.
+
+Binned3's recovered large-allocation metadata stores requested bytes and OS
+extent in 32-bit fields. The final event request whose rounded OS extent remains
+representable below 4 GiB is 29,825,706:
 
 ```text
-513 / 512 / 1
-520 / 512 / 8
+request 29,825,706: raw/helper 0xFFFEFFA0, OS extent 0xFFFF0000
+request 29,825,707: raw        0xFFFF0030, OS extent 0x100000000
 ```
 
-For both shapes every source row must satisfy:
+The second request cannot be represented in the recovered OS-size metadata.
+This is a remote structural hazard, not a support limit. OOM, native result
+counters, per-frame work, duration, and product abuse controls become relevant
+many orders of magnitude earlier.
+
+## Lead Integration Decision: Bounded Monotone Substrate
+
+This section is an Integration design decision made from the recovered evidence;
+it is not itself a recovered native fact or a runtime acceptance claim.
+
+Implement one generic target-count path with this explicit policy bound:
+
+```text
+native parser prefix: 512
+minimum target:       513
+maximum target:       8192
+tail count:           target_count - 512
+```
+
+Do not encode exact 520, 798, 1024, or 8192 construction branches. The descriptor,
+preflight, reserve transaction, construction loop, rollback, committed token, and
+count-facing consumers take one checked immutable target count. A future policy
+may lower or raise the cap without redesigning native ownership, but no value
+above 8192 is admitted without new evidence and qualification.
+
+For every admitted source row:
 
 1. Exactly one nonempty monotone FName and an empty chord FName.
 2. `GroupIndex == 0`.
@@ -179,13 +270,13 @@ For both shapes every source row must satisfy:
 6. A finite parser-equivalent time.
 7. No second native event for the row.
 
-No 514-through-519 profile, general `<=520` profile, chord, mixed row, group,
-camera, or IgnoreSound profile inherits this authority.
+Chord, mixed-row, grouped, camera, and IgnoreSound profiles do not inherit this
+authority at any count.
 
-### Exact 520 tail records
+### Generic monotone tail records
 
 The native parser constructs source rows 0 through 511. The extension constructs
-source rows 512 through 519 in final event slots 512 through 519.
+source rows 512 through `target_count-1` in their same-index final event slots.
 
 For tail source row `r`:
 
@@ -201,11 +292,11 @@ DotType:     immutable descriptor row DotType
 FName:       strict FNAME_Find result for the descriptor monotone ID
 ```
 
-The exact ordinals are:
+Representative ordinal boundaries are:
 
 ```text
-row:      512  513  514  515  516  517  518  519
-ordinal: 1024 1026 1028 1030 1032 1034 1036 1038
+row:      512  519  797  1023  8191
+ordinal: 1024 1038 1594 2046 16382
 ```
 
 Each tail must be zeroed before calling `FUN_143987734` / RVA `0x03987734`.
@@ -217,8 +308,8 @@ After construction require:
 - group links and IgnoreSound ownership are empty;
 - assignment at `+0x48` is not sentinel `8`;
 - lookup path at `+0x49` is native-resolved and is `0` or `1`;
-- for the first bounded candidate, the assignment occurs in the parser-built
-  prefix and the lookup-path behavior matches its prefix exemplar;
+- the assignment occurs in the parser-built prefix and the lookup-path behavior
+  matches its prefix exemplar;
 - runtime state bytes remain initial.
 
 Then construct callback state with `FUN_143982EA0` / RVA `0x03982EA0`, passing a
@@ -230,7 +321,7 @@ native vector count.
 Tail-only pitches or assignment behavior absent from the prefix remain
 unqualified. Supporting arbitrary generated-note domains requires separate
 assignment-table evidence or focused runtime qualification; it must not be
-inferred from a non-sentinel byte alone in the first candidate.
+inferred from a non-sentinel byte alone.
 
 ## Multi-Tail Transaction
 
@@ -240,7 +331,8 @@ Before acquiring mutation authority:
 
 1. Retain immutable registry storage and exact song/profile identity.
 2. Require current playable policy generation and descriptor hash.
-3. Require one of the two exact source/prefix/tail shapes above.
+3. Require `513 <= target_count <= 8192`, a 512-row prefix, and exactly
+   `target_count-512` contiguous retained tail rows.
 4. Validate every prefix and tail row against the restricted shape.
 5. Check all count, offset, multiplication, and ordinal arithmetic.
 6. Strictly resolve all tail FNames without inserting names.
@@ -253,15 +345,14 @@ Checked bounds include:
 
 ```text
 target_count >= 513
-target_count is exactly 513 or 520 for the first implementation
-target_count <= 910 for every native reserve path
-target_count * 0x90 is representable and <= the proved regime bound
+target_count <= 8192 by explicit product resource policy
+target_count * 0x90 is checked in 64-bit arithmetic
 tail_count == target_count - 512
 max ordinal == 2 * (target_count - 1) for monotone-only rows
 ```
 
-At the hard 910 ceiling, the monotone ordinal would be 1818 and a hypothetical
-chord ordinal 1819, both far below `uint32_t` limits.
+At target 8192, the final monotone ordinal is 16382, far below the `uint32_t`
+field limit.
 
 ### Synchronous authority and final reserve
 
@@ -283,6 +374,17 @@ Substitute the exact final target count once. The reserve must happen before the
 parser constructs its prefix. This gives the parser and every tail one final
 allocation; no event-vector growth or raw relocation is permitted afterward.
 
+The pristine-header requirement (`data == nullptr`, `count == 0`, `capacity ==
+0`) is especially important across the large branch: the admitted parser call
+uses the fresh-allocation path, so no existing event is copied or relocated. The
+persistent caller remains suspended until the detour finishes. This excludes
+same-thread caller replacement but does not prove cross-thread quiescence.
+
+Accordingly, parser-prefix construction, private tail bookkeeping, reverse
+destruction, maximum-time update, count-last publication, synchronous rollback,
+next-parser reset, and chart/shared-control-block destruction are identical in
+the small- and large-allocation regimes.
+
 All nonmatching reserve calls forward their original arguments unchanged.
 
 ### Parser prefix and tail construction
@@ -294,7 +396,8 @@ and require:
 header address == chart + 0x80
 data == the allocation returned by the intercepted reserve
 count == 512
-capacity == 540 for the first 513/520 implementation
+capacity == the exact matching-build result for target_count
+capacity >= target_count
 allocation extent covers capacity * 0x90 bytes
 controller/chart/header relation remains exact
 all 512 prefix events match immutable descriptor and ABI invariants
@@ -405,10 +508,50 @@ It must not retain or later dereference controller, control block, chart,
 chart-row, side, vector header, allocation, event, callback, or group-link
 pointers.
 
+## Native And Product Limits
+
+### Recovered native representation and workload facts
+
+- Event-vector count and capacity are signed 32-bit fields. The reserve request
+  is signed 32-bit and its byte multiplication uses 64-bit arithmetic.
+- Event ordinal is `uint32_t`; monotone ordinal `2*row` remains representable for
+  every row admitted by the 8192 policy.
+- `piano_chart_update`, `FUN_1439BA628` / RVA `0x039BA628`, reads the dynamic
+  signed event count, computes `base + count*0x90`, and traverses every event
+  twice. This proves dynamic count consumption, not acceptable frame cost.
+- Native score calculation `FUN_1439917F4` consumes four `uint16_t` result
+  counters and returns a signed weighted result. Target 8192 fits an individual
+  counter; counts beyond 65,535 can wrap a category counter. Runtime weights and
+  the complete signed-score overflow domain remain unqualified.
+- Registry, active-count, page-marker, and persisted score/count values use
+  signed 32-bit representations.
+- The product duration override accepts only finite durations in `(0,600]`
+  seconds. Audio input is independently bounded to ten minutes. Float time
+  representation is sufficient for the proposed fixture but does not establish
+  arbitrary long-chart timing behavior.
+
+### Product-imposed limits
+
+- The existing accepted-input ceiling of 1024, runtime-cache note safety bound of
+  8192, and chart-event diagnostic walker bound of 2048 are repository policies,
+  not recovered native engine limits.
+- The 2048 diagnostic walker cannot safely inspect the returned capacity 2275
+  for an exact-2048 request without being widened. An 8192 candidate requires all
+  diagnostic count/capacity arithmetic to use the same explicit 8192 policy and
+  checked allocation extents.
+- Event-vector cost is `144*target_count` bytes, but this excludes native
+  callback/reference allocations. Exact 8192 uses a 1,179,648-byte vector and
+  makes chart update process up to 16 times the stock parser event count.
+
+The lead-selected 8192 cap is therefore an explicit memory/work/abuse boundary,
+not a conclusion that native code is safe up to that value or unsafe at 8193.
+Allocator proof alone does not qualify higher per-frame work, UI/result behavior,
+score accumulation, completion, replacement, or teardown.
+
 ## Future Group-Link Design
 
 This section retains parser evidence for future work. It does not authorize group
-support in the first multi-tail implementation.
+support in the bounded monotone substrate.
 
 `piano_event_link`, `FUN_14398DB4C` / RVA `0x0398DB4C`, receives root/predecessor
 in RCX and child in RDX. It:
@@ -451,8 +594,8 @@ adjacent intended runs with the same byte would merge.
 
 Current compiler/MIDI policy deliberately rejects historical ID reuse and limits
 group shapes. That policy, descriptor validation, action counting, and tests must
-change explicitly before cycling is enabled. Group zero remains mandatory for the
-first 513/520 implementation.
+change explicitly before cycling is enabled. Group zero remains mandatory for
+the entire 513-through-8192 monotone substrate.
 
 ## Deferred Shapes And Direct Blockers
 
@@ -465,8 +608,8 @@ This ABI is direct evidence, but no appended chord tail has runtime qualificatio
 Mixed rows may produce two events while consuming one source row, so source row
 count no longer equals target event count. They also invoke monotone-preferred
 group-root behavior and chord IgnoreSound handling. Both chord and mixed rows are
-excluded from the first implementation. Empty-IgnoreSound, one-event chord rows
-require a separate focused qualification before general either-hand support.
+excluded from the bounded monotone substrate. Empty-IgnoreSound, one-event chord
+rows require separate focused qualification before general either-hand support.
 
 ### IgnoreSound
 
@@ -498,88 +641,95 @@ Current retained pipeline evidence already owns more than one tail offline:
 - `DiagnosticChartRetention` stores complete source rows, compiled tail rows,
   source-row indices/count, native-prefix count, and descriptor hash.
 - Runtime-cache format 14 serializes counted source and compiled-tail vectors and
-  already validates exact `520/512/8` diagnostic retention.
+  uses a self-imposed 8192-note safety bound.
 - `SongDifficultyProfile`, however, projects only one optional tail note, and the
   runtime eligibility path admits only exact `513/512/1`.
 
-The first implementation needs an immutable owning tail vector in the runtime
+The Integration implementation needs an immutable owning tail vector in the runtime
 profile/descriptor, contiguous indices beginning at 512, exact target count, and
 hash coverage for every source and compiled tail field. `chart_notes` remains the
 512-row native prefix.
 
-Policy identity must distinguish diagnostic-only 520 retention from playable
-520 authority. A descriptor/cache produced under the diagnostic-only policy must
-not silently acquire mutation authority under the playable policy.
+Policy identity must distinguish historical exact-513/exact-520 retention from
+generic playable 513-through-8192 authority. A descriptor/cache produced under a
+diagnostic-only policy must not silently acquire mutation authority.
 
-A runtime-cache format or pipeline-version bump is **not established merely by
-this evidence**:
+A runtime-cache format bump is not required by the selected design:
 
-- Exact 520 data is already represented by the format-14 counted payload.
-- The binary encoding need not change merely to project those eight retained rows
-  into an immutable runtime vector.
-- Existing cache validation already has policy identity/generation and semantic
-  hashes that may provide the correct invalidation boundary.
-- A global policy/version change may unnecessarily reject ordinary 512-row
-  caches whose serialized semantics did not change.
+- Format 14 already encodes counted source and compiled-tail vectors with 32-bit
+  lengths and has an 8192-note defensive bound.
+- The serialized field layout does not change when validators admit a larger
+  counted tail and project it into an immutable runtime vector.
+- Extended profiles retain policy identity/generation and semantic hashes, which
+  must cover every retained row and the selected target count.
+- Ordinary 512-row payload semantics do not change and must remain cache
+  compatible.
 
-The Integration implementation must inspect the exact cache acceptance keys and
-version ownership before changing them. It must:
+The Integration cache/policy work must therefore:
 
-1. Change the playable policy identity for exact 520.
-2. Prove whether that policy is currently embedded in all cache entries or only
-   extended-profile validity.
-3. Preserve ordinary 512 cache compatibility when its payload and semantics are
-   unchanged, or document why the existing key design makes selective reuse
-   unsafe.
-4. Bump pipeline or cache format only if the serialized contract, trusted count
-   domain, semantic hash, or reader/writer compatibility actually changes.
+1. Widen bounded source/tail validation to 8192/7680 without changing the
+   format-14 binary layout.
+2. Change the special extended policy identity so old diagnostic or narrower
+   profiles cannot gain playable authority.
+3. Preserve ordinary 512 cache acceptance when its payload and semantics are
+   unchanged; do not use a blind global invalidation.
+4. Reject malformed counts, noncontiguous source rows, incomplete hashes, and
+   policy/target mismatches before descriptor publication.
 
-General retention up to 798 would expand the trusted tail bound from 8 to 286.
-Although the existing encoding is counted, that larger validator domain may
-justify a later explicit format/version boundary. It is not part of the first
-513/520 implementation decision.
-
-Do not reuse the current offline 1024 diagnostic-input constant as native reserve
-authority. Native playable hard ceiling, bounded product/experiment target, and
-offline diagnostic input are separate policies.
+If implementation discovers that existing acceptance keys cannot isolate the
+extended policy from ordinary profiles, that is a design blocker to resolve at
+the key boundary, not authorization for global invalidation. A future serialized
+field change may require a format bump; widening the current counted validator
+alone does not.
 
 ## Next Runtime Qualification
 
 No additional observation-only run is required before a reviewed, reversible
-exact-520 Integration candidate. The mutation experiment still requires the
-normal explicit lead/game authorization.
+Integration candidate. The lead decision is one maximum-bound Development
+qualification at exact 8192 rather than staged manual 520, 798, and 1024 runs.
+This is a decision about validation cost and product scope, not evidence that
+intermediate counts have already run.
 
-### Exact 520 scenario
+### Exact 8192 scenario
 
-Use the existing fixture:
+Use a deterministic generated fixture with:
 
 ```text
-title: Extended Chart Read-Only Diagnostic 520
-shape: 520 C4 monotone rows, group 0, no chord/IgnoreSound/camera
-audio: retained 70-second silent sidecar
+title:               Extended Chart Maximum 8192 Development Test
+shape:               8192 C4 monotone rows, one event per row
+group/chord/camera:  zero/absent/absent
+IgnoreSound:         empty
+strength:            0.0
+absolute frame r:    4*r at 60 FPS
+last frame/time:     32764 / 546 seconds + 4 frames
+audio:               deterministic silent sidecar longer than the final event
+                     and no longer than the 600-second product bound
 ```
 
 Start the selected fixture immediately through the normal readiness predicate;
 do not add or require a delay. Early input must either receive exact guarded
-admission or follow the recoverable native behavior. Let all 520 events traverse
-the chart to natural completion, then start the ordinary 290-event song and
+admission or follow the recoverable native 512 behavior. Four-frame spacing gives
+every event a distinct frame while keeping the chart inside the supported
+duration. Let all events traverse to natural completion, then start the ordinary
+290-event song and
 verify chart, score, and audio recovery before list exit.
 
 Required structured markers, emitted once per stage rather than per frame:
 
 ```text
-candidate: source=520 prefix=512 tail=8 target=520 policy_generation/hash
+candidate: source=8192 prefix=512 tail=7680 target=8192 policy_generation/hash
 authority_pre: caller/admission/TLS/controller/chart/header exact
-reserve: requested=512 substituted=520 hits=1 capacity=540 allocation_exact
-parser_post: count=512 capacity=540 prefix_valid=512
-tails: requested=8 constructed=8 first_row=512 last_row=519
-       first_ordinal=1024 last_ordinal=1038 callbacks=8
-commit: max_time_valid=1 count_last=520 terminal_generation_exact=1
-publication: target=520 pending_then_active exact_playback=1
-identity: target=520 descriptor/token/policy exact
-score: native_counter_sum=520
-completion: natural target=520
-replacement: prior_target=520 invalidated ordinary_count=290
+reserve: requested=512 substituted=8192 hits=1 capacity=8192
+         allocator_regime=large allocation_exact=1 relocation=0
+parser_post: count=512 capacity=8192 prefix_valid=512
+tails: requested=7680 constructed=7680 first_row=512 last_row=8191
+       first_ordinal=1024 last_ordinal=16382 callbacks=7680
+commit: max_time_valid=1 count_last=8192 terminal_generation_exact=1
+publication: target=8192 pending_then_active exact_playback=1
+identity: target=8192 descriptor/token/policy exact
+result: native_counter_sum=8192 count=8192
+completion: natural target=8192
+replacement: prior_target=8192 invalidated ordinary_count=290
 cleanup: custom_absent=1 exit_cleanup_complete=1 aggregate_exit_complete=1
 ```
 
@@ -587,27 +737,6 @@ Every failure marker must identify the first failed predicate and include target
 constructed count, header count/capacity, rollback outcome, activation generation,
 and terminal order. Acceptance requires no unresolved ownership, external drift,
 unexpected reserve hit, rollback failure, terminal mismatch, or stale-token reuse.
-
-### Subsequent 798 experiment
-
-Only after exact 520 is accepted, use a deterministic 798-row monotone-only,
-one-event-per-row fixture:
-
-```text
-target:           798
-tail count:       286
-calculated capacity: 824
-last monotone ordinal: 1594
-```
-
-It must repeat natural completion, replacement, ordinary-song recovery, and
-teardown qualification. “Megalovania 798 distinct candidate frames” is a
-task-supplied practical target, not an independently retained repository metric.
-The actual song is not a valid first capacity fixture if it requires chord,
-group, IgnoreSound, camera, mixed-row, or tail-only assignment behavior.
-
-Acceptance of 520 does not qualify 798; acceptance of a synthetic monotone 798
-does not qualify those deferred chart shapes or make 798 a public product limit.
 
 ## Physical-Chart-First MIDI Substrate
 
@@ -626,12 +755,16 @@ group policy inside game callbacks.
 
 This evidence does not establish:
 
-- playable exact 520 or 798 behavior;
-- capacities above the accepted 540 at runtime;
-- any public row limit, including 798 or 910;
+- playable multi-tail behavior at 520, 798, 1024, or 8192;
+- any runtime capacity above the accepted 540, including the calculated 8192
+  capacity for request 8192;
+- safety, acceptable resource use, or product behavior above the lead-selected
+  8192 policy bound;
 - arbitrary pitch assignment or tail-only FName behavior;
 - chord, mixed-row, grouped, IgnoreSound, or camera tail safety;
-- native allocator failure, C++ exception, or SEH recovery;
+- recoverable native allocator failure, C++ exception, or SEH handling;
+- acceptable frame time, UI/result behavior, score-weight arithmetic, or natural
+  completion at 8192 before the named Development qualification;
 - cross-thread chart quiescence while the persistent caller is suspended;
 - exact native C++ class names or RTTI identities;
 - exact list-exit destruction instruction, thread, or timing;
