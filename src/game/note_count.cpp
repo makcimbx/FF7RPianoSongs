@@ -423,6 +423,9 @@ uintptr_t to_rva(void* caller_address)
 void __fastcall chart_expand_detour(
     void* wrapper, void* chart_row, void* arg3, void* arg4) noexcept
 {
+    // Any expansion may replace the native chart allocation. Revoke the prior
+    // success token before admission and before any possible original call.
+    invalidate_extended_chart_commit("chart_expansion_begin");
     ChartExpandPreparationOutcome preparation
         = ChartExpandPreparationOutcome::NativePristine;
     ChartAudioDiagnosticTransaction chart_audio_transaction;
@@ -460,7 +463,8 @@ void __fastcall chart_expand_detour(
     log_chart_audio_expand_snapshot(
         "expand_exit", chart_audio_expand, false);
     finish_active_chart_row_patch_after_expand(wrapper, caller_rva);
-    (void)finish_extended_chart_transaction(wrapper, chart_row, caller_rva);
+    const bool extended_513_committed =
+        finish_extended_chart_transaction(wrapper, chart_row, caller_rva);
     chart_audio_diagnostic_expand_completed(chart_audio_transaction);
     // Keep the exact committed transaction active after expand return. A
     // PlaySetup that is not nested in this call can then correlate solely by
@@ -471,15 +475,21 @@ void __fastcall chart_expand_detour(
     const SongDescriptor* song = snapshot.song;
     const SongDifficultyProfile* profile = snapshot.profile;
     if (!song || !profile || caller_rva != rva::PersistentChartExpandCaller) {
+        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_selection");
         return;
     }
 
     int32_t note_count = 0;
     if (!core::safe_read_field(wrapper, runtime_layouts::PianoScoreWrapper::copied_row_count, note_count)) {
+        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_count_read");
         return;
     }
-    const bool playable_513_count = note_count == 513 && playable_513_profile(*profile);
-    if (!valid_note_count(note_count) && !playable_513_count) return;
+    const bool playable_513_count = note_count == 513 && extended_513_committed
+        && playable_513_playback(snapshot);
+    if (!valid_note_count(note_count) && !playable_513_count) {
+        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_count_identity");
+        return;
+    }
     float max_event_seconds = 0.0f;
     const bool max_event_valid = core::safe_read_field(wrapper, 0x30, max_event_seconds)
         && std::isfinite(max_event_seconds) && max_event_seconds >= 0.0f;
@@ -548,10 +558,16 @@ void __fastcall chart_expand_detour(
         core::log(identity_valid && diagnostic_profile ? core::LogLevel::Info : core::LogLevel::Error,
             identity.str());
     }
-    if (!identity_valid || !log_chart_event_plan(wrapper, note_count, profile, capture_id)) return;
+    if (!identity_valid || !log_chart_event_plan(wrapper, note_count, profile, capture_id)) {
+        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_event_identity");
+        return;
+    }
     const float target_seconds = completion_target_seconds(song, profile, max_event_seconds);
     if (!max_event_valid || !std::isfinite(target_seconds) || target_seconds <= 0.0f
-        || !capture_identity_valid) return;
+        || !capture_identity_valid) {
+        if (extended_513_committed) invalidate_extended_chart_commit("post_expand_completion_identity");
+        return;
+    }
     auto capture = std::make_shared<const CompletionCapture>(CompletionCapture{
         wrapper,
         wrapper_identity,
@@ -617,7 +633,8 @@ uintptr_t __fastcall note_count_detour(void* arg0, void* arg1, void* arg2, void*
     const SongDescriptor* song = menu.song ? menu.song : playback.song;
     const SongDifficultyProfile* profile = menu.profile ? menu.profile : playback.profile;
     const int replacement = resolve_menu_or_playback_note_count(menu, playback);
-    const bool restricted_513 = replacement == 513 && profile && playable_513_profile(*profile);
+    const bool restricted_513 = replacement == 513 && profile
+        && (menu.song ? playable_513_selection(menu) : playable_513_playback(playback));
     if (!song || (!valid_note_count(replacement) && !restricted_513)) {
         return original;
     }
@@ -648,7 +665,7 @@ void capture_active_note_count(int note_count)
 {
     const PlaybackSnapshot playback = registry().playback_snapshot();
     const bool restricted_513 = note_count == 513 && playback.profile
-        && playable_513_profile(*playback.profile);
+        && playable_513_playback(playback);
     g_active_captured_note_count.store(valid_note_count(note_count) || restricted_513 ? note_count : 0,
         std::memory_order_relaxed);
 }
@@ -661,11 +678,12 @@ int active_captured_note_count()
 void reset_active_note_count()
 {
     g_active_captured_note_count.store(0, std::memory_order_relaxed);
+    invalidate_extended_chart_commit("note_count_lifecycle_reset");
 }
 
 int resolve_note_count(const PlaybackSnapshot& playback)
 {
-    const int maximum = playback.profile && playable_513_profile(*playback.profile)
+    const int maximum = playback.profile && playable_513_playback(playback)
         ? static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows)
         : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
     return menu_or_playback_note_count_value({}, playback,
@@ -676,7 +694,8 @@ int resolve_menu_or_playback_note_count(
     const RenderSnapshot& menu, const PlaybackSnapshot& playback)
 {
     const SongDifficultyProfile* selected = menu.song ? menu.profile : playback.profile;
-    const int maximum = selected && playable_513_profile(*selected)
+    const int maximum = selected
+        && (menu.song ? playable_513_selection(menu) : playable_513_playback(playback))
         ? static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows)
         : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
     return menu_or_playback_note_count_value(menu, playback,

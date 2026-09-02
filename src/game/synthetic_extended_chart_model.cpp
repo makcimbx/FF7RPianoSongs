@@ -54,13 +54,25 @@ Result run(const BuildRequest& request, Chart& chart) {
     if (request.failure == FailurePoint::CallbackBuild || request.failure == FailurePoint::CallbackValidation) {
         cleanup(); return result;
     }
-    chart.storage.back().callback_valid = true; result.callback_validated = true;
-    const float old_max = chart.max_time; chart.max_time = request.rows->back().time;
-    if (request.failure == FailurePoint::MaxTimeValidation) {
-        chart.max_time = old_max; cleanup(); result.max_restore_proved = true; return result;
+    if (request.failure == FailurePoint::CallbackCleanupIdentityFailure) {
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
     }
-    if (request.failure == FailurePoint::MaxTimeRestoreFailure) {
-        cleanup(); result.route_blocked = true; return result;
+    chart.storage.back().callback_valid = true; result.callback_validated = true;
+    const float old_max = chart.max_time;
+    if (request.failure == FailurePoint::PreWriteMaxReadFailure) {
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    if (request.failure == FailurePoint::PreWriteMaxDrift) {
+        chart.max_time = old_max + 0.25f;
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    chart.max_time = request.rows->back().time; ++chart.max_write_count;
+    if (request.failure == FailurePoint::PostWriteMaxReadFailure) {
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    if (request.failure == FailurePoint::PostWriteMaxMismatch) {
+        chart.max_time = request.rows->back().time + 0.25f;
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
     }
     chart.count = kPlayableRows; result.count_committed = true;
     if (request.failure == FailurePoint::PostCountExternalDrift) {
@@ -80,4 +92,33 @@ Result run(const BuildRequest& request, Chart& chart) {
 void model_next_parser_reset(Chart& chart) {
     chart.storage.clear(); chart.count = 0; chart.capacity = 0;
 }
+
+void model_expansion_begin(PublicationState& state) { state = {}; }
+
+void model_publish_result(const Result& result, const CommitIdentity& identity,
+    PublicationState& state)
+{
+    state = result.count_committed && !result.rolled_back && !result.route_blocked
+        ? PublicationState{true, identity} : PublicationState{};
+}
+
+std::size_t model_published_count(const PublicationState& state,
+    const CommitIdentity& current, const bool profile_eligible)
+{
+    if (!state.committed || !profile_eligible) return kNativeRows;
+    const auto& a = state.identity;
+    const auto& b = current;
+    return a.song == b.song && a.profile == b.profile
+        && a.selection_generation == b.selection_generation
+        && a.policy_generation == b.policy_generation
+        && a.registry_generation == b.registry_generation
+        && a.route_generation == b.route_generation
+        && a.lease_generation == b.lease_generation && a.song_key == b.song_key
+        && a.descriptor_hash == b.descriptor_hash
+        && a.owner_generation == b.owner_generation && a.owner == b.owner
+        && a.wrapper == b.wrapper && a.chart == b.chart && a.header == b.header
+        && a.allocation == b.allocation ? kPlayableRows : kNativeRows;
+}
+
+void model_shutdown(PublicationState& state) { state = {}; }
 } // namespace ff7r::piano::game::synthetic_model

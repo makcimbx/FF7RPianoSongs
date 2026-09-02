@@ -40,6 +40,7 @@ struct Chart {
     bool tail_constructor_entered = false;
     bool tail_destructed = false;
     bool ownership_preserved = false;
+    std::size_t max_write_count = 0;
 };
 
 enum class FailurePoint {
@@ -50,11 +51,37 @@ enum class FailurePoint {
     ConstructorValidation,
     CallbackBuild,
     CallbackValidation,
-    MaxTimeValidation,
-    MaxTimeRestoreFailure,
+    CallbackCleanupIdentityFailure,
+    PreWriteMaxReadFailure,
+    PreWriteMaxDrift,
+    PostWriteMaxReadFailure,
+    PostWriteMaxMismatch,
     PostCountValidation,
     PostCountRestoreFailure,
     PostCountExternalDrift,
+};
+
+struct CommitIdentity {
+    std::uint64_t song = 1;
+    std::uint64_t profile = 1;
+    std::uint64_t selection_generation = 1;
+    std::uint64_t policy_generation = 1;
+    std::uint64_t registry_generation = 1;
+    std::uint64_t route_generation = 1;
+    std::uint64_t lease_generation = 1;
+    std::uint64_t song_key = 1;
+    std::uint64_t descriptor_hash = 1;
+    std::uint64_t owner_generation = 1;
+    std::uint64_t owner = 1;
+    std::uint64_t wrapper = 1;
+    std::uint64_t chart = 1;
+    std::uint64_t header = 1;
+    std::uint64_t allocation = 1;
+};
+
+struct PublicationState {
+    bool committed = false;
+    CommitIdentity identity{};
 };
 
 struct BuildRequest {
@@ -87,5 +114,11 @@ struct Result {
 
 Result run(const BuildRequest& request, Chart& chart);
 void model_next_parser_reset(Chart& chart);
+void model_expansion_begin(PublicationState& state);
+void model_publish_result(const Result& result, const CommitIdentity& identity,
+    PublicationState& state);
+std::size_t model_published_count(const PublicationState& state,
+    const CommitIdentity& current, bool profile_eligible);
+void model_shutdown(PublicationState& state);
 
 } // namespace ff7r::piano::game::synthetic_model

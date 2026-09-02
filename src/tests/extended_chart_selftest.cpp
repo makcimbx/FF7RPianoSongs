@@ -21,7 +21,9 @@ namespace {
 
 using ff7r::piano::game::synthetic_model::BuildRequest;
 using ff7r::piano::game::synthetic_model::Chart;
+using ff7r::piano::game::synthetic_model::CommitIdentity;
 using ff7r::piano::game::synthetic_model::FailurePoint;
+using ff7r::piano::game::synthetic_model::PublicationState;
 using ff7r::piano::game::synthetic_model::SourceRow;
 
 std::vector<SourceRow> make_rows(std::size_t count)
@@ -128,7 +130,7 @@ bool test_failure_cleanup_and_drift()
             || chart.count != 512 || chart.storage.size() != 512 || chart.capacity < 513) return false;
     }
     for (const FailurePoint point : {FailurePoint::Constructor, FailurePoint::ConstructorValidation,
-             FailurePoint::CallbackBuild, FailurePoint::CallbackValidation, FailurePoint::MaxTimeValidation}) {
+             FailurePoint::CallbackBuild, FailurePoint::CallbackValidation}) {
         Chart chart; const auto result = ff7r::piano::game::synthetic_model::run(extended_request(rows, point), chart);
         if (result.count_committed || !chart.tail_destructed || chart.count != 512 || chart.storage.size() != 512) return false;
     }
@@ -140,14 +142,88 @@ bool test_failure_cleanup_and_drift()
         extended_request(rows, FailurePoint::PostCountRestoreFailure), count_restore_failed);
     if (!failed_restore.count_committed || !failed_restore.route_blocked
         || count_restore_failed.tail_destructed || !count_restore_failed.ownership_preserved) return false;
-    Chart max_restore_failed; const auto failed_max = ff7r::piano::game::synthetic_model::run(
-        extended_request(rows, FailurePoint::MaxTimeRestoreFailure), max_restore_failed);
-    if (failed_max.count_committed || !failed_max.route_blocked
-        || !max_restore_failed.tail_destructed || max_restore_failed.count != 512) return false;
+    for (const FailurePoint point : {FailurePoint::CallbackCleanupIdentityFailure}) {
+        Chart identity_lost;
+        const auto result = ff7r::piano::game::synthetic_model::run(
+            extended_request(rows, point), identity_lost);
+        if (result.count_committed || !result.route_blocked || identity_lost.tail_destructed
+            || !identity_lost.ownership_preserved || identity_lost.count != 512) return false;
+    }
+    for (const FailurePoint point : {FailurePoint::PreWriteMaxReadFailure,
+             FailurePoint::PreWriteMaxDrift}) {
+        Chart prewrite;
+        const auto result = ff7r::piano::game::synthetic_model::run(
+            extended_request(rows, point), prewrite);
+        if (result.count_committed || !result.route_blocked || prewrite.tail_destructed
+            || !prewrite.ownership_preserved || prewrite.max_write_count != 0
+            || prewrite.count != 512 || prewrite.storage.size() != 513) return false;
+    }
+    for (const FailurePoint point : {FailurePoint::PostWriteMaxReadFailure,
+             FailurePoint::PostWriteMaxMismatch}) {
+        Chart postwrite;
+        const auto result = ff7r::piano::game::synthetic_model::run(
+            extended_request(rows, point), postwrite);
+        if (result.count_committed || !result.route_blocked || postwrite.tail_destructed
+            || !postwrite.ownership_preserved || postwrite.max_write_count != 1
+            || postwrite.count != 512 || postwrite.storage.size() != 513) return false;
+    }
     Chart drift; const auto drift_result = ff7r::piano::game::synthetic_model::run(
         extended_request(rows, FailurePoint::PostCountExternalDrift), drift);
     return drift_result.count_committed && drift_result.route_blocked
         && drift.ownership_preserved && !drift.tail_destructed;
+}
+
+bool test_committed_publication_state()
+{
+    using namespace ff7r::piano::game::synthetic_model;
+    const auto rows = make_rows(513);
+    const CommitIdentity identity{};
+    PublicationState state;
+    Chart chart;
+    const Result success = run(extended_request(rows), chart);
+    if (model_published_count(state, identity, true) != 512) return false;
+    model_publish_result(success, identity, state);
+    if (model_published_count(state, identity, true) != 513) return false;
+
+    auto reserve_unavailable = extended_request(rows);
+    reserve_unavailable.verified_1005 = false;
+    Chart unavailable_chart;
+    model_publish_result(run(reserve_unavailable, unavailable_chart), identity, state);
+    if (model_published_count(state, identity, true) != 512) return false;
+    auto excessive_capacity = extended_request(rows);
+    excessive_capacity.reserve_capacity = 1025;
+    Chart capacity_chart;
+    model_publish_result(run(excessive_capacity, capacity_chart), identity, state);
+    if (model_published_count(state, identity, true) != 512) return false;
+
+    model_publish_result(success, identity, state);
+
+    CommitIdentity mismatch = identity;
+    mismatch.selection_generation++;
+    if (model_published_count(state, mismatch, true) != 512
+        || model_published_count(state, identity, false) != 512) return false;
+    mismatch = identity;
+    mismatch.route_generation++;
+    if (model_published_count(state, mismatch, true) != 512) return false;
+
+    for (const FailurePoint point : {FailurePoint::PrefixValidation, FailurePoint::FNameFind,
+             FailurePoint::CallbackValidation, FailurePoint::CallbackCleanupIdentityFailure,
+             FailurePoint::PreWriteMaxReadFailure, FailurePoint::PreWriteMaxDrift,
+             FailurePoint::PostWriteMaxReadFailure, FailurePoint::PostWriteMaxMismatch,
+             FailurePoint::PostCountValidation,
+             FailurePoint::PostCountRestoreFailure, FailurePoint::PostCountExternalDrift}) {
+        Chart failed_chart;
+        const Result failed = run(extended_request(rows, point), failed_chart);
+        model_publish_result(failed, identity, state);
+        if (model_published_count(state, identity, true) != 512) return false;
+    }
+
+    model_publish_result(success, identity, state);
+    model_expansion_begin(state);
+    if (model_published_count(state, identity, true) != 512) return false;
+    model_publish_result(success, identity, state);
+    model_shutdown(state);
+    return model_published_count(state, identity, true) == 512;
 }
 
 bool test_shipping_specs()
@@ -320,6 +396,7 @@ int main()
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
         {"forwarding_and_restrictions", test_forwarding_and_restrictions},
         {"failure_cleanup_and_drift", test_failure_cleanup_and_drift},
+        {"committed_publication_state", test_committed_publication_state},
         {"chart_patch_ignore_sound", ff7r::piano::game::chart_patch_ignore_sound_selftest},
         {"shipping_specs", test_shipping_specs},
         {"fixture_tool_contract", test_fixture_tool_contract},
