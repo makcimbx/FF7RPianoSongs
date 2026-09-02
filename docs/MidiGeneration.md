@@ -4,6 +4,11 @@
 
 When a song supplies MIDI, the pipeline can generate source-backed difficulty profiles that fit the native piano interaction. The generator is deterministic: identical semantic inputs produce identical profile data and cache identity.
 
+Repository loading parses and normalizes the MIDI source once into immutable event,
+tempo, meter, and source-identity data. Every independently evaluated difficulty
+profile consumes that same normalized value; profile generation does not reread or
+renormalize the file and does not share mutable analysis state.
+
 ## Input Behavior
 
 - MIDI format 0 and 1 timelines are supported; format 2 is rejected.

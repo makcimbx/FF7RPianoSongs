@@ -33,6 +33,7 @@ constexpr std::array<const char*, 12> kPitchClasses{
 using SourceIdentity = MidiSourceIdentity;
 using MidiNoteEvent = NormalizedMidiNoteEvent;
 using TempoChange = MidiTempoChange;
+
 using MeterChange = MidiMeterChange;
 
 struct Profile {
@@ -812,6 +813,13 @@ struct OutputAction {
     Attack attack;
 };
 
+struct AnalysisNote {
+    double beat = 0.0;
+    int pitch = -1;
+    std::string_view chord_id;
+    bool right_action = false;
+};
+
 struct JointStrainAnalysis {
     MidiJointStrainMetrics metrics;
     std::vector<double> samples;
@@ -843,15 +851,27 @@ int strain_pitch_number(const std::string& pitch) {
     return midi_pitch >= 0 && midi_pitch <= 127 ? midi_pitch : -1;
 }
 
-JointStrainAnalysis calculate_joint_strain(
-    const std::vector<Note>& notes, const double bpm, const bool notes_are_sorted = false) {
+std::vector<AnalysisNote> analysis_notes_from_notes(const std::vector<Note>& notes) {
+    std::vector<AnalysisNote> result;
+    result.reserve(notes.size());
+    std::uint8_t previous_group = 0;
+    for (const Note& note : notes) {
+        result.push_back({note.beat, strain_pitch_number(note.pitch), note.chord_id,
+            !note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)});
+        previous_group = note.group_index;
+    }
+    return result;
+}
+
+JointStrainAnalysis calculate_joint_strain_analysis(
+    const std::vector<AnalysisNote>& notes, const double bpm, const bool notes_are_sorted = false) {
     JointStrainAnalysis result;
     if (notes.empty() || bpm <= 0.0) return result;
-    std::vector<Note> sorted_notes;
-    const std::vector<Note>* ordered_notes = &notes;
+    std::vector<AnalysisNote> sorted_notes;
+    const std::vector<AnalysisNote>* ordered_notes = &notes;
     if (!notes_are_sorted) {
         sorted_notes = notes;
-        std::stable_sort(sorted_notes.begin(), sorted_notes.end(), [](const Note& a, const Note& b) {
+        std::stable_sort(sorted_notes.begin(), sorted_notes.end(), [](const AnalysisNote& a, const AnalysisNote& b) {
             return a.beat < b.beat;
         });
         ordered_notes = &sorted_notes;
@@ -864,17 +884,14 @@ JointStrainAnalysis calculate_joint_strain(
     int previous_hand_mask = 0;
     std::string_view previous_chord;
     bool has_previous = false;
-    std::uint8_t previous_group = 0;
     result.samples.reserve(ordered_notes->size());
-    for (const Note& note : *ordered_notes) {
-        const bool grouped_follower = note.group_index != 0 && note.group_index == previous_group;
-        previous_group = note.group_index;
-        if (grouped_follower && note.chord_id.empty()) continue;
+    for (const AnalysisNote& note : *ordered_notes) {
+        if (!note.right_action && note.chord_id.empty()) continue;
         const double seconds = note.beat * 60.0 / bpm;
         const double elapsed = has_previous ? std::max(0.0, seconds - previous_seconds) : 10.0;
         const bool connected_transition = has_previous && elapsed < 2.0;
-        const int pitch = strain_pitch_number(note.pitch);
-        const bool has_pitch = pitch >= 0;
+        const int pitch = note.pitch;
+        const bool has_pitch = note.right_action && pitch >= 0;
         const bool has_chord = !note.chord_id.empty();
         const int hand_mask = (has_pitch ? 1 : 0) | (has_chord ? 2 : 0);
         double impulse = 1.0;
@@ -922,6 +939,11 @@ JointStrainAnalysis calculate_joint_strain(
     return result;
 }
 
+JointStrainAnalysis calculate_joint_strain(
+    const std::vector<Note>& notes, const double bpm, const bool notes_are_sorted = false) {
+    return calculate_joint_strain_analysis(analysis_notes_from_notes(notes), bpm, notes_are_sorted);
+}
+
 struct SkillAction {
     double seconds = 0.0;
     bool right = false;
@@ -929,7 +951,7 @@ struct SkillAction {
     std::string_view id;
 };
 
-double interpolated_quantile(std::vector<double> values, const double fraction) {
+double interpolated_quantile(std::vector<double>& values, const double fraction) {
     if (values.empty()) return 0.0;
     const double position = fraction * static_cast<double>(values.size() - 1);
     const std::size_t lower = static_cast<std::size_t>(std::floor(position));
@@ -942,21 +964,19 @@ double interpolated_quantile(std::vector<double> values, const double fraction) 
         (position - static_cast<double>(lower));
 }
 
-MidiLocalSkillMetrics calculate_local_skills(
-    const std::vector<Note>& notes, const double bpm, const bool notes_are_sorted = false,
+MidiLocalSkillMetrics calculate_local_skills_analysis(
+    const std::vector<AnalysisNote>& notes, const double bpm, const bool notes_are_sorted = false,
     const bool monotonic_only = false) {
     MidiLocalSkillMetrics result;
     if (bpm <= 0.0) return result;
     std::vector<SkillAction> actions;
     actions.reserve(notes.size() * 2);
-    std::uint8_t previous_group = 0;
-    for (const Note& note : notes) {
+    for (const AnalysisNote& note : notes) {
         const double seconds = note.beat * 60.0 / bpm;
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) {
-            actions.push_back({seconds, true, strain_pitch_number(note.pitch), note.pitch});
+        if (note.right_action) {
+            actions.push_back({seconds, true, note.pitch, {}});
         }
         if (!note.chord_id.empty()) actions.push_back({seconds, false, -1, note.chord_id});
-        previous_group = note.group_index;
     }
     if (!notes_are_sorted) {
         std::stable_sort(actions.begin(), actions.end(), [](const SkillAction& a, const SkillAction& b) {
@@ -1021,7 +1041,8 @@ MidiLocalSkillMetrics calculate_local_skills(
     std::size_t jack_count = 0;
     for (std::size_t index = 0; index < actions.size(); ++index) {
         if (index > 0 && actions[index].right == actions[index - 1].right &&
-            actions[index].id == actions[index - 1].id &&
+            (actions[index].right ? actions[index].pitch == actions[index - 1].pitch :
+                actions[index].id == actions[index - 1].id) &&
             actions[index].seconds - actions[index - 1].seconds <= 0.5 + kComparisonEpsilon) {
             ++jack_count;
         } else {
@@ -1169,6 +1190,13 @@ MidiLocalSkillMetrics calculate_local_skills(
         result.rhythm_irregularity_p90 = interpolated_quantile(irregularities, 0.90);
     }
     return result;
+}
+
+MidiLocalSkillMetrics calculate_local_skills(
+    const std::vector<Note>& notes, const double bpm, const bool notes_are_sorted = false,
+    const bool monotonic_only = false) {
+    return calculate_local_skills_analysis(
+        analysis_notes_from_notes(notes), bpm, notes_are_sorted, monotonic_only);
 }
 
 double local_skill_violation(
@@ -1343,19 +1371,17 @@ double output_row_score(const OutputRow& row) {
 }
 
 double recoverable_route_penalty(
-    const std::vector<Note>& notes, const double bpm, const Profile::SkillRoute& route,
+    const std::vector<AnalysisNote>& notes, const double bpm, const Profile::SkillRoute& route,
     const bool notes_are_sorted = false) {
     if (bpm <= 0.0) return 0.0;
     std::vector<SkillAction> actions;
     actions.reserve(notes.size());
-    std::uint8_t previous_group = 0;
-    for (const Note& note : notes) {
+    for (const AnalysisNote& note : notes) {
         const double seconds = note.beat * 60.0 / bpm;
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) {
-            actions.push_back({seconds, true, strain_pitch_number(note.pitch), note.pitch});
+        if (note.right_action) {
+            actions.push_back({seconds, true, note.pitch, {}});
         }
         if (!note.chord_id.empty()) actions.push_back({seconds, false, -1, note.chord_id});
-        previous_group = note.group_index;
     }
     if (!notes_are_sorted) {
         std::stable_sort(actions.begin(), actions.end(), [](const SkillAction& a, const SkillAction& b) {
@@ -1424,9 +1450,22 @@ struct IncrementalState {
     std::uint32_t admissible_routes = 0;
     std::size_t route_focus = 0;
     std::size_t row_count = 0;
+    std::size_t group_count = 0;
     std::size_t finalized_row_count = 0;
     bool has_finalized_prefix = false;
 };
+
+bool group_eligible(const OutputRow& row) {
+    return row.has_right && !row.has_left && !row.note.pitch.empty() && row.note.chord_id.empty();
+}
+
+bool follows_groupably(
+    const long long previous_frame, const OutputRow& previous,
+    const long long frame, const OutputRow& row,
+    const Profile& profile) {
+    return group_eligible(previous) && group_eligible(row) && frame > previous_frame &&
+        row.right.start - previous.right.start < profile.right_seconds - kComparisonEpsilon;
+}
 
 struct IncrementalSelection {
     Status status = Status::ok_status();
@@ -1443,34 +1482,39 @@ struct IncrementalSelection {
 template <typename Rows>
 std::vector<Note> grouped_notes_from_rows(const Rows& rows, const Profile& profile) {
     std::vector<Note> notes;
-    std::vector<long long> frames;
-    std::vector<bool> eligible;
-    std::vector<double> right_starts;
     notes.reserve(rows.size());
-    frames.reserve(rows.size());
-    eligible.reserve(rows.size());
-    right_starts.reserve(rows.size());
+    bool has_previous = false;
+    bool previous_eligible = false;
+    bool in_group = false;
+    long long previous_frame = 0;
+    double previous_start = 0.0;
+    std::uint16_t next_group = 1;
     for (const auto& entry : rows) {
         notes.push_back(entry.second.note);
         notes.back().group_index = 0;
-        frames.push_back(entry.first);
-        eligible.push_back(entry.second.has_right && !entry.second.has_left &&
-            !entry.second.note.pitch.empty() && entry.second.note.chord_id.empty());
-        right_starts.push_back(entry.second.has_right ? entry.second.right.start : 0.0);
-    }
-    std::uint16_t next_group = 1;
-    for (std::size_t begin = 0; begin + 1 < notes.size();) {
-        std::size_t end = begin + 1;
-        while (end < notes.size() && eligible[end - 1] && eligible[end] &&
-            frames[end] > frames[end - 1] &&
-            right_starts[end] - right_starts[end - 1] < profile.right_seconds - kComparisonEpsilon) ++end;
-        if (end - begin >= 2u && next_group <= 255u) {
-            for (std::size_t index = begin; index < end; ++index) {
-                notes[index].group_index = static_cast<std::uint8_t>(next_group);
+        const bool eligible = entry.second.has_right && !entry.second.has_left &&
+            !entry.second.note.pitch.empty() && entry.second.note.chord_id.empty();
+        const bool follows_groupably = has_previous && previous_eligible && eligible &&
+            entry.first > previous_frame && entry.second.right.start - previous_start <
+                profile.right_seconds - kComparisonEpsilon;
+        if (follows_groupably) {
+            if (!in_group) {
+                if (next_group <= 255u) {
+                    notes[notes.size() - 2].group_index = static_cast<std::uint8_t>(next_group);
+                    notes.back().group_index = static_cast<std::uint8_t>(next_group);
+                    ++next_group;
+                    in_group = true;
+                }
+            } else {
+                notes.back().group_index = notes[notes.size() - 2].group_index;
             }
-            ++next_group;
+        } else {
+            in_group = false;
         }
-        begin = end == begin + 1 ? begin + 1 : end;
+        has_previous = true;
+        previous_eligible = eligible;
+        previous_frame = entry.first;
+        previous_start = eligible ? entry.second.right.start : 0.0;
     }
     return notes;
 }
@@ -1492,6 +1536,131 @@ std::size_t required_action_count(const std::vector<Note>& notes) {
         previous_group = note.group_index;
     }
     return count;
+}
+
+std::size_t required_action_count_with_candidate(
+    const IncrementalRows& rows,
+    const IncrementalCandidate& candidate,
+    const Profile& profile,
+    const std::size_t current_count) {
+    const auto eligible = [](const OutputRow& row) {
+        return row.has_right && !row.has_left && !row.note.pitch.empty() && row.note.chord_id.empty();
+    };
+    const auto follows = [&](const IncrementalRow* previous, const long long frame, const OutputRow& row) {
+        return previous != nullptr && eligible(previous->second) && eligible(row) &&
+            frame > previous->first && row.right.start - previous->second.right.start <
+                profile.right_seconds - kComparisonEpsilon;
+    };
+    const auto insertion = std::lower_bound(rows.begin(), rows.end(), candidate.frame,
+        [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
+    const IncrementalRow* previous = insertion == rows.begin() ? nullptr : &*std::prev(insertion);
+    const IncrementalRow* successor = insertion == rows.end() ? nullptr : &*insertion;
+    std::ptrdiff_t delta = !candidate.row.note.chord_id.empty() ? 1 : 0;
+    if (!candidate.row.note.pitch.empty() && !follows(previous, candidate.frame, candidate.row)) ++delta;
+    if (successor != nullptr && !successor->second.note.pitch.empty()) {
+        const bool was_root = !follows(previous, successor->first, successor->second);
+        const IncrementalRow inserted{candidate.frame, candidate.row};
+        const bool is_root = !follows(&inserted, successor->first, successor->second);
+        delta += static_cast<std::ptrdiff_t>(is_root) - static_cast<std::ptrdiff_t>(was_root);
+    }
+    return static_cast<std::size_t>(static_cast<std::ptrdiff_t>(current_count) + delta);
+}
+
+std::size_t generated_group_count(const IncrementalRows& rows, const Profile& profile) {
+    std::size_t count = 0;
+    bool previous_follows = false;
+    for (std::size_t index = 1; index < rows.size(); ++index) {
+        const bool follows = follows_groupably(
+            rows[index - 1].first, rows[index - 1].second,
+            rows[index].first, rows[index].second, profile);
+        if (follows && !previous_follows) ++count;
+        previous_follows = follows;
+    }
+    return count;
+}
+
+struct InsertionSemantics {
+    bool permitted = false;
+    bool analysis_unchanged = false;
+    std::size_t action_count = 0;
+    std::size_t group_count = 0;
+};
+
+InsertionSemantics analyze_incremental_insertion(
+    const IncrementalRows& rows,
+    const IncrementalCandidate& candidate,
+    const Profile& profile,
+    const std::size_t current_action_count,
+    const std::size_t current_group_count) {
+    InsertionSemantics result;
+    const auto insertion = std::lower_bound(rows.begin(), rows.end(), candidate.frame,
+        [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
+    if (insertion != rows.end() && insertion->first == candidate.frame) return result;
+    const std::size_t position = static_cast<std::size_t>(std::distance(rows.begin(), insertion));
+    const bool right = candidate.row.has_right;
+    const Attack& candidate_attack = right ? candidate.row.right : candidate.row.left;
+    const double spacing = right ? profile.right_seconds : profile.chord_seconds;
+
+    bool component_open = right && group_eligible(candidate.row);
+    long long later_frame = candidate.frame;
+    const OutputRow* later_row = &candidate.row;
+    for (std::size_t index = position; index > 0;) {
+        const IncrementalRow& row = rows[--index];
+        if (component_open && follows_groupably(row.first, row.second, later_frame, *later_row, profile)) {
+            later_frame = row.first;
+            later_row = &row.second;
+            continue;
+        }
+        component_open = false;
+        const bool same_hand = right ? row.second.has_right : row.second.has_left;
+        if (!same_hand) continue;
+        const Attack& existing = right ? row.second.right : row.second.left;
+        if (std::fabs(candidate_attack.start - existing.start) + kComparisonEpsilon < spacing) return result;
+        break;
+    }
+
+    component_open = right && group_eligible(candidate.row);
+    long long earlier_frame = candidate.frame;
+    const OutputRow* earlier_row = &candidate.row;
+    for (std::size_t index = position; index < rows.size(); ++index) {
+        const IncrementalRow& row = rows[index];
+        if (component_open && follows_groupably(earlier_frame, *earlier_row, row.first, row.second, profile)) {
+            earlier_frame = row.first;
+            earlier_row = &row.second;
+            continue;
+        }
+        component_open = false;
+        const bool same_hand = right ? row.second.has_right : row.second.has_left;
+        if (!same_hand) continue;
+        const Attack& existing = right ? row.second.right : row.second.left;
+        if (std::fabs(candidate_attack.start - existing.start) + kComparisonEpsilon < spacing) return result;
+        break;
+    }
+
+    const IncrementalRow* previous = position == 0 ? nullptr : &rows[position - 1];
+    const IncrementalRow* previous_previous = position < 2 ? nullptr : &rows[position - 2];
+    const IncrementalRow* successor = position == rows.size() ? nullptr : &rows[position];
+    const bool previous_follows = previous_previous != nullptr && previous != nullptr && follows_groupably(
+        previous_previous->first, previous_previous->second, previous->first, previous->second, profile);
+    const bool old_successor_follows = previous != nullptr && successor != nullptr && follows_groupably(
+        previous->first, previous->second, successor->first, successor->second, profile);
+    const bool candidate_follows = previous != nullptr && follows_groupably(
+        previous->first, previous->second, candidate.frame, candidate.row, profile);
+    const bool successor_follows = successor != nullptr && follows_groupably(
+        candidate.frame, candidate.row, successor->first, successor->second, profile);
+    result.analysis_unchanged = candidate.row.note.chord_id.empty() &&
+        !candidate.row.note.pitch.empty() && candidate_follows &&
+        old_successor_follows == successor_follows;
+    const std::ptrdiff_t old_starts = old_successor_follows && !previous_follows ? 1 : 0;
+    const std::ptrdiff_t new_starts = (candidate_follows && !previous_follows ? 1 : 0) +
+        (successor_follows && !candidate_follows ? 1 : 0);
+    result.group_count = static_cast<std::size_t>(
+        static_cast<std::ptrdiff_t>(current_group_count) + new_starts - old_starts);
+    if (result.group_count > 255u) return result;
+    result.action_count = required_action_count_with_candidate(
+        rows, candidate, profile, current_action_count);
+    result.permitted = true;
+    return result;
 }
 
 bool contains_frame(const IncrementalRows& rows, const long long frame) {
@@ -1523,6 +1692,42 @@ std::vector<Note> notes_from_rows_with_candidate(
     }
     if (!inserted) materialized.emplace_back(candidate->frame, candidate->row);
     return grouped_notes_from_rows(materialized, profile);
+}
+
+std::vector<AnalysisNote> analysis_notes_from_rows_with_candidate(
+    const IncrementalRows& rows, const IncrementalCandidate* candidate,
+    const Profile& profile,
+    const long long through_frame = std::numeric_limits<long long>::max()) {
+    std::vector<AnalysisNote> notes;
+    notes.reserve(rows.size() + (candidate != nullptr ? 1u : 0u));
+    bool has_previous = false;
+    bool previous_eligible = false;
+    long long previous_frame = 0;
+    double previous_start = 0.0;
+    const auto append = [&](const long long frame, const OutputRow& row) {
+        const bool eligible = row.has_right && !row.has_left && !row.note.pitch.empty() &&
+            row.note.chord_id.empty();
+        const bool grouped_follower = has_previous && previous_eligible && eligible &&
+            frame > previous_frame && row.right.start - previous_start <
+                profile.right_seconds - kComparisonEpsilon;
+        notes.push_back({row.note.beat, strain_pitch_number(row.note.pitch), row.note.chord_id,
+            !row.note.pitch.empty() && !grouped_follower});
+        has_previous = true;
+        previous_eligible = eligible;
+        previous_frame = frame;
+        previous_start = eligible ? row.right.start : 0.0;
+    };
+    bool inserted = candidate == nullptr || candidate->frame > through_frame;
+    for (const auto& entry : rows) {
+        if (entry.first > through_frame) break;
+        if (!inserted && candidate->frame < entry.first) {
+            append(candidate->frame, candidate->row);
+            inserted = true;
+        }
+        append(entry.first, entry.second);
+    }
+    if (!inserted) append(candidate->frame, candidate->row);
+    return notes;
 }
 
 double largest_gap_with_candidate(
@@ -1714,9 +1919,10 @@ IncrementalSelection select_incremental_rows(
     const std::size_t baseline_size = baseline.size();
     const std::size_t baseline_actions = required_action_count(notes_from_rows(baseline, profile));
     const auto analyze = [&](IncrementalState* state) {
-        const std::vector<Note> notes = notes_from_rows(*state->rows, profile);
-        state->strain = calculate_joint_strain(notes, bpm, true).metrics;
-        state->local_skills = calculate_local_skills(notes, bpm, true);
+        const std::vector<AnalysisNote> notes = analysis_notes_from_rows_with_candidate(
+            *state->rows, nullptr, profile);
+        state->strain = calculate_joint_strain_analysis(notes, bpm, true).metrics;
+        state->local_skills = calculate_local_skills_analysis(notes, bpm, true);
         if (state->route_focus < profile.route_count) {
             state->recoverable_penalty = recoverable_route_penalty(
                 notes, bpm, profile.routes[state->route_focus], true);
@@ -1737,6 +1943,7 @@ IncrementalSelection select_incremental_rows(
     for (auto& entry : baseline) initial_rows->emplace_back(entry.first, std::move(entry.second));
     initial.rows = std::move(initial_rows);
     initial.row_count = baseline_actions;
+    initial.group_count = generated_group_count(*initial.rows, profile);
     initial.preferred_actions = std::min(preferred_baseline_actions, initial.rows->size());
     analyze(&initial);
     for (const auto& entry : *initial.rows) initial.salience += output_row_score(entry.second);
@@ -1760,7 +1967,8 @@ IncrementalSelection select_incremental_rows(
         focused.route_focus = route;
         focused.admissible_routes = std::uint32_t{1} << route;
         focused.recoverable_penalty = recoverable_route_penalty(
-            notes_from_rows(*focused.rows, profile), bpm, profile.routes[route], true);
+            analysis_notes_from_rows_with_candidate(*focused.rows, nullptr, profile),
+            bpm, profile.routes[route], true);
         focused.full_route_load = local_skill_violation(
             focused.local_skills, profile.routes[route]);
         beam.push_back(std::move(focused));
@@ -1806,13 +2014,14 @@ IncrementalSelection select_incremental_rows(
         struct AnalysisWork {
             std::shared_ptr<const IncrementalRows> parent_rows;
             const IncrementalCandidate* candidate = nullptr;
-            std::vector<Note> notes;
+            std::vector<AnalysisNote> notes;
             MidiLocalSkillMetrics local_skills;
             MidiLocalSkillMetrics finalized_prefix_skills;
             MidiLocalSkillMetrics previous_finalized_prefix_skills;
             std::size_t previous_finalized_row_count = 0;
             std::size_t finalized_row_count = 0;
             bool has_previous_finalized_prefix = false;
+            bool full_analysis_unchanged = false;
         };
         struct PendingState {
             IncrementalState state;
@@ -1840,7 +2049,8 @@ IncrementalSelection select_incremental_rows(
         work.reserve(beam.size() * (end - begin + 1));
         std::unordered_map<WorkKey, std::size_t, WorkKeyHash> work_indices;
         work_indices.reserve(beam.size() * (end - begin + 1));
-        const auto work_index_for = [&](const IncrementalState& state, const IncrementalCandidate* candidate) {
+        const auto work_index_for = [&](const IncrementalState& state, const IncrementalCandidate* candidate,
+                                        const bool full_analysis_unchanged = false) {
             const WorkKey key{state.rows.get(), candidate};
             const auto found = work_indices.find(key);
             if (found != work_indices.end()) return found->second;
@@ -1851,6 +2061,8 @@ IncrementalSelection select_incremental_rows(
             analysis.previous_finalized_prefix_skills = state.finalized_prefix_skills;
             analysis.previous_finalized_row_count = state.finalized_row_count;
             analysis.has_previous_finalized_prefix = state.has_finalized_prefix;
+            analysis.full_analysis_unchanged = full_analysis_unchanged;
+            if (full_analysis_unchanged) analysis.local_skills = state.local_skills;
             work.push_back(std::move(analysis));
             work_indices.emplace(key, index);
             return index;
@@ -1861,13 +2073,14 @@ IncrementalSelection select_incremental_rows(
             if (state.rows->size() >= maximum_physical_rows ||
                 contains_frame(*state.rows, candidates[begin].frame)) continue;
             for (std::size_t index = begin; index < end; ++index) {
-                if (!insertion_obeys_profile_spacing(*state.rows, candidates[index], profile)) continue;
+                const InsertionSemantics insertion = analyze_incremental_insertion(
+                    *state.rows, candidates[index], profile, state.row_count, state.group_count);
+                if (!insertion.permitted) continue;
                 spacing_eligible[index - begin] = true;
                 IncrementalState added = state;
                 const std::size_t required_additions = target_rows > baseline_actions ?
                     target_rows - baseline_actions : 0;
-                const std::size_t added_row_count = required_action_count(
-                    notes_from_rows_with_candidate(*state.rows, &candidates[index], profile));
+                const std::size_t added_row_count = insertion.action_count;
                 if (added_row_count > maximum_search_rows) continue;
                 const std::size_t selected_additions = added_row_count > baseline_actions ?
                     added_row_count - baseline_actions : 0;
@@ -1880,15 +2093,20 @@ IncrementalSelection select_incremental_rows(
                 added.salience += candidates[index].salience;
                 added.preferred_actions += candidates[index].preferred ? 1u : 0u;
                 added.row_count = added_row_count;
+                added.group_count = insertion.group_count;
                 const IncrementalCandidate* candidate = &candidates[index];
-                const std::size_t work_index = work_index_for(added, candidate);
+                const std::size_t work_index = work_index_for(
+                    added, candidate, insertion.analysis_unchanged);
                 pending.push_back(PendingState{std::move(added), candidate, work_index});
             }
         }
         std::for_each(std::execution::par, work.begin(), work.end(), [&](AnalysisWork& value) {
             if (value.candidate != nullptr) {
-                value.notes = notes_from_rows_with_candidate(*value.parent_rows, value.candidate, profile);
-                value.local_skills = calculate_local_skills(value.notes, bpm, true);
+                if (!value.full_analysis_unchanged) {
+                    value.notes = analysis_notes_from_rows_with_candidate(
+                        *value.parent_rows, value.candidate, profile);
+                    value.local_skills = calculate_local_skills_analysis(value.notes, bpm, true);
+                }
             }
             const auto finalized_end = std::upper_bound(
                 value.parent_rows->begin(), value.parent_rows->end(), candidates[begin].frame,
@@ -1903,9 +2121,10 @@ IncrementalSelection select_incremental_rows(
                 value.finalized_row_count == value.parent_rows->size() + 1) {
                 value.finalized_prefix_skills = value.local_skills;
             } else {
-                value.finalized_prefix_skills = calculate_local_skills(
-                    notes_from_rows_with_candidate(
-                        *value.parent_rows, value.candidate, profile, candidates[begin].frame), bpm, true, true);
+                const std::vector<AnalysisNote> prefix_notes = analysis_notes_from_rows_with_candidate(
+                    *value.parent_rows, value.candidate, profile, candidates[begin].frame);
+                value.finalized_prefix_skills = calculate_local_skills_analysis(
+                    prefix_notes, bpm, true, true);
             }
         });
         std::for_each(std::execution::par, pending.begin(), pending.end(), [&](PendingState& value) {
@@ -1920,12 +2139,14 @@ IncrementalSelection select_incremental_rows(
                 state.finalized_prefix_skills, profile.routes[state.route_focus],
                 nullptr, nullptr, nullptr, nullptr, true);
             if (value.candidate != nullptr) {
-                state.local_skills = analysis.local_skills;
                 state.largest_internal_gap = std::numeric_limits<double>::quiet_NaN();
-                state.recoverable_penalty = recoverable_route_penalty(
-                    analysis.notes, bpm, profile.routes[state.route_focus], true);
-                state.full_route_load = local_skill_violation(
-                    state.local_skills, profile.routes[state.route_focus]);
+                if (!analysis.full_analysis_unchanged) {
+                    state.local_skills = analysis.local_skills;
+                    state.recoverable_penalty = recoverable_route_penalty(
+                        analysis.notes, bpm, profile.routes[state.route_focus], true);
+                    state.full_route_load = local_skill_violation(
+                        state.local_skills, profile.routes[state.route_focus]);
+                }
             }
         });
         std::vector<IncrementalState> next;
@@ -1989,16 +2210,24 @@ IncrementalSelection select_incremental_rows(
                 "no target-band state satisfies a coherent local-skill route");
             return result;
         }
-        std::for_each(std::execution::par, beam.begin(), beam.end(), [](IncrementalState& state) {
-            if (state.deferred_candidate == nullptr) return;
-            auto selected_rows = std::make_shared<IncrementalRows>(*state.rows);
-            const auto insertion = std::lower_bound(
-                selected_rows->begin(), selected_rows->end(), state.deferred_candidate->frame,
-                [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
-            selected_rows->emplace(insertion, state.deferred_candidate->frame, state.deferred_candidate->row);
-            state.rows = std::move(selected_rows);
+        std::unordered_map<WorkKey, std::shared_ptr<const IncrementalRows>, WorkKeyHash> committed_rows;
+        committed_rows.reserve(beam.size());
+        for (IncrementalState& state : beam) {
+            if (state.deferred_candidate == nullptr) continue;
+            const WorkKey key{state.rows.get(), state.deferred_candidate};
+            auto found = committed_rows.find(key);
+            if (found == committed_rows.end()) {
+                auto selected_rows = std::make_shared<IncrementalRows>(*state.rows);
+                const auto insertion = std::lower_bound(
+                    selected_rows->begin(), selected_rows->end(), state.deferred_candidate->frame,
+                    [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
+                selected_rows->emplace(
+                    insertion, state.deferred_candidate->frame, state.deferred_candidate->row);
+                found = committed_rows.emplace(key, std::move(selected_rows)).first;
+            }
+            state.rows = found->second;
             state.deferred_candidate = nullptr;
-        });
+        }
         begin = end;
     }
 
@@ -2055,8 +2284,10 @@ IncrementalSelection select_incremental_rows(
         }
         if (!witness) witness = &beam.front();
         result.rows = map_from_incremental_rows(*witness->rows);
-        result.strain = calculate_joint_strain(notes_from_rows(*witness->rows, profile), bpm, true).metrics;
-        result.local_skills = calculate_local_skills(notes_from_rows(*witness->rows, profile), bpm);
+        const std::vector<AnalysisNote> witness_notes = analysis_notes_from_rows_with_candidate(
+            *witness->rows, nullptr, profile);
+        result.strain = calculate_joint_strain_analysis(witness_notes, bpm, true).metrics;
+        result.local_skills = calculate_local_skills_analysis(witness_notes, bpm);
         annotate_best_route(&result.local_skills, profile);
         const std::string interval = result.local_skills.dominant_skill_is_global ? "global" :
             std::to_string(result.local_skills.hardest_window_begin_seconds) + "-" +
@@ -2074,7 +2305,8 @@ IncrementalSelection select_incremental_rows(
         return result;
     }
     result.rows = map_from_incremental_rows(*best->rows);
-    result.strain = calculate_joint_strain(notes_from_rows(*best->rows, profile), bpm, true).metrics;
+    result.strain = calculate_joint_strain_analysis(
+        analysis_notes_from_rows_with_candidate(*best->rows, nullptr, profile), bpm, true).metrics;
     result.local_skills = best->local_skills;
     annotate_best_route(&result.local_skills, profile);
     result.retained_actions = best->preferred_actions;

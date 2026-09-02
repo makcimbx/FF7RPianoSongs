@@ -2414,6 +2414,44 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
         discovered.songs[0].chart_policy_identity != discovered.songs[1].chart_policy_identity) {
         return fail("bounded discovery captured inequivalent global policy snapshots");
     }
+    if (discovered.songs[0].audio.stereo_samples.empty() ||
+        discovered.songs[1].audio.stereo_samples.empty()) {
+        return fail("default discovery unexpectedly released decoded PCM");
+    }
+    const auto first_frames = discovered.songs[0].audio.source_frame_count;
+    const auto second_frames = discovered.songs[1].audio.source_frame_count;
+    std::error_code compact_cache_error;
+    std::filesystem::remove_all(music_root / "AValid" / ".cache", compact_cache_error);
+    if (!compact_cache_error) {
+        std::filesystem::remove_all(music_root / "BValid" / ".cache", compact_cache_error);
+    }
+    if (compact_cache_error) return fail("failed to clear compacted cold-discovery fixture caches");
+    ff7rp::pipeline::SongDiscoveryHooks compact_hooks;
+    compact_hooks.audio_retention =
+        ff7rp::pipeline::SongDiscoveryHooks::AudioRetention::ReleaseDecodedPcmAfterLoad;
+    bool compact_settlement_valid = true;
+    std::size_t compact_settled_songs = 0;
+    compact_hooks.on_settled_delta = [&](const ff7rp::pipeline::SongRepositorySettlementDelta& delta) {
+        for (const auto& candidate : delta.candidates) {
+            if (!candidate.status.ok()) continue;
+            ++compact_settled_songs;
+            compact_settlement_valid = compact_settlement_valid &&
+                candidate.song.audio.stereo_samples.empty() &&
+                candidate.song.audio.source_frame_count != 0;
+        }
+    };
+    const auto compacted = ff7rp::pipeline::discover_songs(music_root.string(), compact_hooks);
+    if (compacted.songs.size() != 2u || !compacted.songs[0].audio.stereo_samples.empty() ||
+        !compacted.songs[1].audio.stereo_samples.empty() ||
+        compacted.songs[0].audio.source_frame_count != first_frames ||
+        compacted.songs[1].audio.source_frame_count != second_frames ||
+        !configs_equal(compacted.songs[0].config, discovered.songs[0].config) ||
+        !configs_equal(compacted.songs[1].config, discovered.songs[1].config) ||
+        !charts_equal(compacted.songs[0].chart, discovered.songs[0].chart) ||
+        !charts_equal(compacted.songs[1].chart, discovered.songs[1].chart) ||
+        !compact_settlement_valid || compact_settled_songs != 2u) {
+        return fail("opt-in discovery PCM release changed song metadata or chart semantics");
+    }
 
     ff7rp::pipeline::SongDiscoveryHooks setup_failure_hooks;
     setup_failure_hooks.before_setup = [] { throw std::runtime_error("injected setup failure"); };

@@ -84,6 +84,12 @@ struct SongRepositorySettlementDelta {
 using SongLoadProgress = std::function<void(SongLoadProgressStage stage)>;
 
 struct SongDiscoveryHooks {
+    enum class AudioRetention {
+        RetainDecodedPcm,
+        ReleaseDecodedPcmAfterLoad,
+    };
+
+    AudioRetention audio_retention = AudioRetention::RetainDecodedPcm;
     std::function<void()> before_setup;
     std::function<void(std::size_t)> after_enumeration;
     std::function<void(std::size_t)> before_worker_start;

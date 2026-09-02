@@ -10,6 +10,8 @@
 
 namespace ff7rp::pipeline {
 
+struct NormalizedMidiSource;
+
 inline constexpr int kLowestMidiDifficulty = 1;
 inline constexpr int kHighestMidiDifficulty = 6;
 inline constexpr std::size_t kMinimumAbsoluteProfileGrowth = 4;
@@ -170,6 +172,15 @@ std::array<int, 2> vanilla_mode_change_counts_for_route(std::string_view route_n
 
 Status generate_notes_from_midi(
     const std::string& midi_path,
+    const WavAudio& audio,
+    const SongConfig& config,
+    std::vector<Note>* out_notes,
+    MidiChartStats* out_stats = nullptr,
+    const std::vector<Note>* preferred_baseline = nullptr,
+    std::size_t maximum_visible_rows = 0);
+
+Status generate_notes_from_normalized_midi(
+    const NormalizedMidiSource& source,
     const WavAudio& audio,
     const SongConfig& config,
     std::vector<Note>* out_notes,

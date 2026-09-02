@@ -694,6 +694,12 @@ int main(int argc, char** argv) {
     const auto direct = ff7rp::pipeline::compile_normalized_midi_chart(
         {normalized, no_audio, direct_config, nullptr, 0});
     const Observation direct_observation{direct.status, direct.notes, direct.stats};
+    std::vector<Note> normalized_facade_notes;
+    MidiChartStats normalized_facade_stats;
+    const Status normalized_facade_status = ff7rp::pipeline::generate_notes_from_normalized_midi(
+        normalized, no_audio, direct_config, &normalized_facade_notes, &normalized_facade_stats);
+    const Observation normalized_facade{
+        normalized_facade_status, std::move(normalized_facade_notes), std::move(normalized_facade_stats)};
     const bool tempos_unchanged = std::equal(normalized.tempos.begin(), normalized.tempos.end(),
         original.tempos.begin(), original.tempos.end(), [](const auto& a, const auto& b) {
             return a.tick == b.tick && std::bit_cast<std::uint64_t>(a.bpm) == std::bit_cast<std::uint64_t>(b.bpm) &&
@@ -712,11 +718,12 @@ int main(int argc, char** argv) {
                 std::bit_cast<std::uint64_t>(a.stream_prior) == std::bit_cast<std::uint64_t>(b.stream_prior);
         });
     if (fingerprint(direct_observation) != expected[3].digest ||
+        fingerprint(normalized_facade) != expected[3].digest ||
         normalized.ticks_per_quarter != original.ticks_per_quarter ||
         std::bit_cast<std::uint64_t>(normalized.source_bpm) != std::bit_cast<std::uint64_t>(original.source_bpm) ||
         normalized.tempos.size() != original.tempos.size() || normalized.meters.size() != original.meters.size() ||
         normalized.notes.size() != original.notes.size() || !tempos_unchanged || !meters_unchanged || !notes_unchanged) {
-        return fail("direct compilation diverged from the parent facade oracle or mutated normalized input");
+        return fail("normalized compilation facade diverged from the path facade oracle or mutated normalized input");
     }
     std::string cleanup_error;
     if (!temporary.cleanup(&cleanup_error)) return fail("temporary cleanup failed: " + cleanup_error);

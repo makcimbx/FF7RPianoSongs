@@ -33,6 +33,7 @@
 #include "chart_compiler.h"
 #include "mabf_builder.h"
 #include "midi_chart_generator.h"
+#include "midi_source_normalizer.h"
 #include "pipeline_limits.h"
 #include "runtime_cache_codec.h"
 #include "runtime_artifact_validator.h"
@@ -857,6 +858,14 @@ Status load_song_directory(
                     {skipped, 0, "not_evaluated_after_monotonic_row_limit"});
             }
         };
+        NormalizedMidiSource normalized_midi;
+        status = normalize_midi_source(song.midi_source_path, &normalized_midi);
+        if (!status.ok()) {
+            song.status = status;
+            write_last_error(song.directory, status);
+            *out_song = std::move(song);
+            return status;
+        }
         for (int difficulty = kLowestMidiDifficulty; difficulty <= kHighestMidiDifficulty; ++difficulty) {
             LoadedDifficultyProfile profile;
             profile.config = song.config;
@@ -866,7 +875,7 @@ Status load_song_directory(
                 &song.difficulty_profiles.back().config.notes;
             const std::size_t maximum_visible_rows = baseline ?
                 maximum_midi_visible_profile_actions(baseline->size()) : 0;
-            status = generate_notes_from_midi(song.midi_source_path, song.audio, profile.config,
+            status = generate_notes_from_normalized_midi(normalized_midi, song.audio, profile.config,
                 &profile.config.notes, &stats, baseline, maximum_visible_rows);
             if (status.code == StatusCode::ChartRowLimitExceeded) {
                 DifficultyProfileOmission omission;
@@ -1293,6 +1302,10 @@ SongRepositoryResult discover_songs(
                         [&](const char* stage) {
                             pending[index].trace_stages.emplace_back(stage);
                         }, true, report_progress);
+                    if (pending[index].status.ok() &&
+                        hooks.audio_retention == SongDiscoveryHooks::AudioRetention::ReleaseDecodedPcmAfterLoad) {
+                        std::vector<float>().swap(pending[index].song.audio.stereo_samples);
+                    }
                     if (hooks.after_candidate_load) hooks.after_candidate_load(index);
                 } catch (const std::exception& error) {
                     pending[index].status = Status::error(

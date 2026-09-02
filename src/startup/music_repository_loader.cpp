@@ -372,6 +372,7 @@ bool load_music_repository(const std::wstring& dll_dir, StartupCacheProgress* pr
         const std::filesystem::path music_root = std::filesystem::path(dll_dir) / L"Music";
         bool discovery_started_emitted = false;
         ff7rp::pipeline::SongDiscoveryHooks hooks;
+        hooks.audio_retention = ff7rp::pipeline::SongDiscoveryHooks::AudioRetention::ReleaseDecodedPcmAfterLoad;
         hooks.after_enumeration = [&](const std::size_t candidate_count) {
             discovery_started_emitted = true;
             if (progress) progress->begin(candidate_count);
@@ -423,6 +424,7 @@ ProgressiveRepositoryState run_progressive_music_repository(
         state.phase = ProgressiveRepositoryPhase::Discovering;
         publish_state();
         ff7rp::pipeline::SongDiscoveryHooks hooks;
+        hooks.audio_retention = ff7rp::pipeline::SongDiscoveryHooks::AudioRetention::ReleaseDecodedPcmAfterLoad;
         ProgressiveSettlementPublisher publisher(state, callbacks, progress, publish_state);
         ProgressiveDeltaAccumulator accumulator(publisher);
         hooks.after_enumeration = [&](const std::size_t count) {
