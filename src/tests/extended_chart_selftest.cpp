@@ -229,6 +229,22 @@ bool test_committed_publication_state()
     if (model_published_count(state, identity, true) != 513
         || state.pending || !state.active) return false;
 
+    // Presentation observes the same deterministic window: exact playback is
+    // visible before the deferred lifecycle handoff, so it must preserve the
+    // pending token at 512 and activate from that same snapshot afterward.
+    PublicationState presentation_window;
+    model_publish_result(success, identity, presentation_window);
+    if (model_presentation_published_count(
+            presentation_window, identity, &identity, true) != 512
+        || !presentation_window.pending || presentation_window.active) return false;
+    model_terminal(presentation_window, identity.activation_generation,
+        identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        identity.route_lifecycle_epoch + 1);
+    if (model_presentation_published_count(
+            presentation_window, identity, &identity, true) != 513) return false;
+    if (model_published_count(presentation_window, identity, true, false) != 512
+        || presentation_window.pending || presentation_window.active) return false;
+
     auto reserve_unavailable = extended_request(rows);
     reserve_unavailable.verified_1005 = false;
     Chart unavailable_chart;
@@ -365,8 +381,8 @@ bool test_terminal_publication_order()
     if (!model_publish_result(success, success_chart, identity, success_terminal)
         || model_published_count(success_terminal, identity, true) != 513) return false;
 
-    // Invalid advancement and success for a different generation cannot
-    // activate the pending token.
+    // Delivered invalid advancement and success for a newer generation are
+    // definitive mismatches, not an undelivered handoff; each invalidates.
     PublicationState lifecycle_mismatch;
     Chart mismatch_chart;
     Result mismatch_result = run(extended_request(rows), mismatch_chart);
@@ -376,12 +392,18 @@ bool test_terminal_publication_order()
         identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
         identity.route_lifecycle_epoch + 2);
     if (model_published_count(lifecycle_mismatch, identity, true) != 512
-        || !lifecycle_mismatch.pending) return false;
-    model_terminal(lifecycle_mismatch, identity.activation_generation + 1,
+        || lifecycle_mismatch.pending || lifecycle_mismatch.active) return false;
+
+    PublicationState generation_mismatch;
+    Chart generation_chart;
+    Result generation_result = run(extended_request(rows), generation_chart);
+    if (!model_publish_result(generation_result, generation_chart, identity,
+            generation_mismatch)) return false;
+    model_terminal(generation_mismatch, identity.activation_generation + 1,
         identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
         identity.route_lifecycle_epoch + 1);
-    if (model_published_count(lifecycle_mismatch, identity, true) != 512
-        || !lifecycle_mismatch.pending) return false;
+    if (model_published_count(generation_mismatch, identity, true) != 512
+        || generation_mismatch.pending || generation_mismatch.active) return false;
 
     model_terminal(success_terminal, identity.activation_generation,
         identity.route_lifecycle_epoch, TerminalOutcome::StopFailed);

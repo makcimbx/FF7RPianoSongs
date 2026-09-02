@@ -83,7 +83,8 @@ struct PublicationState {
     bool failed_terminal = false;
     std::uint64_t failed_generation = 0;
     std::uint64_t failed_lifecycle_epoch = 0;
-    bool successful_transition = false;
+    bool successful_transition_delivered = false;
+    bool successful_transition_exact = false;
     std::uint64_t successful_generation = 0;
     std::uint64_t successful_lifecycle_epoch_before = 0;
     std::uint64_t successful_lifecycle_epoch_after = 0;

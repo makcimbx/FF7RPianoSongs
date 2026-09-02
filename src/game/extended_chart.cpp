@@ -116,7 +116,8 @@ struct FailedActivationWatermark {
 };
 
 struct SuccessfulLifecycleTransition {
-    bool valid = false;
+    bool delivered = false;
+    bool exact = false;
     std::uint64_t generation = 0;
     std::uint64_t lifecycle_epoch_before = 0;
     std::uint64_t lifecycle_epoch_after = 0;
@@ -336,13 +337,27 @@ bool publish_committed_513(const Transaction& tx)
             == tx.authority.route_lifecycle_epoch
         && tx.authority.activation_generation
             <= g_failed_activation_watermark.generation;
-    if (terminalized || !g_activation_serial.valid
+    const bool lifecycle_handoff_invalid =
+        g_successful_lifecycle_transition.delivered
+        && g_successful_lifecycle_transition.generation
+            >= tx.authority.activation_generation
+        && (g_successful_lifecycle_transition.generation
+                != tx.authority.activation_generation
+            || !g_successful_lifecycle_transition.exact
+            || tx.authority.route_lifecycle_epoch == UINT64_MAX
+            || g_successful_lifecycle_transition.lifecycle_epoch_before
+                != tx.authority.route_lifecycle_epoch
+            || g_successful_lifecycle_transition.lifecycle_epoch_after
+                != tx.authority.route_lifecycle_epoch + 1);
+    if (terminalized || lifecycle_handoff_invalid || !g_activation_serial.valid
         || g_activation_serial.generation != tx.authority.activation_generation
         || g_activation_serial.route_lifecycle_epoch != tx.authority.route_lifecycle_epoch
         || g_activation_serial.preparation_ordinal != tx.authority.preparation_ordinal
         || g_activation_serial.failed) {
         core::log(core::LogLevel::Error,
-            "[extended_chart] committed_513=rejected reason=failed_activation_terminal rollback=synchronous");
+            lifecycle_handoff_invalid
+                ? "[extended_chart] committed_513=rejected reason=invalid_lifecycle_transition rollback=synchronous"
+                : "[extended_chart] committed_513=rejected reason=failed_activation_terminal rollback=synchronous");
         return false;
     }
     g_committed = {};
@@ -375,27 +390,41 @@ bool committed_selection_matches_locked(const SelectionSnapshot& selection)
         && selection.profile->diagnostic_descriptor_hash == g_committed.descriptor_hash;
 }
 
-bool committed_playback_matches_locked(const PlaybackSnapshot& playback)
+bool committed_playback_identity_matches_locked(const PlaybackSnapshot& playback)
 {
     return playback.token.valid() && committed_selection_matches_locked(playback)
         && playback.token.registry_generation == g_committed.registry_generation
         && playback.token.route_generation == g_committed.route_generation
         && playback.token.lease_generation == g_committed.lease_generation
         && playback.token.song_key == g_committed.song_key
-        && g_committed.route_lifecycle_epoch != UINT64_MAX
-        && g_successful_lifecycle_transition.valid
-        && g_successful_lifecycle_transition.generation
-            == g_committed.activation_generation
-        && g_successful_lifecycle_transition.lifecycle_epoch_before
-            == g_committed.route_lifecycle_epoch
-        && g_successful_lifecycle_transition.lifecycle_epoch_after
-            == g_committed.route_lifecycle_epoch + 1
         && g_activation_serial.valid && !g_activation_serial.failed
         && g_activation_serial.generation == g_committed.activation_generation
         && g_activation_serial.route_lifecycle_epoch
             == g_committed.route_lifecycle_epoch
         && g_activation_serial.preparation_ordinal
             == g_committed.preparation_ordinal;
+}
+
+enum class LifecycleTransitionMatch { Awaiting, Exact, Invalid };
+
+LifecycleTransitionMatch committed_lifecycle_transition_locked()
+{
+    if (!g_successful_lifecycle_transition.delivered
+        || g_successful_lifecycle_transition.generation
+            < g_committed.activation_generation) {
+        return LifecycleTransitionMatch::Awaiting;
+    }
+    if (g_successful_lifecycle_transition.generation
+            != g_committed.activation_generation
+        || !g_successful_lifecycle_transition.exact
+        || g_committed.route_lifecycle_epoch == UINT64_MAX
+        || g_successful_lifecycle_transition.lifecycle_epoch_before
+            != g_committed.route_lifecycle_epoch
+        || g_successful_lifecycle_transition.lifecycle_epoch_after
+            != g_committed.route_lifecycle_epoch + 1) {
+        return LifecycleTransitionMatch::Invalid;
+    }
+    return LifecycleTransitionMatch::Exact;
 }
 
 bool playback_absent(const PlaybackSnapshot& playback)
@@ -525,7 +554,17 @@ bool playable_513_playback(const PlaybackSnapshot& playback) noexcept {
             "[extended_chart] committed_513=pending playback=absent publication=512");
         return false;
     }
-    const bool matches = committed_playback_matches_locked(playback);
+    const bool identity_matches = committed_playback_identity_matches_locked(playback);
+    const LifecycleTransitionMatch transition = identity_matches
+        ? committed_lifecycle_transition_locked() : LifecycleTransitionMatch::Invalid;
+    if (g_committed.pending && identity_matches
+        && transition == LifecycleTransitionMatch::Awaiting) {
+        core::log(core::LogLevel::Debug,
+            "[extended_chart] committed_513=pending playback_identity=exact lifecycle_transition=awaiting publication=512");
+        return false;
+    }
+    const bool matches = identity_matches
+        && transition == LifecycleTransitionMatch::Exact;
     if (g_committed.pending && matches) {
         g_committed.pending = false;
         g_committed.active = true;
@@ -553,10 +592,21 @@ bool playable_513_presentation(
             "[extended_chart] committed_513=pending presentation_playback=absent publication=512");
         return false;
     }
-    const bool matches = menu_matches && committed_playback_matches_locked(playback)
+    const bool playback_identity_matches = menu_matches
+        && committed_playback_identity_matches_locked(playback)
         && menu.storage && playback.storage
         && menu.song == playback.song && menu.profile == playback.profile
         && menu.generation == playback.generation;
+    const LifecycleTransitionMatch transition = playback_identity_matches
+        ? committed_lifecycle_transition_locked() : LifecycleTransitionMatch::Invalid;
+    if (g_committed.pending && playback_identity_matches
+        && transition == LifecycleTransitionMatch::Awaiting) {
+        core::log(core::LogLevel::Debug,
+            "[extended_chart] committed_513=pending presentation_identity=exact lifecycle_transition=awaiting publication=512");
+        return false;
+    }
+    const bool matches = playback_identity_matches
+        && transition == LifecycleTransitionMatch::Exact;
     if (g_committed.pending && matches) {
         g_committed.pending = false;
         g_committed.active = true;
@@ -596,20 +646,22 @@ void extended_chart_activation_terminal(const std::uint64_t activation_generatio
     try {
         if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
             || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) {
-            if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
-                && route_lifecycle_epoch != 0
-                && route_lifecycle_epoch != UINT64_MAX
-                && successful_lifecycle_epoch == route_lifecycle_epoch + 1) {
+            if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished) {
+                const bool exact = route_lifecycle_epoch != 0
+                    && route_lifecycle_epoch != UINT64_MAX
+                    && successful_lifecycle_epoch == route_lifecycle_epoch + 1;
                 std::lock_guard<std::mutex> lock(g_committed_mutex);
-                if (!g_successful_lifecycle_transition.valid
+                if (!g_successful_lifecycle_transition.delivered
                     || activation_generation
                         > g_successful_lifecycle_transition.generation) {
-                    g_successful_lifecycle_transition = {true,
+                    g_successful_lifecycle_transition = {true, exact,
                         activation_generation, route_lifecycle_epoch,
                         successful_lifecycle_epoch};
                 }
-                core::log(core::LogLevel::Info,
-                    "[extended_chart] activation_terminal=audio_published lifecycle_transition=exact");
+                core::log(exact ? core::LogLevel::Info : core::LogLevel::Error,
+                    exact
+                        ? "[extended_chart] activation_terminal=audio_published lifecycle_transition=exact"
+                        : "[extended_chart] activation_terminal=audio_published lifecycle_transition=invalid");
             }
             return;
         }
@@ -624,7 +676,7 @@ void extended_chart_activation_terminal(const std::uint64_t activation_generatio
             && g_activation_serial.generation == activation_generation
             && g_activation_serial.route_lifecycle_epoch == route_lifecycle_epoch;
         if (exact_serial) g_activation_serial.failed = true;
-        if (g_successful_lifecycle_transition.valid
+        if (g_successful_lifecycle_transition.delivered
             && g_successful_lifecycle_transition.generation == activation_generation
             && g_successful_lifecycle_transition.lifecycle_epoch_before
                 == route_lifecycle_epoch) {

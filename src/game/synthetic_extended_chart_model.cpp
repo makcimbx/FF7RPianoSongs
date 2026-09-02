@@ -119,9 +119,19 @@ bool model_transaction_begin(const PublicationState& state,
 bool model_publish_result(Result& result, Chart& chart, const CommitIdentity& identity,
     PublicationState& state)
 {
-    if (state.failed_terminal
-        && state.failed_lifecycle_epoch == identity.route_lifecycle_epoch
-        && state.failed_generation >= identity.activation_generation) {
+    const bool invalid_success = state.successful_transition_delivered
+        && state.successful_generation >= identity.activation_generation
+        && (state.successful_generation != identity.activation_generation
+            || !state.successful_transition_exact
+            || identity.route_lifecycle_epoch == UINT64_MAX
+            || state.successful_lifecycle_epoch_before
+                != identity.route_lifecycle_epoch
+            || state.successful_lifecycle_epoch_after
+                != identity.route_lifecycle_epoch + 1);
+    if ((state.failed_terminal
+            && state.failed_lifecycle_epoch == identity.route_lifecycle_epoch
+            && state.failed_generation >= identity.activation_generation)
+        || invalid_success) {
         if (result.count_committed && chart.count == kPlayableRows) {
             chart.count = kNativeRows;
             chart.storage.resize(kNativeRows);
@@ -144,7 +154,17 @@ bool model_publish_result(Result& result, Chart& chart, const CommitIdentity& id
 void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state)
 {
-    if (result.count_committed && !result.rolled_back && !result.route_blocked) {
+    const bool invalid_success = state.successful_transition_delivered
+        && state.successful_generation >= identity.activation_generation
+        && (state.successful_generation != identity.activation_generation
+            || !state.successful_transition_exact
+            || identity.route_lifecycle_epoch == UINT64_MAX
+            || state.successful_lifecycle_epoch_before
+                != identity.route_lifecycle_epoch
+            || state.successful_lifecycle_epoch_after
+                != identity.route_lifecycle_epoch + 1);
+    if (result.count_committed && !result.rolled_back && !result.route_blocked
+        && !invalid_success) {
         state.pending = true; state.active = false; state.identity = identity;
     } else {
         state.pending = false; state.active = false; state.identity = {};
@@ -156,7 +176,12 @@ std::size_t model_published_count(PublicationState& state,
     const bool playback_present)
 {
     if (!(state.pending || state.active) || !profile_eligible) return kNativeRows;
-    if (state.pending && !playback_present) return kNativeRows;
+    if (!playback_present) {
+        if (state.active) {
+            state.pending = false; state.active = false; state.identity = {};
+        }
+        return kNativeRows;
+    }
     const auto& a = state.identity;
     const auto& b = current;
     const bool matches = a.song == b.song && a.profile == b.profile
@@ -173,12 +198,23 @@ std::size_t model_published_count(PublicationState& state,
         state.pending = false; state.active = false; state.identity = {};
         return kNativeRows;
     }
-    const bool lifecycle_succeeded = state.successful_transition
+    const bool transition_awaiting = !state.successful_transition_delivered
+        || state.successful_generation < a.activation_generation;
+    if (transition_awaiting) {
+        if (state.active) {
+            state.pending = false; state.active = false; state.identity = {};
+        }
+        return kNativeRows;
+    }
+    const bool lifecycle_succeeded = state.successful_transition_exact
         && state.successful_generation == a.activation_generation
         && state.successful_lifecycle_epoch_before == a.route_lifecycle_epoch
         && a.route_lifecycle_epoch != UINT64_MAX
         && state.successful_lifecycle_epoch_after == a.route_lifecycle_epoch + 1;
-    if (matches && !lifecycle_succeeded) return kNativeRows;
+    if (!lifecycle_succeeded) {
+        state.pending = false; state.active = false; state.identity = {};
+        return kNativeRows;
+    }
     if (matches && state.pending) {
         state.pending = false;
         state.active = true;
@@ -189,13 +225,14 @@ std::size_t model_published_count(PublicationState& state,
 std::size_t model_presentation_published_count(PublicationState& state,
     const CommitIdentity& menu, const CommitIdentity* playback, const bool profile_eligible)
 {
-    if (!playback) return kNativeRows;
-    if (model_published_count(state, *playback, profile_eligible) != kPlayableRows) {
-        state.pending = false; state.active = false; state.identity = {};
+    if (!playback) {
+        if (state.active) {
+            state.pending = false; state.active = false; state.identity = {};
+        }
         return kNativeRows;
     }
     const auto& committed = state.identity;
-    const bool matches = menu.song == committed.song && menu.profile == committed.profile
+    const bool menu_matches = menu.song == committed.song && menu.profile == committed.profile
         && menu.selection_generation == committed.selection_generation
         && menu.policy_generation == committed.policy_generation
         && menu.registry_generation == committed.registry_generation
@@ -203,10 +240,11 @@ std::size_t model_presentation_published_count(PublicationState& state,
         && menu.song == playback->song && menu.profile == playback->profile
         && menu.selection_generation == playback->selection_generation
         && menu.registry_generation == playback->registry_generation;
-    if (!matches) {
+    if (!menu_matches) {
         state.pending = false; state.active = false; state.identity = {};
+        return kNativeRows;
     }
-    return matches ? kPlayableRows : kNativeRows;
+    return model_published_count(state, *playback, profile_eligible);
 }
 
 void model_shutdown(PublicationState& state) { state = {}; }
@@ -218,11 +256,12 @@ void model_terminal(PublicationState& state, const std::uint64_t generation,
     const std::uint64_t successful_lifecycle_epoch)
 {
     if (outcome == TerminalOutcome::AudioPublished) {
-        if (lifecycle_epoch != 0 && lifecycle_epoch != UINT64_MAX
-            && successful_lifecycle_epoch == lifecycle_epoch + 1
-            && (!state.successful_transition
-                || generation > state.successful_generation)) {
-            state.successful_transition = true;
+        const bool exact = lifecycle_epoch != 0 && lifecycle_epoch != UINT64_MAX
+            && successful_lifecycle_epoch == lifecycle_epoch + 1;
+        if (!state.successful_transition_delivered
+            || generation > state.successful_generation) {
+            state.successful_transition_delivered = true;
+            state.successful_transition_exact = exact;
             state.successful_generation = generation;
             state.successful_lifecycle_epoch_before = lifecycle_epoch;
             state.successful_lifecycle_epoch_after = successful_lifecycle_epoch;
@@ -241,9 +280,10 @@ void model_terminal(PublicationState& state, const std::uint64_t generation,
         && state.identity.route_lifecycle_epoch == lifecycle_epoch) {
         state.pending = false; state.active = false; state.identity = {};
     }
-    if (state.successful_transition && state.successful_generation == generation
+    if (state.successful_transition_delivered && state.successful_generation == generation
         && state.successful_lifecycle_epoch_before == lifecycle_epoch) {
-        state.successful_transition = false;
+        state.successful_transition_delivered = false;
+        state.successful_transition_exact = false;
         state.successful_generation = 0;
         state.successful_lifecycle_epoch_before = 0;
         state.successful_lifecycle_epoch_after = 0;
