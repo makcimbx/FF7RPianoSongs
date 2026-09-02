@@ -5,7 +5,6 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -37,7 +36,9 @@ struct SongDifficultyProfile {
     std::uint64_t diagnostic_descriptor_hash = 0;
     std::uint64_t diagnostic_policy_generation = 0;
     bool diagnostic_loaded_from_runtime_cache = false;
-    std::optional<SongChartNote> diagnostic_tail_note;
+    // Immutable owned rows beyond chart_notes' native 512-row prefix. Verified
+    // restricted charts may retain a contiguous tail through the 8192-row cap.
+    std::vector<SongChartNote> extended_chart_tail_notes;
 };
 
 struct SongDescriptor;

@@ -1,6 +1,8 @@
 #include "song_descriptor_builder.h"
 
 #include "core/logging.h"
+#include "pipeline/diagnostic_descriptor_hash.h"
+#include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
 
 #include <algorithm>
@@ -9,12 +11,41 @@
 namespace ff7r::piano {
 namespace {
 
-bool restricted_513_note(const game::SongChartNote& note)
+bool restricted_extended_note(const game::SongChartNote& note)
 {
     return !note.monotone_id.empty() && note.chord_id.empty() && note.group_index == 0
         && note.camera_switch_timing == 0
         && std::all_of(note.ignore_sound_ids.begin(), note.ignore_sound_ids.end(),
             [](const std::string& id) { return id.empty(); });
+}
+
+bool eligible_extended_profile(const ff7rp::pipeline::LoadedSong& song,
+    const ff7rp::pipeline::LoadedDifficultyProfile& profile, const std::size_t target_rows)
+{
+    const auto& diagnostic = profile.diagnostic_chart;
+    if (!ff7rp::pipeline::extended_chart_row_count_in_range(target_rows)
+        || profile.config.notes.size() != ff7rp::pipeline::kMaxChartRows
+        || profile.chart.notes.size() != ff7rp::pipeline::kMaxChartRows
+        || diagnostic.source_row_count != target_rows
+        || diagnostic.native_prefix_row_count != ff7rp::pipeline::kMaxChartRows
+        || diagnostic.tail_rows.size() != target_rows - ff7rp::pipeline::kMaxChartRows
+        || diagnostic.descriptor_hash == 0
+        || diagnostic.descriptor_hash != ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+            song.id, profile.config.difficulty, profile.chart, diagnostic)
+        || !ff7rp::pipeline::bounded_extended_retention_shape(diagnostic)) {
+        return false;
+    }
+    for (std::size_t index = 0; index < profile.config.notes.size(); ++index) {
+        if (!ff7rp::pipeline::restricted_extended_row_pair(
+                profile.config.notes[index], profile.chart.notes[index], profile.config.bpm)) return false;
+    }
+    for (std::size_t index = 0; index < diagnostic.tail_rows.size(); ++index) {
+        if (diagnostic.tail_rows[index].source_row != ff7rp::pipeline::kMaxChartRows + index
+            || !ff7rp::pipeline::restricted_extended_row_pair(
+                diagnostic.tail_rows[index].source, diagnostic.tail_rows[index].compiled,
+                profile.config.bpm)) return false;
+    }
+    return true;
 }
 
 float chart_duration_seconds(const ff7rp::pipeline::LoadedSong& song)
@@ -98,24 +129,38 @@ game::SongDescriptor build_song_descriptor(
         profile.diagnostic_descriptor_hash = source_profile.diagnostic_chart.descriptor_hash;
         profile.diagnostic_policy_generation = song.chart_policy_generation;
         profile.diagnostic_loaded_from_runtime_cache = song.loaded_from_runtime_cache;
-        if (source_profile.diagnostic_chart.source_row_count == ff7rp::pipeline::kPlayable513ChartRows
+        const std::size_t source_rows = source_profile.diagnostic_chart.source_row_count;
+        bool supported_tail_shape =
+            ff7rp::pipeline::extended_chart_row_count_in_range(source_rows)
             && source_profile.diagnostic_chart.native_prefix_row_count == ff7rp::pipeline::kMaxChartRows
-            && source_profile.diagnostic_chart.tail_rows.size() == 1u
-            && source_profile.diagnostic_chart.tail_rows.front().source_row
-                == ff7rp::pipeline::kMaxChartRows) {
-            const auto& note = source_profile.diagnostic_chart.tail_rows.front().compiled;
-            profile.diagnostic_tail_note = game::SongChartNote{
+            && source_profile.diagnostic_chart.tail_rows.size()
+                == source_rows - ff7rp::pipeline::kMaxChartRows;
+        for (std::size_t tail_index = 0;
+             supported_tail_shape && tail_index < source_profile.diagnostic_chart.tail_rows.size();
+             ++tail_index) {
+            supported_tail_shape = source_profile.diagnostic_chart.tail_rows[tail_index].source_row
+                == ff7rp::pipeline::kMaxChartRows + tail_index;
+        }
+        if (supported_tail_shape) {
+            profile.extended_chart_tail_notes.reserve(source_profile.diagnostic_chart.tail_rows.size());
+            for (const auto& tail_row : source_profile.diagnostic_chart.tail_rows) {
+                const auto& note = tail_row.compiled;
+                profile.extended_chart_tail_notes.push_back(game::SongChartNote{
                 note.time_str, note.monotone_id, note.chord_id, note.note_type,
                 note.dot_type, note.camera_switch_timing, note.group_index,
-                note.ignore_sound_ids};
+                note.ignore_sound_ids});
+            }
             const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
-            if (policy.playable_513_available
+            if (policy.playable_extended_available && song.chart_policy_enabled
                 && song.chart_policy_generation == policy.generation
-                && source_profile.diagnostic_chart.descriptor_hash != 0
-                && profile.chart_notes.size() == ff7rp::pipeline::kMaxChartRows
-                && restricted_513_note(*profile.diagnostic_tail_note)
-                && std::all_of(profile.chart_notes.begin(), profile.chart_notes.end(), restricted_513_note))
-                profile.note_count = static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows);
+                && song.chart_policy_identity == policy.identity()
+                && song.accepted_chart_input_limit >= source_rows
+                && song.published_chart_row_limit >= source_rows
+                && std::all_of(profile.extended_chart_tail_notes.begin(),
+                    profile.extended_chart_tail_notes.end(), restricted_extended_note)
+                && std::all_of(profile.chart_notes.begin(), profile.chart_notes.end(), restricted_extended_note)
+                && eligible_extended_profile(song, source_profile, source_rows))
+                profile.note_count = static_cast<int>(source_rows);
         }
         descriptor.profiles.push_back(std::move(profile));
     }

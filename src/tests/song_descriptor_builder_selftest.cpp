@@ -1,4 +1,6 @@
 #include "song_descriptor_builder.h"
+#include "pipeline/diagnostic_descriptor_hash.h"
+#include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
 
 #include <array>
@@ -46,7 +48,7 @@ bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfil
         left.diagnostic_native_prefix_rows != right.diagnostic_native_prefix_rows ||
         left.diagnostic_tail_rows != right.diagnostic_tail_rows ||
         left.diagnostic_descriptor_hash != right.diagnostic_descriptor_hash ||
-        left.diagnostic_tail_note.has_value() != right.diagnostic_tail_note.has_value() ||
+        left.extended_chart_tail_notes.size() != right.extended_chart_tail_notes.size() ||
         left.diagnostic_policy_generation != right.diagnostic_policy_generation ||
         left.diagnostic_loaded_from_runtime_cache != right.diagnostic_loaded_from_runtime_cache) {
         return false;
@@ -54,8 +56,9 @@ bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfil
     for (std::size_t i = 0; i < left.chart_notes.size(); ++i) {
         if (!chart_note_equal(left.chart_notes[i], right.chart_notes[i])) return false;
     }
-    if (left.diagnostic_tail_note
-        && !chart_note_equal(*left.diagnostic_tail_note, *right.diagnostic_tail_note)) return false;
+    for (std::size_t i = 0; i < left.extended_chart_tail_notes.size(); ++i) {
+        if (!chart_note_equal(left.extended_chart_tail_notes[i], right.extended_chart_tail_notes[i])) return false;
+    }
     return true;
 }
 
@@ -194,8 +197,8 @@ SongDescriptor expected_full_descriptor()
         profile.diagnostic_descriptor_hash = 0xabc000u + static_cast<std::uint64_t>(difficulty);
         profile.diagnostic_policy_generation = 0x1122334455667788ull;
         profile.diagnostic_loaded_from_runtime_cache = true;
-        if (difficulty == 1) profile.diagnostic_tail_note = SongChartNote{
-            "64_0", "Cn4", "", 7, 2, 0, 0, {"", "", ""}};
+        if (difficulty == 1) profile.extended_chart_tail_notes.push_back(SongChartNote{
+            "64_0", "Cn4", "", 7, 2, 0, 0, {"", "", ""}});
         expected.profiles.push_back(std::move(profile));
     }
     return expected;
@@ -205,6 +208,60 @@ SongDescriptor build_after_source_destruction()
 {
     LoadedSong local = full_fixture();
     return ff7r::piano::build_song_descriptor(local, 17);
+}
+
+LoadedDifficultyProfile extended_profile_fixture(const std::size_t row_count)
+{
+    LoadedDifficultyProfile profile;
+    profile.config.schema = "2";
+    profile.config.title = "Extended";
+    profile.config.bpm = 120.0;
+    profile.config.bpm_provided = true;
+    profile.config.difficulty = 1;
+    profile.config.diagnostic_extended_chart_fixture = true;
+    for (std::size_t index = 0; index < row_count; ++index) {
+        ff7rp::pipeline::Note note;
+        note.beat = static_cast<double>(index);
+        note.duration_beats = 1.0;
+        note.pitch = "C4";
+        ChartNote compiled;
+        compiled.beat = note.beat;
+        compiled.duration_beats = note.duration_beats;
+        compiled.pitch = note.pitch;
+        compiled.time_str = ff7rp::pipeline::expected_compiled_time_string(note.beat, profile.config.bpm);
+        compiled.monotone_id = "Cn4";
+        compiled.note_type = 3;
+        if (index < ff7rp::pipeline::kMaxChartRows) {
+            profile.config.notes.push_back(std::move(note));
+            profile.chart.notes.push_back(std::move(compiled));
+        } else {
+            profile.diagnostic_chart.tail_rows.push_back({index, std::move(note), std::move(compiled)});
+        }
+    }
+    profile.diagnostic_chart.source_row_count = row_count;
+    profile.diagnostic_chart.native_prefix_row_count = ff7rp::pipeline::kMaxChartRows;
+    return profile;
+}
+
+LoadedSong extended_song_fixture(const std::size_t row_count)
+{
+    LoadedSong song;
+    song.id = "extended-fixture";
+    song.config.title = "Extended";
+    song.config.bpm = 120.0;
+    song.audio.sample_rate = 48000;
+    song.audio.source_frame_count = 48000;
+    song.difficulty_profiles.push_back(extended_profile_fixture(row_count));
+    auto& profile = song.difficulty_profiles.front();
+    profile.diagnostic_chart.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+        song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+    const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
+    song.chart_policy_enabled = policy.enabled;
+    song.chart_policy_generation = policy.generation;
+    song.chart_policy_identity = policy.identity();
+    song.accepted_chart_input_limit = policy.accepted_input_limit;
+    song.published_chart_row_limit = policy.publication_limit;
+    return song;
 }
 
 } // namespace
@@ -219,20 +276,112 @@ int main()
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    LoadedSong playable = full_fixture();
-    playable.chart_policy_generation = ff7rp::pipeline::chart_row_policy_generation();
-    auto prefix = chart_note("0_00", "Cn4", "", 3, 0, 0, 0);
-    prefix.ignore_sound_ids = {"", "", ""};
-    playable.difficulty_profiles.resize(1);
-    playable.difficulty_profiles.front().chart.notes.assign(512, prefix);
+    LoadedSong playable = extended_song_fixture(513);
     SongDescriptor playable_descriptor = ff7r::piano::build_song_descriptor(playable, 17);
     if (playable_descriptor.profiles.front().note_count != 513
-        || !playable_descriptor.profiles.front().diagnostic_tail_note) {
+        || playable_descriptor.profiles.front().extended_chart_tail_notes.size() != 1) {
         return fail("exact eligible 513 descriptor did not publish its immutable tail");
+    }
+    LoadedSong playable_520 = extended_song_fixture(520);
+    const SongDescriptor playable_520_descriptor = ff7r::piano::build_song_descriptor(playable_520, 17);
+    if (playable_520_descriptor.profiles.front().note_count != 520
+        || playable_520_descriptor.profiles.front().chart_notes.size() != 512
+        || playable_520_descriptor.profiles.front().extended_chart_tail_notes.size() != 8) {
+        return fail("exact eligible 520 descriptor did not publish its immutable tail vector");
+    }
+    LoadedSong warm_520 = playable_520;
+    warm_520.loaded_from_runtime_cache = true;
+    SongDescriptor warm_520_descriptor = ff7r::piano::build_song_descriptor(warm_520, 17);
+    SongDescriptor normalized_cold_520 = playable_520_descriptor;
+    normalized_cold_520.profiles.front().diagnostic_loaded_from_runtime_cache = true;
+    if (!descriptor_equal(normalized_cold_520, warm_520_descriptor)) {
+        return fail("cold/warm exact-520 descriptors differed beyond cache provenance");
+    }
+    {
+        LoadedSong maximum = extended_song_fixture(ff7rp::pipeline::kMaximumExtendedChartRows);
+        const auto maximum_profile = ff7r::piano::build_song_descriptor(maximum, 17).profiles.front();
+        if (maximum_profile.note_count != static_cast<int>(ff7rp::pipeline::kMaximumExtendedChartRows)
+            || maximum_profile.chart_notes.size() != ff7rp::pipeline::kMaxChartRows
+            || maximum_profile.extended_chart_tail_notes.size()
+                != ff7rp::pipeline::kMaximumExtendedChartTailRows) {
+            return fail("8192-row eligible descriptor did not publish its complete owned tail");
+        }
     }
     playable.difficulty_profiles.front().chart.notes.front().chord_id = "pca_C";
     if (ff7r::piano::build_song_descriptor(playable, 17).profiles.front().note_count != 512) {
         return fail("ineligible 513 descriptor published a generalized count");
+    }
+    playable_520.difficulty_profiles.front().diagnostic_chart.tail_rows[1].source_row = 519;
+    const auto malformed = ff7r::piano::build_song_descriptor(playable_520, 17).profiles.front();
+    if (malformed.note_count != 512 || !malformed.extended_chart_tail_notes.empty()) {
+        return fail("noncontiguous 520 tail did not fail closed");
+    }
+    LoadedSong wrong_shape = extended_song_fixture(520);
+    wrong_shape.difficulty_profiles.front().diagnostic_chart.source_row_count = 520;
+    wrong_shape.difficulty_profiles.front().diagnostic_chart.tail_rows.resize(7);
+    const auto wrong_shape_descriptor = ff7r::piano::build_song_descriptor(wrong_shape, 17).profiles.front();
+    if (wrong_shape_descriptor.note_count != 512
+        || !wrong_shape_descriptor.extended_chart_tail_notes.empty()) {
+        return fail("count/tail mismatch did not fail closed");
+    }
+    LoadedSong above_maximum = extended_song_fixture(520);
+    above_maximum.difficulty_profiles.front().diagnostic_chart.source_row_count =
+        ff7rp::pipeline::kMaximumExtendedChartRows + 1u;
+    const auto above_maximum_descriptor =
+        ff7r::piano::build_song_descriptor(above_maximum, 17).profiles.front();
+    if (above_maximum_descriptor.note_count != 512
+        || !above_maximum_descriptor.extended_chart_tail_notes.empty()) {
+        return fail("8193-row descriptor shape did not fail closed");
+    }
+    LoadedSong empty_tail = extended_song_fixture(513);
+    empty_tail.difficulty_profiles.front().diagnostic_chart.tail_rows.clear();
+    const auto empty_tail_descriptor = ff7r::piano::build_song_descriptor(empty_tail, 17).profiles.front();
+    if (empty_tail_descriptor.note_count != 512
+        || !empty_tail_descriptor.extended_chart_tail_notes.empty()) {
+        return fail("empty extended tail did not fail closed");
+    }
+    LoadedSong hash_mismatch = extended_song_fixture(520);
+    hash_mismatch.difficulty_profiles.front().diagnostic_chart.descriptor_hash ^= 1u;
+    if (ff7r::piano::build_song_descriptor(hash_mismatch, 17).profiles.front().note_count != 512) {
+        return fail("exact-520 descriptor hash mismatch gained publication authority");
+    }
+    LoadedSong chord_tail = extended_song_fixture(520);
+    auto& chord_diagnostic = chord_tail.difficulty_profiles.front().diagnostic_chart;
+    chord_diagnostic.tail_rows.front().source.chord_id = "pca_C";
+    chord_diagnostic.tail_rows.front().compiled.chord_id = "pca_C";
+    chord_diagnostic.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+        chord_tail.id, chord_tail.difficulty_profiles.front().config.difficulty,
+        chord_tail.difficulty_profiles.front().chart, chord_diagnostic);
+    if (ff7r::piano::build_song_descriptor(chord_tail, 17).profiles.front().note_count != 512) {
+        return fail("chord-bearing exact-520 tail gained publication authority");
+    }
+    const auto rejects_tail_mutation = [&](const char* label, const auto& mutate) {
+        LoadedSong candidate = extended_song_fixture(520);
+        auto& diagnostic = candidate.difficulty_profiles.front().diagnostic_chart;
+        mutate(diagnostic.tail_rows.front());
+        diagnostic.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+            candidate.id, candidate.difficulty_profiles.front().config.difficulty,
+            candidate.difficulty_profiles.front().chart, diagnostic);
+        return ff7r::piano::build_song_descriptor(candidate, 17).profiles.front().note_count == 512
+            ? 0 : fail(std::string(label) + " exact-520 tail gained publication authority");
+    };
+    if (rejects_tail_mutation("grouped", [](auto& row) {
+            row.source.group_index = 1;
+            row.compiled.group_index = 1;
+        }) != 0
+        || rejects_tail_mutation("IgnoreSound", [](auto& row) {
+            row.source.ignore_sound_pitches = {"Cn2"};
+            row.compiled.ignore_sound_ids = {"Cn2", "", ""};
+        }) != 0
+        || rejects_tail_mutation("camera-cued", [](auto& row) {
+            row.compiled.camera_switch_timing = 1;
+        }) != 0) return 1;
+    ff7rp::pipeline::configure_chart_row_limit(true, true, false);
+    LoadedSong diagnostic_only = extended_song_fixture(520);
+    const auto diagnostic_descriptor = ff7r::piano::build_song_descriptor(diagnostic_only, 17).profiles.front();
+    if (diagnostic_descriptor.note_count != 512
+        || diagnostic_descriptor.extended_chart_tail_notes.size() != 8) {
+        return fail("diagnostic-only 520 did not retain its immutable nonplayable tail");
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 

@@ -13,15 +13,25 @@ inline constexpr std::size_t kMaxMabfBytes = 64u * 1024u * 1024u;
 // FUN_1439B3608 advances its row cursor by three fields until 0x600,
 // so the shipping PianoScore parser consumes at most 512 rows.
 inline constexpr std::size_t kMaxChartRows = 512u;
-inline constexpr std::size_t kPlayable513ChartRows = 513u;
-// 1024 rows bound modeled event storage to roughly 144 KiB plus owned fields,
-// while limiting construction and validation work to twice the shipping path.
-inline constexpr std::size_t kExperimentalMaxChartRows = 1024u;
+inline constexpr std::size_t kMinimumExtendedChartRows = kMaxChartRows + 1u;
+inline constexpr std::size_t kMaximumExtendedChartRows = 8192u;
+inline constexpr std::size_t kMaximumExtendedChartTailRows =
+    kMaximumExtendedChartRows - kMaxChartRows;
+inline constexpr std::size_t kLegacyDiagnosticChartInputRows = 1024u;
+inline constexpr const char* kDisabledChartRowPolicyIdentity =
+    "chart_rows=native512;extended=disabled";
+inline constexpr const char* kDiagnosticChartRowPolicyIdentity =
+    // Compatibility token: format-14 diagnostic caches retain this identity even
+    // though the bounded internal retention ceiling is now 8192 rows.
+    "chart_rows=native512+diagnostic1024;extended=verified";
+inline constexpr const char* kPlayableExtendedChartRowPolicyIdentity =
+    "chart_rows=native512+playable513to8192;extended=verified1005";
+inline constexpr std::size_t kExperimentalMaxChartRows = kMaximumExtendedChartRows;
 
 struct ChartRowPolicySnapshot {
     bool requested = false;
     bool enabled = false;
-    bool playable_513_available = false;
+    bool playable_extended_available = false;
     std::size_t accepted_input_limit = kMaxChartRows;
     std::size_t publication_limit = kMaxChartRows;
     std::uint64_t generation = 0;
@@ -29,10 +39,10 @@ struct ChartRowPolicySnapshot {
     std::string identity() const
     {
         return enabled
-            ? (playable_513_available
-                ? "chart_rows=native512+playable513+diagnostic520;extended=verified1005"
-                : "chart_rows=native512+diagnostic1024;extended=verified")
-            : "chart_rows=native512;extended=disabled";
+            ? (playable_extended_available
+                ? kPlayableExtendedChartRowPolicyIdentity
+                : kDiagnosticChartRowPolicyIdentity)
+            : kDisabledChartRowPolicyIdentity;
     }
 };
 
@@ -40,11 +50,11 @@ struct ChartRowPolicySnapshot {
 inline std::atomic_uint64_t g_chart_row_policy_state{0};
 
 inline void configure_chart_row_limit(bool requested, bool diagnostic_input_available,
-    bool playable_513_available = false)
+    bool playable_extended_available = false)
 {
     const std::uint64_t flags = (requested ? 1ull : 0ull) |
         (requested && diagnostic_input_available ? 2ull : 0ull) |
-        (requested && diagnostic_input_available && playable_513_available ? 4ull : 0ull);
+        (requested && diagnostic_input_available && playable_extended_available ? 4ull : 0ull);
     std::uint64_t current = g_chart_row_policy_state.load(std::memory_order_acquire);
     while ((current & 7ull) != flags) {
         const std::uint64_t generation = (current >> 3u) + 1u;
@@ -62,8 +72,10 @@ inline ChartRowPolicySnapshot chart_row_policy_snapshot()
     ChartRowPolicySnapshot snapshot;
     snapshot.requested = (state & 1ull) != 0;
     snapshot.enabled = (state & 2ull) != 0;
-    snapshot.playable_513_available = (state & 4ull) != 0;
+    snapshot.playable_extended_available = (state & 4ull) != 0;
     snapshot.accepted_input_limit = snapshot.enabled ? kExperimentalMaxChartRows : kMaxChartRows;
+    snapshot.publication_limit = snapshot.playable_extended_available
+        ? kMaximumExtendedChartRows : kMaxChartRows;
     snapshot.generation = state >> 3u;
     return snapshot;
 }
@@ -83,7 +95,8 @@ inline std::size_t effective_chart_row_limit()
     return kMaxChartRows;
 }
 
-// Only verified shipping helpers permit retention. Runtime publication remains fixed at 512.
+// Retention may reach the explicit safety ceiling; publication authority remains
+// descriptor-gated to a complete, strictly eligible count-driven chart.
 inline std::size_t chart_input_row_limit()
 {
     return chart_row_policy_snapshot().accepted_input_limit;

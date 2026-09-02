@@ -10,6 +10,7 @@
 #include "audio_loudness.h"
 #include "cache.h"
 #include "chart_compiler.h"
+#include "extended_chart_eligibility.h"
 #include "pipeline_limits.h"
 
 namespace ff7rp::pipeline {
@@ -285,7 +286,8 @@ bool read_compiled_chart(RuntimeCacheReader& in, CompiledChart* chart) {
 
 bool write_diagnostic_chart(RuntimeCacheWriter& out, const DiagnosticChartRetention& diagnostic) {
     if (diagnostic.source_row_count > kExperimentalMaxChartRows ||
-        diagnostic.native_prefix_row_count > kMaxChartRows || diagnostic.tail_rows.size() > 8u ||
+        diagnostic.native_prefix_row_count > kMaxChartRows
+        || diagnostic.tail_rows.size() > kMaximumExtendedChartTailRows ||
         !out.pod(static_cast<std::uint32_t>(diagnostic.source_row_count)) ||
         !out.pod(static_cast<std::uint32_t>(diagnostic.native_prefix_row_count)) ||
         !out.pod(static_cast<std::uint32_t>(diagnostic.tail_rows.size())) || !out.pod(diagnostic.descriptor_hash)) return false;
@@ -304,7 +306,8 @@ bool read_diagnostic_chart(RuntimeCacheReader& in, DiagnosticChartRetention* dia
     if (!diagnostic) return false;
     std::uint32_t source = 0, prefix = 0, tail = 0;
     if (!in.pod(&source) || !in.pod(&prefix) || !in.pod(&tail) || !in.pod(&diagnostic->descriptor_hash) ||
-        source > kExperimentalMaxChartRows || prefix > kMaxChartRows || tail > 8u) return false;
+        source > kExperimentalMaxChartRows || prefix > kMaxChartRows
+        || tail > kMaximumExtendedChartTailRows) return false;
     diagnostic->source_row_count = source;
     diagnostic->native_prefix_row_count = prefix;
     diagnostic->tail_rows.assign(tail, {});
@@ -520,22 +523,40 @@ bool valid_config_and_chart(const SongConfig& config, const CompiledChart& chart
     return true;
 }
 
-bool valid_cached_profile(const std::string& song_id, const bool extended, const LoadedDifficultyProfile& profile) {
+bool valid_cached_profile(const std::string& song_id, const bool extended,
+    const bool playable_extended, const LoadedDifficultyProfile& profile) {
     if (profile.config.notes.size() > kMaxChartRows || profile.chart.notes.size() > kMaxChartRows ||
         profile.config.notes.size() != profile.chart.notes.size()) return false;
     const auto& diagnostic = profile.diagnostic_chart;
     if (!diagnostic.present()) return !profile.config.diagnostic_extended_chart_fixture;
-    const bool supported_retention =
-        (diagnostic.source_row_count == kPlayable513ChartRows && diagnostic.tail_rows.size() == 1u)
-        || (diagnostic.source_row_count == 520u && diagnostic.tail_rows.size() == 8u);
-    if (!extended || !profile.config.diagnostic_extended_chart_fixture || !supported_retention ||
+    if (!extended || !profile.config.diagnostic_extended_chart_fixture
+        || !bounded_extended_retention_shape(diagnostic) ||
         diagnostic.native_prefix_row_count != kMaxChartRows ||
         profile.chart.notes.size() != kMaxChartRows) return false;
     for (std::size_t i = 0; i < diagnostic.tail_rows.size(); ++i) {
         if (diagnostic.tail_rows[i].source_row != kMaxChartRows + i) return false;
     }
-    return diagnostic.descriptor_hash == diagnostic_descriptor_hash(
-        song_id, profile.config.difficulty, profile.chart, diagnostic);
+    SongConfig complete = profile.config;
+    complete.notes.reserve(diagnostic.source_row_count);
+    for (const auto& row : diagnostic.tail_rows) complete.notes.push_back(row.source);
+    CompiledChart expected_chart;
+    DiagnosticChartRetention expected_diagnostic;
+    if (!compile_chart(complete, &expected_chart, &expected_diagnostic,
+            kMaximumExtendedChartRows).ok()
+        || !compiled_charts_equal(expected_chart, profile.chart)) return false;
+    expected_diagnostic.descriptor_hash = diagnostic_descriptor_hash(
+        song_id, profile.config.difficulty, expected_chart, expected_diagnostic);
+    if (!diagnostic_charts_equal(expected_diagnostic, diagnostic)) return false;
+    if (playable_extended) {
+        for (std::size_t index = 0; index < profile.config.notes.size(); ++index) {
+            if (!restricted_extended_row_pair(
+                    profile.config.notes[index], profile.chart.notes[index], profile.config.bpm)) return false;
+        }
+        for (const auto& row : diagnostic.tail_rows) {
+            if (!restricted_extended_row_pair(row.source, row.compiled, profile.config.bpm)) return false;
+        }
+    }
+    return true;
 }
 
 std::uint64_t profile_semantic_hash_impl(const LoadedDifficultyProfile& profile) {
@@ -585,7 +606,8 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
         !out.pod(static_cast<std::uint32_t>(song.difficulty_profiles.size()))) return false;
     for (const auto& profile : song.difficulty_profiles) {
         const auto hash = profile_semantic_hash_impl(profile);
-        if (!valid_cached_profile(song.id, song.chart_policy_enabled, profile) ||
+        if (!valid_cached_profile(song.id, song.chart_policy_enabled,
+                song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile) ||
             !write_song_config(out, profile.config) || !write_compiled_chart(out, profile.chart) ||
             !write_profile_diagnostics(out, profile.diagnostics) || !write_diagnostic_chart(out, profile.diagnostic_chart) ||
             hash == 0 || !out.pod(hash)) return false;
@@ -613,8 +635,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
     std::string identity;
     MabfArtifactMetadata metadata;
     if (!in.pod(&cache_key) || cache_key != song->cache_key || !in.pod(&accepted) ||
-        accepted != song->accepted_chart_input_limit || !in.pod(&published) ||
-        published != song->published_chart_row_limit || !in.pod(&diagnostic) || diagnostic > 1u ||
+        !in.pod(&published) || published != song->published_chart_row_limit
+        || !in.pod(&diagnostic) || diagnostic > 1u ||
         (diagnostic != 0) != song->chart_policy_enabled || !in.pod(&generation) ||
         generation != song->chart_policy_generation || !in.string(&identity) || identity != song->chart_policy_identity ||
         !in.pod(&metadata.digest) || !in.pod(&metadata.byte_count) || !in.pod(&metadata.logical_source_frames) ||
@@ -640,6 +662,11 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         !std::isfinite(song->loudness_applied_gain_db) || !std::isfinite(song->gain_envelope_max_gain_db) ||
         !std::isfinite(song->gain_envelope_min_gain_db) || !std::isfinite(song->metronome_first_beat_seconds) ||
         !std::isfinite(song->metronome_last_beat_seconds)) return false;
+    const bool legacy_diagnostic_limit =
+        accepted == kLegacyDiagnosticChartInputRows
+        && song->accepted_chart_input_limit == kMaximumExtendedChartRows
+        && identity == kDiagnosticChartRowPolicyIdentity;
+    if (accepted != song->accepted_chart_input_limit && !legacy_diagnostic_limit) return false;
     if (!valid_config_and_chart(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
     song->audio.stereo_samples.clear(); song->chart_from_midi = midi != 0;
@@ -662,7 +689,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         if (!read_song_config(in, &profile.config) || !read_compiled_chart(in, &profile.chart) ||
             !read_profile_diagnostics(in, &profile.diagnostics) || !read_diagnostic_chart(in, &profile.diagnostic_chart) ||
             !in.pod(&hash) || hash == 0 || hash != profile_semantic_hash_impl(profile) ||
-            !valid_cached_profile(song->id, song->chart_policy_enabled, profile)) return false;
+            !valid_cached_profile(song->id, song->chart_policy_enabled,
+                song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile)) return false;
         if (!valid_config_and_chart(profile.config, profile.chart)) return false;
     }
     if (!song_configs_equal_impl(song->config, song->difficulty_profiles.front().config) ||

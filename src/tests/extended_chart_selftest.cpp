@@ -57,13 +57,13 @@ bool test_default_policy()
     }
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     const bool enabled = ff7rp::pipeline::effective_chart_row_limit() == 512u
-        && ff7rp::pipeline::chart_input_row_limit() == 1024u
+        && ff7rp::pipeline::chart_input_row_limit() == 8192u
         && ff7rp::pipeline::chart_row_policy_identity()
              == "chart_rows=native512+diagnostic1024;extended=verified";
     ff7rp::pipeline::configure_chart_row_limit(true, true, true);
     if (ff7rp::pipeline::effective_chart_row_limit() != 512u
-        || ff7rp::pipeline::chart_row_policy_snapshot().publication_limit != 512u
-        || !ff7rp::pipeline::chart_row_policy_snapshot().playable_513_available) return false;
+        || ff7rp::pipeline::chart_row_policy_snapshot().publication_limit != 8192u
+        || !ff7rp::pipeline::chart_row_policy_snapshot().playable_extended_available) return false;
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     return enabled && !ff7rp::pipeline::experimental_extended_charts_requested();
 }
@@ -78,6 +78,82 @@ bool test_exact_success_and_lifecycle()
         || chart.max_time != rows.back().time) return false;
     ff7r::piano::game::synthetic_model::model_next_parser_reset(chart);
     return chart.count == 0 && chart.storage.empty();
+}
+
+bool test_count_driven_capacity_and_bounds()
+{
+    using namespace ff7r::piano::game::synthetic_model;
+    const struct Case { std::size_t target; std::size_t capacity; } cases[] = {
+        {513, 540}, {519, 540}, {520, 540}, {910, 910}, {911, 1365},
+        {1024, 1365}, {8192, 8192},
+    };
+    for (const Case& value : cases) {
+        if (expected_capacity(value.target) != value.capacity) return false;
+        const auto rows = make_rows(value.target);
+        Chart chart;
+        const Result result = run(extended_request(rows), chart);
+        if (!result.substituted || result.forwarded || !result.count_committed
+            || result.target_count != value.target || chart.count != value.target
+            || chart.capacity != value.capacity
+            || chart.storage.size() != value.target
+            || chart.storage.back().ordinal != 2u * (value.target - 1u)
+            || result.constructed_tail_count != value.target - kNativeRows) return false;
+    }
+    const auto excessive = make_rows(8193);
+    Chart rejected;
+    const Result result = run(extended_request(excessive), rejected);
+    if (expected_capacity(8193) != 0 || !result.forwarded
+        || result.substituted || result.count_committed || !rejected.storage.empty()) return false;
+
+    const auto maximum_rows = make_rows(8192);
+    Chart maximum_chart;
+    Result maximum_result = run(extended_request(maximum_rows), maximum_chart);
+    CommitIdentity maximum_identity{};
+    maximum_identity.target_count = maximum_rows.size();
+    PublicationState publication;
+    if (!model_publish_result(maximum_result, maximum_chart, maximum_identity, publication)
+        || model_published_count(publication, maximum_identity, true) != kNativeRows
+        || !publication.pending) return false;
+    model_terminal(publication, maximum_identity.activation_generation,
+        maximum_identity.route_lifecycle_epoch, TerminalOutcome::AudioPublished,
+        maximum_identity.route_lifecycle_epoch + 1);
+    if (model_published_count(publication, maximum_identity, true) != 8192)
+        return false;
+    CommitIdentity wrong_target = maximum_identity;
+    wrong_target.target_count = 1024;
+    return model_published_count(publication, wrong_target, true) == kNativeRows
+        && !publication.pending && !publication.active;
+}
+
+bool test_preflight_and_partial_reverse_cleanup()
+{
+    using namespace ff7r::piano::game::synthetic_model;
+    const auto rows = make_rows(1024);
+    Chart preflight;
+    const Result preflight_result = run(
+        extended_request(rows, FailurePoint::FNameFind), preflight);
+    if (!preflight_result.forwarded || preflight_result.substituted
+        || preflight.tail_constructor_entered || !preflight.storage.empty()) return false;
+
+    const std::size_t tail_count = rows.size() - kNativeRows;
+    for (const std::size_t failure_index : {std::size_t{0}, tail_count / 2, tail_count - 1}) {
+        BuildRequest request = extended_request(rows, FailurePoint::CallbackValidation);
+        request.failure_tail_index = failure_index;
+        Chart chart;
+        const Result result = run(request, chart);
+        if (result.count_committed || result.route_blocked || !chart.tail_destructed
+            || chart.tail_destruct_count != failure_index + 1
+            || chart.destroyed_tail_indices.front() != failure_index
+            || chart.destroyed_tail_indices.back() != 0
+            || chart.storage.size() != kNativeRows || chart.count != kNativeRows)
+            return false;
+    }
+    BuildRequest non_tail = extended_request(rows, FailurePoint::ConstructorReturnedNonTail);
+    non_tail.failure_tail_index = tail_count / 2;
+    Chart uncertain;
+    const Result uncertain_result = run(non_tail, uncertain);
+    return uncertain_result.route_blocked && !uncertain.tail_destructed
+        && uncertain.ownership_preserved && !uncertain_result.count_committed;
 }
 
 bool test_forwarding_and_restrictions()
@@ -108,14 +184,14 @@ bool test_forwarding_and_restrictions()
         if (invalid == 7) rows.back().assignment = 7;
         if (!ff7r::piano::game::synthetic_model::run(extended_request(rows), chart).forwarded) return false;
     }
-    rows = make_rows(520);
+    rows = make_rows(512);
     if (!ff7r::piano::game::synthetic_model::run(extended_request(rows), chart).forwarded) return false;
     rows = make_rows(513);
     auto second_hit = extended_request(rows);
     second_hit.second_reserve_hit = true;
     const auto result = ff7r::piano::game::synthetic_model::run(second_hit, chart);
     auto excessive_capacity = extended_request(rows);
-    excessive_capacity.reserve_capacity = 1025;
+    excessive_capacity.reserve_capacity = 8193;
     const auto capacity_result = ff7r::piano::game::synthetic_model::run(excessive_capacity, chart);
     if (!(result.substituted && result.forwarded && !result.count_committed
             && capacity_result.substituted && !capacity_result.count_committed)) return false;
@@ -151,7 +227,7 @@ bool test_forwarding_and_restrictions()
 bool test_failure_cleanup_and_drift()
 {
     const auto rows = make_rows(513);
-    for (const FailurePoint point : {FailurePoint::PrefixValidation, FailurePoint::FNameFind}) {
+    for (const FailurePoint point : {FailurePoint::PrefixValidation}) {
         Chart chart; const auto result = ff7r::piano::game::synthetic_model::run(extended_request(rows, point), chart);
         if (result.count_committed || chart.tail_constructor_entered || chart.tail_destructed
             || chart.count != 512 || chart.storage.size() != 512 || chart.capacity < 513) return false;
@@ -251,7 +327,7 @@ bool test_committed_publication_state()
     model_publish_result(run(reserve_unavailable, unavailable_chart), identity, state);
     if (model_published_count(state, identity, true) != 512) return false;
     auto excessive_capacity = extended_request(rows);
-    excessive_capacity.reserve_capacity = 1025;
+    excessive_capacity.reserve_capacity = 8193;
     Chart capacity_chart;
     model_publish_result(run(excessive_capacity, capacity_chart), identity, state);
     if (model_published_count(state, identity, true) != 512) return false;
@@ -584,6 +660,8 @@ int main()
     } tests[] = {
         {"default_policy", test_default_policy},
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
+        {"count_driven_capacity_and_bounds", test_count_driven_capacity_and_bounds},
+        {"preflight_and_partial_reverse_cleanup", test_preflight_and_partial_reverse_cleanup},
         {"forwarding_and_restrictions", test_forwarding_and_restrictions},
         {"failure_cleanup_and_drift", test_failure_cleanup_and_drift},
         {"committed_publication_state", test_committed_publication_state},

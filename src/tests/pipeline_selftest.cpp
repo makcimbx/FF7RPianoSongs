@@ -582,16 +582,40 @@ int main()
             + " chart=" + std::to_string(chart.notes.size()) + " source=" + std::to_string(diagnostic.source_row_count)
             + " tail=" + std::to_string(diagnostic.tail_rows.size()) + " hash=" + std::to_string(diagnostic.descriptor_hash));
     auto prohibited = fixture_config;
-    prohibited.notes.back().chord_id = "C";
-    if (ff7rp::pipeline::compile_chart(prohibited, &chart, &diagnostic).ok())
-        return fail("513 fixture with chord did not fail closed");
+    prohibited.notes.back().chord_id = "pca_C";
+    if (!ff7rp::pipeline::compile_chart(prohibited, &chart, &diagnostic).ok()
+        || diagnostic.tail_rows.size() != 1u)
+        return fail("nonplayable 513 fixture was not retained diagnostically");
 
-    ff7rp::pipeline::configure_chart_row_limit(false, false);
     std::string invalid_fixture = fixture_json.str();
     const std::size_t marker = invalid_fixture.rfind(",{");
     invalid_fixture.erase(marker, invalid_fixture.find("]}", marker) - marker);
     status = ff7rp::pipeline::parse_song_json_string(invalid_fixture, &fixture_config);
-    if (status.ok()) return fail("non-520 diagnostic fixture did not fail strict schema validation");
+    if (!status.ok() || fixture_config.notes.size() != 519u
+        || !ff7rp::pipeline::compile_chart(fixture_config, &chart, &diagnostic).ok()
+        || diagnostic.tail_rows.size() != 7u) {
+        return fail("general in-range diagnostic fixture was not retained");
+    }
+
+    ff7rp::pipeline::SongConfig maximum_fixture = fixture_config;
+    maximum_fixture.notes.assign(ff7rp::pipeline::kMaximumExtendedChartRows,
+        ff7rp::pipeline::Note{0.0, 1.0, "C4", ""});
+    for (std::size_t index = 0; index < maximum_fixture.notes.size(); ++index)
+        maximum_fixture.notes[index].beat = static_cast<double>(index);
+    if (!ff7rp::pipeline::compile_chart(maximum_fixture, &chart, &diagnostic,
+            ff7rp::pipeline::kMaximumExtendedChartRows).ok()
+        || chart.notes.size() != ff7rp::pipeline::kMaxChartRows
+        || diagnostic.tail_rows.size() != ff7rp::pipeline::kMaximumExtendedChartTailRows
+        || diagnostic.tail_rows.back().source_row + 1u != ff7rp::pipeline::kMaximumExtendedChartRows) {
+        return fail("8192-row diagnostic boundary was not retained exactly");
+    }
+    maximum_fixture.notes.push_back(
+        {static_cast<double>(maximum_fixture.notes.size()), 1.0, "C4", ""});
+    if (ff7rp::pipeline::compile_chart(maximum_fixture, &chart, &diagnostic,
+            maximum_fixture.notes.size()).ok()) {
+        return fail("8193-row diagnostic boundary did not fail closed");
+    }
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
 
     static constexpr std::array<const char*, 12> canonical_names{
         "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
@@ -670,8 +694,16 @@ int main()
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     const auto policy_changed = ff7rp::pipeline::chart_row_policy_snapshot();
     if (policy_changed.generation == policy_before.generation || !policy_changed.enabled ||
-        policy_changed.accepted_input_limit != 1024u || policy_changed.publication_limit != 512u) {
+        policy_changed.accepted_input_limit != ff7rp::pipeline::kMaximumExtendedChartRows
+        || policy_changed.publication_limit != 512u) {
         return fail("chart-policy snapshot did not publish one coherent configuration");
+    }
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    const auto playable_extended = ff7rp::pipeline::chart_row_policy_snapshot();
+    if (!playable_extended.playable_extended_available
+        || playable_extended.publication_limit != ff7rp::pipeline::kMaximumExtendedChartRows
+        || playable_extended.identity() != ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity) {
+        return fail("playable extended policy did not publish bounded count-driven authority");
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 

@@ -1,11 +1,12 @@
 #include "game/synthetic_extended_chart_model.h"
 
 #include <cmath>
+#include <limits>
 
 namespace ff7r::piano::game::synthetic_model {
 namespace {
 bool restricted(const std::vector<SourceRow>& rows) {
-    if (rows.size() != kPlayableRows) return false;
+    if (rows.size() < kMinPlayableRows || rows.size() > kMaxPlayableRows) return false;
     float previous = -1;
     bool prefix_assignments[256]{};
     uint8_t prefix_lookup_path = 2;
@@ -21,9 +22,25 @@ bool restricted(const std::vector<SourceRow>& rows) {
         }
         previous = row.time;
     }
-    return rows.back().lookup_path == prefix_lookup_path
-        && prefix_assignments[rows.back().assignment];
+    for (std::size_t index = kNativeRows; index < rows.size(); ++index) {
+        if (rows[index].lookup_path != prefix_lookup_path
+            || !prefix_assignments[rows[index].assignment]) return false;
+    }
+    return true;
 }
+}
+
+std::size_t expected_capacity(const std::size_t target_count)
+{
+    constexpr std::size_t event_size = 0x90;
+    constexpr std::size_t threshold = 0x20000;
+    if (target_count < kMinPlayableRows || target_count > kMaxPlayableRows
+        || target_count > (std::numeric_limits<std::size_t>::max)() / event_size) return 0;
+    const std::size_t raw = target_count * event_size;
+    const std::size_t quantum = raw <= threshold ? 0x1000 : 0x10000;
+    if (raw > (std::numeric_limits<std::size_t>::max)() - (quantum - 1)) return 0;
+    const std::size_t capacity = ((raw + quantum - 1) / quantum) * quantum / event_size;
+    return capacity >= target_count && capacity <= kMaxPlayableRows ? capacity : 0;
 }
 
 Result run(const BuildRequest& request, Chart& chart) {
@@ -35,40 +52,62 @@ Result run(const BuildRequest& request, Chart& chart) {
         && request.control_block_nonnull && request.reciprocal_pre && request.header_pre
         && restricted(*request.rows);
     if (!gate) { result.forwarded = true; return result; }
+    result.target_count = request.rows->size();
+    // Native production preflights every tail FName before reserve substitution.
+    if (request.failure == FailurePoint::FNameFind) {
+        result.forwarded = true;
+        return result;
+    }
     if (!request.reciprocal_reserve || !request.header_reserve) {
         result.forwarded = true;
         return result;
     }
     result.substituted = true;
     if (request.second_reserve_hit) { result.forwarded = true; return result; }
-    if (request.reserve_capacity < kPlayableRows || request.reserve_capacity > 1024) return result;
+    const std::size_t required_capacity = expected_capacity(result.target_count);
+    const std::size_t actual_capacity = request.reserve_capacity
+        ? request.reserve_capacity : required_capacity;
+    if (!required_capacity || actual_capacity != required_capacity) return result;
 
-    chart.storage.clear(); chart.storage.reserve(request.reserve_capacity); chart.capacity = request.reserve_capacity;
+    chart.storage.clear(); chart.storage.reserve(actual_capacity); chart.capacity = actual_capacity;
     for (std::size_t i = 0; i < kNativeRows; ++i)
         chart.storage.push_back({i, static_cast<uint32_t>(2 * i), (*request.rows)[i].time, true});
     chart.count = kNativeRows; chart.max_time = request.rows->at(kNativeRows - 1).time;
     if (!request.reciprocal_post || !request.header_post) return result;
     if (request.failure == FailurePoint::PrefixValidation) return result;
     result.prefix_validated = true;
-    if (request.failure == FailurePoint::FNameFind) return result;
 
-    chart.storage.push_back({kNativeRows, 1024, request.rows->back().time, false});
-    chart.tail_constructor_entered = true; result.tail_constructed = true;
-    const auto cleanup = [&] { chart.storage.resize(kNativeRows); chart.tail_destructed = true; };
-    if (request.failure == FailurePoint::ConstructorReturnedNonTail) {
-        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    const auto cleanup = [&] {
+        for (std::size_t row = chart.storage.size(); row > kNativeRows; --row)
+            chart.destroyed_tail_indices.push_back(row - 1 - kNativeRows);
+        chart.tail_destruct_count += chart.storage.size() - kNativeRows;
+        chart.storage.resize(kNativeRows);
+        chart.tail_destructed = chart.tail_destruct_count != 0;
+    };
+    const std::size_t tail_count = result.target_count - kNativeRows;
+    for (std::size_t i = 0; i < tail_count; ++i) {
+        const std::size_t row = kNativeRows + i;
+        chart.storage.push_back({row, static_cast<uint32_t>(2 * row), (*request.rows)[row].time, false});
+        chart.tail_constructor_entered = true; result.tail_constructed = true;
+        if (i == request.failure_tail_index
+            && request.failure == FailurePoint::ConstructorReturnedNonTail) {
+            chart.ownership_preserved = true; result.route_blocked = true; return result;
+        }
+        result.constructor_returned_tail = true;
+        if (i == request.failure_tail_index
+            && (request.failure == FailurePoint::ConstructorValidation
+                || request.failure == FailurePoint::CallbackBuild
+                || request.failure == FailurePoint::CallbackValidation)) {
+            cleanup(); return result;
+        }
+        if (i == request.failure_tail_index
+            && request.failure == FailurePoint::CallbackCleanupIdentityFailure) {
+            chart.ownership_preserved = true; result.route_blocked = true; return result;
+        }
+        chart.storage.back().callback_valid = true;
+        ++result.constructed_tail_count;
     }
-    result.constructor_returned_tail = true;
-    if (request.failure == FailurePoint::ConstructorValidation) {
-        cleanup(); return result;
-    }
-    if (request.failure == FailurePoint::CallbackBuild || request.failure == FailurePoint::CallbackValidation) {
-        cleanup(); return result;
-    }
-    if (request.failure == FailurePoint::CallbackCleanupIdentityFailure) {
-        chart.ownership_preserved = true; result.route_blocked = true; return result;
-    }
-    chart.storage.back().callback_valid = true; result.callback_validated = true;
+    result.callback_validated = true;
     const float old_max = chart.max_time;
     if (request.failure == FailurePoint::PreWriteMaxReadFailure) {
         chart.ownership_preserved = true; result.route_blocked = true; return result;
@@ -85,7 +124,7 @@ Result run(const BuildRequest& request, Chart& chart) {
         chart.max_time = request.rows->back().time + 0.25f;
         chart.ownership_preserved = true; result.route_blocked = true; return result;
     }
-    chart.count = kPlayableRows; result.count_committed = true;
+    chart.count = result.target_count; result.count_committed = true;
     if (request.failure == FailurePoint::PostCountExternalDrift) {
         chart.count = 77; chart.ownership_preserved = true; result.route_blocked = true; return result;
     }
@@ -132,7 +171,7 @@ bool model_publish_result(Result& result, Chart& chart, const CommitIdentity& id
             && state.failed_lifecycle_epoch == identity.route_lifecycle_epoch
             && state.failed_generation >= identity.activation_generation)
         || invalid_success) {
-        if (result.count_committed && chart.count == kPlayableRows) {
+        if (result.count_committed && chart.count == identity.target_count) {
             chart.count = kNativeRows;
             chart.storage.resize(kNativeRows);
             chart.tail_destructed = true;
@@ -193,7 +232,8 @@ std::size_t model_published_count(PublicationState& state,
         && a.descriptor_hash == b.descriptor_hash
         && a.activation_generation == b.activation_generation
         && a.preparation_ordinal == b.preparation_ordinal
-        && a.route_lifecycle_epoch == b.route_lifecycle_epoch;
+        && a.route_lifecycle_epoch == b.route_lifecycle_epoch
+        && a.target_count == b.target_count;
     if (!matches) {
         state.pending = false; state.active = false; state.identity = {};
         return kNativeRows;
@@ -219,7 +259,7 @@ std::size_t model_published_count(PublicationState& state,
         state.pending = false;
         state.active = true;
     }
-    return matches && state.active ? kPlayableRows : kNativeRows;
+    return matches && state.active ? a.target_count : kNativeRows;
 }
 
 std::size_t model_presentation_published_count(PublicationState& state,

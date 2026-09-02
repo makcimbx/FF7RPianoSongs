@@ -1,5 +1,6 @@
 #include "pipeline/cache.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/pipeline_limits.h"
 #include "pipeline/runtime_cache_codec.h"
 
 #include <array>
@@ -199,6 +200,39 @@ LoadedSong diagnostic_tail_oracle_song() {
     return song;
 }
 
+LoadedSong playable_extended_oracle_song(const std::size_t row_count = 520u) {
+    LoadedSong song = diagnostic_tail_oracle_song();
+    song.chart_policy_identity = kPlayableExtendedChartRowPolicyIdentity;
+    song.accepted_chart_input_limit = kMaximumExtendedChartRows;
+    song.published_chart_row_limit = kMaximumExtendedChartRows;
+    SongConfig complete = song.difficulty_profiles.front().config;
+    for (const auto& row : song.difficulty_profiles.front().diagnostic_chart.tail_rows) {
+        complete.notes.push_back(row.source);
+    }
+    for (auto& note : complete.notes) {
+        note.chord_id.clear();
+        note.pitch = "C4";
+    }
+    complete.notes.resize(row_count);
+    for (std::size_t index = 0; index < complete.notes.size(); ++index) {
+        complete.notes[index].beat = static_cast<double>(index);
+        complete.notes[index].duration_beats = 1.0;
+        complete.notes[index].pitch = "C4";
+        complete.notes[index].chord_id.clear();
+    }
+    DiagnosticChartRetention diagnostic;
+    if (!compile_chart(complete, &song.chart, &diagnostic, kMaximumExtendedChartRows).ok()) return {};
+    complete.notes.resize(kMaxChartRows);
+    song.config = complete;
+    auto& profile = song.difficulty_profiles.front();
+    profile.config = complete;
+    profile.chart = song.chart;
+    profile.diagnostic_chart = std::move(diagnostic);
+    profile.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
+        song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+    return song;
+}
+
 bool expect_parent_oracle(
     const LoadedSong& song,
     const std::size_t expected_size,
@@ -236,14 +270,24 @@ int main() {
     // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
     if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive") ||
         !expect_parent_oracle(diagnostic_tail_oracle_song(), 127386u, 0x0fdf7cbfb6f772f2ull, "diagnostic tail")) return 1;
+    const LoadedSong legacy_diagnostic = diagnostic_tail_oracle_song();
+    std::vector<std::uint8_t> legacy_diagnostic_bytes;
+    LoadedSong legacy_diagnostic_destination;
+    legacy_diagnostic_destination.id = legacy_diagnostic.id;
+    legacy_diagnostic_destination.cache_key = legacy_diagnostic.cache_key;
+    legacy_diagnostic_destination.accepted_chart_input_limit = kMaximumExtendedChartRows;
+    legacy_diagnostic_destination.published_chart_row_limit = legacy_diagnostic.published_chart_row_limit;
+    legacy_diagnostic_destination.chart_policy_enabled = legacy_diagnostic.chart_policy_enabled;
+    legacy_diagnostic_destination.chart_policy_generation = legacy_diagnostic.chart_policy_generation;
+    legacy_diagnostic_destination.chart_policy_identity = legacy_diagnostic.chart_policy_identity;
+    legacy_diagnostic_destination.config = legacy_diagnostic.config;
+    if (!expect(encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
+            "legacy diagnostic cache did not encode")
+        || !expect(decode_runtime_cache(
+            legacy_diagnostic_bytes, kMagic, kFormat, &legacy_diagnostic_destination),
+            "legacy diagnostic cache did not survive the bounded-limit compatibility admission")) return 1;
 
-    LoadedSong playable_513 = diagnostic_tail_oracle_song();
-    auto& retained_513 = playable_513.difficulty_profiles.front().diagnostic_chart;
-    retained_513.source_row_count = 513;
-    retained_513.tail_rows.resize(1);
-    retained_513.descriptor_hash = diagnostic_descriptor_hash(playable_513.id,
-        playable_513.difficulty_profiles.front().config.difficulty,
-        playable_513.difficulty_profiles.front().chart, retained_513);
+    LoadedSong playable_513 = playable_extended_oracle_song(513u);
     std::vector<std::uint8_t> playable_513_bytes;
     LoadedSong playable_513_decoded;
     playable_513_decoded.id = playable_513.id;
@@ -261,6 +305,61 @@ int main() {
         || !expect(playable_513_decoded.difficulty_profiles.front().diagnostic_chart.source_row_count == 513
             && playable_513_decoded.difficulty_profiles.front().diagnostic_chart.tail_rows.size() == 1,
             "exact-513 retained tail changed during cache round trip")) return 1;
+
+    const LoadedSong playable_520 = playable_extended_oracle_song();
+    std::vector<std::uint8_t> playable_520_bytes;
+    LoadedSong playable_520_decoded;
+    playable_520_decoded.id = playable_520.id;
+    playable_520_decoded.cache_key = playable_520.cache_key;
+    playable_520_decoded.accepted_chart_input_limit = playable_520.accepted_chart_input_limit;
+    playable_520_decoded.published_chart_row_limit = playable_520.published_chart_row_limit;
+    playable_520_decoded.chart_policy_enabled = playable_520.chart_policy_enabled;
+    playable_520_decoded.chart_policy_generation = playable_520.chart_policy_generation;
+    playable_520_decoded.chart_policy_identity = playable_520.chart_policy_identity;
+    playable_520_decoded.config = playable_520.config;
+    if (!expect(encode_runtime_cache(playable_520, kMagic, kFormat, &playable_520_bytes),
+            "exact-520 playable tail did not encode")
+        || !expect(decode_runtime_cache(playable_520_bytes, kMagic, kFormat, &playable_520_decoded),
+            "exact-520 playable tail did not decode")
+        || !expect(playable_520_decoded.difficulty_profiles.front().diagnostic_chart.tail_rows.size() == 8,
+            "exact-520 playable tail changed during cache round trip")) return 1;
+    LoadedSong old_policy_destination = playable_520_decoded;
+    old_policy_destination.chart_policy_identity = kDiagnosticChartRowPolicyIdentity;
+    if (!expect(!decode_runtime_cache(
+            playable_520_bytes, kMagic, kFormat, &old_policy_destination),
+            "playable exact-520 cache crossed a diagnostic-only policy identity")) return 1;
+    LoadedSong old_exact_policy_destination = playable_520_decoded;
+    old_exact_policy_destination.chart_policy_identity =
+        "chart_rows=native512+playable513+playable520;extended=verified1005";
+    if (!expect(!decode_runtime_cache(
+            playable_520_bytes, kMagic, kFormat, &old_exact_policy_destination),
+            "old exact-shape playable policy gained broader authority")) return 1;
+
+    const LoadedSong playable_8192 = playable_extended_oracle_song(kMaximumExtendedChartRows);
+    std::vector<std::uint8_t> playable_8192_bytes;
+    LoadedSong playable_8192_decoded;
+    playable_8192_decoded.id = playable_8192.id;
+    playable_8192_decoded.cache_key = playable_8192.cache_key;
+    playable_8192_decoded.accepted_chart_input_limit = playable_8192.accepted_chart_input_limit;
+    playable_8192_decoded.published_chart_row_limit = playable_8192.published_chart_row_limit;
+    playable_8192_decoded.chart_policy_enabled = playable_8192.chart_policy_enabled;
+    playable_8192_decoded.chart_policy_generation = playable_8192.chart_policy_generation;
+    playable_8192_decoded.chart_policy_identity = playable_8192.chart_policy_identity;
+    playable_8192_decoded.config = playable_8192.config;
+    if (!expect(encode_runtime_cache(playable_8192, kMagic, kFormat, &playable_8192_bytes),
+            "8192-row playable tail did not encode")
+        || !expect(decode_runtime_cache(
+            playable_8192_bytes, kMagic, kFormat, &playable_8192_decoded),
+            "8192-row playable tail did not decode")
+        || !expect(playable_8192_decoded.difficulty_profiles.front().diagnostic_chart.tail_rows.size()
+                == kMaximumExtendedChartTailRows,
+            "8192-row playable tail changed during cache round trip")) return 1;
+    LoadedSong above_maximum = playable_520;
+    above_maximum.difficulty_profiles.front().diagnostic_chart.source_row_count =
+        kMaximumExtendedChartRows + 1u;
+    std::vector<std::uint8_t> rejected_above_maximum;
+    if (!expect(!encode_runtime_cache(above_maximum, kMagic, kFormat, &rejected_above_maximum),
+            "8193-row cache shape encoded")) return 1;
 
     const LoadedSong source = representative_song();
     std::vector<std::uint8_t> bytes;
@@ -349,6 +448,12 @@ int main() {
     LoadedSong invalid_ignore = comprehensive_oracle_song();
     invalid_ignore.config.notes[2].ignore_sound_pitches = {"Fn2"};
     invalid_ignore.difficulty_profiles[0].config.notes[2].ignore_sound_pitches = {"Fn2"};
+    LoadedSong invalid_playable_tail = playable_extended_oracle_song();
+    invalid_playable_tail.difficulty_profiles.front().diagnostic_chart.tail_rows[0].compiled.group_index = 1;
+    std::vector<std::uint8_t> invalid_playable_tail_bytes;
+    if (!expect(!encode_runtime_cache(
+            invalid_playable_tail, kMagic, kFormat, &invalid_playable_tail_bytes),
+            "invalid playable exact-520 tail encoded")) return 1;
     if (!encoded_rejects(std::move(invalid_semantics), "invalid semantic payload was accepted") ||
         !encoded_rejects(std::move(invalid_enum), "invalid chart enum was accepted") ||
         !encoded_rejects(std::move(invalid_ignore), "invalid IgnoreSound cache mutation was accepted") ||

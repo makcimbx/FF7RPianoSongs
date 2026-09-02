@@ -13,6 +13,7 @@
 #include "game/rvas.h"
 #include "game/runtime_layouts.h"
 #include "pipeline/pipeline_limits.h"
+#include "pipeline/extended_chart_eligibility.h"
 
 #include "core/logging.h"
 
@@ -236,7 +237,8 @@ bool log_chart_event_plan(void* wrapper, int32_t expected_event_count,
     constexpr uintptr_t kEventStateOffset = 0x4a;
     constexpr uintptr_t kEventReferencedStateOffset = 0x50;
     constexpr uintptr_t kEventSize = 0x90;
-    constexpr int32_t kMaximumEventCount = 2048;
+    constexpr int32_t kMaximumEventCount =
+        static_cast<int32_t>(ff7rp::pipeline::kMaximumExtendedChartRows);
     constexpr int32_t kMaximumOwnedCapacity = 64;
     constexpr int32_t kBoundaryEventCount = 16;
     constexpr int32_t kMaximumOwnedValues = 8;
@@ -466,7 +468,7 @@ void __fastcall chart_expand_detour(
     log_chart_audio_expand_snapshot(
         "expand_exit", chart_audio_expand, false);
     finish_active_chart_row_patch_after_expand(wrapper, caller_rva);
-    const bool extended_513_committed =
+    const bool extended_committed =
         finish_extended_chart_transaction(wrapper, chart_row, caller_rva);
     chart_audio_diagnostic_expand_completed(chart_audio_transaction);
     // Keep the exact committed transaction active after expand return. A
@@ -488,9 +490,9 @@ void __fastcall chart_expand_detour(
     if (!core::safe_read_field(wrapper, runtime_layouts::PianoScoreWrapper::copied_row_count, note_count)) {
         return;
     }
-    const bool playable_513_count = note_count == 513 && extended_513_committed
-        && authority_exact;
-    if (!valid_note_count(note_count) && !playable_513_count) {
+    const bool playable_extended_count = extended_committed && profile
+        && note_count == profile->note_count && authority_exact;
+    if (!valid_note_count(note_count) && !playable_extended_count) {
         return;
     }
     float max_event_seconds = 0.0f;
@@ -498,32 +500,35 @@ void __fastcall chart_expand_detour(
         && std::isfinite(max_event_seconds) && max_event_seconds >= 0.0f;
 
     const std::uint64_t capture_id = g_capture_id.fetch_add(1, std::memory_order_acq_rel) + 1;
-    const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
     const bool diagnostic_profile = profile->diagnostic_source_rows != 0 ||
         profile->diagnostic_tail_rows != 0;
-    const bool registry_identity_stable = snapshot.storage
-        && activation_authority.token.valid()
-        && snapshot.song == song && snapshot.profile == profile;
-    UObjectLiveHandle wrapper_identity{};
-    const bool wrapper_identity_valid = capture_live_uobject_handle(wrapper, wrapper_identity);
-    const bool capture_identity_valid = registry_identity_stable
-        && owner.owner_observed && owner.chart_read_succeeded && owner.chart == wrapper
-        && owner.registry_generation == snapshot.generation;
     const bool exact_520_diagnostic =
         profile->diagnostic_source_rows == 520u &&
         profile->diagnostic_native_prefix_rows == ff7rp::pipeline::kMaxChartRows &&
         profile->diagnostic_tail_rows == 8u && profile->diagnostic_descriptor_hash != 0 &&
         profile->chart_notes.size() == ff7rp::pipeline::kMaxChartRows && note_count == 512;
-    const bool exact_513_playable = playable_513_count &&
-        profile->diagnostic_source_rows == ff7rp::pipeline::kPlayable513ChartRows &&
+    const RetainedChartOwnerObservation owner = exact_520_diagnostic
+        ? retained_chart_owner_observation() : RetainedChartOwnerObservation{};
+    const bool registry_identity_stable = snapshot.storage
+        && activation_authority.token.valid()
+        && snapshot.song == song && snapshot.profile == profile;
+    UObjectLiveHandle wrapper_identity{};
+    const bool wrapper_identity_valid = exact_520_diagnostic
+        && capture_live_uobject_handle(wrapper, wrapper_identity);
+    const bool capture_identity_valid = registry_identity_stable
+        && owner.owner_observed && owner.chart_read_succeeded && owner.chart == wrapper
+        && owner.registry_generation == snapshot.generation;
+    const bool exact_extended_playable = playable_extended_count &&
+        ff7rp::pipeline::extended_chart_row_count_in_range(profile->diagnostic_source_rows) &&
         profile->diagnostic_native_prefix_rows == ff7rp::pipeline::kMaxChartRows &&
-        profile->diagnostic_tail_rows == 1u && profile->diagnostic_descriptor_hash != 0 &&
+        profile->diagnostic_tail_rows == profile->diagnostic_source_rows
+            - ff7rp::pipeline::kMaxChartRows && profile->diagnostic_descriptor_hash != 0 &&
         profile->chart_notes.size() == ff7rp::pipeline::kMaxChartRows;
-    const bool synchronous_513_identity = exact_513_playable && authority_exact;
+    const bool synchronous_extended_identity = exact_extended_playable && authority_exact;
     const bool identity_valid = !diagnostic_profile ||
         (registry_identity_stable && ff7rp::pipeline::experimental_extended_charts_enabled() &&
             profile->diagnostic_policy_generation == ff7rp::pipeline::chart_row_policy_generation() &&
-            ((exact_520_diagnostic && capture_identity_valid) || synchronous_513_identity));
+            ((exact_520_diagnostic && capture_identity_valid) || synchronous_extended_identity));
     if (diagnostic_profile || ff7rp::pipeline::experimental_extended_charts_requested()) {
         const uintptr_t owner_address = reinterpret_cast<uintptr_t>(owner.owner);
         const uintptr_t owner_chart_field = owner_address != 0 &&
@@ -539,7 +544,7 @@ void __fastcall chart_expand_detour(
             << " descriptor_policy_generation=" << profile->diagnostic_policy_generation
             << " registry_generation=" << snapshot.generation
             << " registry_identity_stable=" << registry_identity_stable
-            << " authority_source=" << (synchronous_513_identity
+            << " authority_source=" << (synchronous_extended_identity
                 ? "selection_admission+synchronous_native" : "retained_completion_owner")
             << " owner_generation=" << owner.generation
             << " owner_registry_generation=" << owner.registry_generation
@@ -567,8 +572,8 @@ void __fastcall chart_expand_detour(
     if (!identity_valid || !log_chart_event_plan(wrapper, note_count, profile, capture_id)) {
         return;
     }
-    if (synchronous_513_identity) {
-        // The exact-513 ownership proof is complete inside the synchronous TLS
+    if (synchronous_extended_identity) {
+        // Extended ownership proof is complete inside the synchronous TLS
         // transaction. Do not promote its native chart/controller pointers into
         // the asynchronous completion-capture path; late completion-owner
         // observations remain diagnostics and cannot revoke the immutable token.
@@ -646,9 +651,10 @@ uintptr_t __fastcall note_count_detour(void* arg0, void* arg1, void* arg2, void*
     const SongDescriptor* song = menu.song ? menu.song : playback.song;
     const SongDifficultyProfile* profile = menu.profile ? menu.profile : playback.profile;
     const int replacement = resolve_menu_or_playback_note_count(menu, playback);
-    const bool restricted_513 = replacement == 513 && profile
-        && (menu.song ? playable_513_presentation(menu, playback) : playable_513_playback(playback));
-    if (!song || (!valid_note_count(replacement) && !restricted_513)) {
+    const bool restricted_extended = profile && replacement == profile->note_count
+        && (menu.song ? playable_extended_presentation(menu, playback)
+                      : playable_extended_playback(playback));
+    if (!song || (!valid_note_count(replacement) && !restricted_extended)) {
         return original;
     }
 
@@ -677,9 +683,10 @@ ChartAudioExpandTlsSnapshot current_chart_audio_expand_tls() noexcept
 void capture_active_note_count(int note_count)
 {
     const PlaybackSnapshot playback = registry().playback_snapshot();
-    const bool restricted_513 = note_count == 513 && playback.profile
-        && playable_513_playback(playback);
-    g_active_captured_note_count.store(valid_note_count(note_count) || restricted_513 ? note_count : 0,
+    const bool restricted_extended = playback.profile
+        && note_count == playback.profile->note_count
+        && playable_extended_playback(playback);
+    g_active_captured_note_count.store(valid_note_count(note_count) || restricted_extended ? note_count : 0,
         std::memory_order_relaxed);
 }
 
@@ -696,8 +703,8 @@ void reset_active_note_count()
 
 int resolve_note_count(const PlaybackSnapshot& playback)
 {
-    const int maximum = playback.profile && playable_513_playback(playback)
-        ? static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows)
+    const int maximum = playback.profile && playable_extended_playback(playback)
+        ? playback.profile->note_count
         : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
     return menu_or_playback_note_count_value({}, playback,
         active_captured_note_count(), maximum);
@@ -708,8 +715,9 @@ int resolve_menu_or_playback_note_count(
 {
     const SongDifficultyProfile* selected = menu.song ? menu.profile : playback.profile;
     const int maximum = selected
-        && (menu.song ? playable_513_presentation(menu, playback) : playable_513_playback(playback))
-        ? static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows)
+        && (menu.song ? playable_extended_presentation(menu, playback)
+                      : playable_extended_playback(playback))
+        ? selected->note_count
         : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
     return menu_or_playback_note_count_value(menu, playback,
         active_captured_note_count(), maximum);

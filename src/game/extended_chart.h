@@ -39,9 +39,9 @@ void extended_chart_activation_terminal(
     std::uint64_t successful_lifecycle_epoch = 0) noexcept;
 core::HookTeardownOperation extended_chart_reserve_teardown_operation();
 void clear_extended_chart_runtime_state() noexcept;
-bool playable_513_profile(const SongDifficultyProfile& profile) noexcept;
-bool playable_513_playback(const PlaybackSnapshot& playback) noexcept;
-bool playable_513_presentation(
+bool playable_extended_profile(const SongDifficultyProfile& profile) noexcept;
+bool playable_extended_playback(const PlaybackSnapshot& playback) noexcept;
+bool playable_extended_presentation(
     const RenderSnapshot& menu, const PlaybackSnapshot& playback) noexcept;
 
 } // namespace ff7r::piano::game

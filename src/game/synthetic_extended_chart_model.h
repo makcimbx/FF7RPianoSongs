@@ -5,12 +5,14 @@
 #include <string>
 #include <vector>
 
-// Offline synthetic model of the exact restricted 513-row reserve transaction.
+// Offline synthetic model of the restricted 513..8192 reserve transaction.
 // It does not prove native ABI compatibility or runtime safety.
 namespace ff7r::piano::game::synthetic_model {
 
 inline constexpr std::size_t kNativeRows = 512;
-inline constexpr std::size_t kPlayableRows = 513;
+inline constexpr std::size_t kMinPlayableRows = 513;
+inline constexpr std::size_t kMaxPlayableRows = 8192;
+inline constexpr std::size_t kPlayableRows = kMinPlayableRows; // 513 regression fixture.
 
 struct SourceRow {
     float time = 0;
@@ -39,6 +41,8 @@ struct Chart {
     float max_time = 0;
     bool tail_constructor_entered = false;
     bool tail_destructed = false;
+    std::size_t tail_destruct_count = 0;
+    std::vector<std::size_t> destroyed_tail_indices;
     bool ownership_preserved = false;
     std::size_t max_write_count = 0;
 };
@@ -74,6 +78,7 @@ struct CommitIdentity {
     std::uint64_t activation_generation = 1;
     std::uint64_t preparation_ordinal = 1;
     std::uint64_t route_lifecycle_epoch = 1;
+    std::size_t target_count = kMinPlayableRows;
 };
 
 struct PublicationState {
@@ -110,7 +115,8 @@ struct BuildRequest {
     bool header_pre = true;
     bool header_reserve = true;
     bool header_post = true;
-    std::size_t reserve_capacity = kPlayableRows;
+    std::size_t reserve_capacity = 0; // Zero asks the model for the native expected capacity.
+    std::size_t failure_tail_index = 0;
     FailurePoint failure = FailurePoint::None;
 };
 
@@ -126,8 +132,11 @@ struct Result {
     bool route_blocked = false;
     bool count_restore_proved = false;
     bool max_restore_proved = false;
+    std::size_t target_count = 0;
+    std::size_t constructed_tail_count = 0;
 };
 
+std::size_t expected_capacity(std::size_t target_count);
 Result run(const BuildRequest& request, Chart& chart);
 void model_next_parser_reset(Chart& chart);
 void model_expansion_begin(PublicationState& state);
