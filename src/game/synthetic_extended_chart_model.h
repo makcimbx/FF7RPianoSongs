@@ -71,6 +71,7 @@ struct CommitIdentity {
     std::uint64_t lease_generation = 1;
     std::uint64_t song_key = 1;
     std::uint64_t descriptor_hash = 1;
+    std::uint64_t activation_generation = 1;
     std::uint64_t owner_generation = 1;
     std::uint64_t owner = 1;
     std::uint64_t wrapper = 1;
@@ -80,7 +81,8 @@ struct CommitIdentity {
 };
 
 struct PublicationState {
-    bool committed = false;
+    bool pending = false;
+    bool active = false;
     CommitIdentity identity{};
 };
 
@@ -119,9 +121,11 @@ void model_expansion_begin(PublicationState& state);
 void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state);
 std::size_t model_published_count(PublicationState& state,
-    const CommitIdentity& current, bool profile_eligible);
+    const CommitIdentity& current, bool profile_eligible,
+    bool playback_present = true);
 std::size_t model_presentation_published_count(PublicationState& state,
     const CommitIdentity& menu, const CommitIdentity* playback, bool profile_eligible);
 void model_shutdown(PublicationState& state);
+void model_activation_abort(PublicationState& state);
 
 } // namespace ff7r::piano::game::synthetic_model

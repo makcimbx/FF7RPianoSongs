@@ -430,6 +430,7 @@ void __fastcall chart_expand_detour(
         = ChartExpandPreparationOutcome::NativePristine;
     ChartAudioDiagnosticTransaction chart_audio_transaction;
     ChartAudioExpandTlsSnapshot chart_audio_expand;
+    SelectionAudioAdmissionAuthority activation_authority;
     try {
     auto callback = non_audio_hook_gate().try_enter();
     if (!callback) {
@@ -439,7 +440,8 @@ void __fastcall chart_expand_detour(
     void* caller = _ReturnAddress();
     const uintptr_t caller_rva = to_rva(caller);
     preparation = prepare_active_chart_row_patch_before_expand(
-        wrapper, chart_row, caller_rva, &chart_audio_transaction);
+        wrapper, chart_row, caller_rva, &chart_audio_transaction,
+        &activation_authority);
     if (!chart_expand_original_allowed(preparation)) {
         static std::atomic_int s_unresolved_logs{0};
         if (s_unresolved_logs.fetch_add(1, std::memory_order_relaxed) < 32) {
@@ -454,7 +456,8 @@ void __fastcall chart_expand_detour(
     if (g_original_chart_expand) {
         ChartAudioExpandTlsScope scope(
             chart_audio_transaction, wrapper, chart_audio_expand);
-        begin_extended_chart_transaction(current_chart_audio_expand_tls(), wrapper, chart_row, caller_rva);
+        begin_extended_chart_transaction(current_chart_audio_expand_tls(),
+            activation_authority, wrapper, chart_row, caller_rva);
         g_original_chart_expand(wrapper, chart_row, arg3, arg4);
         scope.finish();
     }
@@ -471,10 +474,13 @@ void __fastcall chart_expand_detour(
     // selection/route/lease/song facts. Audio publication/failure, an exact
     // replacement, list exit, or an expand exception terminalizes it.
 
-    const PlaybackSnapshot snapshot = registry().playback_snapshot();
+    const SelectionSnapshot& snapshot = activation_authority.selection;
     const SongDescriptor* song = snapshot.song;
     const SongDifficultyProfile* profile = snapshot.profile;
-    if (!song || !profile || caller_rva != rva::PersistentChartExpandCaller) {
+    const bool authority_exact = selection_audio_admission_authority_matches(
+        activation_authority);
+    if (!authority_exact || !song || !profile
+        || caller_rva != rva::PersistentChartExpandCaller) {
         if (extended_513_committed) invalidate_extended_chart_commit("post_expand_selection");
         return;
     }
@@ -485,7 +491,7 @@ void __fastcall chart_expand_detour(
         return;
     }
     const bool playable_513_count = note_count == 513 && extended_513_committed
-        && playable_513_playback(snapshot);
+        && authority_exact;
     if (!valid_note_count(note_count) && !playable_513_count) {
         if (extended_513_committed) invalidate_extended_chart_commit("post_expand_count_identity");
         return;
@@ -498,7 +504,8 @@ void __fastcall chart_expand_detour(
     const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
     const bool diagnostic_profile = profile->diagnostic_source_rows != 0 ||
         profile->diagnostic_tail_rows != 0;
-    const bool registry_identity_stable = snapshot.storage && snapshot.token.valid()
+    const bool registry_identity_stable = snapshot.storage
+        && activation_authority.token.valid()
         && snapshot.song == song && snapshot.profile == profile;
     UObjectLiveHandle wrapper_identity{};
     const bool wrapper_identity_valid = capture_live_uobject_handle(wrapper, wrapper_identity);
@@ -585,7 +592,7 @@ void __fastcall chart_expand_detour(
         max_event_seconds,
         target_seconds,
         wrapper_identity_valid,
-        snapshot.token,
+        activation_authority.token,
     });
     {
         std::lock_guard<std::mutex> lock(g_completion_capture_mutex);

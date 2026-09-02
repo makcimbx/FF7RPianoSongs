@@ -6,6 +6,8 @@
 
 namespace ff7r::piano::game {
 
+struct SelectionAudioAdmissionAuthority;
+
 using ChartExpandPreparationOutcome = ChartMutationTransactionOutcome;
 
 void capture_active_note_count(int note_count);
@@ -35,7 +37,8 @@ inline int menu_or_playback_note_count_value(
 void log_active_chart_memory(float playback_seconds);
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(
     void* wrapper, void* chart_row, uintptr_t caller_rva,
-    ChartAudioDiagnosticTransaction* diagnostic = nullptr) noexcept;
+    ChartAudioDiagnosticTransaction* diagnostic = nullptr,
+    SelectionAudioAdmissionAuthority* authority = nullptr) noexcept;
 void finish_active_chart_row_patch_after_expand(
     void* wrapper, uintptr_t caller_rva) noexcept;
 bool restore_chart_patch_for_shutdown();

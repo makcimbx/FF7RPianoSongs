@@ -4330,6 +4330,43 @@ bool capture_selection_audio_admission_diagnostic(
     }
 }
 
+bool capture_selection_audio_admission_authority(
+    const SelectionAudioAdmission& admission,
+    SelectionAudioAdmissionAuthority& out) noexcept
+{
+    out = {};
+    if (!admission.impl_) return false;
+    try {
+        const auto& state = *admission.impl_;
+        out.selection = state.selection;
+        out.token = state.selection_token;
+        out.route_lifecycle_epoch = state.lifecycle_state_epoch;
+        out.exact = state.selection_guard_acquired && !state.committed
+            && out.selection && out.selection.storage && out.token.valid()
+            && state.reserved_route_generation == out.token.route_generation
+            && state.reserved_lease.generation == out.token.lease_generation
+            && state.reserved_lease.song_key == out.token.song_key
+            && registry().selection_guard_matches(out.selection, out.token);
+        return out.exact;
+    } catch (...) {
+        out = {};
+        return false;
+    }
+}
+
+bool selection_audio_admission_authority_matches(
+    const SelectionAudioAdmissionAuthority& authority) noexcept
+{
+    try {
+        return authority.exact && authority.selection && authority.selection.storage
+            && authority.token.valid()
+            && g_onmemory_bank_lifecycle.state_epoch() == authority.route_lifecycle_epoch
+            && registry().selection_guard_matches(authority.selection, authority.token);
+    } catch (...) {
+        return false;
+    }
+}
+
 bool cancel_selection_audio_admission(
     SelectionAudioAdmission& admission) noexcept
 {

@@ -75,10 +75,13 @@ struct Transaction {
     std::uint64_t owner_generation = 0;
     void* owner = nullptr;
     ChartAudioExpandTlsSnapshot tls{};
+    SelectionAudioAdmissionAuthority authority{};
 };
 
 struct Committed513 {
+    bool pending = false;
     bool active = false;
+    std::shared_ptr<const void> storage;
     const SongDescriptor* song = nullptr;
     const SongDifficultyProfile* profile = nullptr;
     std::uint64_t registry_generation = 0;
@@ -95,6 +98,9 @@ struct Committed513 {
     EventHeader* header = nullptr;
     void* allocation = nullptr;
     int32_t capacity = 0;
+    std::uint64_t activation_generation = 0;
+    std::uint64_t preparation_ordinal = 0;
+    std::uint64_t route_lifecycle_epoch = 0;
 };
 
 thread_local Transaction g_transaction;
@@ -138,13 +144,14 @@ bool eligible_profile(const SongDifficultyProfile& profile) {
 }
 
 bool exact_identity(const Transaction& tx, void* wrapper, void* chart_row, uintptr_t caller_rva) {
-    const PlaybackSnapshot playback = registry().playback_snapshot();
     const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
     return tx.active && tx.wrapper == wrapper && tx.chart_row == chart_row
         && tx.caller_rva == caller_rva && caller_rva == rva::PersistentChartExpandCaller
-        && playback.song == tx.song && playback.profile == tx.profile
-        && playback.generation == tx.registry_generation && tx.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
-        && playback.profile && playback.profile->diagnostic_descriptor_hash == tx.descriptor_hash
+        && selection_audio_admission_authority_matches(tx.authority)
+        && tx.authority.selection.song == tx.song && tx.authority.selection.profile == tx.profile
+        && tx.authority.selection.generation == tx.registry_generation
+        && tx.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
+        && tx.profile && tx.profile->diagnostic_descriptor_hash == tx.descriptor_hash
         && owner.owner_observed && owner.chart_read_succeeded && owner.owner == tx.owner
         && owner.chart == wrapper && owner.generation == tx.owner_generation
         && owner.registry_generation == tx.registry_generation;
@@ -277,16 +284,34 @@ bool exact_unowned_tail(const Transaction& tx, void* wrapper, void* chart_row,
 void publish_committed_513(const Transaction& tx)
 {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
-    g_committed = {true, tx.song, tx.profile, tx.registry_generation,
-        tx.policy_generation, tx.descriptor_hash, tx.tls.selection_generation,
-        tx.tls.route_generation, tx.tls.lease_generation, tx.tls.song_key,
-        tx.owner_generation, tx.owner, tx.wrapper, tx.chart_row,
-        tx.expected_header, tx.reserved_data, tx.reserved_capacity};
+    g_committed = {};
+    g_committed.pending = true;
+    g_committed.storage = tx.authority.selection.storage;
+    g_committed.song = tx.song;
+    g_committed.profile = tx.profile;
+    g_committed.registry_generation = tx.registry_generation;
+    g_committed.policy_generation = tx.policy_generation;
+    g_committed.descriptor_hash = tx.descriptor_hash;
+    g_committed.selection_generation = tx.tls.selection_generation;
+    g_committed.route_generation = tx.tls.route_generation;
+    g_committed.lease_generation = tx.tls.lease_generation;
+    g_committed.song_key = tx.tls.song_key;
+    g_committed.owner_generation = tx.owner_generation;
+    g_committed.owner = tx.owner;
+    g_committed.wrapper = tx.wrapper;
+    g_committed.chart_row = tx.chart_row;
+    g_committed.header = tx.expected_header;
+    g_committed.allocation = tx.reserved_data;
+    g_committed.capacity = tx.reserved_capacity;
+    g_committed.activation_generation = tx.authority.activation_generation;
+    g_committed.preparation_ordinal = tx.authority.preparation_ordinal;
+    g_committed.route_lifecycle_epoch = tx.authority.route_lifecycle_epoch;
 }
 
 bool committed_selection_matches_locked(const SelectionSnapshot& selection)
 {
-    return g_committed.active && g_admissions.load(std::memory_order_acquire)
+    return (g_committed.pending || g_committed.active)
+        && g_admissions.load(std::memory_order_acquire) && g_committed.storage
         && selection.song == g_committed.song && selection.profile == g_committed.profile
         && selection.generation == g_committed.registry_generation
         && selection.generation == g_committed.selection_generation
@@ -302,6 +327,12 @@ bool committed_playback_matches_locked(const PlaybackSnapshot& playback)
         && playback.token.route_generation == g_committed.route_generation
         && playback.token.lease_generation == g_committed.lease_generation
         && playback.token.song_key == g_committed.song_key;
+}
+
+bool playback_absent(const PlaybackSnapshot& playback)
+{
+    return !playback.storage && !playback.song && !playback.profile
+        && !playback.token.valid();
 }
 
 void release_transaction() {
@@ -406,13 +437,23 @@ bool playable_513_profile(const SongDifficultyProfile& profile) noexcept {
 
 bool playable_513_playback(const PlaybackSnapshot& playback) noexcept {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
+    if (g_committed.pending && playback_absent(playback)) {
+        core::log(core::LogLevel::Debug,
+            "[extended_chart] committed_513=pending playback=absent publication=512");
+        return false;
+    }
     const bool matches = committed_playback_matches_locked(playback);
-    if (g_committed.active && !matches) {
+    if (g_committed.pending && matches) {
+        g_committed.pending = false;
+        g_committed.active = true;
         core::log(core::LogLevel::Info,
-            "[extended_chart] committed_513=invalidated reason=playback_context_mismatch");
+            "[extended_chart] committed_513=active playback_identity=exact publication=513");
+    } else if ((g_committed.pending || g_committed.active) && !matches) {
+        core::log(core::LogLevel::Info,
+            "[extended_chart] committed_513=invalidated reason=playback_publication_mismatch");
         g_committed = {};
     }
-    return matches;
+    return matches && g_committed.active;
 }
 
 
@@ -423,22 +464,32 @@ bool playable_513_presentation(
     // The two immutable snapshots are accepted as one coherent bundle only
     // when their shared selection generation and descriptor identities agree.
     // No retry or retained native-pointer dereference is used here.
-    const bool matches = committed_selection_matches_locked(menu)
-        && committed_playback_matches_locked(playback)
+    const bool menu_matches = committed_selection_matches_locked(menu);
+    if (g_committed.pending && menu_matches && playback_absent(playback)) {
+        core::log(core::LogLevel::Debug,
+            "[extended_chart] committed_513=pending presentation_playback=absent publication=512");
+        return false;
+    }
+    const bool matches = menu_matches && committed_playback_matches_locked(playback)
         && menu.storage && playback.storage
         && menu.song == playback.song && menu.profile == playback.profile
         && menu.generation == playback.generation;
-    if (g_committed.active && !matches) {
+    if (g_committed.pending && matches) {
+        g_committed.pending = false;
+        g_committed.active = true;
+        core::log(core::LogLevel::Info,
+            "[extended_chart] committed_513=active playback_identity=exact publication=513 source=presentation");
+    } else if ((g_committed.pending || g_committed.active) && !matches) {
         core::log(core::LogLevel::Info,
             "[extended_chart] committed_513=invalidated reason=presentation_context_mismatch");
         g_committed = {};
     }
-    return matches;
+    return matches && g_committed.active;
 }
 
 void invalidate_extended_chart_commit(const char* reason) noexcept {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
-    if (g_committed.active) {
+    if (g_committed.pending || g_committed.active) {
         std::ostringstream out;
         out << "[extended_chart] committed_513=invalidated reason="
             << (reason ? reason : "unspecified")
@@ -447,9 +498,24 @@ void invalidate_extended_chart_commit(const char* reason) noexcept {
             << " policy_generation=" << g_committed.policy_generation
             << " selection_generation=" << g_committed.selection_generation
             << " route_generation=" << g_committed.route_generation
-            << " lease_generation=" << g_committed.lease_generation;
+            << " lease_generation=" << g_committed.lease_generation
+            << " activation_generation=" << g_committed.activation_generation
+            << " route_lifecycle_epoch=" << g_committed.route_lifecycle_epoch;
         core::log(core::LogLevel::Info, out.str());
     }
+    g_committed = {};
+}
+
+void extended_chart_activation_terminal(const std::uint64_t activation_generation,
+    const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
+{
+    if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
+        || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) return;
+    std::lock_guard<std::mutex> lock(g_committed_mutex);
+    if (!(g_committed.pending || g_committed.active)
+        || g_committed.activation_generation != activation_generation) return;
+    core::log(core::LogLevel::Info,
+        "[extended_chart] committed_513=invalidated reason=activation_terminal");
     g_committed = {};
 }
 
@@ -531,6 +597,7 @@ bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error)
 }
 
 void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transaction,
+    const SelectionAudioAdmissionAuthority& authority,
     void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
     if (g_transaction.active) {
         g_transaction.reserve_mismatch = true;
@@ -543,15 +610,17 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
         || transaction.depth != 1 || !transaction.original_inflight
         || caller_rva != rva::PersistentChartExpandCaller
         || !wrapper || !chart_row) return;
-    const PlaybackSnapshot playback = registry().playback_snapshot();
     const RetainedChartOwnerObservation owner = retained_chart_owner_observation();
-    if (!playback.song || !playback.profile || !eligible_profile(*playback.profile)
+    const SelectionSnapshot& selection = authority.selection;
+    if (!selection_audio_admission_authority_matches(authority)
+        || !selection.song || !selection.profile || !eligible_profile(*selection.profile)
         || !owner.owner_observed || !owner.chart_read_succeeded || owner.chart != wrapper
-        || owner.registry_generation != playback.generation
-        || transaction.selection_generation != playback.generation
-        || transaction.route_generation != playback.token.route_generation
-        || transaction.lease_generation != playback.token.lease_generation
-        || transaction.song_key != playback.token.song_key) return;
+        || owner.registry_generation != selection.generation
+        || transaction.generation != authority.activation_generation
+        || transaction.selection_generation != selection.generation
+        || transaction.route_generation != authority.token.route_generation
+        || transaction.lease_generation != authority.token.lease_generation
+        || transaction.song_key != authority.token.song_key) return;
     bool expected = false;
     if (!g_global_claim.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) return;
     void* side = nullptr;
@@ -560,12 +629,12 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     }
     g_transaction = {true, true, false, false, wrapper, chart_row, side, caller_rva,
         reinterpret_cast<EventHeader*>(static_cast<uint8_t*>(wrapper) + kHeaderOffset),
-        nullptr, 0, playback.song, playback.profile, playback.generation,
-        ff7rp::pipeline::chart_row_policy_generation(), playback.profile->diagnostic_descriptor_hash,
-        owner.generation, owner.owner, transaction};
+        nullptr, 0, selection.song, selection.profile, selection.generation,
+        ff7rp::pipeline::chart_row_policy_generation(), selection.profile->diagnostic_descriptor_hash,
+        owner.generation, owner.owner, transaction, authority};
     std::ostringstream out;
     out << "[extended_chart] transaction=admitted owner_generation=" << owner.generation
-        << " registry_generation=" << playback.generation
+        << " authority_source=selection_admission registry_generation=" << selection.generation
         << " policy_generation=" << g_transaction.policy_generation
         << " descriptor_hash=" << g_transaction.descriptor_hash;
     core::log(core::LogLevel::Info, out.str());
@@ -700,7 +769,7 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         && exact_identity(tx, wrapper, chart_row, caller_rva)) {
         publish_committed_513(tx);
         success = true;
-        core::log(core::LogLevel::Info, "[extended_chart] prefix_validated=1 tail_constructed=1 callback_validated=1 count_commit=513 rollback=none");
+        core::log(core::LogLevel::Info, "[extended_chart] prefix_validated=1 tail_constructed=1 callback_validated=1 count_commit=513 committed_513=pending rollback=none");
         return finish();
     }
     EventHeader live{};

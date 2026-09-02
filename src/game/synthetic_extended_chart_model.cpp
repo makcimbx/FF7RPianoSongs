@@ -103,13 +103,15 @@ void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state)
 {
     state = result.count_committed && !result.rolled_back && !result.route_blocked
-        ? PublicationState{true, identity} : PublicationState{};
+        ? PublicationState{true, false, identity} : PublicationState{};
 }
 
 std::size_t model_published_count(PublicationState& state,
-    const CommitIdentity& current, const bool profile_eligible)
+    const CommitIdentity& current, const bool profile_eligible,
+    const bool playback_present)
 {
-    if (!state.committed || !profile_eligible) return kNativeRows;
+    if (!(state.pending || state.active) || !profile_eligible) return kNativeRows;
+    if (state.pending && !playback_present) return kNativeRows;
     const auto& a = state.identity;
     const auto& b = current;
     const bool matches = a.song == b.song && a.profile == b.profile
@@ -119,17 +121,23 @@ std::size_t model_published_count(PublicationState& state,
         && a.route_generation == b.route_generation
         && a.lease_generation == b.lease_generation && a.song_key == b.song_key
         && a.descriptor_hash == b.descriptor_hash
+        && a.activation_generation == b.activation_generation
         && a.owner_generation == b.owner_generation && a.owner == b.owner
         && a.wrapper == b.wrapper && a.chart == b.chart && a.header == b.header
         && a.allocation == b.allocation;
     if (!matches) state = {};
-    return matches ? kPlayableRows : kNativeRows;
+    if (matches && state.pending) {
+        state.pending = false;
+        state.active = true;
+    }
+    return matches && state.active ? kPlayableRows : kNativeRows;
 }
 
 std::size_t model_presentation_published_count(PublicationState& state,
     const CommitIdentity& menu, const CommitIdentity* playback, const bool profile_eligible)
 {
-    if (!playback || model_published_count(state, *playback, profile_eligible) != kPlayableRows) {
+    if (!playback) return kNativeRows;
+    if (model_published_count(state, *playback, profile_eligible) != kPlayableRows) {
         state = {};
         return kNativeRows;
     }
@@ -147,4 +155,5 @@ std::size_t model_presentation_published_count(PublicationState& state,
 }
 
 void model_shutdown(PublicationState& state) { state = {}; }
+void model_activation_abort(PublicationState& state) { state = {}; }
 } // namespace ff7r::piano::game::synthetic_model

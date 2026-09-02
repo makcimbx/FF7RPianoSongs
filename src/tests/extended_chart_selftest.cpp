@@ -190,7 +190,10 @@ bool test_committed_publication_state()
     const Result success = run(extended_request(rows), chart);
     if (model_published_count(state, identity, true) != 512) return false;
     model_publish_result(success, identity, state);
-    if (model_published_count(state, identity, true) != 513) return false;
+    if (model_published_count(state, identity, true, false) != 512
+        || !state.pending || state.active) return false;
+    if (model_published_count(state, identity, true) != 513
+        || state.pending || !state.active) return false;
 
     auto reserve_unavailable = extended_request(rows);
     reserve_unavailable.verified_1005 = false;
@@ -218,7 +221,7 @@ bool test_committed_publication_state()
     if (model_presentation_published_count(state, identity, &identity, true) != 513) return false;
     model_publish_result(success, identity, state);
     if (model_presentation_published_count(state, identity, nullptr, true) != 512
-        || state.committed) return false;
+        || !state.pending || state.active) return false;
     for (auto mutate : {1, 2, 3}) {
         model_publish_result(success, identity, state);
         CommitIdentity changed_playback = identity;
@@ -226,8 +229,19 @@ bool test_committed_publication_state()
         if (mutate == 2) ++changed_playback.lease_generation;
         if (mutate == 3) ++changed_playback.song_key;
         if (model_presentation_published_count(
-                state, identity, &changed_playback, true) != 512 || state.committed) return false;
+                state, identity, &changed_playback, true) != 512
+            || state.pending || state.active) return false;
     }
+
+    model_publish_result(success, identity, state);
+    CommitIdentity changed_activation = identity;
+    ++changed_activation.activation_generation;
+    if (model_published_count(state, changed_activation, true) != 512
+        || state.pending || state.active) return false;
+
+    model_publish_result(success, identity, state);
+    model_activation_abort(state);
+    if (model_published_count(state, identity, true) != 512) return false;
 
     for (const FailurePoint point : {FailurePoint::PrefixValidation, FailurePoint::FNameFind,
              FailurePoint::ConstructorReturnedNonTail, FailurePoint::CallbackValidation,

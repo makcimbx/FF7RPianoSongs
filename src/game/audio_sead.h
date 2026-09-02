@@ -165,6 +165,7 @@ SelectionActivationClaim claim_selection_audio_activation(
 SelectionSnapshot selection_audio_activation_claim_selection(
     const SelectionActivationClaim& claim) noexcept;
 
+struct SelectionAudioAdmissionAuthority;
 class SelectionAudioAdmission final {
 public:
     struct Impl;
@@ -192,6 +193,18 @@ private:
     friend bool capture_selection_audio_admission_diagnostic(
         const SelectionAudioAdmission& admission,
         ChartAudioDiagnosticPrewriteSnapshot& out) noexcept;
+    friend bool capture_selection_audio_admission_authority(
+        const SelectionAudioAdmission& admission,
+        SelectionAudioAdmissionAuthority& out) noexcept;
+};
+
+struct SelectionAudioAdmissionAuthority final {
+    bool exact = false;
+    SelectionSnapshot selection{};
+    CustomContextToken token{};
+    std::uint64_t route_lifecycle_epoch = 0;
+    std::uint64_t activation_generation = 0;
+    std::uint64_t preparation_ordinal = 0;
 };
 
 SelectionAudioAdmission begin_selection_audio_admission(
@@ -204,6 +217,11 @@ bool cancel_selection_audio_admission(SelectionAudioAdmission& admission) noexce
 bool capture_selection_audio_admission_diagnostic(
     const SelectionAudioAdmission& admission,
     ChartAudioDiagnosticPrewriteSnapshot& out) noexcept;
+bool capture_selection_audio_admission_authority(
+    const SelectionAudioAdmission& admission,
+    SelectionAudioAdmissionAuthority& out) noexcept;
+bool selection_audio_admission_authority_matches(
+    const SelectionAudioAdmissionAuthority& authority) noexcept;
 bool selection_audio_admission_cancellation_complete(
     const SelectionSnapshot& selection,
     const AudioRouteLeaseIdentity& lease) noexcept;

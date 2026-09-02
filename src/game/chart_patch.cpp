@@ -4,6 +4,7 @@
 #include "core/logging.h"
 #include "core/pe_image.h"
 #include "game/completion_timing.h"
+#include "game/extended_chart.h"
 #include "game/note_count.h"
 #include "game/rvas.h"
 #include "game/runtime_layouts.h"
@@ -1834,6 +1835,7 @@ void finish_chart_audio_diagnostic_transaction(
             g_chart_audio_diagnostic_transaction = {};
         }
         log_chart_audio_diagnostic_transaction("terminal", terminal);
+        extended_chart_activation_terminal(terminal.generation, outcome);
     } catch (...) {
     }
 }
@@ -1841,7 +1843,8 @@ void finish_chart_audio_diagnostic_transaction(
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     void* wrapper, void* chart_row, uintptr_t caller_rva,
     SelectionAudioAdmission& admission,
-    ChartAudioDiagnosticTransaction* diagnostic)
+    ChartAudioDiagnosticTransaction* diagnostic,
+    SelectionAudioAdmissionAuthority* authority)
 {
     if (caller_rva != rva::PersistentChartExpandCaller || !wrapper || !chart_row) {
         return ChartExpandPreparationOutcome::NativePristine;
@@ -1928,6 +1931,8 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
 
     const AudioRouteLeaseIdentity admission_lease
         = selection_audio_admission_lease(admission);
+    SelectionAudioAdmissionAuthority captured_authority;
+    (void)capture_selection_audio_admission_authority(admission, captured_authority);
     if (diagnostic) {
         diagnostic->wrapper = reinterpret_cast<uintptr_t>(wrapper);
         diagnostic->chart_row = reinterpret_cast<uintptr_t>(chart_row);
@@ -2042,6 +2047,12 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
             }
         }
     }
+    if (authority && applied && captured_authority.exact && diagnostic
+        && diagnostic->active) {
+        captured_authority.activation_generation = diagnostic->generation;
+        captured_authority.preparation_ordinal = diagnostic->preparation_ordinal;
+        *authority = std::move(captured_authority);
+    }
     return outcome;
 }
 
@@ -2071,14 +2082,16 @@ void log_chart_prepare_outcome_best_effort(
 
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(
     void* wrapper, void* chart_row, uintptr_t caller_rva,
-    ChartAudioDiagnosticTransaction* diagnostic) noexcept
+    ChartAudioDiagnosticTransaction* diagnostic,
+    SelectionAudioAdmissionAuthority* authority) noexcept
 {
     SelectionAudioAdmission admission{};
     if (diagnostic) *diagnostic = {};
+    if (authority) *authority = {};
     try {
         const ChartExpandPreparationOutcome outcome
             = prepare_active_chart_row_patch_impl(
-            wrapper, chart_row, caller_rva, admission, diagnostic);
+            wrapper, chart_row, caller_rva, admission, diagnostic, authority);
         log_chart_prepare_outcome_best_effort(outcome, wrapper, chart_row);
         if (diagnostic && diagnostic->generation != 0) {
             log_chart_audio_diagnostic_transaction("pre_write", *diagnostic);
