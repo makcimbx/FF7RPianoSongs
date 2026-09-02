@@ -23,7 +23,7 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 
 - [ChartRowLimitEvidence.md](ChartRowLimitEvidence.md) preserves parser-cap, event ABI, ownership, synthetic-model, and runtime diagnostic findings.
 - [ChartEventAbiGhidra.txt](ChartEventAbiGhidra.txt) is the underlying recovered chart-event ABI report.
-- [Playable513ReserveEvidence.md](Playable513ReserveEvidence.md) preserves the verified-1.005 scoped-reserve, row-513 constructor/callback, validation, rollback, hook-lifecycle, and explicit nonclaim evidence for the restricted monotone-only experiment.
+- [Playable513ReserveEvidence.md](Playable513ReserveEvidence.md) preserves the verified-1.005 scoped-reserve, row-513 constructor/callback, direct persistent-owner binding, pre-expansion authority, validation, rollback, hook-lifecycle, and explicit nonclaim evidence for the restricted monotone-only experiment.
 - [RecoverChartEventAbi.java](GhidraScripts/RecoverChartEventAbi.java) is the Ghidra extraction script.
 - [MidiDifficultyCalibration-v38-20260714.md](MidiDifficultyCalibration-v38-20260714.md) preserves authored-route calibration, generated fixture diagnostics, and performance observations.
 - [ProductionCacheOptimization-v38-20260715.md](ProductionCacheOptimization-v38-20260715.md) records the cache optimizer investigation.

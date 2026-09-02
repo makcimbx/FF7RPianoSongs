@@ -14,6 +14,8 @@ remains governed by the product source and `../docs/ChartLimits.md`.
 
 - **Direct static evidence**: recovered from the verified executable's code,
   retained Ghidra output, or exact executable-byte reads.
+- **Runtime evidence**: observed in a retained, immutable matching-build session.
+  It establishes that session's call order and values, not unobserved executions.
 - **Bounded inference**: follows from direct evidence under the restricted fixture
   invariants stated here, but has not been exercised in the game.
 - **Runtime-unvalidated**: requires the focused in-game experiment before it can
@@ -695,3 +697,220 @@ capacity is at least 513; parser prefix count is exactly 512; tail prompt and
 judgement occur; score/combo and completion include row 513; abort, natural
 teardown, and a subsequent song destroy/rebuild the vector without stale state,
 leak, double destruction, or fallback-route corruption.
+
+## 2026-09-02 Pre-Expansion Authority Follow-up
+
+This follow-up retains one later, bounded investigation of why an exact eligible
+513-row activation still expanded to 512 events after descriptor retention,
+selection admission, and reserve-hook availability had been established. It does
+not replace the ABI and ownership evidence above.
+
+Follow-up source checkpoint:
+
+```text
+2368bc362729f4c212b7aa3afb6bc57af9f1483d
+```
+
+The executable identity remained exactly:
+
+```text
+catalog build id: ff7rebirth-steam-win64-6a16ced2
+game version:     1.005
+PE timestamp:     0x6a16ced2
+SizeOfImage:      0x099d9000
+PE checksum:      0x0769ea6e
+file size:        124317952
+SHA-256:          752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc
+image base:       0x140000000
+```
+
+Evidence sources and classifications:
+
+- **Runtime evidence**: immutable session
+  `C:/Users/makci/AppData/Local/FF7RPianoSongs/runtime-gates/20260902T150238Z-f519abcb0c7b`,
+  principally `log-after.log`. The session was rolled back after capture.
+- **Direct static evidence**: read-only Ghidra inspection of the matching 1.005
+  program `ff7rebirth_.exe-1.005`, plus the source checkpoint named above. No
+  Ghidra program state was changed.
+- **Bounded inference**: the corrected authority envelope and lifecycle rules
+  below. They are constrained by the exact caller and session evidence but have
+  not run in the game.
+- `rva_catalog.json` entries remain repository migration records. Their presence
+  is not classified as independent recovery of the call semantics below.
+
+### Deterministic circular dependency
+
+The retained session established this order:
+
+1. At `18:06:26.533`, `completion_timing_init_detour` observed native owner
+   `0x7fefcee96b90`. The chart pointer was null both before and after the original
+   call, and playback was absent. The resulting retained observation had owner
+   generation 1, registry generation 0, empty song/profile identity, and no chart.
+2. At `18:06:36.933..18:06:36.946`, the target fixture became current/selected
+   and then entered guarded activation. Selection generation 38, route generation
+   1, lease generation 1, exact song key, chart patching, and chart/audio
+   admission all succeeded while playback remained unpublished.
+3. The expansion received wrapper `0x7fed2eb19750`, chart row
+   `0xf613b7e750`, and persistent caller return RVA `0x03999F53`.
+4. Pre-expansion extended authority capture rejected the retained observation:
+   its registry generation was 0, its chart had not been read or bound, wrapper
+   equality failed, and no wrapper UObject identity was available.
+5. No extended transaction, reserve substitution, tail construction, or count
+   commit followed. Native expansion returned event count/capacity `512/512`.
+   Playback publication occurred only later.
+
+The source explains that order. `completion_timing_init_detour` is the sole native
+producer of `RetainedChartOwnerObservation`. It records a chart only when the
+owner's chart changes across that callback and binds song/profile identity from
+the current playback snapshot. `retained_chart_owner_observation_impl` can lazily
+bind a chart only after current **playback** matches the retained song/profile.
+`begin_extended_chart_transaction`, however, requests that observation before
+calling the original expansion. In the observed first-activation lifecycle there
+is no intervening producer and playback cannot be published until later
+PlaySetup. The observation therefore cannot become current in time to authorize
+the expansion that it is being asked to authorize.
+
+This is a deterministic circular dependency for the observed activation, not a
+cache, descriptor, fixture, startup-order, or reserve-hook loss. It is not a
+universal claim that every native first activation must have the same callback
+history. It proves that playable admission cannot depend on that history. A
+retained observation from an older activation is also not a substitute: the
+global is explicitly cleared only at duration shutdown, may contain a null or
+previous wrapper, and does not itself own the current selection/admission lease.
+It may support later diagnostics only after current identity is independently
+proved.
+
+### Exact current-owner recovery at the persistent caller
+
+Direct disassembly of `FUN_143999AF4` recovered the owner/wrapper relationship
+available during the exact expansion call:
+
+```text
+0x143999B4A  MOV  RDI,RCX               ; preserve native owner
+...
+0x143999E36  LEA  RSI,[RDI+0xF48]       ; persistent owner chart slot
+0x143999E46  MOV  qword ptr [RSI],RCX   ; publish current wrapper
+...
+0x143999E80  MOV  qword ptr [RBP-0x28],RDI ; callback captures owner
+...
+0x143999EAF  VMOVUPS [RAX+0x110],YMM1   ; writes capture; owner at +0x118
+...
+0x143999F4E  CALL 0x1439B9104           ; piano_score_expand
+0x143999F53  ...                         ; exact return/caller gate
+```
+
+At `0x143999E46`, `RSI == owner+0xF48` and `RCX` is the current wrapper. The
+callback object assembled on the caller's stack places RDI at the slot copied to
+`wrapper+0x118`. Immediately before `0x143999F4E`, the caller reloads that wrapper
+from `[RSI]` into RCX and supplies the chart row in RDX. R8/R9 are residual values,
+not owner authority. The ordinary expand detour ABI therefore receives the
+wrapper and chart row directly and can read the current owner from
+`wrapper+0x118`; an owner register is not an expand-function argument.
+
+The wrapper is **not proved to be a UObject**. The retained runtime attempt could
+not capture a wrapper UObject identity, so wrapper validity must not depend on
+one. The owner read from `wrapper+0x118` must instead pass live UObject identity
+capture, and a safe reciprocal read must prove `owner+0xF48 == wrapper`. The
+wrapper remains a borrowed native object bounded by the synchronous persistent
+caller. Exact caller return address, owner identity, reciprocal relation,
+selection/admission generation, wrapper, chart row, and event-header address form
+one composite identity; no one pointer is sufficient alone.
+
+### Corrected fail-closed authority envelope
+
+The smallest bounded correction separates descriptor authority from native
+object authority.
+
+**Before the original expansion:**
+
+1. Require the exact guarded selection/audio admission authority: immutable
+   registry storage, song/profile pointers, selection generation, route and lease
+   generations, song key, route lifecycle epoch, activation generation, and
+   preparation ordinal must all remain current.
+2. Require the existing persistent caller, active depth-one chart/audio TLS, and
+   exclusive global extended-transaction claim.
+3. Read owner from `wrapper+0x118`, capture its live UObject identity, and require
+   `owner+0xF48 == wrapper`.
+4. Bind that owner identity, wrapper, chart row, `wrapper+0x80` event header, and
+   explicit selection/admission identity into the one synchronous transaction.
+5. Do not consult a stale `RetainedChartOwnerObservation` for mutation authority.
+
+**Inside the reserve callback:**
+
+1. Retain every existing TLS, nesting, global-claim, exact caller, exact reserve
+   return, requested-512, and one-hit gate.
+2. Require the callback header to be exactly the bound `wrapper+0x80` header and
+   to be pristine after parser reset.
+3. Revalidate current selection/admission identity and the directly bound native
+   owner/wrapper relation before substituting 513.
+
+**After the original expansion, before any tail write:**
+
+1. Revalidate the owner UObject identity, `owner+0xF48 == wrapper`, wrapper,
+   chart row, header address, selection guard, activation identity, and policy/
+   descriptor identity.
+2. Require the recorded allocation, count 512, capacity at least 513, and the
+   complete prefix invariants already specified in this file.
+3. Construct and validate the tail, update maximum time, and commit count 513
+   last under the existing cleanup state machine.
+4. Publish pending 513 state only for the same selection/admission and terminal
+   generation. Later playback publication may promote it to active only when the
+   route token remains exact.
+
+The directly captured owner may be retained after expansion for completion and
+cross-callback validation, together with its UObject handle and exact activation/
+playback identities. Such retention is downstream validation, not permission to
+mutate a future wrapper. A new expansion must replace or invalidate the old
+observation before binding its current owner. Selection replacement, retry,
+supersession, list exit, playback failure, policy change, and shutdown must prevent
+stale previous-song or previous-generation reuse. No wait, poll count, or tester
+delay is part of this envelope: early input either establishes every predicate or
+falls through safely to the native 512 path.
+
+### Rollback and terminal-generation ordering
+
+Failure before reserve substitution forwards the original request unchanged.
+Failure after successful 513 reservation but before tail ownership leaves a
+native count of 512 with coherent spare capacity; normal native reset/destruction
+owns that allocation. Failure after tail construction follows the count-last
+rollback rules above. If count/header/owner identity drifts and rollback ownership
+cannot be proved, custom audio/publication must be blocked and uncertain native
+memory must not be destructed or guessed.
+
+Static source review also found a distinct terminal-ordering issue. A failed
+chart/audio terminal currently clears a committed 513 record only if publication
+has already created that record. If the same generation becomes terminal just
+before `publish_committed_513`, the terminal is not retained and publication can
+miss it. No retained runtime session exercised this race; this is **direct static
+evidence plus bounded concurrency inference**, not an observed failure.
+
+A coherent state transition must retain the aborting terminal generation across
+publication: terminal-before-publication rejects that generation and requires
+proved synchronous rollback; terminal-after-publication invalidates it; a stale
+generation cannot invalidate or block a newer activation. Supersession, list
+exit, audio failure, and stop failure use the same generation rule. Success
+outcomes do not create an abort watermark. Terminal recording and publication
+must share serialization so a check/publish gap cannot lose the outcome.
+
+### Runtime nonclaims and next experiment
+
+This follow-up does not establish that:
+
+- `wrapper+0x118` has been observed at runtime to equal the current owner during
+  the exact first activation;
+- reciprocal owner/wrapper identity remains exact before and after the original
+  expansion in all activations;
+- a 513 reserve, tail construction, count commit, prompt, judgement, audio route,
+  completion, teardown, retry, or subsequent song has succeeded;
+- cross-thread chart access is impossible or allocator faults are recoverable;
+- the retained terminal-ordering risk has occurred at runtime;
+- any build other than the identified 1.005 executable shares these offsets or
+  call semantics.
+
+The next focused experiment is observation-only. On the first exact activation,
+capture and log the owner read from `wrapper+0x118`, owner UObject identity, and
+the reciprocal `owner+0xF48` read immediately before and after the original
+expansion, correlated with the explicit selection/admission generation and exact
+header. It must leave reserve arguments, vector capacity/count, chart data, and
+audio behavior unchanged. That experiment requires separate authorization to
+build, install, launch, or exercise the game.
