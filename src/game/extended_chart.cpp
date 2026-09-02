@@ -284,7 +284,7 @@ void publish_committed_513(const Transaction& tx)
         tx.expected_header, tx.reserved_data, tx.reserved_capacity};
 }
 
-bool committed_matches_locked(const SelectionSnapshot& selection)
+bool committed_selection_matches_locked(const SelectionSnapshot& selection)
 {
     return g_committed.active && g_admissions.load(std::memory_order_acquire)
         && selection.song == g_committed.song && selection.profile == g_committed.profile
@@ -293,6 +293,15 @@ bool committed_matches_locked(const SelectionSnapshot& selection)
         && selection.profile && eligible_profile(*selection.profile)
         && g_committed.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
         && selection.profile->diagnostic_descriptor_hash == g_committed.descriptor_hash;
+}
+
+bool committed_playback_matches_locked(const PlaybackSnapshot& playback)
+{
+    return playback.token.valid() && committed_selection_matches_locked(playback)
+        && playback.token.registry_generation == g_committed.registry_generation
+        && playback.token.route_generation == g_committed.route_generation
+        && playback.token.lease_generation == g_committed.lease_generation
+        && playback.token.song_key == g_committed.song_key;
 }
 
 void release_transaction() {
@@ -395,27 +404,33 @@ bool playable_513_profile(const SongDifficultyProfile& profile) noexcept {
     return playback.profile == &profile && playable_513_playback(playback);
 }
 
-bool playable_513_selection(const SelectionSnapshot& selection) noexcept {
+bool playable_513_playback(const PlaybackSnapshot& playback) noexcept {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
-    const bool matches = committed_matches_locked(selection);
+    const bool matches = committed_playback_matches_locked(playback);
     if (g_committed.active && !matches) {
         core::log(core::LogLevel::Info,
-            "[extended_chart] committed_513=invalidated reason=selection_or_generation_mismatch");
+            "[extended_chart] committed_513=invalidated reason=playback_context_mismatch");
         g_committed = {};
     }
     return matches;
 }
 
-bool playable_513_playback(const PlaybackSnapshot& playback) noexcept {
+
+bool playable_513_presentation(
+    const RenderSnapshot& menu, const PlaybackSnapshot& playback) noexcept
+{
     std::lock_guard<std::mutex> lock(g_committed_mutex);
-    const bool matches = committed_matches_locked(playback)
-        && playback.token.registry_generation == g_committed.registry_generation
-        && playback.token.route_generation == g_committed.route_generation
-        && playback.token.lease_generation == g_committed.lease_generation
-        && playback.token.song_key == g_committed.song_key;
+    // The two immutable snapshots are accepted as one coherent bundle only
+    // when their shared selection generation and descriptor identities agree.
+    // No retry or retained native-pointer dereference is used here.
+    const bool matches = committed_selection_matches_locked(menu)
+        && committed_playback_matches_locked(playback)
+        && menu.storage && playback.storage
+        && menu.song == playback.song && menu.profile == playback.profile
+        && menu.generation == playback.generation;
     if (g_committed.active && !matches) {
         core::log(core::LogLevel::Info,
-            "[extended_chart] committed_513=invalidated reason=playback_context_mismatch");
+            "[extended_chart] committed_513=invalidated reason=presentation_context_mismatch");
         g_committed = {};
     }
     return matches;
@@ -637,9 +652,13 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     std::memset(tail, 0, kEventSize);
     if (!exact_unowned_tail(tx, wrapper, chart_row, caller_rva, tail))
         return unresolved("tail_slot_identity_before_constructor");
-    if (g_api.construct(tail, wrapper, tx.side, 1024, tail_time, 0.0f,
-            static_cast<uint8_t>(note.note_type), static_cast<uint8_t>(note.dot_type), tail_name) != tail
-        || !event_valid(tail, wrapper, tx.side, 1024, tail_time, note, tail_name, false)) {
+    // Native faults remain outside this experiment's recoverable contract.
+    // A non-tail return does not prove that this slot became destructor-owned.
+    void* const constructed = g_api.construct(tail, wrapper, tx.side, 1024, tail_time, 0.0f,
+        static_cast<uint8_t>(note.note_type), static_cast<uint8_t>(note.dot_type), tail_name);
+    if (constructed != tail)
+        return unresolved("tail_constructor_ownership_unproved");
+    if (!event_valid(tail, wrapper, tx.side, 1024, tail_time, note, tail_name, false)) {
         if (!cleanup_unowned_tail()) return unresolved("tail_constructor_cleanup_identity");
         return reject("tail_constructor_validation");
     }

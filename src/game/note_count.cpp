@@ -634,7 +634,7 @@ uintptr_t __fastcall note_count_detour(void* arg0, void* arg1, void* arg2, void*
     const SongDifficultyProfile* profile = menu.profile ? menu.profile : playback.profile;
     const int replacement = resolve_menu_or_playback_note_count(menu, playback);
     const bool restricted_513 = replacement == 513 && profile
-        && (menu.song ? playable_513_selection(menu) : playable_513_playback(playback));
+        && (menu.song ? playable_513_presentation(menu, playback) : playable_513_playback(playback));
     if (!song || (!valid_note_count(replacement) && !restricted_513)) {
         return original;
     }
@@ -695,7 +695,7 @@ int resolve_menu_or_playback_note_count(
 {
     const SongDifficultyProfile* selected = menu.song ? menu.profile : playback.profile;
     const int maximum = selected
-        && (menu.song ? playable_513_selection(menu) : playable_513_playback(playback))
+        && (menu.song ? playable_513_presentation(menu, playback) : playable_513_playback(playback))
         ? static_cast<int>(ff7rp::pipeline::kPlayable513ChartRows)
         : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
     return menu_or_playback_note_count_value(menu, playback,

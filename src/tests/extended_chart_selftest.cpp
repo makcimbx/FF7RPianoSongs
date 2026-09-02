@@ -129,10 +129,17 @@ bool test_failure_cleanup_and_drift()
         if (result.count_committed || chart.tail_constructor_entered || chart.tail_destructed
             || chart.count != 512 || chart.storage.size() != 512 || chart.capacity < 513) return false;
     }
-    for (const FailurePoint point : {FailurePoint::Constructor, FailurePoint::ConstructorValidation,
+    Chart non_tail;
+    const auto non_tail_result = ff7r::piano::game::synthetic_model::run(
+        extended_request(rows, FailurePoint::ConstructorReturnedNonTail), non_tail);
+    if (non_tail_result.count_committed || non_tail_result.constructor_returned_tail
+        || !non_tail_result.route_blocked || non_tail.tail_destructed
+        || !non_tail.ownership_preserved || non_tail.storage.size() != 513) return false;
+    for (const FailurePoint point : {FailurePoint::ConstructorValidation,
              FailurePoint::CallbackBuild, FailurePoint::CallbackValidation}) {
         Chart chart; const auto result = ff7r::piano::game::synthetic_model::run(extended_request(rows, point), chart);
-        if (result.count_committed || !chart.tail_destructed || chart.count != 512 || chart.storage.size() != 512) return false;
+        if (result.count_committed || !result.constructor_returned_tail || !chart.tail_destructed
+            || chart.count != 512 || chart.storage.size() != 512) return false;
     }
     Chart rolled; const auto rollback = ff7r::piano::game::synthetic_model::run(
         extended_request(rows, FailurePoint::PostCountValidation), rolled);
@@ -202,12 +209,29 @@ bool test_committed_publication_state()
     mismatch.selection_generation++;
     if (model_published_count(state, mismatch, true) != 512
         || model_published_count(state, identity, false) != 512) return false;
+    model_publish_result(success, identity, state);
     mismatch = identity;
     mismatch.route_generation++;
     if (model_published_count(state, mismatch, true) != 512) return false;
 
+    model_publish_result(success, identity, state);
+    if (model_presentation_published_count(state, identity, &identity, true) != 513) return false;
+    model_publish_result(success, identity, state);
+    if (model_presentation_published_count(state, identity, nullptr, true) != 512
+        || state.committed) return false;
+    for (auto mutate : {1, 2, 3}) {
+        model_publish_result(success, identity, state);
+        CommitIdentity changed_playback = identity;
+        if (mutate == 1) ++changed_playback.route_generation;
+        if (mutate == 2) ++changed_playback.lease_generation;
+        if (mutate == 3) ++changed_playback.song_key;
+        if (model_presentation_published_count(
+                state, identity, &changed_playback, true) != 512 || state.committed) return false;
+    }
+
     for (const FailurePoint point : {FailurePoint::PrefixValidation, FailurePoint::FNameFind,
-             FailurePoint::CallbackValidation, FailurePoint::CallbackCleanupIdentityFailure,
+             FailurePoint::ConstructorReturnedNonTail, FailurePoint::CallbackValidation,
+             FailurePoint::CallbackCleanupIdentityFailure,
              FailurePoint::PreWriteMaxReadFailure, FailurePoint::PreWriteMaxDrift,
              FailurePoint::PostWriteMaxReadFailure, FailurePoint::PostWriteMaxMismatch,
              FailurePoint::PostCountValidation,

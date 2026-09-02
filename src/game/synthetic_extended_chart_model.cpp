@@ -48,7 +48,11 @@ Result run(const BuildRequest& request, Chart& chart) {
     chart.storage.push_back({kNativeRows, 1024, request.rows->back().time, false});
     chart.tail_constructor_entered = true; result.tail_constructed = true;
     const auto cleanup = [&] { chart.storage.resize(kNativeRows); chart.tail_destructed = true; };
-    if (request.failure == FailurePoint::Constructor || request.failure == FailurePoint::ConstructorValidation) {
+    if (request.failure == FailurePoint::ConstructorReturnedNonTail) {
+        chart.ownership_preserved = true; result.route_blocked = true; return result;
+    }
+    result.constructor_returned_tail = true;
+    if (request.failure == FailurePoint::ConstructorValidation) {
         cleanup(); return result;
     }
     if (request.failure == FailurePoint::CallbackBuild || request.failure == FailurePoint::CallbackValidation) {
@@ -102,13 +106,13 @@ void model_publish_result(const Result& result, const CommitIdentity& identity,
         ? PublicationState{true, identity} : PublicationState{};
 }
 
-std::size_t model_published_count(const PublicationState& state,
+std::size_t model_published_count(PublicationState& state,
     const CommitIdentity& current, const bool profile_eligible)
 {
     if (!state.committed || !profile_eligible) return kNativeRows;
     const auto& a = state.identity;
     const auto& b = current;
-    return a.song == b.song && a.profile == b.profile
+    const bool matches = a.song == b.song && a.profile == b.profile
         && a.selection_generation == b.selection_generation
         && a.policy_generation == b.policy_generation
         && a.registry_generation == b.registry_generation
@@ -117,7 +121,29 @@ std::size_t model_published_count(const PublicationState& state,
         && a.descriptor_hash == b.descriptor_hash
         && a.owner_generation == b.owner_generation && a.owner == b.owner
         && a.wrapper == b.wrapper && a.chart == b.chart && a.header == b.header
-        && a.allocation == b.allocation ? kPlayableRows : kNativeRows;
+        && a.allocation == b.allocation;
+    if (!matches) state = {};
+    return matches ? kPlayableRows : kNativeRows;
+}
+
+std::size_t model_presentation_published_count(PublicationState& state,
+    const CommitIdentity& menu, const CommitIdentity* playback, const bool profile_eligible)
+{
+    if (!playback || model_published_count(state, *playback, profile_eligible) != kPlayableRows) {
+        state = {};
+        return kNativeRows;
+    }
+    const auto& committed = state.identity;
+    const bool matches = menu.song == committed.song && menu.profile == committed.profile
+        && menu.selection_generation == committed.selection_generation
+        && menu.policy_generation == committed.policy_generation
+        && menu.registry_generation == committed.registry_generation
+        && menu.descriptor_hash == committed.descriptor_hash
+        && menu.song == playback->song && menu.profile == playback->profile
+        && menu.selection_generation == playback->selection_generation
+        && menu.registry_generation == playback->registry_generation;
+    if (!matches) state = {};
+    return matches ? kPlayableRows : kNativeRows;
 }
 
 void model_shutdown(PublicationState& state) { state = {}; }

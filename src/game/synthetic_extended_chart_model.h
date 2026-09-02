@@ -47,7 +47,7 @@ enum class FailurePoint {
     None,
     PrefixValidation,
     FNameFind,
-    Constructor,
+    ConstructorReturnedNonTail,
     ConstructorValidation,
     CallbackBuild,
     CallbackValidation,
@@ -104,6 +104,7 @@ struct Result {
     bool forwarded = false;
     bool prefix_validated = false;
     bool tail_constructed = false;
+    bool constructor_returned_tail = false;
     bool callback_validated = false;
     bool count_committed = false;
     bool rolled_back = false;
@@ -117,8 +118,10 @@ void model_next_parser_reset(Chart& chart);
 void model_expansion_begin(PublicationState& state);
 void model_publish_result(const Result& result, const CommitIdentity& identity,
     PublicationState& state);
-std::size_t model_published_count(const PublicationState& state,
+std::size_t model_published_count(PublicationState& state,
     const CommitIdentity& current, bool profile_eligible);
+std::size_t model_presentation_published_count(PublicationState& state,
+    const CommitIdentity& menu, const CommitIdentity* playback, bool profile_eligible);
 void model_shutdown(PublicationState& state);
 
 } // namespace ff7r::piano::game::synthetic_model

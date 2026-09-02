@@ -10,7 +10,7 @@
 namespace ff7r::piano::game {
 
 struct SongDifficultyProfile;
-struct SelectionSnapshot;
+struct RenderSnapshot;
 struct PlaybackSnapshot;
 
 struct ExtendedChartSupport {
@@ -33,7 +33,8 @@ void invalidate_extended_chart_commit(const char* reason) noexcept;
 core::HookTeardownOperation extended_chart_reserve_teardown_operation();
 void clear_extended_chart_runtime_state() noexcept;
 bool playable_513_profile(const SongDifficultyProfile& profile) noexcept;
-bool playable_513_selection(const SelectionSnapshot& selection) noexcept;
 bool playable_513_playback(const PlaybackSnapshot& playback) noexcept;
+bool playable_513_presentation(
+    const RenderSnapshot& menu, const PlaybackSnapshot& playback) noexcept;
 
 } // namespace ff7r::piano::game
