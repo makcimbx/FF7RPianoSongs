@@ -373,9 +373,11 @@ Substitute `requested_capacity=513` only when all of these predicates hold:
    `{data=null,count=0,capacity=0}` after parser reset.
 6. Dedicated TLS context is active, `original_inflight` is true, and nesting
    depth is exactly one.
-7. TLS selection, route, lease, song, policy, registry, descriptor, owner,
-   wrapper, chart-row, fixture-hash, and source-row identities still match the
-   admitted transaction.
+7. TLS selection, route, lease, song, policy, registry, descriptor, direct
+   native controller, wrapper, chart-row, fixture-hash, and source-row
+   identities still match the admitted transaction. The controller identity is
+   the synchronous callback capture qualified below, not the retained completion
+   UObject observation.
 8. TLS declares final generated event count 513 and the exact restricted fixture.
 9. The per-transaction reserve-hit count is zero; a second matching hit fails
    closed and must not authorize a tail.
@@ -572,11 +574,16 @@ Synchronous rollback before the expand detour returns:
 After successful return, no asynchronous rollback is authorized. Native ownership
 has committed:
 
-- abort/song switch and normal chart teardown destroy 513 events;
 - the next parser invocation calls `FUN_143997808`, which destroys count 513 and
   frees the single allocation;
+- native chart destruction walks the current event count, destroys all 513
+  events, and frees the vector as qualified below;
+- mod abort, song switch, or list exit invalidates only immutable publication
+  identity and must not free or dereference retained native addresses;
 - no original allocation was detached or retained, so there is no orphaned block
   and no custom lifecycle journal to drain.
+
+The exact native release instant and thread for list exit were not recovered.
 
 A failed experiment that leaves a coherent capacity at least 513 but count 512 is
 safe under recovered native semantics. The unused slot is not destructed because
@@ -780,137 +787,237 @@ previous wrapper, and does not itself own the current selection/admission lease.
 It may support later diagnostics only after current identity is independently
 proved.
 
-### Exact current-owner recovery at the persistent caller
+### 2026-09-02 Native chart ownership and observation follow-up
 
-Direct disassembly of `FUN_143999AF4` recovered the owner/wrapper relationship
-available during the exact expansion call:
+This later result supersedes the UObject requirement and observation-only next
+step in the earlier owner-recovery hypothesis. It uses clean source checkpoint:
 
 ```text
-0x143999B4A  MOV  RDI,RCX               ; preserve native owner
-...
-0x143999E36  LEA  RSI,[RDI+0xF48]       ; persistent owner chart slot
-0x143999E46  MOV  qword ptr [RSI],RCX   ; publish current wrapper
-...
-0x143999E80  MOV  qword ptr [RBP-0x28],RDI ; callback captures owner
-...
-0x143999EAF  VMOVUPS [RAX+0x110],YMM1   ; writes capture; owner at +0x118
-...
-0x143999F4E  CALL 0x1439B9104           ; piano_score_expand
-0x143999F53  ...                         ; exact return/caller gate
+c95bac83814a83b162b5efe42b107ffe7e444bae
 ```
 
-At `0x143999E46`, `RSI == owner+0xF48` and `RCX` is the current wrapper. The
-callback object assembled on the caller's stack places RDI at the slot copied to
-`wrapper+0x118`. Immediately before `0x143999F4E`, the caller reloads that wrapper
-from `[RSI]` into RCX and supplies the chart row in RDX. R8/R9 are residual values,
-not owner authority. The ordinary expand detour ABI therefore receives the
-wrapper and chart row directly and can read the current owner from
-`wrapper+0x118`; an owner register is not an expand-function argument.
+Evidence sources and classifications:
 
-The wrapper is **not proved to be a UObject**. The retained runtime attempt could
-not capture a wrapper UObject identity, so wrapper validity must not depend on
-one. The owner read from `wrapper+0x118` must instead pass live UObject identity
-capture, and a safe reciprocal read must prove `owner+0xF48 == wrapper`. The
-wrapper remains a borrowed native object bounded by the synchronous persistent
-caller. Exact caller return address, owner identity, reciprocal relation,
-selection/admission generation, wrapper, chart row, and event-header address form
-one composite identity; no one pointer is sufficient alone.
+- **Runtime evidence**: immutable, rolled-back session
+  `C:/Users/makci/AppData/Local/FF7RPianoSongs/runtime-gates/20260902T162602Z-633a77abe6d8`.
+  Its observation ASI SHA-256 was
+  `5ade619d84e9c777643028f7b1f766fa90de1aea369126cc2bbe7916442b5420` and
+  `log-after.log` SHA-256 was
+  `4946014397b43f633f9a3cc6b72ddce7886e7c48e3d64a388f1d33ec17be9b9f`.
+- **Direct static evidence**: read-only Ghidra inspection of matching program
+  `ff7rebirth_.exe-1.005`, retained ABI evidence above, and source at the named
+  checkpoint. Ghidra state was not changed.
+- **Bounded inference**: same-thread lifetime, cross-callback separation, and the
+  corrected Integration state transition below. These claims remain scoped to
+  the exact executable identity at lines 717-725.
 
-### Corrected fail-closed authority envelope
+#### Native chart construction, shared ownership, and callback capture
 
-The smallest bounded correction separates descriptor authority from native
-object authority.
+`piano_score_expand` RCX is the actual non-UObject native chart/parser object.
+The persistent caller `FUN_143999AF4` constructs and owns it as follows:
 
-**Before the original expansion:**
+1. The native controller arrives in RCX and is saved in RDI at `0x143999B4A`.
+2. `FUN_14079F980` allocates `0x140` bytes. Allocation offsets `+0x08` and
+   `+0x0C` receive strong and weak counts `1/1`, and allocation offset zero
+   receives control-block table `PTR_FUN_14662E320`.
+3. `FUN_1421FFCDC` (`0x1421FFCDC`, RVA `0x021FFCDC`) constructs the chart
+   in-place at allocation `+0x10`, using controller `+0xF30` as its source or
+   context. A separate path, `FUN_1439A0744`, constructs the same chart type on
+   the stack, expands it, inspects its vector, and destroys it. The chart type
+   therefore neither is nor intrinsically requires a UObject or shared allocation.
+4. The persistent controller's shared pair is controller `+0xF48` for the chart
+   object and `+0xF50` for its control block. At `0x143999E46` the new chart is
+   published into that pair; `FUN_140DD5E94` transfers/releases the prior control
+   block.
+5. Before expansion, the caller installs a 64-byte callback closure at chart
+   `+0xF0..+0x12F`. The writes at `0x143999E80` and `0x143999EAF` place the raw
+   native controller in the closure at chart `+0x118`. Callback target
+   `FUN_143991DB4` uses that capture to call `FUN_1439B9340(controller+8)`.
+   The capture is a borrowed native controller pointer, not a UObject handle,
+   reference count, completion owner, or independently retained owner.
+6. Immediately before `0x143999F4E`, RCX is reloaded from controller `+0xF48`,
+   RDX is the chart row, and R8/R9 are residual rather than authority. The exact
+   call returns at `0x143999F53` (RVA `0x03999F53`).
 
-1. Require the exact guarded selection/audio admission authority: immutable
-   registry storage, song/profile pointers, selection generation, route and lease
-   generations, song key, route lifecycle epoch, activation generation, and
-   preparation ordinal must all remain current.
-2. Require the existing persistent caller, active depth-one chart/audio TLS, and
-   exclusive global extended-transaction claim.
-3. Read owner from `wrapper+0x118`, capture its live UObject identity, and require
-   `owner+0xF48 == wrapper`.
-4. Bind that owner identity, wrapper, chart row, `wrapper+0x80` event header, and
-   explicit selection/admission identity into the one synchronous transaction.
-5. Do not consult a stale `RetainedChartOwnerObservation` for mutation authority.
+The controller relation is therefore:
 
-**Inside the reserve callback:**
+```text
+chart+0x118       -> raw native controller callback capture
+controller+0xF48 -> chart object
+controller+0xF50 -> native shared-pointer control block
+```
 
-1. Retain every existing TLS, nesting, global-claim, exact caller, exact reserve
-   return, requested-512, and one-hit gate.
-2. Require the callback header to be exactly the bound `wrapper+0x80` header and
-   to be pristine after parser reset.
-3. Revalidate current selection/admission identity and the directly bound native
-   owner/wrapper relation before substituting 513.
+The earlier interpretation was wrong only in identifying this controller as the
+completion UObject. A safe transaction-local reciprocal read of
+`(*(chart+0x118))+0xF48 == chart` is meaningful. No UObject identity predicate
+belongs on either the chart or this captured native controller.
 
-**After the original expansion, before any tail write:**
+Direct teardown evidence establishes ordinary native ownership. Chart destructor
+`FUN_143988A30` (RVA `0x03988A30`) destroys the `+0xF0` and `+0xB0` callback
+closures, state at `+0x90`, the event vector at `+0x80` through
+`FUN_143987C18`, camera/vector state at `+0x70`, and finally resets the embedded
+table. Control-block destructor `FUN_143995700` invokes that chart destructor on
+control block `+0x10`. The shared-pointer release path decrements the strong
+count, destroys the chart at zero, then releases the weak/control block. The raw
+callback capture does not extend controller lifetime by itself.
 
-1. Revalidate the owner UObject identity, `owner+0xF48 == wrapper`, wrapper,
-   chart row, header address, selection guard, activation identity, and policy/
-   descriptor identity.
-2. Require the recorded allocation, count 512, capacity at least 513, and the
-   complete prefix invariants already specified in this file.
-3. Construct and validate the tail, update maximum time, and commit count 513
-   last under the existing cleanup state machine.
-4. Publish pending 513 state only for the same selection/admission and terminal
-   generation. Later playback publication may promote it to active only when the
-   route token remains exact.
+#### Successful observation and the failed UObject model
 
-The directly captured owner may be retained after expansion for completion and
-cross-callback validation, together with its UObject handle and exact activation/
-playback identities. Such retention is downstream validation, not permission to
-mutate a future wrapper. A new expansion must replace or invalidate the old
-observation before binding its current owner. Selection replacement, retry,
-supersession, list exit, playback failure, policy change, and shutdown must prevent
-stale previous-song or previous-generation reuse. No wait, poll count, or tester
-delay is part of this envelope: early input either establishes every predicate or
-falls through safely to the native 512 path.
+The immutable session observed the exact first-activation interval without
+changing reserve arguments or chart memory:
 
-### Rollback and terminal-generation ordering
+- Completion timing first observed completion owner `0x7fefc9f37050` with null
+  chart before and after its original call and with playback absent. This is the
+  separate late `RetainedChartOwnerObservation` path.
+- Fixture admission succeeded for selection generation 41, route generation 1,
+  lease generation 1, activation generation 1, and song key
+  `3028907728447002289`. The score-expand wrapper was `0x7fed29b85790`.
+- Before original expansion, exact caller and guarded selection/admission
+  authority were true. `wrapper+0x118` was readable and nonnull; the embedded
+  `wrapper+0x80` header relation/read was exact. The captured pointer failed
+  UObject identity, and the observation candidate consequently did not attempt
+  its reciprocal read.
+- The reserve callback was accounted, received requested capacity 512, and
+  forwarded 512 unchanged as required by observation-only mode.
+- After original expansion, the same captured pointer was stable, caller and
+  admission authority remained exact, and the same embedded header contained
+  count/capacity `512/512`. UObject identity remained invalid.
+- PlaySetup and playback publication occurred only afterward. The later completion
+  observation then read the same chart through its independent completion-owner
+  path.
 
-Failure before reserve substitution forwards the original request unchanged.
-Failure after successful 513 reservation but before tail ownership leaves a
-native count of 512 with coherent spare capacity; normal native reset/destruction
-owns that allocation. Failure after tail construction follows the count-last
-rollback rules above. If count/header/owner identity drifts and rollback ownership
-cannot be proved, custom audio/publication must be blocked and uncertain native
-memory must not be destructed or guessed.
+Thus the first failed predicate was the incorrect UObject model, not an unreadable
+or unstable chart/controller capture, header mismatch, admission loss, or reserve
+callsite mismatch. The session did not mutate or prove a 513 event.
 
-Static source review also found a distinct terminal-ordering issue. A failed
-chart/audio terminal currently clears a committed 513 record only if publication
-has already created that record. If the same generation becomes terminal just
-before `publish_committed_513`, the terminal is not retained and publication can
-miss it. No retained runtime session exercised this race; this is **direct static
-evidence plus bounded concurrency inference**, not an observed failure.
+#### Corrected synchronous authority envelope
 
-A coherent state transition must retain the aborting terminal generation across
-publication: terminal-before-publication rejects that generation and requires
-proved synchronous rollback; terminal-after-publication invalidates it; a stale
-generation cannot invalidate or block a newer activation. Supersession, list
-exit, audio failure, and stop failure use the same generation rule. Success
-outcomes do not create an abort watermark. Terminal recording and publication
-must share serialization so a check/publish gap cannot lose the outcome.
+The smallest fail-closed Integration authority is one synchronous transaction:
 
-### Runtime nonclaims and next experiment
+**Before original expansion**
 
-This follow-up does not establish that:
+1. Require the exact persistent caller, nonnull chart/chart-row, eligible exact
+   513 descriptor, current policy/hash, depth-one original-inflight chart/audio
+   TLS, and exclusive global claim.
+2. Require guarded selection/audio admission identity: immutable registry storage,
+   song/profile pointers, selection generation, route/lease generations, song
+   key, route lifecycle epoch, activation generation, and preparation ordinal.
+3. Read a nonnull native controller from chart `+0x118`; safely require
+   controller `+0xF48 == chart`. Bind controller, chart, chart row, and the exact
+   embedded event-header address `chart+0x80` only into the thread-local
+   transaction. Do not inspect UObject metadata or native reference counts.
+4. A stale or null `RetainedChartOwnerObservation` is not mutation authority.
 
-- `wrapper+0x118` has been observed at runtime to equal the current owner during
-  the exact first activation;
-- reciprocal owner/wrapper identity remains exact before and after the original
-  expansion in all activations;
-- a 513 reserve, tail construction, count commit, prompt, judgement, audio route,
-  completion, teardown, retry, or subsequent song has succeeded;
-- cross-thread chart access is impossible or allocator faults are recoverable;
-- the retained terminal-ordering risk has occurred at runtime;
-- any build other than the identified 1.005 executable shares these offsets or
-  call semantics.
+**Inside the reserve callback**
 
-The next focused experiment is observation-only. On the first exact activation,
-capture and log the owner read from `wrapper+0x118`, owner UObject identity, and
-the reciprocal `owner+0xF48` read immediately before and after the original
-expansion, correlated with the explicit selection/admission generation and exact
-header. It must leave reserve arguments, vector capacity/count, chart data, and
-audio behavior unchanged. That experiment requires separate authorization to
-build, install, launch, or exercise the game.
+1. Revalidate the same TLS/generation/admission/controller/chart relation, exact
+   header, global claim, one-hit state, requested 512, and exact parser reserve
+   return RVA `0x039B36B8`.
+2. Require the embedded header to be pristine after parser reset, then substitute
+   513 and retain the normal-return allocation/capacity result.
+3. Every nonmatching call forwards the original request unchanged.
+
+**After original expansion, before detour return**
+
+1. Revalidate capture stability, reciprocal controller relation, admission/TLS
+   identities, chart/chart-row/header addresses, and the recorded allocation.
+2. Require native count 512, capacity at least 513, and all prefix/event/time
+   invariants above before touching slot 512.
+3. Construct and validate the tail, update maximum time, and publish native count
+   513 last. Publication of the mod's pending token must succeed for the same
+   activation generation before the synchronous transaction is considered
+   successful.
+
+The persistent caller cannot execute its post-call instructions until the detour
+returns, and its shared member already owns the chart. The parser reserve callback
+and finish phase are nested within that same call. This directly excludes
+same-thread replacement during the interval. Cross-thread replacement remains a
+nonclaim; repeated reciprocal/header checks narrow but do not atomically eliminate
+that risk.
+
+No pointer from this envelope may outlive the synchronous transaction. After a
+successful count-last commit, the immutable committed token may retain only:
+
+- registry storage and exact song/profile pointers;
+- registry, policy, and selection generations plus descriptor hash;
+- route generation, lease generation, song key, and route lifecycle epoch;
+- activation generation and preparation ordinal.
+
+It must not retain or later dereference the native controller, chart, chart row,
+event header, vector allocation, callback capture, or a synthetic owner generation.
+Later completion hold/inspection may use the separately qualified completion
+UObject observation, but absence of that downstream authority must not invalidate
+an already proven synchronous 513 commit.
+
+#### Native ownership and rollback after count-last
+
+Before count 513, cleanup follows the destructor-safe state machine above. If
+publication is rejected while the detour still has exact synchronous identity,
+restore count to 512 first, restore maximum time, destruct the now-uncounted tail,
+and zero it. If ownership has drifted, block the custom route and do not guess.
+
+After successful publication, native code owns the allocation and all 513 events:
+
+- another parse calls `FUN_143997808(chart+0x80)`, destructs exactly the current
+  event count, zeros count, and reserves zero to free/reset the allocation;
+- replacement of the controller shared pair releases the old chart when its
+  native strong count reaches zero;
+- chart destruction invokes the callback/vector/event teardown chain above.
+
+Mod terminal, list-exit, replacement, and shutdown paths must only invalidate the
+immutable token. They have no authority for asynchronous native rollback or free.
+The exact list-exit release instruction, release thread, and timing were not
+recovered, and ordinary completion was not shown to destroy the chart immediately.
+
+#### Terminal-generation serialization
+
+Source review proves a check/publication ordering gap: a failed activation terminal
+can arrive before `publish_committed_513`, find no committed record, and be lost.
+The race itself was not observed at runtime.
+
+Terminal recording and publication must share the committed-state serialization.
+A monotonic failed-terminal generation watermark, paired with the existing
+nonwrapping activation generation, gives the required ordering:
+
+- failure terminal N before publication records N; publication N rejects and
+  performs the synchronous rollback above;
+- publication N before failure terminal N creates the token; that terminal then
+  invalidates the exact token without dereferencing native memory;
+- stale terminal N cannot invalidate or block newer generation N+1;
+- AudioPublished and ExpandFinished do not record a failure watermark.
+
+Supersession must notify this same state transition. Replacement expansion retires
+the old immutable token before admission and binds only its new synchronous chart.
+Shutdown closes admission, drains outer/reserve callbacks, clears transaction and
+immutable publication state, and leaves native allocations to native ownership.
+No wait, polling count, or tester delay is introduced: early input either satisfies
+all predicates or follows the native 512 path recoverably.
+
+#### Disposition, nonclaims, and next Integration proof
+
+No further observation-only run is required before a focused Integration edit.
+The runtime session establishes capture readability and pre/post stability, while
+direct static evidence establishes its native type, reciprocal relation, shared
+ownership, and destructor chain. The first Integration run must still prove:
+
+1. synchronous authority exact pre/reserve/post, including controller reciprocal
+   equality and embedded-header identity;
+2. one exact reserve substitution from 512 to 513 and validated returned capacity;
+3. parser prefix count 512, complete prefix/tail/callback validation, max-time
+   update, and count-last commit 513;
+4. immutable pending-to-active publication only after exact playback promotion;
+5. `[extended_chart_identity] status=proven` from selection/admission plus
+   synchronous native authority, without completion-owner or UObject dependence;
+6. terminal-before-publication rollback, terminal-after-publication invalidation,
+   replacement/list-exit retirement, and clean native teardown;
+7. first activation, warm-cache retry, early-input fallback, an ordinary 512 chart,
+   and diagnostic 520 isolation without timing waits.
+
+No cache payload or policy change follows from this result. No recovered catalog
+RVA changes. Production use of chart `+0x118` and controller `+0xF48/+0xF50`
+must remain gated to this exact executable and retain/startup-validate the caller
+instructions establishing the callback capture and shared publication.
+
+This result does **not** establish native class names, cross-thread quiescence,
+exact controller-destruction/list-exit timing, allocator-fault recovery, a
+successful playable row 513, or compatibility with another executable build.
