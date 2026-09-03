@@ -28,7 +28,7 @@ inline constexpr const char* kDiagnosticChartRowPolicyIdentity =
 inline constexpr const char* kPlayableExtendedChartRowPolicyIdentity =
     "chart_rows=8192;events=8192;groups+dual+chords=verified1005";
 inline constexpr const char* kPhysicalMidiGenerationIdentity =
-    "midi_generation=physical_chart_first:v7";
+    "midi_generation=physical_chart_first:v8";
 inline constexpr std::size_t kExperimentalMaxChartRows = kMaximumExtendedChartRows;
 
 struct ChartRowPolicySnapshot {

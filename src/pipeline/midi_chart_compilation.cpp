@@ -2470,46 +2470,58 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             return result;
         }
 
-        // Chords retain the established exact/unique-superset inference. Any
-        // source not consumed by one such chord remains an RH monotone.
+        // Build one difficulty-independent musical reduction before topology
+        // planning. The established melody tracker supplies a monophonic RH
+        // voice; exact/unique-superset inference supplies sparse LH harmony.
+        // The hardest profile fixes chord spacing for every visible label.
+        const Profile physical_profile = profile_for_difficulty(kHighestMidiDifficulty);
         std::vector<Attack> physical_chords = build_chord_candidates(clusters, melody_sources);
-        std::set<SourceIdentity> chord_sources;
-        for (const Attack& chord : physical_chords) {
-            chord_sources.insert(chord.chord_sources.begin(), chord.chord_sources.end());
+        std::vector<Attack> physical_right_candidates = voice;
+
+        // Voice selection uses humanized cluster context. Every retained melody
+        // event is timed and bounded by its authoritative source onset.
+        for (Attack& attack : physical_right_candidates) {
+            attack.start = attack.event.start;
+            attack.beat = attack.event.beat;
         }
-        std::vector<Attack> physical_right;
-        for (const OnsetCluster& cluster : clusters) {
-            for (const MidiNoteEvent& event : cluster.notes) {
-                if (chord_sources.count(event.source) != 0) continue;
-                Attack attack;
-                attack.event = event;
-                attack.start = event.start;
-                attack.end = event.end;
-                attack.beat = event.beat;
-                attack.metric_accent = cluster.metric_accent;
-                attack.melody_evidence = midi_melody_scoring_detail::melody_evidence(
-                    event.source.pitch, event.source.velocity, event.start, event.end, event.stream_prior);
-                physical_right.push_back(std::move(attack));
-            }
+        std::set<SourceIdentity> physical_lead_rejections;
+        std::set<SourceIdentity> physical_duration_rejections;
+        std::set<SourceIdentity> eligible_sources;
+        for (const MidiNoteEvent& event : source) {
+            Attack source_attack;
+            source_attack.event = event;
+            source_attack.start = event.start;
+            const int rejection = timing_rejection(source_attack);
+            if (rejection == 1) physical_lead_rejections.insert(event.source);
+            if (rejection == 2) physical_duration_rejections.insert(event.source);
+            if (rejection == 0) eligible_sources.insert(event.source);
+        }
+        const auto filter_physical_timing = [&](std::vector<Attack>* attacks) {
+            attacks->erase(std::remove_if(attacks->begin(), attacks->end(), [&](const Attack& attack) {
+                return timing_rejection(attack) != 0;
+            }), attacks->end());
+        };
+        filter_physical_timing(&physical_right_candidates);
+        filter_physical_timing(&physical_chords);
+        measure_shared_audio_prominence(
+            audio, {&physical_right_candidates, &physical_chords}, audio_alignment_seconds);
+        std::vector<Attack> physical_right = std::move(physical_right_candidates);
+        std::vector<Attack> selected_physical_chords;
+        Status physical_selection_status = select_chords(
+            physical_chords, physical_profile, &selected_physical_chords);
+        if (!physical_selection_status.ok()) {
+            result.status = physical_selection_status;
+            return result;
+        }
+        physical_chords = std::move(selected_physical_chords);
+        std::set<SourceIdentity> represented_sources;
+        for (const Attack& attack : physical_right) represented_sources.insert(attack.event.source);
+        for (const Attack& attack : physical_chords) {
+            represented_sources.insert(attack.chord_sources.begin(), attack.chord_sources.end());
         }
         std::sort(physical_right.begin(), physical_right.end(), attack_less);
         const std::map<SourceIdentity, bool> physical_alternate_plan =
             plan_alternate_monotones(physical_right);
-
-        std::set<SourceIdentity> physical_lead_rejections;
-        std::set<SourceIdentity> physical_duration_rejections;
-        const auto filter_physical_timing = [&](std::vector<Attack>* attacks) {
-            attacks->erase(std::remove_if(attacks->begin(), attacks->end(), [&](const Attack& attack) {
-                const int rejection = timing_rejection(attack);
-                if (rejection == 1) physical_lead_rejections.insert(attack.event.source);
-                if (rejection == 2) physical_duration_rejections.insert(attack.event.source);
-                return rejection != 0;
-            }), attacks->end());
-        };
-        filter_physical_timing(&physical_right);
-        filter_physical_timing(&physical_chords);
-        measure_shared_audio_prominence(
-            audio, {&physical_right, &physical_chords}, audio_alignment_seconds);
 
         struct PhysicalRow {
             Note note;
@@ -2940,7 +2952,12 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         }
         result.notes = std::move(notes);
         result.stats.source_events = source.size();
-        result.stats.candidate_actions = physical_events + duplicate_count;
+        const std::size_t eligible_source_events = eligible_sources.size();
+        const std::size_t represented_eligible_events = static_cast<std::size_t>(std::count_if(
+            represented_sources.begin(), represented_sources.end(), [&](const SourceIdentity& identity) {
+                return eligible_sources.find(identity) != eligible_sources.end();
+            }));
+        result.stats.candidate_actions = eligible_source_events;
         result.stats.candidate_frames = frames.size();
         result.stats.selected_actions = actions;
         result.stats.desired_rows = physical_rows.size();
@@ -2964,8 +2981,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         const MidiJointStrainMetrics strain = analyze_midi_joint_strain(result.notes, chart_bpm);
         result.stats.joint_strain_p95 = strain.p95;
         result.stats.joint_strain_peak = strain.peak;
-        result.stats.selected_retention = physical_events == 0 ? 0.0 :
-            static_cast<double>(physical_events) / static_cast<double>(physical_events + duplicate_count);
+        result.stats.selected_retention = eligible_source_events == 0 ? 0.0 :
+            static_cast<double>(represented_eligible_events) / static_cast<double>(eligible_source_events);
         if (!route.feasible) {
             result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
                 "physical-domain root selector cannot satisfy a supported difficulty route within its target band");

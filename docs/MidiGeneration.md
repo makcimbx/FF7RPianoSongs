@@ -24,15 +24,26 @@ such as metronome-beat extraction, may parse the source separately.
 ## Profile Behavior
 
 When verified generalized chart policy is available, the generator first builds
-one profile-independent physical chart. Every supported source attack is retained
-unless it is a constituent of one verified chord, is outside explicit timing
-bounds, or is an exact same-frame/right-hand-pitch duplicate. Ambiguous or
-unsupported harmony remains as monotones instead of being guessed or removed.
-Generated rows contain exactly one native event: monotones are emitted first in
-immutable source order and at most one inferred chord follows. Distinct same-frame
-right-hand rows form one mandatory run; the same-frame chord remains an independent
-hard-profile action and may join a mixed run on easier profiles. The chart rejects rather than
-truncates above either 8192 source rows or 8192 native events.
+one profile-independent reduced physical chart. The established deterministic
+melody tracker retains one monophonic right-hand voice across humanized onset
+clusters, while exact or unique-safe-superset chord inference retains sparse
+left-hand harmony at the spacing accepted by the hardest profile. Inner voices,
+doubled melody tones, and ambiguous harmony are not emitted as extra monotones.
+Retained melody attacks use their authoritative source-event timing rather than
+the humanized cluster anchor, including for timing-domain filtering and audio
+prominence. Inferred chord rows retain their established cluster-anchor timing;
+out-of-domain constituent identities do not contribute to retention. Generated rows contain exactly one native event:
+the retained melody monotone precedes an optional inferred chord at the same
+frame. The chart rejects rather than truncates above either 8192 physical rows or
+8192 native events.
+
+Generalized diagnostics distinguish the normalized source inventory from the
+eligible reduction domain. `source_events` is the supported normalized note count
+before lead-in and known-audio-duration filtering. `candidate_actions` excludes
+those timing rejections but still includes inner voices and source doublings.
+`selected_retention` is the fraction of those eligible source identities represented
+by either the retained melody or the source constituents of retained chords; it is
+not the physical-row or required-action ratio.
 
 Every profile uses this identical physical row/event identity. Difficulty changes
 only deterministic row-level group topology and therefore the number of required
@@ -40,7 +51,7 @@ roots. A run root or continuation may be a monotone or chord row; explicit autho
 dual rows remain supported by the shared model. Mandatory equal-time RH edges are
 always grouped. A compact selector works directly on canonical physical-row
 identities; it never translates roots from the legacy reduced candidate domain and
-never removes physical rows. Previously visible roots are pinned, and later profiles
+never removes rows from the shared reduced chart. Previously visible roots are pinned, and later profiles
 add only physical-row roots, so easier root sets remain subsets of harder ones.
 Before route selection, consecutive equal-frame monotones become indivisible
 atomic units and a deterministic planner adds the smallest root set needed to
@@ -71,7 +82,7 @@ route load normalized by that route's evidence margin before soft musical prefer
 feasible states retain the documented
 musical ranking. If mandatory or inherited roots exceed the profile target band,
 or no physical-domain topology in that band passes the root-only route,
-that label is omitted; physical events are never deleted.
+that label is omitted; profile generation never deletes additional physical rows.
 
 Without verified generalized policy (including build 1.004), the accepted v44
 legacy path remains unchanged: it clusters humanized onsets, tracks a melody path,

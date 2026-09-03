@@ -225,6 +225,55 @@ std::vector<unsigned char> physical_frame_midi_bytes(
     return file;
 }
 
+std::vector<unsigned char> verified_chord_runs_midi_bytes(
+    const std::size_t frame_count, const int spacing_frames) {
+    constexpr int base_tick = 1920;
+    constexpr int ticks_per_frame = 16;
+    std::vector<MidiEvent> melody;
+    std::vector<MidiEvent> harmony;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    for (std::size_t index = 0; index < frame_count; ++index) {
+        const int tick = base_tick + static_cast<int>(index) * spacing_frames * ticks_per_frame;
+        add_note(&melody, tick, 8, 72 + static_cast<int>(index % 5u), 104);
+        add_note(&harmony, tick, 8, 48, 84);
+        add_note(&harmony, tick, 8, 52, 82);
+        add_note(&harmony, tick, 8, 55, 80);
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 1);
+    append_u16(&file, 2);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    append_midi_track(&file, std::move(harmony));
+    return file;
+}
+
+std::vector<unsigned char> follower_boundary_midi_bytes(const std::size_t followers) {
+    constexpr int base_tick = 1920;
+    constexpr int ticks_per_frame = 16;
+    constexpr std::array<int, 8> follower_frames{{16, 17, 18, 19, 20, 21, 22, 23}};
+    std::vector<MidiEvent> melody;
+    std::vector<MidiEvent> harmony;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    add_note(&melody, base_tick, 8, 72, 104);
+    for (std::size_t index = 0; index < followers; ++index) {
+        add_note(&melody, base_tick + follower_frames[index] * ticks_per_frame,
+            8, 73 + static_cast<int>(index), 104);
+    }
+    add_note(&harmony, base_tick, 8, 48, 84);
+    add_note(&harmony, base_tick, 8, 52, 82);
+    add_note(&harmony, base_tick, 8, 55, 80);
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 1);
+    append_u16(&file, 2);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    append_midi_track(&file, std::move(harmony));
+    return file;
+}
+
 std::vector<unsigned char> humanized_meter_boundary_midi_bytes() {
     constexpr int base_tick = 1920;
     std::vector<MidiEvent> melody;
@@ -235,6 +284,24 @@ std::vector<unsigned char> humanized_meter_boundary_midi_bytes() {
     melody.push_back({base_tick + 115, 0, {0xff, 0x58, 0x04, 0x03, 0x02, 24, 8}});
     add_note(&melody, base_tick + 118, 8, 64, 100);
     add_note(&melody, base_tick + 256, 8, 65, 100);
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    return file;
+}
+
+std::vector<unsigned char> humanized_timing_boundary_midi_bytes() {
+    std::vector<MidiEvent> melody;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    add_note(&melody, 1800, 8, 60, 100);
+    // These distinct source onsets share one humanized cluster but straddle
+    // native frame 120/121. The tracker deterministically retains the latter.
+    add_note(&melody, 1927, 8, 62, 90);
+    add_note(&melody, 1933, 8, 72, 110);
+    add_note(&melody, 2160, 8, 74, 100);
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
     append_u16(&file, 0);
     append_u16(&file, 1);
@@ -505,6 +572,12 @@ int main(int argc, char** argv) {
                                              const std::vector<std::pair<int, int>>& meters = {}) {
         const std::filesystem::path path = temporary.path() / name;
         const std::vector<unsigned char> fixture = physical_frame_midi_bytes(frames, meters);
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+        return path;
+    };
+    const auto write_bytes_fixture = [&](const char* name, const std::vector<unsigned char>& fixture) {
+        const std::filesystem::path path = temporary.path() / name;
         std::ofstream stream(path, std::ios::binary | std::ios::trunc);
         stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
         return path;
@@ -816,27 +889,23 @@ int main(int argc, char** argv) {
         || unsupported_pitch.status.message.find("outside C1-C7") == std::string::npos) {
         return fail("generalized out-of-range source pitches did not fail closed before publication");
     }
-    std::size_t equal_frame_grouped_rows = 0;
-    std::size_t equal_frame_group_run = 1;
-    std::size_t maximum_equal_frame_group_run = 0;
-    for (std::size_t index = 1; index < physical_ambiguous.notes.size(); ++index) {
-        const Note& previous = physical_ambiguous.notes[index - 1];
-        const Note& current = physical_ambiguous.notes[index];
-        if (current.beat == previous.beat && current.group_index != 0
-            && current.group_index == previous.group_index) {
-            ++equal_frame_grouped_rows;
-            ++equal_frame_group_run;
-            maximum_equal_frame_group_run = std::max(maximum_equal_frame_group_run,
-                equal_frame_group_run);
-        } else {
-            equal_frame_group_run = 1;
-        }
+    std::size_t maximum_ambiguous_frame_rows = 0;
+    for (std::size_t begin = 0; begin < physical_ambiguous.notes.size();) {
+        std::size_t end = begin + 1u;
+        while (end < physical_ambiguous.notes.size()
+            && physical_ambiguous.notes[end].beat == physical_ambiguous.notes[begin].beat) ++end;
+        maximum_ambiguous_frame_rows = std::max(maximum_ambiguous_frame_rows, end - begin);
+        begin = end;
     }
-    if (equal_frame_grouped_rows == 0 || maximum_equal_frame_group_run < 3u
+    if (maximum_ambiguous_frame_rows != 1u
+        || physical_ambiguous.stats.source_events <= physical_ambiguous.notes.size()
+        || physical_ambiguous.stats.selected_retention >= 1.0
         || std::any_of(physical_ambiguous.notes.begin(), physical_ambiguous.notes.end(), [](const Note& note) {
             return !note.chord_id.empty();
         })) {
-        return fail("ambiguous same-frame harmony was not preserved as grouped RH monotones");
+        return fail("ambiguous inner harmony was not reduced to the deterministic tracked melody voice: rows="
+            + std::to_string(physical_ambiguous.notes.size()) + " max_frame_rows="
+            + std::to_string(maximum_ambiguous_frame_rows));
     }
     bool split_cross_hand = false;
     bool hard_chord_is_independent = false;
@@ -853,18 +922,18 @@ int main(int argc, char** argv) {
         }
     }
     if (!split_cross_hand || !hard_chord_is_independent
+        || std::none_of(physical_exact.notes.begin(), physical_exact.notes.end(),
+            [](const Note& note) { return !note.chord_id.empty(); })
         || std::any_of(physical_exact.notes.begin(), physical_exact.notes.end(),
             [](const Note& note) { return !note.pitch.empty() && !note.chord_id.empty(); })) {
         return fail("generated same-frame RH/chord material was not split into stable one-event rows");
     }
-    std::set<std::pair<double, std::string>> duplicate_pitch_rows;
-    for (const Note& note : physical_duplicate.notes) {
-        if (!note.pitch.empty() && !duplicate_pitch_rows.emplace(note.beat, note.pitch).second) {
-            return fail("exact same-frame RH duplicate was not coalesced");
-        }
-    }
-    if (physical_duplicate.stats.dropped_conflicts == 0) {
-        return fail("exact duplicate coalescing was not reported");
+    std::set<std::pair<double, std::string>> reduced_duplicate_rows;
+    const bool repeated_same_key = std::any_of(physical_duplicate.notes.begin(), physical_duplicate.notes.end(),
+        [&](const Note& note) { return !note.pitch.empty()
+            && !reduced_duplicate_rows.emplace(note.beat, note.pitch).second; });
+    if (repeated_same_key || physical_duplicate.stats.source_events <= physical_duplicate.notes.size()) {
+        return fail("same-key doubling was not removed by the shared physical reduction");
     }
     const auto physical_plan = [](const Observation& observation, const int difficulty,
                                   ff7rp::pipeline::ChartEventPlan* plan) {
@@ -956,21 +1025,71 @@ int main(int argc, char** argv) {
         return fail("beam accepted a root insertion that invalidated its downstream envelope segment");
     }
 
-    const Observation seven_followers = generate_physical_fixture(
-        "seven-followers.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55}}});
-    const Observation eight_followers = generate_physical_fixture(
-        "eight-followers.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
-    const Observation eight_followers_repeat = generate_physical_fixture(
-        "eight-followers-repeat.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
-    if (!seven_followers.status.ok() || seven_followers.notes.size() != 8u
-        || std::count_if(seven_followers.notes.begin(), seven_followers.notes.end(),
+    const Observation dense_stack = generate_physical_fixture(
+        "dense-inner-stack.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
+    const Observation dense_stack_repeat = generate_physical_fixture(
+        "dense-inner-stack-repeat.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
+    std::set<double> dense_stack_frames;
+    const bool repeated_dense_frame = std::any_of(dense_stack.notes.begin(), dense_stack.notes.end(),
+        [&](const Note& note) { return !dense_stack_frames.insert(note.beat).second; });
+    if (!dense_stack.status.ok() || repeated_dense_frame
+        || canonical_note_bytes(dense_stack.notes) != canonical_note_bytes(dense_stack_repeat.notes)) {
+        return fail("dense same-frame inner voices were not reduced deterministically to one melody tone");
+    }
+
+    SongConfig eligible_stats_config = envelope_config(1);
+    eligible_stats_config.midi_minimum_lead_in_seconds = 2.25;
+    const Observation eligible_stats = generate(write_physical_fixture(
+        "eligible-retention.mid", {{0, {60}}, {30, {62}}}), no_audio, eligible_stats_config);
+    if (!eligible_stats.status.ok() || eligible_stats.stats.source_events != 2u
+        || eligible_stats.stats.lead_in_rejections != 1u
+        || eligible_stats.stats.candidate_actions != 1u
+        || std::abs(eligible_stats.stats.selected_retention - 1.0) > 1e-9) {
+        return fail("generalized reduction diagnostics did not use the eligible source-event domain");
+    }
+
+    const std::filesystem::path humanized_timing_path = write_bytes_fixture(
+        "humanized-timing-boundary.mid", humanized_timing_boundary_midi_bytes());
+    SongConfig humanized_lead_config = envelope_config(1);
+    humanized_lead_config.midi_minimum_lead_in_seconds = 2.01;
+    const Observation humanized_lead = generate(humanized_timing_path, no_audio, humanized_lead_config);
+    WavAudio bounded_audio;
+    bounded_audio.sample_rate = 1000;
+    bounded_audio.channels = 2;
+    bounded_audio.source_frame_count = 2010;
+    const Observation humanized_duration = generate(
+        humanized_timing_path, bounded_audio, envelope_config(1));
+    if (!humanized_lead.status.ok() || humanized_lead.notes.size() != 2u
+        || humanized_lead.notes.front().pitch != "C5"
+        || std::llround(humanized_lead.notes.front().beat * 3600.0 / 120.0) != 121
+        || humanized_lead.stats.source_events != 4u
+        || humanized_lead.stats.lead_in_rejections != 2u
+        || humanized_lead.stats.candidate_actions != 2u
+        || std::abs(humanized_lead.stats.selected_retention - 1.0) > 1e-9
+        || !humanized_duration.status.ok() || humanized_duration.notes.size() != 1u
+        || std::llround(humanized_duration.notes.front().beat * 3600.0 / 120.0) != 113
+        || humanized_duration.stats.audio_duration_rejections != 2u
+        || humanized_duration.stats.candidate_actions != 2u
+        || std::abs(humanized_duration.stats.selected_retention - 0.5) > 1e-9) {
+        return fail("humanized melody timing did not use authoritative source-event bounds and retention");
+    }
+
+    // The chord is an independent root. Delays 16..23 are outside every short
+    // follower window, so these fixtures isolate only the seven-follower cap.
+    const Observation seven_followers = generate(write_bytes_fixture("seven-followers.mid",
+        follower_boundary_midi_bytes(7u)), no_audio, envelope_config(1));
+    const Observation eight_followers = generate(write_bytes_fixture("eight-followers.mid",
+        follower_boundary_midi_bytes(8u)), no_audio, envelope_config(1));
+    if (!seven_followers.status.ok() || seven_followers.notes.size() != 9u
+        || !topology_root(seven_followers.notes, 1u)
+        || std::any_of(seven_followers.notes.begin() + 2, seven_followers.notes.end(),
             [&](const Note& note) { return topology_root(seven_followers.notes,
-                static_cast<std::size_t>(&note - seven_followers.notes.data())); }) != 1
+                static_cast<std::size_t>(&note - seven_followers.notes.data())); })
         || eight_followers.status.ok()
-        || eight_followers.status.message.find("atomic") == std::string::npos
-        || eight_followers_repeat.status.code != eight_followers.status.code
-        || eight_followers_repeat.status.message != eight_followers.status.message) {
-        return fail("same-frame atomic monotone clusters did not preserve the 7/8 follower boundary");
+        || eight_followers.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
+        || eight_followers.status.message.find("mandatory/inherited generalized roots exceed")
+            == std::string::npos) {
+        return fail("reduced physical rows did not preserve the isolated seven/eight-follower boundary");
     }
 
     const Observation gap102 = generate_physical_fixture("gap-102.mid", {{0, {60}}, {102, {62}}});
@@ -1015,12 +1134,10 @@ int main(int argc, char** argv) {
     if (!meter_boundary.status.ok() || !topology_root(meter_boundary.notes, 1u)
         || !humanized_meter_normalization.ok() || !has_source_note(2032, 62)
         || !has_source_note(2038, 64) || !has_straddled_meter
-        || !humanized_meter_boundary.status.ok() || humanized_meter_boundary.notes.size() != 4u
-        || topology_root(humanized_meter_boundary.notes, 1u)
-        || topology_root(humanized_meter_boundary.notes, 2u)
-        || !topology_root(humanized_meter_boundary.notes, 3u)
-        || std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0)
-            != std::llround(humanized_meter_boundary.notes[2].beat * 3600.0 / 120.0)
+        || !humanized_meter_boundary.status.ok() || humanized_meter_boundary.notes.size() != 3u
+        || !topology_root(humanized_meter_boundary.notes, 1u)
+        || humanized_meter_boundary.notes[1].pitch != "E4"
+        || std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0) != 127
         || !downbeat_preference.status.ok() || !topology_root(downbeat_preference.notes, 3u)
         || downbeat_preference.stats.selected_actions != 2u) {
         return fail("meter boundaries or downbeat root preference were not preserved: meter_status=["
@@ -1041,6 +1158,9 @@ int main(int argc, char** argv) {
             + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
                 std::to_string(humanized_meter_boundary.notes[1].beat) + ","
                 + std::to_string(humanized_meter_boundary.notes[2].beat))
+            + " humanized_pitch="
+            + (humanized_meter_boundary.notes.size() < 2u ? std::string{} :
+                humanized_meter_boundary.notes[1].pitch)
             + " humanized_frames="
             + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
                 std::to_string(std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0))
@@ -1071,18 +1191,22 @@ int main(int argc, char** argv) {
         }
     }
 
-    std::vector<PhysicalFrame> id_frames;
-    id_frames.reserve(256u);
-    for (int index = 0; index < 256; ++index) {
-        id_frames.push_back({index * 103, {48 + index % 12, 72 + index % 12}});
+    const Observation id_reuse = generate(write_bytes_fixture("id-reuse.mid",
+        verified_chord_runs_midi_bytes(310u, 54)), no_audio, envelope_config(1));
+    std::vector<std::uint8_t> grouped_run_ids;
+    for (std::size_t row = 0; row < id_reuse.notes.size(); ++row) {
+        const std::uint8_t id = id_reuse.notes[row].group_index;
+        if (id != 0 && (row == 0 || id_reuse.notes[row - 1u].group_index != id)) {
+            grouped_run_ids.push_back(id);
+        }
     }
-    const Observation id_reuse = generate_physical_fixture("id-reuse.mid", id_frames);
-    if (!id_reuse.status.ok() || id_reuse.notes.size() != 512u
-        || id_reuse.notes[0].group_index != 1u || id_reuse.notes[1].group_index != 1u
-        || id_reuse.notes[508].group_index != 255u || id_reuse.notes[509].group_index != 255u
-        || id_reuse.notes[510].group_index != 1u || id_reuse.notes[511].group_index != 1u) {
-        return fail("run-local group IDs did not cycle safely through 1..255");
+    if (!id_reuse.status.ok() || id_reuse.notes.size() != 620u
+        || grouped_run_ids.size() <= 255u || grouped_run_ids[254] != 255u
+        || grouped_run_ids[255] != 1u) {
+        return fail("reducer-compatible grouped runs did not cycle GroupIndex safely through 1..255: rows="
+            + std::to_string(id_reuse.notes.size()) + " runs=" + std::to_string(grouped_run_ids.size()));
     }
+
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 
     ff7rp::pipeline::ChartEventPlan exact_easy_plan;
