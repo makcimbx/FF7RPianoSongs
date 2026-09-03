@@ -30,6 +30,7 @@ struct Attack {
     std::string chord_id;
     std::vector<std::string> ignore_sound_pitches;
     std::vector<std::string> source_chord_pitches;
+    std::vector<MidiSourceIdentity> chord_sources;
 };
 
 struct MidiMelodyTrackingResult {

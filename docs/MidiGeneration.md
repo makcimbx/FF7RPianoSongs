@@ -14,14 +14,48 @@ such as metronome-beat extraction, may parse the source separately.
 
 - MIDI format 0 and 1 timelines are supported; format 2 is rejected.
 - Tempo and meter events are linked before chart generation.
-- Drum-channel events and pitches outside C1-C7 are ignored.
+- Drum-channel events are ignored. The generalized physical-chart path rejects a
+  linked pitched event outside C1-C7; the legacy fallback retains its prior
+  behavior of ignoring those events.
 - No pitch is invented or transposed.
 - Actions before the established audio lead-in or after known source-audio duration are excluded.
 - Explicit JSON notes remain authoritative and bypass MIDI reduction.
 
 ## Profile Behavior
 
-The generator clusters humanized onsets, tracks a melody path, groups alternatives by native frame, and searches source-backed reductions under calibrated movement, density, stream, jack, reversal, fatigue, imbalance, timing-irregularity, and recognizability constraints.
+When verified generalized chart policy is available, the generator first builds
+one profile-independent physical chart. Every supported source attack is retained
+unless it is a constituent of one verified chord, is outside explicit timing
+bounds, or is an exact same-frame/right-hand-pitch duplicate. Ambiguous or
+unsupported harmony remains as monotones instead of being guessed or removed.
+Generated rows contain exactly one native event: monotones are emitted first in
+immutable source order and at most one inferred chord follows. Distinct same-frame
+right-hand rows form one mandatory run; the same-frame chord remains an independent
+hard-profile action and may join a mixed run on easier profiles. The chart rejects rather than
+truncates above either 8192 source rows or 8192 native events.
+
+Every profile uses this identical physical row/event identity. Difficulty changes
+only deterministic row-level group topology and therefore the number of required
+roots. A run root or continuation may be a monotone or chord row; explicit authored
+dual rows remain supported by the shared model. Mandatory equal-time RH edges are
+always grouped. A compact selector works directly on canonical physical-row
+identities; it never translates roots from the legacy reduced candidate domain and
+never removes physical rows. Previously visible roots are pinned, and later profiles
+add only physical-row roots, so easier root sets remain subsets of harder ones. At
+each addition the selector considers a bounded deterministic frontier favoring
+canonical/salient rows and temporal coverage, then chooses the candidate with the
+best exact root-only route ratio. Group
+IDs are run-local serialization values and cycle through 1..255 after a zero or
+different separator. Every event on a continuation row is automated and does not
+enter action, strain, score-growth, or recognizability counts. Calibrated APM and
+tolerance define a target band over the complete physical active span. The selector
+uses the lower edge of that band as its deterministic minimum and never drops below
+inherited roots. If no selected physical-domain topology passes the root-only route,
+that label is omitted; physical events are never deleted.
+
+Without verified generalized policy (including build 1.004), the accepted v44
+legacy path remains unchanged: it clusters humanized onsets, tracks a melody path,
+and searches source-backed reductions under calibrated constraints.
 
 Distinct-frame, right-hand-only events that violate the selected profile's
 existing right-hand spacing threshold may form a contiguous group instead of
@@ -33,14 +67,21 @@ spacing remain ungrouped. A root can own multiple followers when every adjacent
 gap in the uninterrupted run violates that threshold; nonadjacent members of
 that same run do not conflict again. A left-hand, mixed-hand, or non-monotone row,
 or an adjacent gap that satisfies the threshold, ends the run and forbids grouping
-across it. Same-frame collisions are still collisions. The group
+across it. In the legacy fallback, same-frame collisions are still collisions. The group
 root, not its followers, counts as the required right-hand action for gameplay
-metadata and strain; an independent left-hand chord remains its own action. All
+metadata and strain; a chord on a continuation row is automated by the same
+row-level run. All
 retained followers remain physical chart rows, and the native row limit still
 applies to those rows. Generated output also fails closed rather than requiring
-more than 255 distinct byte-valued groups.
+more than 255 distinct byte-valued groups. Generalized output instead reuses IDs
+across separated runs.
 
-Each actual difficulty label is evaluated independently. A profile is exposed only when it is meaningfully larger than the previous visible profile, retains sufficient exact source identity, passes the shared validator, and remains within the playable chart limit. Failed labels are omitted without renumbering; higher labels may still be evaluated until a monotone size bound proves they cannot fit.
+Each actual difficulty label is evaluated independently. In the generalized path, every
+visible profile has the same physical digest and a strictly larger nested parentless-root
+set than the previous visible profile; duplicate root topologies are omitted, but legacy
+minimum/maximum action-growth percentages do not reject an otherwise valid generalized
+topology. The legacy path retains its meaningful-growth and exact-source-overlap rules.
+Failed labels are omitted without renumbering; higher labels may still be evaluated.
 
 Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Authored calibration routes overlap, and incomplete recovered evidence is treated as unknown rather than as rests or easy material.
 
@@ -79,8 +120,11 @@ ignored sound.
 ## Author Expectations
 
 - Sparse levels are expected and their actual labels are displayed.
-- A profile can be omitted because no valid source-backed witness fits every constraint.
-- A level whose minimum target exceeds 512 rows is not clipped into a publishable profile.
+- A generalized profile can be omitted when no nested physical-root topology in its
+  calibrated band satisfies a supported route; legacy profiles retain source-witness rules.
+- Legacy fallback levels remain subject to the 512-row reduction boundary.
+- Generalized levels are never clipped: complete physical material must fit both
+  8192 bounds and a valid topology, or the profile fails closed.
 - Different source MIDI quantization, tempo maps, or note provenance can materially change results.
 - Inspect logs and generated profile diagnostics before changing authoring inputs merely to force a level.
 

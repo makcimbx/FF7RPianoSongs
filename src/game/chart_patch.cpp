@@ -5,6 +5,7 @@
 #include "core/pe_image.h"
 #include "game/completion_timing.h"
 #include "game/extended_chart.h"
+#include "pipeline/chart_event_plan.h"
 #include "game/note_count.h"
 #include "game/rvas.h"
 #include "game/runtime_layouts.h"
@@ -908,12 +909,39 @@ bool plan_descriptor_chart_patch(
         }
         return false;
     }
+    bool generalized_extended = false;
+    try {
+        const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
+        std::vector<ff7rp::pipeline::ChartEventRow> complete_rows;
+        complete_rows.reserve(profile.chart_notes.size() + profile.extended_chart_tail_notes.size());
+        for (const SongChartNote& row : profile.chart_notes)
+            complete_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+        for (const SongChartNote& row : profile.extended_chart_tail_notes)
+            complete_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+        const ff7rp::pipeline::ChartEventPlan plan =
+            ff7rp::pipeline::derive_chart_event_plan(complete_rows);
+        generalized_extended = policy.playable_extended_available
+            && plan.valid()
+            && plan.source_row_count > ff7rp::pipeline::kMaxChartRows
+            && plan.native_event_count > plan.native_prefix_event_count
+            && plan.source_row_count == profile.source_row_count
+            && plan.native_prefix_event_count == profile.native_prefix_event_count
+            && plan.native_event_count == profile.native_event_count
+            && plan.required_action_count == profile.required_action_count
+            && plan.physical_digest == profile.physical_chart_digest
+            && profile.note_count == static_cast<int32_t>(plan.required_action_count)
+            && profile.diagnostic_descriptor_hash != 0
+            && profile.physical_chart_digest != 0
+            && profile.diagnostic_policy_generation == policy.generation;
+    } catch (...) {
+        generalized_extended = false;
+    }
     if (rows.size() > static_cast<size_t>(kMaxPatchedChartRows)
         && ff7rp::pipeline::experimental_extended_charts_requested()) {
         rows.resize(static_cast<size_t>(kMaxPatchedChartRows));
     }
     const NativeEventPlanSummary native_events = summarize_native_events(rows);
-    if (native_events.grouping_present
+    if (!generalized_extended && native_events.grouping_present
         && native_events.event_count > kNativeStableLinkedEventCapacity) {
         if (fail_reason) {
             *fail_reason = "native_event_link_stability_guard row_count="
@@ -1012,7 +1040,10 @@ bool plan_descriptor_chart_patch(
         arrays->monotone_note_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
         arrays->monotone_dot_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
         arrays->camera_switch_timings[index] = static_cast<uint8_t>(std::clamp(row.camera_switch_timing, 0, 255));
-        arrays->group_indices[index] = static_cast<uint8_t>(std::clamp(row.group_index, 0, 255));
+        // The generalized transaction relinks only after the final allocation is
+        // stable. Suppress parser links for its exact first-512 source prefix.
+        arrays->group_indices[index] = generalized_extended
+            ? 0 : static_cast<uint8_t>(std::clamp(row.group_index, 0, 255));
     }
 
     const int32_t patched_count = static_cast<int32_t>(rows.size());
@@ -1672,6 +1703,39 @@ bool chart_patch_ignore_sound_selftest()
         || g_chart_patch_journal.active || !g_chart_patch_journal.entries.empty()) {
         return fail();
     }
+
+    SongDifficultyProfile generalized;
+    generalized.difficulty = 4;
+    generalized.chart_notes.assign(512,
+        SongChartNote{"00_00", "Mono", "", 3, 0, 0, 0, {}});
+    generalized.extended_chart_tail_notes.push_back(
+        SongChartNote{"00_00", "Mono", "", 3, 0, 0, 1, {}});
+    generalized.chart_notes[511].group_index = 1;
+    std::vector<ff7rp::pipeline::ChartEventRow> generalized_rows;
+    generalized_rows.reserve(513);
+    for (const auto& row : generalized.chart_notes)
+        generalized_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+    generalized_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(
+        generalized.extended_chart_tail_notes.front()));
+    const auto generalized_events = ff7rp::pipeline::derive_chart_event_plan(generalized_rows);
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    generalized.source_row_count = generalized_events.source_row_count;
+    generalized.native_prefix_event_count = generalized_events.native_prefix_event_count;
+    generalized.native_event_count = generalized_events.native_event_count;
+    generalized.required_action_count = generalized_events.required_action_count;
+    generalized.note_count = static_cast<int32_t>(generalized_events.required_action_count);
+    generalized.physical_chart_digest = generalized_events.physical_digest;
+    generalized.diagnostic_descriptor_hash = 1;
+    generalized.diagnostic_policy_generation = ff7rp::pipeline::chart_row_policy_generation();
+    boundary_plan = {};
+    const bool suppression_ok = try_plan_descriptor_chart_patch(
+            generalized, "selftest-generalized-groups", layout, resolver,
+            boundary_plan, &boundary_reason)
+        && boundary_plan.arrays
+        && std::all_of(boundary_plan.arrays->group_indices.begin(),
+            boundary_plan.arrays->group_indices.end(), [](const uint8_t value) { return value == 0; });
+    ff7rp::pipeline::configure_chart_row_limit(false, false, false);
+    if (!suppression_ok) return fail();
 
     PlannedDescriptorChartPatch planned;
     std::string reason;

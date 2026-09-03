@@ -371,4 +371,104 @@ void model_terminal(PublicationState& state, const std::uint64_t generation,
         state.successful_lifecycle_epoch_after = 0;
     }
 }
+
+GeneralizedResult run_generalized(const GeneralizedRequest& request)
+{
+    GeneralizedResult result{};
+    if (!request.plan || !request.plan->valid() || !request.verified_1005
+        || !request.eligible || request.plan->source_row_count <= kNativeRows
+        || request.plan->native_event_count > kMaxPlayableRows
+        || request.plan->native_prefix_event_count > kNativeRows * 2
+        || request.plan->native_event_count <= request.plan->native_prefix_event_count
+        || request.plan->required_action_count
+            != request.plan->native_event_count - request.plan->links.size()
+        || request.failure == GeneralizedFailure::Preflight) return result;
+    const auto& plan = *request.plan;
+    if (plan.events.size() != plan.native_event_count) return result;
+    std::vector<int32_t> parents(plan.events.size(), -1);
+    for (std::size_t i = 0; i < plan.events.size(); ++i) {
+        const auto& event = plan.events[i];
+        const uint32_t expected_ordinal = static_cast<uint32_t>(event.source_row_index * 2u
+            + (event.kind == ff7rp::pipeline::ChartEventKind::Chord ? 1u : 0u));
+        if (event.compact_event_index != i || event.source_row_index >= plan.source_row_count
+            || event.ordinal != expected_ordinal
+            || ((i < plan.native_prefix_event_count) != (event.source_row_index < kNativeRows)))
+            return result;
+    }
+    for (const auto& link : plan.links) {
+        if (link.root_event_index >= plan.events.size()
+            || link.child_event_index >= plan.events.size()
+            || link.root_event_index == link.child_event_index
+            || parents[link.root_event_index] != -1
+            || parents[link.child_event_index] != -1) return result;
+        parents[link.child_event_index] = static_cast<int32_t>(link.root_event_index);
+        std::size_t depth = 0;
+        for (int32_t current = static_cast<int32_t>(link.child_event_index);
+             current >= 0; current = parents[static_cast<std::size_t>(current)]) {
+            if (++depth > parents.size()) return result;
+        }
+    }
+    result.parser_count = plan.native_prefix_event_count;
+    result.reserve_target = plan.native_event_count;
+    result.final_count = result.parser_count;
+    result.reserve_substituted = true;
+    const std::size_t tail_count = plan.native_event_count - plan.native_prefix_event_count;
+    auto clean_tails = [&](const std::size_t count) {
+        for (std::size_t i = count; i; --i)
+            result.destroyed_compact_indices.push_back(plan.native_prefix_event_count + i - 1);
+    };
+    for (std::size_t i = 0; i < tail_count; ++i) {
+        if (request.failure == GeneralizedFailure::ConstructorNonTail
+            && request.failure_index == i) {
+            result.ownership_preserved = true;
+            return result;
+        }
+        ++result.constructed_tails;
+        if ((request.failure == GeneralizedFailure::IgnoreSound
+                || request.failure == GeneralizedFailure::Callback)
+            && request.failure_index == i) {
+            clean_tails(result.constructed_tails);
+            result.constructed_tails = 0;
+            result.rollback_completed = true;
+            return result;
+        }
+    }
+    for (std::size_t i = 0; i < plan.links.size(); ++i) {
+        if (request.failure == GeneralizedFailure::Link && request.failure_index == i) {
+            for (std::size_t j = result.applied_links; j; --j)
+                result.rolled_back_link_indices.push_back(j - 1);
+            clean_tails(result.constructed_tails);
+            result.constructed_tails = 0;
+            result.applied_links = 0;
+            result.rollback_completed = true;
+            return result;
+        }
+        ++result.applied_links;
+    }
+    if (request.failure == GeneralizedFailure::UncertainOwnership) {
+        result.ownership_preserved = true;
+        return result;
+    }
+    if (request.failure == GeneralizedFailure::MaxPublish) {
+        for (std::size_t j = result.applied_links; j; --j)
+            result.rolled_back_link_indices.push_back(j - 1);
+        clean_tails(result.constructed_tails);
+        result.constructed_tails = result.applied_links = 0;
+        result.rollback_completed = true;
+        return result;
+    }
+    result.final_count = plan.native_event_count;
+    result.count_committed = true;
+    if (request.failure == GeneralizedFailure::CountValidation) {
+        result.final_count = plan.native_prefix_event_count;
+        for (std::size_t j = result.applied_links; j; --j)
+            result.rolled_back_link_indices.push_back(j - 1);
+        clean_tails(result.constructed_tails);
+        result.constructed_tails = result.applied_links = 0;
+        result.rollback_completed = true;
+        return result;
+    }
+    result.published_actions = plan.required_action_count;
+    return result;
+}
 } // namespace ff7r::piano::game::synthetic_model

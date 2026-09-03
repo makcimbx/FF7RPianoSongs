@@ -1,4 +1,5 @@
 #include "chart_compiler.h"
+#include "chart_event_plan.h"
 #include "diagnostic_descriptor_hash.h"
 #include "native_chord_constituents.h"
 #include "pipeline_limits.h"
@@ -154,7 +155,6 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
 
     CompiledChart chart;
     chart.notes.reserve(config.notes.size());
-    std::set<std::uint8_t> closed_groups;
     std::uint8_t active_group = 0;
     std::size_t active_group_rows = 0;
     for (std::size_t i = 0; i < config.notes.size(); ++i) {
@@ -178,18 +178,13 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
             if (active_group != 0 && active_group_rows < 2u) {
                 return Status::error(StatusCode::InvalidChart, "group_index run must contain at least two rows");
             }
-            if (active_group != 0) closed_groups.insert(active_group);
             active_group = source.group_index;
             active_group_rows = active_group == 0 ? 0u : 1u;
-            if (active_group != 0 && closed_groups.count(active_group) != 0) {
-                return Status::error(StatusCode::InvalidChart, "group_index may identify only one contiguous run");
-            }
         } else if (active_group != 0) {
             ++active_group_rows;
         }
-        if (source.group_index != 0 && (source.pitch.empty() || !source.chord_id.empty())) {
-            return Status::error(StatusCode::InvalidChart,
-                "group_index is supported only for right-hand monotone rows");
+        if (source.pitch.empty() && source.chord_id.empty()) {
+            return Status::error(StatusCode::InvalidChart, "chart row must contain at least one native event");
         }
 
         if (!source.pitch.empty()) {
@@ -213,6 +208,11 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
     }
     if (active_group != 0 && active_group_rows < 2u) {
         return Status::error(StatusCode::InvalidChart, "group_index run must contain at least two rows");
+    }
+    ChartEventPlan event_plan;
+    if (!derive_chart_event_plan(config.notes, chart.notes, &event_plan)) {
+        return Status::error(StatusCode::InvalidChart,
+            "chart rows do not form a valid bounded native event/action plan");
     }
     DiagnosticChartRetention diagnostic;
     if (has_diagnostic_tail) {

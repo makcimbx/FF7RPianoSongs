@@ -61,6 +61,7 @@ struct NormalizedMidiSource {
     std::vector<MidiTempoChange> tempos;
     std::vector<MidiMeterChange> meters;
     std::vector<NormalizedMidiNoteEvent> notes;
+    std::size_t unsupported_pitch_events = 0;
 };
 
 Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_source);

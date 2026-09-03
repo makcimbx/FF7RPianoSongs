@@ -1,5 +1,7 @@
 #include "core/generated/build_identity.generated.h"
+#include "game/song_registry.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/chart_event_plan.h"
 #include "pipeline/native_chord_constituents.h"
 #include "pipeline/cache.h"
 #include "pipeline/pipeline_limits.h"
@@ -389,6 +391,113 @@ int main()
         extended_chart.notes[1].group_index != 17) {
         return fail("extended note semantics did not parse and compile exactly");
     }
+    ff7rp::pipeline::SongConfig reused_group_config;
+    reused_group_config.schema = "v2";
+    reused_group_config.title = "reused group";
+    reused_group_config.bpm = 120.0;
+    for (int index = 0; index < 5; ++index) {
+        ff7rp::pipeline::Note note;
+        note.beat = index * 0.25;
+        note.duration_beats = 0.25;
+        note.pitch = "C4";
+        note.group_index = index == 2 ? 0 : 1;
+        reused_group_config.notes.push_back(std::move(note));
+    }
+    reused_group_config.notes_provided = true;
+    ff7rp::pipeline::CompiledChart reused_group_chart;
+    if (!ff7rp::pipeline::compile_chart(reused_group_config, &reused_group_chart).ok()) {
+        return fail("run-local GroupIndex reuse after a zero separator was rejected");
+    }
+    ff7rp::pipeline::SongConfig mixed_group_config;
+    mixed_group_config.schema = "v2";
+    mixed_group_config.title = "mixed native groups";
+    mixed_group_config.bpm = 120.0;
+    mixed_group_config.notes_provided = true;
+    const auto append_mixed = [&](const double beat, const char* pitch, const char* chord,
+                                  const std::uint8_t group) {
+        ff7rp::pipeline::Note note;
+        note.beat = beat;
+        note.duration_beats = 0.25;
+        note.pitch = pitch;
+        note.chord_id = chord;
+        note.group_index = group;
+        mixed_group_config.notes.push_back(std::move(note));
+    };
+    append_mixed(0.0, "", "pca_C", 9);       // chord root: one action
+    append_mixed(0.0, "C4", "", 9);          // equal-time monotone continuation
+    append_mixed(0.5, "D4", "pca_D", 9);    // explicit-dual continuation
+    append_mixed(0.75, "E4", "pca_E", 10);  // explicit-dual root: two actions
+    append_mixed(1.0, "", "pca_F", 10);      // chord continuation
+    ff7rp::pipeline::CompiledChart mixed_group_chart;
+    ff7rp::pipeline::ChartEventPlan mixed_group_plan;
+    if (!ff7rp::pipeline::compile_chart(mixed_group_config, &mixed_group_chart).ok()
+        || !ff7rp::pipeline::derive_chart_event_plan(
+            mixed_group_config.notes, mixed_group_chart.notes, &mixed_group_plan)
+        || mixed_group_plan.source_row_count != 5u
+        || mixed_group_plan.native_event_count != 7u
+        || mixed_group_plan.required_action_count != 3u) {
+        return fail("mixed row-level GroupIndex roots and continuations were not derived exactly");
+    }
+    std::vector<ff7rp::pipeline::ChartEventRow> runtime_rows;
+    runtime_rows.reserve(mixed_group_chart.notes.size());
+    for (const auto& compiled : mixed_group_chart.notes) {
+        ff7r::piano::game::SongChartNote runtime;
+        runtime.time_str = compiled.time_str;
+        runtime.monotone_id = compiled.monotone_id;
+        runtime.chord_id = compiled.chord_id;
+        runtime.note_type = compiled.note_type;
+        runtime.dot_type = compiled.dot_type;
+        runtime.camera_switch_timing = compiled.camera_switch_timing;
+        runtime.group_index = compiled.group_index;
+        runtime.ignore_sound_ids = compiled.ignore_sound_ids;
+        runtime_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(runtime));
+    }
+    const auto runtime_mixed_plan = ff7rp::pipeline::derive_chart_event_plan(runtime_rows);
+    if (!runtime_mixed_plan.valid()
+        || !ff7rp::pipeline::chart_event_plans_equal(mixed_group_plan, runtime_mixed_plan)
+        || runtime_mixed_plan.events.size() != 7u || runtime_mixed_plan.links.size() != 4u
+        || runtime_mixed_plan.events[0].kind != ff7rp::pipeline::ChartEventKind::Chord
+        || runtime_mixed_plan.events[0].ordinal != 1u
+        || runtime_mixed_plan.events[1].root_event_index != 0u
+        || runtime_mixed_plan.events[2].ordinal != 4u
+        || runtime_mixed_plan.events[3].ordinal != 5u
+        || !runtime_mixed_plan.events[4].parentless
+        || !runtime_mixed_plan.events[5].parentless
+        || runtime_mixed_plan.events[6].root_event_index != 4u
+        || runtime_mixed_plan.final_group_index != 10u) {
+        return fail("runtime-neutral mixed event/link plan diverged from pipeline derivation");
+    }
+    auto plan_mutation = runtime_mixed_plan;
+    ++plan_mutation.events[1].source_row_index;
+    if (ff7rp::pipeline::chart_event_plans_equal(runtime_mixed_plan, plan_mutation))
+        return fail("event-row mutation did not change canonical plan equality");
+    plan_mutation = runtime_mixed_plan;
+    plan_mutation.events[0].kind = ff7rp::pipeline::ChartEventKind::Monotone;
+    if (ff7rp::pipeline::chart_event_plans_equal(runtime_mixed_plan, plan_mutation))
+        return fail("event-kind mutation did not change canonical plan equality");
+    plan_mutation = runtime_mixed_plan;
+    ++plan_mutation.events[0].ordinal;
+    if (ff7rp::pipeline::chart_event_plans_equal(runtime_mixed_plan, plan_mutation))
+        return fail("event-ordinal mutation did not change canonical plan equality");
+    plan_mutation = runtime_mixed_plan;
+    ++plan_mutation.links[0].child_event_index;
+    if (ff7rp::pipeline::chart_event_plans_equal(runtime_mixed_plan, plan_mutation))
+        return fail("event-link mutation did not change canonical plan equality");
+    auto topology_mutation = runtime_rows;
+    topology_mutation[2].group_index = 0;
+    const auto regrouped_plan = ff7rp::pipeline::derive_chart_event_plan(topology_mutation);
+    if (!regrouped_plan.valid() || regrouped_plan.physical_digest != runtime_mixed_plan.physical_digest
+        || regrouped_plan.required_action_count == runtime_mixed_plan.required_action_count
+        || ff7rp::pipeline::chart_event_plans_equal(runtime_mixed_plan, regrouped_plan)) {
+        return fail("group topology mutation did not preserve physical identity and change links/actions");
+    }
+    auto physical_mutation = runtime_rows;
+    physical_mutation[1].monotone_id = "Dn4";
+    const auto changed_physical_plan = ff7rp::pipeline::derive_chart_event_plan(physical_mutation);
+    if (!changed_physical_plan.valid()
+        || changed_physical_plan.physical_digest == runtime_mixed_plan.physical_digest) {
+        return fail("compiled physical-row mutation did not change the physical digest");
+    }
     const char* ignore_sound_json = R"json({
         "schema":"v2","title":"Exact ignores","bpm":120,"notes":[
             {"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En2"]},
@@ -539,6 +648,44 @@ int main()
         diagnostic.tail_rows.front().source.beat != fixture_config.notes[512].beat) {
         return fail("diagnostic compiler did not isolate the exact 512+8 split");
     }
+    ff7rp::pipeline::SongConfig reused_256_groups;
+    reused_256_groups.schema = "v2";
+    reused_256_groups.title = "256 run-local groups";
+    reused_256_groups.bpm = 120.0;
+    reused_256_groups.notes_provided = true;
+    reused_256_groups.diagnostic_extended_chart_fixture = true;
+    for (std::size_t run = 0; run < 256u; ++run) {
+        const std::uint8_t id = static_cast<std::uint8_t>(1u + run % 255u);
+        for (int follower = 0; follower < 2; ++follower) {
+            ff7rp::pipeline::Note note;
+            note.beat = reused_256_groups.notes.size() * 0.25;
+            note.duration_beats = 0.25;
+            note.pitch = "C4";
+            note.group_index = id;
+            reused_256_groups.notes.push_back(std::move(note));
+        }
+        ff7rp::pipeline::Note separator;
+        separator.beat = reused_256_groups.notes.size() * 0.25;
+        separator.duration_beats = 0.25;
+        separator.pitch = "D4";
+        reused_256_groups.notes.push_back(std::move(separator));
+    }
+    ff7rp::pipeline::CompiledChart reused_256_chart;
+    ff7rp::pipeline::DiagnosticChartRetention reused_256_tail;
+    if (!ff7rp::pipeline::compile_chart(reused_256_groups, &reused_256_chart,
+            &reused_256_tail, ff7rp::pipeline::kMaximumExtendedChartRows).ok()) {
+        return fail("256 disjoint generated groups could not reuse byte IDs safely");
+    }
+    ff7rp::pipeline::LoadedDifficultyProfile reused_profile;
+    reused_profile.config = reused_256_groups;
+    reused_profile.config.notes.resize(ff7rp::pipeline::kMaxChartRows);
+    reused_profile.chart = reused_256_chart;
+    reused_profile.diagnostic_chart = reused_256_tail;
+    ff7rp::pipeline::ChartEventPlan reused_plan;
+    if (!ff7rp::pipeline::derive_profile_event_plan(reused_profile, &reused_plan)
+        || reused_plan.native_event_count != 768u || reused_plan.required_action_count != 512u) {
+        return fail("run-local GroupIndex reuse changed row/event/action derivation");
+    }
     auto mutated_diagnostic = diagnostic;
     if (!ff7rp::pipeline::diagnostic_charts_equal(diagnostic, mutated_diagnostic)) {
         return fail("identical diagnostic tails did not compare equal");
@@ -608,6 +755,57 @@ int main()
         || diagnostic.tail_rows.size() != ff7rp::pipeline::kMaximumExtendedChartTailRows
         || diagnostic.tail_rows.back().source_row + 1u != ff7rp::pipeline::kMaximumExtendedChartRows) {
         return fail("8192-row diagnostic boundary was not retained exactly");
+    }
+    ff7rp::pipeline::SongConfig maximum_event_fixture = fixture_config;
+    maximum_event_fixture.notes.assign(ff7rp::pipeline::kMaximumNativeChartEvents / 2u,
+        ff7rp::pipeline::Note{0.0, 1.0, "C4", "pca_C"});
+    for (std::size_t index = 0; index < maximum_event_fixture.notes.size(); ++index)
+        maximum_event_fixture.notes[index].beat = static_cast<double>(index);
+    if (!ff7rp::pipeline::compile_chart(maximum_event_fixture, &chart, &diagnostic,
+            ff7rp::pipeline::kMaximumExtendedChartRows).ok()) {
+        return fail("8192-native-event dual-row boundary was rejected");
+    }
+    std::vector<ff7rp::pipeline::ChartNote> maximum_event_compiled = chart.notes;
+    for (const auto& row : diagnostic.tail_rows) maximum_event_compiled.push_back(row.compiled);
+    ff7rp::pipeline::ChartEventPlan maximum_event_plan;
+    if (!ff7rp::pipeline::derive_chart_event_plan(
+            maximum_event_fixture.notes, maximum_event_compiled, &maximum_event_plan)
+        || maximum_event_plan.source_row_count != 4096u
+        || maximum_event_plan.native_prefix_event_count != 1024u
+        || maximum_event_plan.native_event_count != 8192u
+        || maximum_event_plan.required_action_count != 8192u) {
+        return fail("dual-row R/P/E/A derivation changed at the native-event ceiling");
+    }
+    std::vector<ff7rp::pipeline::ChartEventRow> representative_runtime_rows(4099u);
+    for (std::size_t row = 0; row < representative_runtime_rows.size(); ++row) {
+        auto& compiled = representative_runtime_rows[row];
+        compiled.time_str = ff7rp::pipeline::beat_to_time_str(static_cast<double>(row), 60.0);
+        compiled.monotone_id = "Cn4";
+        const bool single = row == 510u || row == 511u || row >= 4095u;
+        if (!single) compiled.chord_id = "pca_C";
+        if (row >= 510u && row <= 512u) compiled.group_index = 1;
+        if (row >= 513u && row <= 516u) compiled.group_index = 2;
+    }
+    const auto representative_runtime_plan =
+        ff7rp::pipeline::derive_chart_event_plan(representative_runtime_rows);
+    if (!representative_runtime_plan.valid()
+        || representative_runtime_plan.source_row_count != 4099u
+        || representative_runtime_plan.native_prefix_event_count != 1022u
+        || representative_runtime_plan.native_event_count != 8192u
+        || representative_runtime_plan.required_action_count != 8183u
+        || representative_runtime_plan.events.size() != 8192u
+        || representative_runtime_plan.links.size() != 9u
+        || representative_runtime_plan.events[1020].source_row_index != 510u
+        || representative_runtime_plan.events[1021].root_event_index != 1020u
+        || representative_runtime_plan.events[1022].root_event_index != 1020u
+        || representative_runtime_plan.events[1023].root_event_index != 1020u) {
+        return fail("representative R4099/P1022/E8192/A8183 runtime plan was not exact");
+    }
+    maximum_event_fixture.notes.push_back(
+        {static_cast<double>(maximum_event_fixture.notes.size()), 1.0, "C4", ""});
+    if (ff7rp::pipeline::compile_chart(maximum_event_fixture, &chart, &diagnostic,
+            ff7rp::pipeline::kMaximumExtendedChartRows).ok()) {
+        return fail("8193+ native events were not rejected without truncation");
     }
     maximum_fixture.notes.push_back(
         {static_cast<double>(maximum_fixture.notes.size()), 1.0, "C4", ""});

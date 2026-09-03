@@ -2,6 +2,7 @@
 #include "game/extended_chart_runtime_specs.h"
 #include "game/hook_specs.h"
 #include "pipeline/pipeline_limits.h"
+#include "pipeline/chart_event_plan.h"
 #include "tests/test_support.h"
 #include "tools/extended_chart_fixture.h"
 
@@ -124,6 +125,145 @@ bool test_count_driven_capacity_and_bounds()
     wrong_target.target_count = 1024;
     return model_published_count(publication, wrong_target, true) == kNativeRows
         && !publication.pending && !publication.active;
+}
+
+bool test_generalized_representative_plan()
+{
+    using namespace ff7rp::pipeline;
+    // The physical-first generator emits one event per row. Equal-frame rows
+    // remain in deterministic generated order, while an explicitly authored
+    // dual row remains monotone then chord in compact native order.
+    std::vector<ChartEventRow> generated_same_frame(3);
+    generated_same_frame[0].time_str = generated_same_frame[1].time_str
+        = generated_same_frame[2].time_str = "00_00";
+    generated_same_frame[0].monotone_id = "C4";
+    generated_same_frame[1].monotone_id = "D4";
+    generated_same_frame[2].chord_id = "Chord_C";
+    const ChartEventPlan generated_order = derive_chart_event_plan(generated_same_frame);
+    if (!generated_order.valid() || generated_order.native_event_count != 3
+        || generated_order.events[0].kind != ChartEventKind::Monotone
+        || generated_order.events[1].kind != ChartEventKind::Monotone
+        || generated_order.events[2].kind != ChartEventKind::Chord
+        || generated_order.events[0].source_row_index != 0
+        || generated_order.events[1].source_row_index != 1
+        || generated_order.events[2].source_row_index != 2) return false;
+    ChartEventRow explicit_dual;
+    explicit_dual.time_str = "00_00";
+    explicit_dual.monotone_id = "C4";
+    explicit_dual.chord_id = "Chord_C";
+    const ChartEventPlan dual_order = derive_chart_event_plan({explicit_dual});
+    if (!dual_order.valid() || dual_order.events.size() != 2
+        || dual_order.events[0].kind != ChartEventKind::Monotone
+        || dual_order.events[1].kind != ChartEventKind::Chord
+        || dual_order.events[0].ordinal != 0 || dual_order.events[1].ordinal != 1)
+        return false;
+
+    std::vector<ChartEventRow> rows(4099);
+    for (ChartEventRow& row : rows) {
+        row.time_str = "00_00"; // Equal times are parser-valid and preserve source order.
+        row.monotone_id = "C4";
+        row.chord_id = "Chord_C";
+    }
+    // Exactly 4093 dual, three monotone-only and three chord-only rows.
+    rows[0].chord_id.clear();
+    rows[100].monotone_id.clear();
+    rows[4095].chord_id.clear();
+    rows[4096].monotone_id.clear();
+    rows[4097].chord_id.clear();
+    rows[4098].monotone_id.clear();
+
+    // Four two-child runs (including the 511->512 boundary) and one
+    // single-child reused Group1 run produce exactly nine canonical links.
+    rows[0].group_index = rows[1].group_index = 2;       // monotone root -> dual
+    rows[100].group_index = rows[101].group_index = 3;   // chord root -> dual
+    rows[200].group_index = rows[201].group_index = 4;   // dual root -> dual
+    rows[511].group_index = rows[512].group_index = 1;   // prefix -> tail
+    rows[4095].group_index = rows[4096].group_index = 1; // run-local reuse
+    rows[512].ignore_sound_ids = {"Ignore_A", "", ""};
+    rows[513].ignore_sound_ids = {"Ignore_A", "Ignore_B", ""};
+    rows[514].ignore_sound_ids = {"Ignore_A", "Ignore_B", "Ignore_C"};
+
+    const ChartEventPlan plan = derive_chart_event_plan(rows);
+    if (!plan.valid() || plan.source_row_count != 4099
+        || plan.native_prefix_event_count != 1022
+        || plan.native_event_count != 8192
+        || plan.required_action_count != 8183 || plan.links.size() != 9
+        || plan.events.size() != 8192) return false;
+    if (plan.events[0].ordinal != 0
+        || plan.events[1].ordinal != 2
+        || plan.events[2].ordinal != 3
+        || plan.events.back().ordinal != 8197) return false;
+    std::vector<ChartEventRow> dual_prefix(513);
+    for (auto& row : dual_prefix) {
+        row.time_str = "00_00"; row.monotone_id = "C4"; row.chord_id = "Chord_C";
+    }
+    const ChartEventPlan p1024 = derive_chart_event_plan(dual_prefix);
+    if (!p1024.valid() || p1024.native_prefix_event_count != 1024) return false;
+    std::vector<ChartEventRow> too_many_events(4097);
+    for (auto& row : too_many_events) {
+        row.time_str = "00_00"; row.monotone_id = "C4"; row.chord_id = "Chord_C";
+    }
+    if (derive_chart_event_plan(too_many_events).valid()) return false;
+    const auto crossing = std::find_if(plan.links.begin(), plan.links.end(),
+        [](const ChartEventLink& link) {
+            return link.root_event_index < 1022 && link.child_event_index >= 1022;
+        });
+    if (crossing == plan.links.end()
+        || plan.required_action_count != plan.native_event_count - plan.links.size()) return false;
+
+    using namespace ff7r::piano::game::synthetic_model;
+    GeneralizedRequest request{&plan};
+    const GeneralizedResult success = run_generalized(request);
+    if (!success.reserve_substituted || success.reserve_target != 8192
+        || success.parser_count != 1022 || !success.count_committed
+        || success.final_count != 8192 || success.published_actions != 8183
+        || success.constructed_tails != 7170 || success.applied_links != 9)
+        return false;
+
+    const std::size_t tail_count = plan.native_event_count - plan.native_prefix_event_count;
+    for (const auto failure : {GeneralizedFailure::IgnoreSound, GeneralizedFailure::Callback}) {
+        for (const std::size_t index : {std::size_t{0}, tail_count / 2, tail_count - 1}) {
+            request.failure = failure;
+            request.failure_index = index;
+            const GeneralizedResult failed = run_generalized(request);
+            if (!failed.rollback_completed || failed.count_committed
+                || failed.final_count != plan.native_prefix_event_count
+                || failed.destroyed_compact_indices.empty()
+                || failed.destroyed_compact_indices.front()
+                    != plan.native_prefix_event_count + index
+                || failed.destroyed_compact_indices.back() != plan.native_prefix_event_count)
+                return false;
+        }
+    }
+    for (const std::size_t index : {std::size_t{0}, plan.links.size() / 2,
+            plan.links.size() - 1}) {
+        request.failure = GeneralizedFailure::Link;
+        request.failure_index = index;
+        const GeneralizedResult failed = run_generalized(request);
+        if (!failed.rollback_completed || failed.applied_links != 0
+            || failed.rolled_back_link_indices.size() != index) return false;
+    }
+    request.failure = GeneralizedFailure::ConstructorNonTail;
+    request.failure_index = tail_count / 2;
+    const GeneralizedResult non_tail = run_generalized(request);
+    if (!non_tail.ownership_preserved || non_tail.rollback_completed) return false;
+    request.failure = GeneralizedFailure::CountValidation;
+    const GeneralizedResult count_failure = run_generalized(request);
+    if (!count_failure.count_committed || !count_failure.rollback_completed
+        || count_failure.final_count != plan.native_prefix_event_count
+        || count_failure.rolled_back_link_indices.size() != plan.links.size()) return false;
+    request.failure = GeneralizedFailure::UncertainOwnership;
+    const GeneralizedResult uncertain = run_generalized(request);
+    if (!uncertain.ownership_preserved || uncertain.rollback_completed) return false;
+    ChartEventPlan duplicate = plan;
+    duplicate.links.push_back(duplicate.links.front());
+    --duplicate.required_action_count;
+    if (run_generalized(GeneralizedRequest{&duplicate}).reserve_substituted) return false;
+    ChartEventPlan cycle = plan;
+    cycle.links.push_back({cycle.links.front().child_event_index,
+        cycle.links.front().root_event_index, 0, 1});
+    --cycle.required_action_count;
+    return !run_generalized(GeneralizedRequest{&cycle}).reserve_substituted;
 }
 
 bool test_preflight_and_partial_reverse_cleanup()
@@ -557,6 +697,9 @@ bool test_shipping_specs()
         || kPersistentChartOwnerOffset == 0
         || kExtendedChartCanonicalSpecs.size() != 6u
         || rva::PianoEventVectorReserve == 0 || rva::PianoEventVectorReserveCall == 0
+        || rva::PianoEventIgnoreSoundInsert == 0
+        || rva::PianoEventIgnoreSoundInsertCall == 0
+        || rva::PianoEventLink == 0
         || rva::PianoEventCallbackBuild == 0 || rva::PianoEventResultCallback == 0
         || rva::PianoEventCallbackVtable == 0) {
         return false;
@@ -714,6 +857,7 @@ int main()
         {"default_policy", test_default_policy},
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
         {"count_driven_capacity_and_bounds", test_count_driven_capacity_and_bounds},
+        {"generalized_representative_plan", test_generalized_representative_plan},
         {"preflight_and_partial_reverse_cleanup", test_preflight_and_partial_reverse_cleanup},
         {"post_parser_time_authority", test_post_parser_time_authority},
         {"forwarding_and_restrictions", test_forwarding_and_restrictions},

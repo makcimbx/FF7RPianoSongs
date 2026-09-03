@@ -2,6 +2,7 @@
 
 #include "core/logging.h"
 #include "pipeline/diagnostic_descriptor_hash.h"
+#include "pipeline/chart_event_plan.h"
 #include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
 
@@ -11,41 +12,33 @@
 namespace ff7r::piano {
 namespace {
 
-bool restricted_extended_note(const game::SongChartNote& note)
-{
-    return !note.monotone_id.empty() && note.chord_id.empty() && note.group_index == 0
-        && note.camera_switch_timing == 0
-        && std::all_of(note.ignore_sound_ids.begin(), note.ignore_sound_ids.end(),
-            [](const std::string& id) { return id.empty(); });
-}
-
 bool eligible_extended_profile(const ff7rp::pipeline::LoadedSong& song,
-    const ff7rp::pipeline::LoadedDifficultyProfile& profile, const std::size_t target_rows)
+    const ff7rp::pipeline::LoadedDifficultyProfile& profile,
+    const ff7rp::pipeline::ChartEventPlan& event_plan)
 {
     const auto& diagnostic = profile.diagnostic_chart;
-    if (!ff7rp::pipeline::extended_chart_row_count_in_range(target_rows)
+    if (!ff7rp::pipeline::extended_chart_row_count_in_range(event_plan.source_row_count)
         || profile.config.notes.size() != ff7rp::pipeline::kMaxChartRows
         || profile.chart.notes.size() != ff7rp::pipeline::kMaxChartRows
-        || diagnostic.source_row_count != target_rows
+        || diagnostic.source_row_count != event_plan.source_row_count
         || diagnostic.native_prefix_row_count != ff7rp::pipeline::kMaxChartRows
-        || diagnostic.tail_rows.size() != target_rows - ff7rp::pipeline::kMaxChartRows
+        || diagnostic.tail_rows.size() != event_plan.source_row_count - ff7rp::pipeline::kMaxChartRows
         || diagnostic.descriptor_hash == 0
         || diagnostic.descriptor_hash != ff7rp::pipeline::compute_diagnostic_descriptor_hash(
             song.id, profile.config.difficulty, profile.chart, diagnostic)
         || !ff7rp::pipeline::bounded_extended_retention_shape(diagnostic)) {
         return false;
     }
-    for (std::size_t index = 0; index < profile.config.notes.size(); ++index) {
-        if (!ff7rp::pipeline::restricted_extended_row_pair(
-                profile.config.notes[index], profile.chart.notes[index], profile.config.bpm)) return false;
-    }
-    for (std::size_t index = 0; index < diagnostic.tail_rows.size(); ++index) {
-        if (diagnostic.tail_rows[index].source_row != ff7rp::pipeline::kMaxChartRows + index
-            || !ff7rp::pipeline::restricted_extended_row_pair(
-                diagnostic.tail_rows[index].source, diagnostic.tail_rows[index].compiled,
-                profile.config.bpm)) return false;
-    }
-    return true;
+    std::vector<ff7rp::pipeline::Note> source_rows;
+    std::vector<ff7rp::pipeline::ChartNote> compiled_rows;
+    ff7rp::pipeline::ChartEventPlan verified;
+    return ff7rp::pipeline::complete_profile_rows(profile, &source_rows, &compiled_rows)
+        && ff7rp::pipeline::eligible_extended_chart_plan(
+            source_rows, compiled_rows, profile.config.bpm, &verified)
+        && verified.source_row_count == event_plan.source_row_count
+        && verified.native_event_count == event_plan.native_event_count
+        && verified.required_action_count == event_plan.required_action_count
+        && verified.physical_digest == event_plan.physical_digest;
 }
 
 float chart_duration_seconds(const ff7rp::pipeline::LoadedSong& song)
@@ -106,7 +99,18 @@ game::SongDescriptor build_song_descriptor(
         const auto& source_profile = song.difficulty_profiles[profile_index];
         game::SongDifficultyProfile profile;
         profile.difficulty = source_profile.config.difficulty;
-        profile.note_count = static_cast<int>(source_profile.chart.notes.size());
+        ff7rp::pipeline::ChartEventPlan event_plan;
+        const bool event_plan_valid = ff7rp::pipeline::derive_profile_event_plan(source_profile, &event_plan);
+        if (event_plan_valid) {
+            profile.source_row_count = event_plan.source_row_count;
+            profile.native_prefix_event_count = event_plan.native_prefix_event_count;
+            profile.native_event_count = event_plan.native_event_count;
+            profile.required_action_count = event_plan.required_action_count;
+            profile.physical_chart_digest = event_plan.physical_digest;
+            profile.note_count = static_cast<int>(event_plan.required_action_count);
+        } else {
+            profile.note_count = static_cast<int>(source_profile.chart.notes.size());
+        }
         profile.bpm = static_cast<float>(source_profile.config.bpm);
         profile.title = descriptor.title;
         if (song.difficulty_profiles.size() > 1) {
@@ -156,11 +160,24 @@ game::SongDescriptor build_song_descriptor(
                 && song.chart_policy_identity == policy.identity()
                 && song.accepted_chart_input_limit >= source_rows
                 && song.published_chart_row_limit >= source_rows
-                && std::all_of(profile.extended_chart_tail_notes.begin(),
-                    profile.extended_chart_tail_notes.end(), restricted_extended_note)
-                && std::all_of(profile.chart_notes.begin(), profile.chart_notes.end(), restricted_extended_note)
-                && eligible_extended_profile(song, source_profile, source_rows))
-                profile.note_count = static_cast<int>(source_rows);
+                && event_plan_valid
+                && event_plan.native_event_count <= ff7rp::pipeline::kMaximumNativeChartEvents
+                && eligible_extended_profile(song, source_profile, event_plan)) {
+                // Runtime owners consume native_event_count for allocation and
+                // required_action_count/note_count for scoring.
+            } else {
+                profile.extended_chart_tail_notes.clear();
+                ff7rp::pipeline::ChartEventPlan prefix_plan;
+                if (ff7rp::pipeline::derive_chart_event_plan(
+                        source_profile.config.notes, source_profile.chart.notes, &prefix_plan)) {
+                    profile.source_row_count = prefix_plan.source_row_count;
+                    profile.native_prefix_event_count = prefix_plan.native_prefix_event_count;
+                    profile.native_event_count = prefix_plan.native_event_count;
+                    profile.required_action_count = prefix_plan.required_action_count;
+                    profile.physical_chart_digest = prefix_plan.physical_digest;
+                    profile.note_count = static_cast<int>(prefix_plan.required_action_count);
+                }
+            }
         }
         descriptor.profiles.push_back(std::move(profile));
     }

@@ -99,7 +99,8 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
 - `chord_id` must be a valid native `pca_*` identifier.
 - `group_index` is an optional integer from 0 through 255. Zero or omission means
   ungrouped. A nonzero value must identify one contiguous run of at least two
-  pitch-only rows; an identity cannot be reused later in the chart. The run's
+  pitch-only rows. An identity may be reused by a later disjoint run after a zero
+  or different identity separates the runs; adjacent runs must differ. The run's
   first row is the required/scored action and later rows are grouped followers.
 - `monotone_variant` is optionally `"default"` or `"alternate"`. Omission is
   `"default"`. `"alternate"` selects the verified `_2` identity and is accepted
@@ -116,7 +117,9 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
 Omitting all three fields preserves the behavior of existing schema-v2 songs.
 Unknown fields and malformed, ambiguous, or unsupported combinations are rejected.
 
-Playable charts are limited to 512 rows. Inputs above that boundary are not publishable; see [Compatibility and Limitations](../README.md#compatibility-and-limitations).
+Ordinary user-authored charts are limited to 512 rows. The internal engineering
+flag has a separate fail-closed 8192-row and 8192-native-event contract; it does
+not make extended authoring a public schema feature.
 
 ## Explicit Difficulty Profiles
 
@@ -165,13 +168,25 @@ without duplicating its folder or audio. Each profile permits exactly
 
 ## Pitch Contract
 
-MIDI and named pitches are restricted to the playable piano range C1 through C7. MIDI drum-channel events are ignored. The generator preserves source pitches and never invents or transposes notes to force a profile.
+MIDI and named pitches are restricted to the playable piano range C1 through C7.
+MIDI drum-channel events are ignored. Generalized generation rejects a linked
+pitched source event outside that range; legacy generation retains its prior
+ignore behavior. The generator never invents or transposes pitches.
 
 ## MIDI Contract
 
-MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. For compatibility with common non-standard exports, a preceding channel running status may resume after a Meta or SysEx event; this exception does not extend to other system status bytes. Notes outside the pitch range, before the established audio lead-in, or after known source-audio duration do not become prompts.
+MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. For compatibility with common non-standard exports, a preceding channel running status may resume after a Meta or SysEx event; this exception does not extend to other system status bytes. Notes before the established audio lead-in or after known source-audio duration do not become prompts.
 
-Generated levels are independent profiles, can have sparse labels, and may be omitted when no valid source-backed chart satisfies the calibrated constraints.
+Under verified generalized policy, generated levels share one immutable physical
+chart and differ only by nested right-hand group topology. Source rows, native
+prefix events, total native events, and required root actions are separate counts.
+Exact same-frame/right-hand-pitch duplicates coalesce; other same-frame right-hand
+notes become stable equal-time grouped rows. Generated rows contain one event:
+monotones are ordered first and an unambiguous chord follows in its own row. Explicit
+authored dual rows remain valid. Ambiguous harmony falls back to source
+monotones. Either all physical rows fit the 8192-row and 8192-event limits or
+generation rejects without truncation. Without verified policy, the legacy v44
+reduction path and sparse-label behavior remain.
 Generated charts deterministically group only distinct-frame right-hand events
 that form an uninterrupted run of adjacent spacing violations under the selected
 profile's own constraint. One root may own multiple followers; a playable gap or

@@ -40,7 +40,11 @@ bool chart_note_equal(const SongChartNote& left, const SongChartNote& right)
 bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfile& right)
 {
     if (left.title != right.title || left.difficulty != right.difficulty ||
-        left.note_count != right.note_count || left.bpm != right.bpm ||
+        left.note_count != right.note_count || left.source_row_count != right.source_row_count ||
+        left.native_prefix_event_count != right.native_prefix_event_count ||
+        left.native_event_count != right.native_event_count ||
+        left.required_action_count != right.required_action_count ||
+        left.physical_chart_digest != right.physical_chart_digest || left.bpm != right.bpm ||
         left.score_thresholds != right.score_thresholds ||
         left.mode_change_combo_counts != right.mode_change_combo_counts ||
         left.chart_notes.size() != right.chart_notes.size() ||
@@ -197,8 +201,6 @@ SongDescriptor expected_full_descriptor()
         profile.diagnostic_descriptor_hash = 0xabc000u + static_cast<std::uint64_t>(difficulty);
         profile.diagnostic_policy_generation = 0x1122334455667788ull;
         profile.diagnostic_loaded_from_runtime_cache = true;
-        if (difficulty == 1) profile.extended_chart_tail_notes.push_back(SongChartNote{
-            "64_0", "Cn4", "", 7, 2, 0, 0, {"", "", ""}});
         expected.profiles.push_back(std::move(profile));
     }
     return expected;
@@ -352,8 +354,10 @@ int main()
     chord_diagnostic.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
         chord_tail.id, chord_tail.difficulty_profiles.front().config.difficulty,
         chord_tail.difficulty_profiles.front().chart, chord_diagnostic);
-    if (ff7r::piano::build_song_descriptor(chord_tail, 17).profiles.front().note_count != 512) {
-        return fail("chord-bearing exact-520 tail gained publication authority");
+    const auto chord_profile = ff7r::piano::build_song_descriptor(chord_tail, 17).profiles.front();
+    if (chord_profile.note_count != 521 || chord_profile.native_event_count != 521
+        || chord_profile.extended_chart_tail_notes.size() != 8) {
+        return fail("dual-hand exact-520 tail did not publish distinct row/event/action counts");
     }
     const auto rejects_tail_mutation = [&](const char* label, const auto& mutate) {
         LoadedSong candidate = extended_song_fixture(520);
@@ -380,8 +384,8 @@ int main()
     LoadedSong diagnostic_only = extended_song_fixture(520);
     const auto diagnostic_descriptor = ff7r::piano::build_song_descriptor(diagnostic_only, 17).profiles.front();
     if (diagnostic_descriptor.note_count != 512
-        || diagnostic_descriptor.extended_chart_tail_notes.size() != 8) {
-        return fail("diagnostic-only 520 did not retain its immutable nonplayable tail");
+        || !diagnostic_descriptor.extended_chart_tail_notes.empty()) {
+        return fail("diagnostic-only 520 gained generalized tail authority");
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 

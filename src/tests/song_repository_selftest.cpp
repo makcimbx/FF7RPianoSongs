@@ -1050,6 +1050,57 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
+    struct PolicyReset {
+        ~PolicyReset() { ff7rp::pipeline::configure_chart_row_limit(false, false); }
+    } reset;
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+
+    const std::filesystem::path song_directory = root / "PhysicalMidiCacheFixture";
+    std::filesystem::create_directories(song_directory);
+    MidiTrack track;
+    for (int index = 0; index < 8; ++index) add_note(&track, index * 960, 120, 72 + index % 5, 110);
+    if (!write_bytes(song_directory / "song.mid", build_midi(std::move(track)))
+        || !write_silent_wav(song_directory / "song.wav", 8.5)
+        || !write_song_json(song_directory / "song.json", "Physical MIDI Cache Fixture", true)) {
+        return fail("failed to write generalized physical MIDI cache fixture");
+    }
+
+    ff7rp::pipeline::LoadedSong cold;
+    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cold);
+    if (!status.ok() || cold.loaded_from_runtime_cache || cold.difficulty_profiles.empty()
+        || cold.chart_policy_identity != ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity) {
+        return fail("generalized physical MIDI cold generation failed: " + status.message);
+    }
+    const std::string manifest = read_text(cold.cache_manifest_path);
+    if (manifest.find("profile_source_rows=") == std::string::npos
+        || manifest.find("profile_native_events=") == std::string::npos
+        || manifest.find("profile_required_actions=") == std::string::npos
+        || manifest.find("profile_physical_digests=") == std::string::npos) {
+        return fail("generalized physical MIDI manifest omitted derived event counts");
+    }
+
+    ff7rp::pipeline::LoadedSong warm;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &warm);
+    if (!status.ok() || !warm.loaded_from_runtime_cache
+        || warm.difficulty_profiles.size() != cold.difficulty_profiles.size()
+        || read_text(warm.cache_manifest_path) != manifest) {
+        return fail("generalized physical MIDI runtime cache did not round-trip");
+    }
+    for (std::size_t index = 0; index < cold.difficulty_profiles.size(); ++index) {
+        if (!configs_equal(warm.difficulty_profiles[index].config, cold.difficulty_profiles[index].config)
+            || !charts_equal(warm.difficulty_profiles[index].chart, cold.difficulty_profiles[index].chart)
+            || !diagnostics_equal(warm.difficulty_profiles[index].diagnostics,
+                cold.difficulty_profiles[index].diagnostics)
+            || !ff7rp::pipeline::diagnostic_charts_equal(
+                warm.difficulty_profiles[index].diagnostic_chart,
+                cold.difficulty_profiles[index].diagnostic_chart)) {
+            return fail("generalized physical MIDI cold/warm profile semantics changed");
+        }
+    }
+    return 0;
+}
+
 int test_dense_collision_cache_round_trip(const std::filesystem::path& root) {
     const std::filesystem::path song_directory = root / "DenseCollisionFixture";
     std::filesystem::create_directories(song_directory);
@@ -2543,6 +2594,7 @@ int main() {
     if (run("profile_comparison", test_dual_action_profile_comparison) != 0) return 1;
     if (run("authored_profiles", [&] { return test_authored_profiles(root.path()); }) != 0) return 1;
     if (run("growth_cache_manifest", [&] { return test_growth_cache_and_manifest(root.path()); }) != 0) return 1;
+    if (run("physical_midi_cache", [&] { return test_physical_midi_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("dense_collision_cache", [&] { return test_dense_collision_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("offline_goldens", [&] { return test_offline_artifact_goldens(root.path()); }) != 0) return 1;
     if (run("normal_policy", [&] { return test_normal_chart_cache_policy_normalization(root.path()); }) != 0) return 1;

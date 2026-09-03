@@ -150,6 +150,7 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
     midi.linkNotePairs();
     std::vector<NormalizedMidiNoteEvent> source;
     std::size_t source_ordinal = 0;
+    std::size_t unsupported_pitch_events = 0;
     for (int track = 0; track < midi.getTrackCount(); ++track) {
         for (int event_index = 0; event_index < midi.getEventCount(track); ++event_index) {
             const smf::MidiEvent& event = midi[track][event_index];
@@ -159,8 +160,12 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
             const smf::MidiEvent* linked = event.getLinkedEvent();
             const int pitch = event.getKeyNumber();
             const double duration = event.getDurationInSeconds();
-            if (!linked || pitch < 24 || pitch > 96 || duration <= 0.0 ||
+            if (!linked || duration <= 0.0 ||
                 !std::isfinite(event.seconds) || !std::isfinite(duration)) {
+                continue;
+            }
+            if (pitch < 24 || pitch > 96) {
+                ++unsupported_pitch_events;
                 continue;
             }
             NormalizedMidiNoteEvent note;
@@ -183,6 +188,7 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
     out_source->tempos = std::move(tempos);
     out_source->meters = std::move(meters);
     out_source->notes = std::move(source);
+    out_source->unsupported_pitch_events = unsupported_pitch_events;
     return Status::ok_status();
 }
 

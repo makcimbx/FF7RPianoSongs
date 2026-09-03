@@ -2,6 +2,7 @@
 
 #include "pipeline/cache.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/pipeline_limits.h"
 
 #include <cmath>
 #include <cstdint>
@@ -203,16 +204,16 @@ int main() {
     // The oracle includes the generated pipeline cache identity. It was
     // regenerated for authored difficulty profiles without changing the cache
     // manifest schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5593u, 0xa3f32f5d96666a21ull, "comprehensive")) return 1;
+    if (!check_golden(comprehensive, source_config, 5593u, 0x22b8fd920ba141b2ull, "comprehensive")) return 1;
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3715u, 0x5472df17229ee2f4ull, "empty")) return 1;
+    if (!check_golden(empty, empty_source, 3715u, 0x7d7365679cf785e2ull, "empty")) return 1;
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3716u, 0x1e3bec8b249af73aull, "nonfinite")) return 1;
+    if (!check_golden(nonfinite, empty_source, 3716u, 0x5e6b8790bdba33e4ull, "nonfinite")) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);
@@ -223,7 +224,7 @@ int main() {
 
     std::string text;
     if (!render_cache_manifest(comprehensive, source_config, &text).ok()) return 1;
-    return expect(text.find("title=Manifest Ω\nline\t=\r\n") != std::string::npos,
+    if (!(expect(text.find("title=Manifest Ω\nline\t=\r\n") != std::string::npos,
                "Unicode/control title behavior changed") &&
         expect(text.find("profile_omissions=9:777:omitted:semicolon;colon:\nΩ\n") != std::string::npos,
             "omission string behavior changed") &&
@@ -234,5 +235,23 @@ int main() {
                 text.find("profile_row_limit_exceeded=0,1,1\n") != std::string::npos &&
                 text.find("profile_nested_from_previous=1,1,0\n") != std::string::npos,
             "diagnostics boolean signatures changed")
+        )) return 1;
+
+    LoadedSong generalized = comprehensive;
+    generalized.chart_policy_identity = kPlayableExtendedChartRowPolicyIdentity;
+    generalized.accepted_chart_input_limit = kMaximumExtendedChartRows;
+    generalized.published_chart_row_limit = kMaximumExtendedChartRows;
+    std::string generalized_text;
+    if (!render_cache_manifest(generalized, source_config, &generalized_text).ok()) return 1;
+    return expect(generalized_text.find("profile_source_rows=2,2,520\n") != std::string::npos,
+            "generalized manifest source-row counts missing") &&
+        expect(generalized_text.find("profile_native_prefix_events=3,3,512\n") != std::string::npos,
+            "generalized manifest prefix-event counts missing") &&
+        expect(generalized_text.find("profile_native_events=3,3,520\n") != std::string::npos,
+            "generalized manifest native-event counts missing") &&
+        expect(generalized_text.find("profile_required_actions=3,3,520\n") != std::string::npos,
+            "generalized manifest required-action counts missing") &&
+        expect(generalized_text.find("profile_physical_digests=") != std::string::npos,
+            "generalized manifest physical digests missing")
         ? 0 : 1;
 }

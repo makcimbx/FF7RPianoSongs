@@ -717,6 +717,7 @@ std::vector<Attack> build_chord_candidates(
         });
         for (const MidiNoteEvent* note : harmony) {
             chord.source_chord_pitches.push_back(pitch_name(note->source.pitch));
+            chord.chord_sources.push_back(note->source);
         }
         result.push_back(std::move(chord));
     }
@@ -818,6 +819,7 @@ struct AnalysisNote {
     int pitch = -1;
     std::string_view chord_id;
     bool right_action = false;
+    bool left_action = false;
 };
 
 struct JointStrainAnalysis {
@@ -856,8 +858,11 @@ std::vector<AnalysisNote> analysis_notes_from_notes(const std::vector<Note>& not
     result.reserve(notes.size());
     std::uint8_t previous_group = 0;
     for (const Note& note : notes) {
+        const bool continuation = note.group_index != 0
+            && note.group_index == previous_group;
         result.push_back({note.beat, strain_pitch_number(note.pitch), note.chord_id,
-            !note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)});
+            !note.pitch.empty() && !continuation,
+            !note.chord_id.empty() && !continuation});
         previous_group = note.group_index;
     }
     return result;
@@ -886,13 +891,13 @@ JointStrainAnalysis calculate_joint_strain_analysis(
     bool has_previous = false;
     result.samples.reserve(ordered_notes->size());
     for (const AnalysisNote& note : *ordered_notes) {
-        if (!note.right_action && note.chord_id.empty()) continue;
+        if (!note.right_action && !note.left_action) continue;
         const double seconds = note.beat * 60.0 / bpm;
         const double elapsed = has_previous ? std::max(0.0, seconds - previous_seconds) : 10.0;
         const bool connected_transition = has_previous && elapsed < 2.0;
         const int pitch = note.pitch;
         const bool has_pitch = note.right_action && pitch >= 0;
-        const bool has_chord = !note.chord_id.empty();
+        const bool has_chord = note.left_action;
         const int hand_mask = (has_pitch ? 1 : 0) | (has_chord ? 2 : 0);
         double impulse = 1.0;
         if (has_chord) impulse += 0.20;
@@ -976,7 +981,7 @@ MidiLocalSkillMetrics calculate_local_skills_analysis(
         if (note.right_action) {
             actions.push_back({seconds, true, note.pitch, {}});
         }
-        if (!note.chord_id.empty()) actions.push_back({seconds, false, -1, note.chord_id});
+        if (note.left_action) actions.push_back({seconds, false, -1, note.chord_id});
     }
     if (!notes_are_sorted) {
         std::stable_sort(actions.begin(), actions.end(), [](const SkillAction& a, const SkillAction& b) {
@@ -1381,7 +1386,7 @@ double recoverable_route_penalty(
         if (note.right_action) {
             actions.push_back({seconds, true, note.pitch, {}});
         }
-        if (!note.chord_id.empty()) actions.push_back({seconds, false, -1, note.chord_id});
+        if (note.left_action) actions.push_back({seconds, false, -1, note.chord_id});
     }
     if (!notes_are_sorted) {
         std::stable_sort(actions.begin(), actions.end(), [](const SkillAction& a, const SkillAction& b) {
@@ -1531,8 +1536,9 @@ std::size_t required_action_count(const std::vector<Note>& notes) {
     std::size_t count = 0;
     std::uint8_t previous_group = 0;
     for (const Note& note : notes) {
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) ++count;
-        if (!note.chord_id.empty()) ++count;
+        const bool continuation = note.group_index != 0 && note.group_index == previous_group;
+        if (!continuation) count += static_cast<std::size_t>(!note.pitch.empty())
+            + static_cast<std::size_t>(!note.chord_id.empty());
         previous_group = note.group_index;
     }
     return count;
@@ -1711,7 +1717,8 @@ std::vector<AnalysisNote> analysis_notes_from_rows_with_candidate(
             frame > previous_frame && row.right.start - previous_start <
                 profile.right_seconds - kComparisonEpsilon;
         notes.push_back({row.note.beat, strain_pitch_number(row.note.pitch), row.note.chord_id,
-            !row.note.pitch.empty() && !grouped_follower});
+            !row.note.pitch.empty() && !grouped_follower,
+            !row.note.chord_id.empty()});
         has_previous = true;
         previous_eligible = eligible;
         previous_frame = frame;
@@ -2454,6 +2461,366 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     };
     Profile profile = profile_for_difficulty(config.difficulty);
     const std::map<SourceIdentity, bool> alternate_monotone_plan = plan_alternate_monotones(voice);
+    const ChartRowPolicySnapshot physical_policy = chart_row_policy_snapshot();
+    if (physical_policy.enabled && physical_policy.playable_extended_available) {
+        if (normalized_source.unsupported_pitch_events != 0) {
+            result.status = Status::error(StatusCode::InvalidMidi,
+                "generalized MIDI contains " + std::to_string(normalized_source.unsupported_pitch_events)
+                    + " pitched note event(s) outside C1-C7");
+            return result;
+        }
+
+        // Chords retain the established exact/unique-superset inference. Any
+        // source not consumed by one such chord remains an RH monotone.
+        std::vector<Attack> physical_chords = build_chord_candidates(clusters, melody_sources);
+        std::set<SourceIdentity> chord_sources;
+        for (const Attack& chord : physical_chords) {
+            chord_sources.insert(chord.chord_sources.begin(), chord.chord_sources.end());
+        }
+        std::vector<Attack> physical_right;
+        for (const OnsetCluster& cluster : clusters) {
+            for (const MidiNoteEvent& event : cluster.notes) {
+                if (chord_sources.count(event.source) != 0) continue;
+                Attack attack;
+                attack.event = event;
+                attack.start = event.start;
+                attack.end = event.end;
+                attack.beat = event.beat;
+                attack.metric_accent = cluster.metric_accent;
+                attack.melody_evidence = midi_melody_scoring_detail::melody_evidence(
+                    event.source.pitch, event.source.velocity, event.start, event.end, event.stream_prior);
+                physical_right.push_back(std::move(attack));
+            }
+        }
+        std::sort(physical_right.begin(), physical_right.end(), attack_less);
+        const std::map<SourceIdentity, bool> physical_alternate_plan =
+            plan_alternate_monotones(physical_right);
+
+        std::set<SourceIdentity> physical_lead_rejections;
+        std::set<SourceIdentity> physical_duration_rejections;
+        const auto filter_physical_timing = [&](std::vector<Attack>* attacks) {
+            attacks->erase(std::remove_if(attacks->begin(), attacks->end(), [&](const Attack& attack) {
+                const int rejection = timing_rejection(attack);
+                if (rejection == 1) physical_lead_rejections.insert(attack.event.source);
+                if (rejection == 2) physical_duration_rejections.insert(attack.event.source);
+                return rejection != 0;
+            }), attacks->end());
+        };
+        filter_physical_timing(&physical_right);
+        filter_physical_timing(&physical_chords);
+        measure_shared_audio_prominence(
+            audio, {&physical_right, &physical_chords}, audio_alignment_seconds);
+
+        struct PhysicalRow {
+            Note note;
+            long long frame = 0;
+            bool right = false;
+            bool left = false;
+            Attack right_attack;
+            double accent = 0.0;
+            double salience = 0.0;
+            SourceIdentity source;
+            int sector_pitch = 0;
+            bool preserve_root = false;
+        };
+        std::map<long long, std::vector<Attack>> rights_by_frame;
+        std::map<long long, std::vector<Attack>> chords_by_frame;
+        std::size_t duplicate_count = 0;
+        for (const Attack& attack : physical_right) rights_by_frame[native_frame(attack.start)].push_back(attack);
+        for (const Attack& attack : physical_chords) chords_by_frame[native_frame(attack.start)].push_back(attack);
+        std::set<long long> frames;
+        for (const auto& item : rights_by_frame) frames.insert(item.first);
+        for (const auto& item : chords_by_frame) frames.insert(item.first);
+        std::vector<PhysicalRow> physical_rows;
+        const auto set_right = [&](PhysicalRow* row, const Attack& attack) {
+            row->right = true;
+            row->right_attack = attack;
+            row->accent = attack.metric_accent;
+            row->salience = attack_evidence(attack);
+            row->source = attack.event.source;
+            row->sector_pitch = attack.event.source.pitch;
+            row->preserve_root = melody_sources.count(attack.event.source) != 0;
+            row->note.pitch = pitch_name(attack.event.source.pitch);
+            const auto alternate = physical_alternate_plan.find(attack.event.source);
+            row->note.alternate_monotone = alternate != physical_alternate_plan.end() && alternate->second;
+        };
+        const auto set_left = [&](PhysicalRow* row, const Attack& attack) {
+            row->left = true;
+            row->accent = std::max(row->accent, attack.metric_accent);
+            row->salience = std::max(row->salience, attack_evidence(attack));
+            row->source = attack.event.source;
+            row->sector_pitch = attack.event.source.pitch;
+            row->preserve_root = true;
+            row->note.chord_id = attack.chord_id;
+            row->note.ignore_sound_pitches = attack.ignore_sound_pitches;
+            row->note.source_chord_pitches = attack.source_chord_pitches;
+        };
+        for (const long long frame : frames) {
+            auto& rights = rights_by_frame[frame];
+            auto& lefts = chords_by_frame[frame];
+            std::sort(rights.begin(), rights.end(), [](const Attack& a, const Attack& b) {
+                return a.event.source < b.event.source;
+            });
+            std::set<int> retained_pitches;
+            rights.erase(std::remove_if(rights.begin(), rights.end(), [&](const Attack& attack) {
+                if (retained_pitches.insert(attack.event.source.pitch).second) return false;
+                ++duplicate_count;
+                return true;
+            }), rights.end());
+            if (lefts.size() > 1u) {
+                result.status = Status::error(StatusCode::InvalidChart,
+                    "generalized MIDI produced multiple left-hand chords at one native frame");
+                return result;
+            }
+            const auto make_physical_row = [&](PhysicalRow row) {
+                row.frame = frame;
+                row.note.beat = (static_cast<double>(frame) / 60.0) * chart_bpm / 60.0;
+                row.note.duration_beats = 0.25;
+                physical_rows.push_back(std::move(row));
+            };
+            // Generated physical rows always represent exactly one native event.
+            // Stable monotones precede the optional chord at the same frame.
+            for (const Attack& attack : rights) {
+                PhysicalRow row;
+                set_right(&row, attack);
+                make_physical_row(std::move(row));
+            }
+            if (!lefts.empty()) {
+                PhysicalRow row;
+                set_left(&row, lefts.front());
+                make_physical_row(std::move(row));
+            }
+        }
+        std::size_t physical_events = 0;
+        for (const PhysicalRow& row : physical_rows) {
+            physical_events += static_cast<std::size_t>(row.right) + static_cast<std::size_t>(row.left);
+        }
+        if (physical_rows.empty()) {
+            result.status = Status::error(StatusCode::InvalidChart,
+                "generalized MIDI produced no physical chart rows inside the timing domain");
+            return result;
+        }
+        if (physical_rows.size() > kMaximumExtendedChartRows
+            || physical_events > kMaximumNativeChartEvents) {
+            result.status = Status::error(StatusCode::ChartRowLimitExceeded,
+                "generalized MIDI physical chart exceeds the 8192 row/event safety ceiling");
+            return result;
+        }
+
+        // Generalized selection operates only on compact roots in the prepared
+        // physical-row domain. Physical rows are immutable and never pruned.
+        std::vector<bool> mandatory_edge(physical_rows.size(), false);
+        for (std::size_t row = 1; row < physical_rows.size(); ++row) {
+            const PhysicalRow& previous = physical_rows[row - 1];
+            const PhysicalRow& current = physical_rows[row];
+            mandatory_edge[row] = previous.frame == current.frame && previous.right && current.right;
+        }
+        const auto is_continuation = [](const std::vector<Note>& notes, const std::size_t row) {
+            return row > 0 && notes[row].group_index != 0
+                && notes[row].group_index == notes[row - 1u].group_index;
+        };
+
+        std::vector<bool> roots(physical_rows.size(), false);
+        roots[0] = true;
+        if (preferred_baseline != nullptr) {
+            if (preferred_baseline->size() != physical_rows.size()) {
+                result.status = Status::error(StatusCode::InvalidChart,
+                    "generalized MIDI baseline does not match the physical chart");
+                return result;
+            }
+            for (std::size_t row = 0; row < physical_rows.size(); ++row) {
+                const Note& baseline_row = (*preferred_baseline)[row];
+                const Note& physical = physical_rows[row].note;
+                if (baseline_row.beat != physical.beat
+                    || baseline_row.duration_beats != physical.duration_beats
+                    || baseline_row.pitch != physical.pitch || baseline_row.chord_id != physical.chord_id
+                    || baseline_row.alternate_monotone != physical.alternate_monotone
+                    || baseline_row.ignore_sound_pitches != physical.ignore_sound_pitches
+                    || baseline_row.source_chord_pitches != physical.source_chord_pitches) {
+                    result.status = Status::error(StatusCode::InvalidChart,
+                        "generalized MIDI baseline physical identity changed");
+                    return result;
+                }
+                if (!is_continuation(*preferred_baseline, row)) roots[row] = true;
+            }
+        }
+
+        // Secondary simultaneous RH rows are mandatory followers. A same-frame
+        // chord remains available as an independent physical-domain root.
+        for (std::size_t row = 1; row < physical_rows.size(); ++row) {
+            if (mandatory_edge[row]) roots[row] = false;
+            if (config.difficulty == 6 && physical_rows[row].left
+                && physical_rows[row - 1u].frame == physical_rows[row].frame) roots[row] = true;
+        }
+
+        long long supported_frames = 0;
+        long long previous_frame = frames.empty() ? 0 : *frames.begin();
+        for (const long long frame : frames) {
+            if (frame != previous_frame) supported_frames += std::min<long long>(480, frame - previous_frame);
+            previous_frame = frame;
+        }
+        const double active_seconds = static_cast<double>(supported_frames) / 60.0;
+        const std::size_t available_roots = physical_rows.size()
+            - static_cast<std::size_t>(std::count(mandatory_edge.begin(), mandatory_edge.end(), true));
+        const std::size_t calibrated_target = std::min(available_roots, std::max<std::size_t>(1,
+            static_cast<std::size_t>(std::llround(active_seconds * profile.target_actions_per_minute / 60.0)) + 1));
+        const std::size_t target_minimum = std::min(available_roots, std::max<std::size_t>(1,
+            static_cast<std::size_t>(std::floor(calibrated_target * (1.0 - profile.target_tolerance)))));
+        const std::size_t target_maximum = std::min(available_roots, std::max(target_minimum,
+            static_cast<std::size_t>(std::ceil(calibrated_target * (1.0 + profile.target_tolerance)))));
+        std::size_t root_count = static_cast<std::size_t>(std::count(roots.begin(), roots.end(), true));
+        if (root_count > target_maximum) {
+            result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
+                "inherited generalized roots exceed the current physical-domain target band");
+            return result;
+        }
+
+        const auto root_notes = [&](const std::vector<bool>& selected) {
+            std::vector<Note> notes;
+            notes.reserve(static_cast<std::size_t>(std::count(selected.begin(), selected.end(), true)));
+            for (std::size_t row = 0; row < physical_rows.size(); ++row) {
+                if (!selected[row]) continue;
+                Note note = physical_rows[row].note;
+                note.group_index = 0;
+                notes.push_back(std::move(note));
+            }
+            return notes;
+        };
+
+        // Add roots directly in the physical domain. This compact beam stores
+        // only root bits and route results, never copies or regroups the full
+        // physical chart. Each state expands a deterministic frontier of
+        // canonical, salient, and temporally underrepresented rows.
+        const std::size_t selection_goal = std::max(root_count, target_minimum);
+        struct PhysicalRootState {
+            std::vector<bool> roots;
+            MidiRouteValidation route;
+            std::size_t added_row = 0;
+        };
+        std::vector<PhysicalRootState> root_beam{
+            PhysicalRootState{roots,
+                validate_midi_difficulty_route(root_notes(roots), chart_bpm, config.difficulty), 0}};
+        const auto root_state_less = [](const PhysicalRootState& a, const PhysicalRootState& b) {
+            if (a.route.ratio != b.route.ratio) return a.route.ratio < b.route.ratio;
+            if (a.added_row != b.added_row) return a.added_row < b.added_row;
+            return std::lexicographical_compare(
+                a.roots.begin(), a.roots.end(), b.roots.begin(), b.roots.end());
+        };
+        while (root_count < selection_goal) {
+            std::vector<PhysicalRootState> next_beam;
+            for (const PhysicalRootState& state : root_beam) {
+                std::vector<std::size_t> candidates;
+                std::vector<long long> separations(physical_rows.size(), -1);
+                for (std::size_t row = 0; row < physical_rows.size(); ++row) {
+                    if (state.roots[row] || mandatory_edge[row]) continue;
+                    long long separation = std::numeric_limits<long long>::max();
+                    for (std::size_t selected = 0; selected < physical_rows.size(); ++selected) {
+                        if (!state.roots[selected]) continue;
+                        separation = std::min(separation,
+                            std::llabs(physical_rows[row].frame - physical_rows[selected].frame));
+                    }
+                    separations[row] = separation;
+                    candidates.push_back(row);
+                }
+                std::sort(candidates.begin(), candidates.end(), [&](const std::size_t a, const std::size_t b) {
+                    if (physical_rows[a].preserve_root != physical_rows[b].preserve_root)
+                        return physical_rows[a].preserve_root;
+                    if (physical_rows[a].salience != physical_rows[b].salience)
+                        return physical_rows[a].salience > physical_rows[b].salience;
+                    const long long sa = separations[a], sb = separations[b];
+                    if (sa != sb) return sa > sb;
+                    return a < b;
+                });
+                const std::size_t frontier = config.difficulty == kLowestMidiDifficulty ? 128u : 64u;
+                const std::size_t breadth = std::min(frontier, candidates.size());
+                for (std::size_t index = 0; index < breadth; ++index) {
+                    PhysicalRootState child = state;
+                    child.added_row = candidates[index];
+                    child.roots[child.added_row] = true;
+                    child.route = validate_midi_difficulty_route(
+                        root_notes(child.roots), chart_bpm, config.difficulty);
+                    next_beam.push_back(std::move(child));
+                }
+            }
+            if (next_beam.empty()) break;
+            std::sort(next_beam.begin(), next_beam.end(), root_state_less);
+            constexpr std::size_t kPhysicalRootBeamWidth = 4;
+            if (next_beam.size() > kPhysicalRootBeamWidth)
+                next_beam.resize(kPhysicalRootBeamWidth);
+            root_beam = std::move(next_beam);
+            ++root_count;
+        }
+        if (!root_beam.empty()) {
+            std::sort(root_beam.begin(), root_beam.end(), root_state_less);
+            roots = std::move(root_beam.front().roots);
+            root_count = static_cast<std::size_t>(std::count(roots.begin(), roots.end(), true));
+        }
+
+        const auto apply_topology = [&]() {
+            for (PhysicalRow& row : physical_rows) row.note.group_index = 0;
+            std::size_t run_ordinal = 0;
+            for (std::size_t root = 0; root < physical_rows.size();) {
+                std::size_t next = root + 1u;
+                while (next < physical_rows.size() && !roots[next]) ++next;
+                if (next > root + 1u) {
+                    const std::uint8_t id = static_cast<std::uint8_t>(1u + (run_ordinal++ % 255u));
+                    for (std::size_t row = root; row < next; ++row)
+                        physical_rows[row].note.group_index = id;
+                }
+                root = next;
+            }
+        };
+        const auto materialize_topology = [&](std::vector<Note>* notes) {
+            apply_topology();
+            notes->clear();
+            notes->reserve(physical_rows.size());
+            for (const PhysicalRow& row : physical_rows) notes->push_back(row.note);
+        };
+        std::vector<Note> notes;
+        materialize_topology(&notes);
+        MidiRouteValidation route = validate_midi_difficulty_route(notes, chart_bpm, config.difficulty);
+        const std::size_t actions = required_action_count(notes);
+        if (actions != root_count) {
+            result.status = Status::error(StatusCode::InvalidChart,
+                "generalized MIDI root topology did not produce one parentless event per root row");
+            return result;
+        }
+        result.notes = std::move(notes);
+        result.stats.source_events = source.size();
+        result.stats.candidate_actions = physical_events + duplicate_count;
+        result.stats.candidate_frames = frames.size();
+        result.stats.selected_actions = actions;
+        result.stats.desired_rows = physical_rows.size();
+        result.stats.right_events = static_cast<std::size_t>(std::count_if(
+            physical_rows.begin(), physical_rows.end(), [](const PhysicalRow& row) { return row.right; }));
+        result.stats.left_events = static_cast<std::size_t>(std::count_if(
+            physical_rows.begin(), physical_rows.end(), [](const PhysicalRow& row) { return row.left; }));
+        result.stats.merged_events = static_cast<std::size_t>(std::count_if(
+            physical_rows.begin(), physical_rows.end(), [](const PhysicalRow& row) { return row.right && row.left; }));
+        result.stats.dropped_conflicts = duplicate_count;
+        result.stats.lead_in_rejections = physical_lead_rejections.size();
+        result.stats.audio_duration_rejections = physical_duration_rejections.size();
+        result.stats.target_rows = calibrated_target;
+        result.stats.target_minimum_rows = target_minimum;
+        result.stats.target_maximum_rows = target_maximum;
+        result.stats.source_bpm = source_bpm;
+        result.stats.audio_alignment_seconds = audio_alignment_seconds;
+        result.stats.audio_offset_seconds = audio_offset_seconds;
+        result.stats.alignment_confidence = estimated_alignment.confidence;
+        result.stats.local_skills = route.metrics;
+        const MidiJointStrainMetrics strain = analyze_midi_joint_strain(result.notes, chart_bpm);
+        result.stats.joint_strain_p95 = strain.p95;
+        result.stats.joint_strain_peak = strain.peak;
+        result.stats.selected_retention = physical_events == 0 ? 0.0 :
+            static_cast<double>(physical_events) / static_cast<double>(physical_events + duplicate_count);
+        if (!route.feasible) {
+            result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
+                "physical-domain root selector cannot satisfy a supported difficulty route within its target band");
+            return result;
+        }
+        result.status = Status::ok_status();
+        return result;
+    }
     std::vector<Attack> fallback = build_fallback_candidates(
         clusters, voice, melody_sources, primary, profile);
     std::vector<Attack> chords = build_chord_candidates(clusters, melody_sources);
@@ -2756,7 +3123,6 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     out_notes->clear();
     out_notes->reserve(rows.size());
     *out_notes = notes_from_rows(rows, profile);
-
     if (out_stats) {
         std::set<int> source_tracks;
         std::set<SourceIdentity> source_identities;

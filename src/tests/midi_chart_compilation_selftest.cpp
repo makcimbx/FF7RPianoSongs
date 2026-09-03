@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -13,6 +14,8 @@
 #include "pipeline/midi_chart_compilation.h"
 #include "pipeline/midi_source_normalizer.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/chart_event_plan.h"
+#include "pipeline/pipeline_limits.h"
 #include "tests/test_support.h"
 
 namespace {
@@ -420,6 +423,9 @@ int main(int argc, char** argv) {
     const std::filesystem::path superset_path = write_chord_fixture("chord-superset.mid", {43, 47, 54});
     const std::filesystem::path ambiguous_path = write_chord_fixture("chord-ambiguous.mid", {48, 52, 58});
     const std::filesystem::path exact_path = write_chord_fixture("chord-exact.mid", {48, 52, 55});
+    const std::filesystem::path duplicate_path = write_chord_fixture("duplicate-pitch.mid", {48, 52, 48});
+    const std::filesystem::path unsupported_pitch_path =
+        write_chord_fixture("unsupported-pitch.mid", {20, 48, 52});
     const auto write_melody_fixture = [&](const char* name, const std::vector<int>& pitches, const int spacing) {
         const std::filesystem::path path = temporary.path() / name;
         const std::vector<unsigned char> fixture = melody_fixture_midi_bytes(pitches, spacing);
@@ -722,8 +728,129 @@ int main(int argc, char** argv) {
         normalized.ticks_per_quarter != original.ticks_per_quarter ||
         std::bit_cast<std::uint64_t>(normalized.source_bpm) != std::bit_cast<std::uint64_t>(original.source_bpm) ||
         normalized.tempos.size() != original.tempos.size() || normalized.meters.size() != original.meters.size() ||
-        normalized.notes.size() != original.notes.size() || !tempos_unchanged || !meters_unchanged || !notes_unchanged) {
+        normalized.notes.size() != original.notes.size() ||
+        normalized.unsupported_pitch_events != original.unsupported_pitch_events ||
+        !tempos_unchanged || !meters_unchanged || !notes_unchanged) {
         return fail("normalized compilation facade diverged from the path facade oracle or mutated normalized input");
+    }
+
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
+    const Observation physical_ambiguous = generate(ambiguous_path, no_audio, config_for(6));
+    const Observation physical_ambiguous_repeat = generate(ambiguous_path, no_audio, config_for(6));
+    const Observation physical_exact = generate(exact_path, no_audio, config_for(6));
+    const Observation physical_duplicate = generate(duplicate_path, no_audio, config_for(6));
+    ff7rp::pipeline::NormalizedMidiSource unsupported_pitch_source;
+    const Status unsupported_pitch_normalization = ff7rp::pipeline::normalize_midi_source(
+        unsupported_pitch_path.string(), &unsupported_pitch_source);
+    const Observation unsupported_pitch = generate(unsupported_pitch_path, no_audio, config_for(6));
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    if (!physical_ambiguous_easy.status.ok() || !physical_ambiguous.status.ok()
+        || !physical_exact.status.ok() || !physical_duplicate.status.ok()
+        || canonical_note_bytes(physical_ambiguous.notes) != canonical_note_bytes(physical_ambiguous_repeat.notes)) {
+        return fail("generalized physical MIDI generation failed or was nondeterministic");
+    }
+    if (!unsupported_pitch_normalization.ok() || unsupported_pitch_source.unsupported_pitch_events == 0
+        || unsupported_pitch.status.ok() || !unsupported_pitch.notes.empty()
+        || unsupported_pitch.status.message.find("outside C1-C7") == std::string::npos) {
+        return fail("generalized out-of-range source pitches did not fail closed before publication");
+    }
+    std::size_t equal_frame_grouped_rows = 0;
+    std::size_t equal_frame_group_run = 1;
+    std::size_t maximum_equal_frame_group_run = 0;
+    for (std::size_t index = 1; index < physical_ambiguous.notes.size(); ++index) {
+        const Note& previous = physical_ambiguous.notes[index - 1];
+        const Note& current = physical_ambiguous.notes[index];
+        if (current.beat == previous.beat && current.group_index != 0
+            && current.group_index == previous.group_index) {
+            ++equal_frame_grouped_rows;
+            ++equal_frame_group_run;
+            maximum_equal_frame_group_run = std::max(maximum_equal_frame_group_run,
+                equal_frame_group_run);
+        } else {
+            equal_frame_group_run = 1;
+        }
+    }
+    if (equal_frame_grouped_rows == 0 || maximum_equal_frame_group_run < 3u
+        || std::any_of(physical_ambiguous.notes.begin(), physical_ambiguous.notes.end(), [](const Note& note) {
+            return !note.chord_id.empty();
+        })) {
+        return fail("ambiguous same-frame harmony was not preserved as grouped RH monotones");
+    }
+    bool split_cross_hand = false;
+    bool hard_chord_is_independent = false;
+    for (std::size_t index = 1; index < physical_exact.notes.size(); ++index) {
+        const Note& previous = physical_exact.notes[index - 1];
+        const Note& current = physical_exact.notes[index];
+        split_cross_hand = split_cross_hand || (previous.beat == current.beat
+            && !previous.pitch.empty() && previous.chord_id.empty()
+            && current.pitch.empty() && !current.chord_id.empty());
+        if (previous.beat == current.beat && !previous.pitch.empty()
+            && !current.chord_id.empty()) {
+            hard_chord_is_independent = current.group_index == 0
+                || current.group_index != previous.group_index;
+        }
+    }
+    if (!split_cross_hand || !hard_chord_is_independent
+        || std::any_of(physical_exact.notes.begin(), physical_exact.notes.end(),
+            [](const Note& note) { return !note.pitch.empty() && !note.chord_id.empty(); })) {
+        return fail("generated same-frame RH/chord material was not split into stable one-event rows");
+    }
+    std::set<std::pair<double, std::string>> duplicate_pitch_rows;
+    for (const Note& note : physical_duplicate.notes) {
+        if (!note.pitch.empty() && !duplicate_pitch_rows.emplace(note.beat, note.pitch).second) {
+            return fail("exact same-frame RH duplicate was not coalesced");
+        }
+    }
+    if (physical_duplicate.stats.dropped_conflicts == 0) {
+        return fail("exact duplicate coalescing was not reported");
+    }
+    const auto physical_plan = [](const Observation& observation, const int difficulty,
+                                  ff7rp::pipeline::ChartEventPlan* plan) {
+        SongConfig config = config_for(difficulty);
+        config.notes = observation.notes;
+        config.notes_provided = true;
+        config.bpm = observation.stats.source_bpm;
+        ff7rp::pipeline::CompiledChart chart;
+        if (!ff7rp::pipeline::compile_chart(config, &chart).ok()) return false;
+        return ff7rp::pipeline::derive_chart_event_plan(config.notes, chart.notes, plan);
+    };
+    ff7rp::pipeline::ChartEventPlan easy_plan;
+    ff7rp::pipeline::ChartEventPlan hard_plan;
+    if (!physical_plan(physical_ambiguous_easy, 1, &easy_plan)
+        || !physical_plan(physical_ambiguous, 6, &hard_plan)
+        || easy_plan.physical_digest != hard_plan.physical_digest
+        || easy_plan.source_row_count != hard_plan.source_row_count
+        || easy_plan.native_event_count != hard_plan.native_event_count) {
+        return fail("generalized profiles did not preserve one physical chart identity: easy_rows="
+            + std::to_string(easy_plan.source_row_count) + " hard_rows="
+            + std::to_string(hard_plan.source_row_count) + " easy_events="
+            + std::to_string(easy_plan.native_event_count) + " hard_events="
+            + std::to_string(hard_plan.native_event_count) + " easy_digest="
+            + std::to_string(easy_plan.physical_digest) + " hard_digest="
+            + std::to_string(hard_plan.physical_digest));
+    }
+    const auto selected_inside_band = [](const Observation& observation) {
+        return observation.stats.selected_actions >= observation.stats.target_minimum_rows
+            && observation.stats.selected_actions <= observation.stats.target_maximum_rows;
+    };
+    if (!selected_inside_band(physical_ambiguous_easy) || !selected_inside_band(physical_ambiguous)
+        || easy_plan.required_action_count != physical_ambiguous_easy.stats.selected_actions
+        || hard_plan.required_action_count != physical_ambiguous.stats.selected_actions
+        || easy_plan.source_row_count != physical_ambiguous_easy.notes.size()
+        || hard_plan.source_row_count != physical_ambiguous.notes.size()) {
+        return fail("physical-domain selector changed rows or missed its calibrated root band");
+    }
+    const auto right_root = [](const std::vector<Note>& notes, const std::size_t index) {
+        const Note& note = notes[index];
+        return !note.pitch.empty() && (note.group_index == 0 || index == 0
+            || notes[index - 1].group_index != note.group_index);
+    };
+    for (std::size_t index = 0; index < physical_ambiguous_easy.notes.size(); ++index) {
+        if (right_root(physical_ambiguous_easy.notes, index)
+            && !right_root(physical_ambiguous.notes, index)) {
+            return fail("generalized easy-profile roots were not nested in the hard profile");
+        }
     }
     std::string cleanup_error;
     if (!temporary.cleanup(&cleanup_error)) return fail("temporary cleanup failed: " + cleanup_error);

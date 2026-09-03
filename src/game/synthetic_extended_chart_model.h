@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "pipeline/chart_event_plan.h"
+
 // Offline synthetic model of the restricted 513..8192 reserve transaction.
 // It does not prove native ABI compatibility or runtime safety.
 namespace ff7r::piano::game::synthetic_model {
@@ -178,5 +180,35 @@ enum class TerminalOutcome { ExpandFinished, AudioPublished, AudioFailed, StopFa
 void model_terminal(PublicationState& state, std::uint64_t generation,
     std::uint64_t lifecycle_epoch, TerminalOutcome outcome,
     std::uint64_t successful_lifecycle_epoch = 0);
+
+enum class GeneralizedFailure {
+    None, Preflight, ConstructorNonTail, IgnoreSound, Callback,
+    Link, MaxPublish, CountValidation, UncertainOwnership,
+};
+
+struct GeneralizedRequest {
+    const ff7rp::pipeline::ChartEventPlan* plan = nullptr;
+    bool verified_1005 = true;
+    bool eligible = true;
+    GeneralizedFailure failure = GeneralizedFailure::None;
+    std::size_t failure_index = 0;
+};
+
+struct GeneralizedResult {
+    bool reserve_substituted = false;
+    bool count_committed = false;
+    bool rollback_completed = false;
+    bool ownership_preserved = false;
+    std::size_t parser_count = 0;
+    std::size_t reserve_target = 0;
+    std::size_t final_count = 0;
+    std::size_t published_actions = 0;
+    std::size_t constructed_tails = 0;
+    std::size_t applied_links = 0;
+    std::vector<std::size_t> destroyed_compact_indices;
+    std::vector<std::size_t> rolled_back_link_indices;
+};
+
+GeneralizedResult run_generalized(const GeneralizedRequest& request);
 
 } // namespace ff7r::piano::game::synthetic_model

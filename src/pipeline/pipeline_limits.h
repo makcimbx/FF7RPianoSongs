@@ -15,6 +15,7 @@ inline constexpr std::size_t kMaxMabfBytes = 64u * 1024u * 1024u;
 inline constexpr std::size_t kMaxChartRows = 512u;
 inline constexpr std::size_t kMinimumExtendedChartRows = kMaxChartRows + 1u;
 inline constexpr std::size_t kMaximumExtendedChartRows = 8192u;
+inline constexpr std::size_t kMaximumNativeChartEvents = 8192u;
 inline constexpr std::size_t kMaximumExtendedChartTailRows =
     kMaximumExtendedChartRows - kMaxChartRows;
 inline constexpr std::size_t kLegacyDiagnosticChartInputRows = 1024u;
@@ -25,7 +26,9 @@ inline constexpr const char* kDiagnosticChartRowPolicyIdentity =
     // though the bounded internal retention ceiling is now 8192 rows.
     "chart_rows=native512+diagnostic1024;extended=verified";
 inline constexpr const char* kPlayableExtendedChartRowPolicyIdentity =
-    "chart_rows=native512+playable513to8192;extended=verified1005";
+    "chart_rows=8192;events=8192;groups+dual+chords=verified1005";
+inline constexpr const char* kPhysicalMidiGenerationIdentity =
+    "midi_generation=physical_chart_first:v5";
 inline constexpr std::size_t kExperimentalMaxChartRows = kMaximumExtendedChartRows;
 
 struct ChartRowPolicySnapshot {

@@ -14,6 +14,7 @@
 #include <condition_variable>
 #include <limits>
 #include <mutex>
+#include <optional>
 #include <locale>
 #include <map>
 #include <set>
@@ -30,6 +31,7 @@
 #include "audio_reader.h"
 #include "audio_loudness.h"
 #include "audio_metronome.h"
+#include "chart_event_plan.h"
 #include "chart_compiler.h"
 #include "mabf_builder.h"
 #include "midi_chart_generator.h"
@@ -91,8 +93,9 @@ void finalize_gameplay_metadata(SongConfig& config) {
     int scoring_actions = 0;
     std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) ++scoring_actions;
-        if (!note.chord_id.empty()) ++scoring_actions;
+        const bool continuation = note.group_index != 0 && note.group_index == previous_group;
+        if (!continuation) scoring_actions += static_cast<int>(!note.pitch.empty())
+            + static_cast<int>(!note.chord_id.empty());
         previous_group = note.group_index;
     }
     scoring_actions = std::max(1, scoring_actions);
@@ -208,8 +211,9 @@ ProfileActionCounts profile_action_counts(const SongConfig& config) {
     ProfileActionCounts counts;
     std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
-        const bool right = !note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group);
-        const bool left = !note.chord_id.empty();
+        const bool continuation = note.group_index != 0 && note.group_index == previous_group;
+        const bool right = !note.pitch.empty() && !continuation;
+        const bool left = !note.chord_id.empty() && !continuation;
         counts.right += right ? 1u : 0u;
         counts.left += left ? 1u : 0u;
         counts.dual += right && left ? 1u : 0u;
@@ -255,14 +259,15 @@ void normalized_profile_actions(
     ProfileSlotMultiset* slots) {
     std::uint8_t previous_group = 0;
     for (const Note& note : config.notes) {
+        const bool continuation = note.group_index != 0 && note.group_index == previous_group;
         const auto append = [&](const std::uint8_t hand, const std::string& value) {
             const std::uint64_t beat = double_identity(note.beat);
             const std::uint64_t duration = double_identity(note.duration_beats);
             ++(*identities)[{beat, duration, hand, value}];
             ++(*slots)[{beat, duration, hand}];
         };
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_group)) append(0, note.pitch);
-        if (!note.chord_id.empty()) append(1, note.chord_id);
+        if (!note.pitch.empty() && !continuation) append(0, note.pitch);
+        if (!note.chord_id.empty() && !continuation) append(1, note.chord_id);
         previous_group = note.group_index;
     }
 }
@@ -367,6 +372,9 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         return true;
     };
     if (!timing_valid(song.config)) return false;
+    const bool physical_midi = song.chart_from_midi
+        && song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
+    std::optional<std::uint64_t> physical_midi_digest;
     for (std::size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
         const LoadedDifficultyProfile& profile = song.difficulty_profiles[index];
         SongConfig normalized_config = profile.config;
@@ -374,17 +382,27 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         normalized_config.score_thresholds = song.config.score_thresholds;
         normalized_config.mode_change_combo_counts = song.config.mode_change_combo_counts;
         normalized_config.notes = song.config.notes;
-        const ProfileActionCounts counts = profile_action_counts(profile.config);
+        SongConfig complete_config = profile.config;
+        for (const auto& row : profile.diagnostic_chart.tail_rows) complete_config.notes.push_back(row.source);
+        const ProfileActionCounts counts = profile_action_counts(complete_config);
+        if (physical_midi) {
+            ChartEventPlan event_plan;
+            if (!derive_profile_event_plan(profile, &event_plan)
+                || event_plan.required_action_count != profile.diagnostics.selected_actions
+                || (physical_midi_digest.has_value()
+                    && *physical_midi_digest != event_plan.physical_digest)) return false;
+            physical_midi_digest = event_plan.physical_digest;
+        }
         if (profile.diagnostics.selected_actions != counts.right + counts.left ||
-            profile.diagnostics.scheduled_rows != profile.chart.notes.size() ||
+            profile.diagnostics.scheduled_rows != complete_config.notes.size() ||
             !song_configs_equal(normalized_config, song.config) ||
-            !timing_valid(profile.config) ||
+            !timing_valid(complete_config) ||
             profile.config.difficulty < 0 ||
             (song.chart_from_midi && (profile.config.difficulty < kLowestMidiDifficulty ||
                 profile.config.difficulty > kHighestMidiDifficulty)) ||
             (song.chart_from_midi && (profile.diagnostics.candidate_frames > profile.diagnostics.candidate_actions ||
-                profile.diagnostics.dropped_actions !=
-                    profile.diagnostics.candidate_actions - profile.diagnostics.candidate_frames ||
+                (!physical_midi && profile.diagnostics.dropped_actions !=
+                    profile.diagnostics.candidate_actions - profile.diagnostics.candidate_frames) ||
                 profile.diagnostics.selected_actions > profile.diagnostics.candidate_actions ||
                 profile.diagnostics.protected_baseline_actions > profile.diagnostics.candidate_actions ||
                 profile.diagnostics.target_minimum_rows > profile.diagnostics.target_rows ||
@@ -398,9 +416,9 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
             profile.diagnostics.exposure_decision != "visible" ||
             profile.diagnostics.exposure_reason != "complete_target_band")) return false;
         if (song.chart_from_midi) {
-            const MidiJointStrainMetrics strain = analyze_midi_joint_strain(profile.config.notes, profile.config.bpm);
+            const MidiJointStrainMetrics strain = analyze_midi_joint_strain(complete_config.notes, profile.config.bpm);
             const MidiRouteValidation route = validate_midi_difficulty_route(
-                profile.config.notes, profile.config.bpm, profile.config.difficulty);
+                complete_config.notes, profile.config.bpm, profile.config.difficulty);
             const MidiLocalSkillMetrics& local = route.metrics;
             const DifficultyProfileDiagnostics& d = profile.diagnostics;
             if (!route.feasible || d.joint_strain_p95 != strain.p95 || d.joint_strain_peak != strain.peak ||
@@ -444,8 +462,6 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
                 d.dominant_skill_is_global != local.dominant_skill_is_global ||
                 d.satisfied_route_name != local.satisfied_route_name) return false;
         }
-        SongConfig complete_config = profile.config;
-        for (const auto& row : profile.diagnostic_chart.tail_rows) complete_config.notes.push_back(row.source);
         CompiledChart expected_complete_chart;
         DiagnosticChartRetention expected_diagnostic;
         if (!compile_chart(complete_config, &expected_complete_chart, &expected_diagnostic,
@@ -468,8 +484,10 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
             if (profile.diagnostics.overlap_ratio != 1.0 || !profile.diagnostics.nested_from_previous) return false;
             continue;
         }
-        const ProfileActionComparison comparison = compare_profiles(
-            song.difficulty_profiles[index - 1].config, profile.config);
+        SongConfig previous_complete = song.difficulty_profiles[index - 1].config;
+        for (const auto& row : song.difficulty_profiles[index - 1].diagnostic_chart.tail_rows)
+            previous_complete.notes.push_back(row.source);
+        const ProfileActionComparison comparison = compare_profiles(previous_complete, complete_config);
         if (profile.diagnostics.retained_actions != comparison.retained ||
             profile.diagnostics.replaced_actions != comparison.replaced ||
             profile.diagnostics.removed_actions != comparison.removed ||
@@ -740,7 +758,8 @@ Status load_song_directory(
 
     std::unique_lock<std::mutex> cache_lock(song_cache_mutex(song.directory));
     const ChartRowPolicySnapshot global_chart_policy = chart_row_policy_snapshot();
-    const ChartRowPolicySnapshot chart_policy = song.config.diagnostic_extended_chart_fixture
+    const ChartRowPolicySnapshot chart_policy = (song.config.diagnostic_extended_chart_fixture
+        || (!song.config.notes_provided && global_chart_policy.playable_extended_available))
         ? global_chart_policy : ChartRowPolicySnapshot{};
     song.accepted_chart_input_limit = chart_policy.accepted_input_limit;
     song.published_chart_row_limit = chart_policy.publication_limit;
@@ -772,6 +791,9 @@ Status load_song_directory(
         song.config.metronome_enabled
             ? "metronome=resolved_mode0_only_before_hca"
             : "metronome=disabled"};
+    if (song.chart_from_midi && chart_policy.playable_extended_available) {
+        cache_identity.push_back(kPhysicalMidiGenerationIdentity);
+    }
     for (std::size_t role = 0; role < song.audio_sources.authored.size(); ++role) {
         const auto& source = song.audio_sources.authored[role];
         cache_identity.push_back("authored_role=" + std::to_string(role) + ":" +
@@ -871,10 +893,25 @@ Status load_song_directory(
             profile.config = song.config;
             profile.config.difficulty = difficulty;
             MidiChartStats stats;
-            const std::vector<Note>* baseline = song.difficulty_profiles.empty() ? nullptr :
-                &song.difficulty_profiles.back().config.notes;
-            const std::size_t maximum_visible_rows = baseline ?
-                maximum_midi_visible_profile_actions(baseline->size()) : 0;
+            std::vector<Note> complete_baseline;
+            const std::vector<Note>* baseline = nullptr;
+            if (!song.difficulty_profiles.empty()) {
+                const LoadedDifficultyProfile& previous = song.difficulty_profiles.back();
+                complete_baseline = previous.config.notes;
+                complete_baseline.reserve(complete_baseline.size()
+                    + previous.diagnostic_chart.tail_rows.size());
+                for (const DiagnosticChartTailRow& row : previous.diagnostic_chart.tail_rows) {
+                    complete_baseline.push_back(row.source);
+                }
+                baseline = &complete_baseline;
+            }
+            const bool generalized_physical_midi =
+                song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
+            std::size_t maximum_visible_rows = 0;
+            if (!generalized_physical_midi && !song.difficulty_profiles.empty()) {
+                maximum_visible_rows = maximum_midi_visible_profile_actions(
+                    song.difficulty_profiles.back().diagnostics.selected_actions);
+            }
             status = generate_notes_from_normalized_midi(normalized_midi, song.audio, profile.config,
                 &profile.config.notes, &stats, baseline, maximum_visible_rows);
             if (status.code == StatusCode::ChartRowLimitExceeded) {
@@ -925,7 +962,16 @@ Status load_song_directory(
                             authored_counts.begin(), authored_counts.end());
                     }
                 }
-                status = compile_chart(profile.config, &profile.chart, nullptr, song.accepted_chart_input_limit);
+                profile.config.diagnostic_extended_chart_fixture =
+                    profile.config.notes.size() > kMaxChartRows;
+                status = compile_chart(profile.config, &profile.chart,
+                    profile.config.diagnostic_extended_chart_fixture ? &profile.diagnostic_chart : nullptr,
+                    song.accepted_chart_input_limit);
+                if (status.ok() && profile.diagnostic_chart.present()) {
+                    profile.config.notes.resize(kMaxChartRows);
+                    profile.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
+                        song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+                }
             }
             if (!status.ok()) {
                 song.status = status;
@@ -934,30 +980,47 @@ Status load_song_directory(
                 return status;
             }
             const ProfileActionCounts counts = profile_action_counts(profile.config);
-            const std::size_t actions = counts.right + counts.left;
+            const std::size_t actions = chart_policy.playable_extended_available
+                ? profile.diagnostics.selected_actions : counts.right + counts.left;
             if (!song.difficulty_profiles.empty()) {
                 const auto& previous_profile = song.difficulty_profiles.back();
-                const ProfileActionCounts previous_counts =
-                    profile_action_counts(previous_profile.config);
-                const std::size_t previous_actions = previous_counts.right + previous_counts.left;
-                const ProfileActionComparison comparison = compare_profiles(previous_profile.config, profile.config);
-                profile.diagnostics.retained_actions = comparison.retained;
-                profile.diagnostics.replaced_actions = comparison.replaced;
-                profile.diagnostics.removed_actions = comparison.removed;
-                profile.diagnostics.added_actions = comparison.added;
-                profile.diagnostics.overlap_ratio = comparison.overlap;
-                profile.diagnostics.nested_from_previous = comparison.nested;
+                const std::size_t previous_actions = chart_policy.playable_extended_available
+                    ? previous_profile.diagnostics.selected_actions
+                    : [&] {
+                        const ProfileActionCounts previous_counts = profile_action_counts(previous_profile.config);
+                        return previous_counts.right + previous_counts.left;
+                    }();
+                if (chart_policy.playable_extended_available) {
+                    profile.diagnostics.retained_actions = std::min(previous_actions, actions);
+                    profile.diagnostics.removed_actions = 0;
+                    profile.diagnostics.replaced_actions = 0;
+                    profile.diagnostics.added_actions = actions - std::min(previous_actions, actions);
+                    profile.diagnostics.overlap_ratio = 1.0;
+                    profile.diagnostics.nested_from_previous = actions >= previous_actions;
+                } else {
+                    const ProfileActionComparison comparison = compare_profiles(previous_profile.config, profile.config);
+                    profile.diagnostics.retained_actions = comparison.retained;
+                    profile.diagnostics.replaced_actions = comparison.replaced;
+                    profile.diagnostics.removed_actions = comparison.removed;
+                    profile.diagnostics.added_actions = comparison.added;
+                    profile.diagnostics.overlap_ratio = comparison.overlap;
+                    profile.diagnostics.nested_from_previous = comparison.nested;
+                }
                 if (profile.diagnostics.overlap_ratio + 1e-9 < 0.80) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "recognizability_below_80_percent", profile.diagnostics});
                     continue;
                 }
-                if (actions > maximum_midi_visible_profile_actions(previous_actions)) {
+                if (!chart_policy.playable_extended_available
+                    && actions > maximum_midi_visible_profile_actions(previous_actions)) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "maximum_visible_step_exceeded", profile.diagnostics});
                     continue;
                 }
-                if (!has_meaningful_midi_profile_growth(previous_actions, actions)) {
+                const bool distinct_generalized_topology = chart_policy.playable_extended_available
+                    && actions > previous_actions;
+                if (!distinct_generalized_topology
+                    && !has_meaningful_midi_profile_growth(previous_actions, actions)) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "insufficient_meaningful_growth", profile.diagnostics});
                     continue;
@@ -1007,25 +1070,31 @@ Status load_song_directory(
                 *out_song = std::move(song);
                 return status;
             }
+            finalize_gameplay_metadata(profile.config);
+            const ProfileActionCounts counts = profile_action_counts(profile.config);
+            profile.diagnostics.selected_actions = counts.right + counts.left;
+            profile.diagnostics.scheduled_rows = profile.config.notes.size();
+            const MidiJointStrainMetrics strain =
+                analyze_midi_joint_strain(profile.config.notes, profile.config.bpm);
+            profile.diagnostics.joint_strain_p95 = strain.p95;
+            profile.diagnostics.joint_strain_peak = strain.peak;
             if (profile.diagnostic_chart.present()) {
                 profile.config.notes.resize(kMaxChartRows);
                 profile.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
                     song.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
             }
-            finalize_gameplay_metadata(profile.config);
-            const ProfileActionCounts counts = profile_action_counts(profile.config);
-            profile.diagnostics.selected_actions = counts.right + counts.left;
-            profile.diagnostics.scheduled_rows = profile.chart.notes.size();
-            const MidiJointStrainMetrics strain =
-                analyze_midi_joint_strain(profile.config.notes, profile.config.bpm);
-            profile.diagnostics.joint_strain_p95 = strain.p95;
-            profile.diagnostics.joint_strain_peak = strain.peak;
             if (index == 0u) {
                 profile.diagnostics.overlap_ratio = 1.0;
                 profile.diagnostics.nested_from_previous = true;
             } else {
+                SongConfig previous_complete = song.difficulty_profiles.back().config;
+                for (const auto& row : song.difficulty_profiles.back().diagnostic_chart.tail_rows)
+                    previous_complete.notes.push_back(row.source);
+                SongConfig current_complete = profile.config;
+                for (const auto& row : profile.diagnostic_chart.tail_rows)
+                    current_complete.notes.push_back(row.source);
                 const ProfileActionComparison comparison = compare_profiles(
-                    song.difficulty_profiles.back().config, profile.config);
+                    previous_complete, current_complete);
                 profile.diagnostics.retained_actions = comparison.retained;
                 profile.diagnostics.replaced_actions = comparison.replaced;
                 profile.diagnostics.removed_actions = comparison.removed;

@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "cache.h"
+#include "chart_event_plan.h"
 #include "runtime_cache_codec.h"
 
 namespace ff7rp::pipeline {
@@ -107,6 +108,23 @@ Status render_cache_manifest(const LoadedSong& song, const SongConfig& source_co
         out << hex64(profile_semantic_hash(song.difficulty_profiles[index]));
     }
     out << "\n";
+    if (song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity) {
+        const auto write_plan_values = [&](const char* name, const auto member) {
+            out << name << "=";
+            for (std::size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
+                if (index > 0) out << ",";
+                ChartEventPlan plan;
+                out << (derive_profile_event_plan(song.difficulty_profiles[index], &plan)
+                    ? plan.*member : 0u);
+            }
+            out << "\n";
+        };
+        write_plan_values("profile_source_rows", &ChartEventPlan::source_row_count);
+        write_plan_values("profile_native_prefix_events", &ChartEventPlan::native_prefix_event_count);
+        write_plan_values("profile_native_events", &ChartEventPlan::native_event_count);
+        write_plan_values("profile_required_actions", &ChartEventPlan::required_action_count);
+        write_plan_values("profile_physical_digests", &ChartEventPlan::physical_digest);
+    }
     out << "profile_row_limit_exceeded=";
     for (size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
         if (index > 0) out << ",";

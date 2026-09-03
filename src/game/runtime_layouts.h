@@ -93,6 +93,7 @@ struct PianoMusicList {
 struct PianoScoreWrapper {
     static constexpr uintptr_t event_header = 0x80;
     static constexpr uintptr_t copied_row_count = 0x88;
+    static constexpr uintptr_t final_group_index = 0xa3;
     static constexpr uintptr_t controller_capture = 0x118;
 };
 

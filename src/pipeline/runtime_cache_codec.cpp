@@ -548,13 +548,16 @@ bool valid_cached_profile(const std::string& song_id, const bool extended,
         song_id, profile.config.difficulty, expected_chart, expected_diagnostic);
     if (!diagnostic_charts_equal(expected_diagnostic, diagnostic)) return false;
     if (playable_extended) {
-        for (std::size_t index = 0; index < profile.config.notes.size(); ++index) {
-            if (!restricted_extended_row_pair(
-                    profile.config.notes[index], profile.chart.notes[index], profile.config.bpm)) return false;
-        }
+        std::vector<Note> source_rows = profile.config.notes;
+        std::vector<ChartNote> compiled_rows = profile.chart.notes;
+        source_rows.reserve(diagnostic.source_row_count);
+        compiled_rows.reserve(diagnostic.source_row_count);
         for (const auto& row : diagnostic.tail_rows) {
-            if (!restricted_extended_row_pair(row.source, row.compiled, profile.config.bpm)) return false;
+            source_rows.push_back(row.source);
+            compiled_rows.push_back(row.compiled);
         }
+        if (!eligible_extended_chart_plan(
+                source_rows, compiled_rows, profile.config.bpm, nullptr)) return false;
     }
     return true;
 }

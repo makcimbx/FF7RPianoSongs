@@ -12,6 +12,7 @@
 #include "game/runtime_layouts.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/extended_chart_eligibility.h"
+#include "pipeline/chart_event_plan.h"
 
 #include <algorithm>
 #include <array>
@@ -36,7 +37,9 @@ constexpr int32_t kMaximumEventCapacity =
 constexpr std::size_t kHeaderOffset = 0x80;
 constexpr std::size_t kMaxTimeOffset = 0x30;
 constexpr std::size_t kFrameRateOffset = 0x48;
-constexpr std::size_t kSideOffset = 0x18;
+constexpr std::size_t kRightSideOffset = 0x18;
+constexpr std::size_t kLeftSideOffset = 0x10;
+constexpr std::size_t kFinalGroupOffset = runtime_layouts::PianoScoreWrapper::final_group_index;
 constexpr int32_t kFNameFind = 0;
 
 struct EventHeader { void* data; int32_t count; int32_t capacity; };
@@ -49,19 +52,33 @@ using FNameFn = void*(__fastcall*)(FNameValue*, const wchar_t*, int32_t);
 using ConstructFn = void*(__fastcall*)(void*, void*, void*, uint32_t, float, float, uint8_t, uint8_t, uint64_t);
 using DestructFn = void(__fastcall*)(void*);
 using CallbackBuildFn = void*(__fastcall*)(void*, void**);
+using IgnoreSoundInsertFn = uint32_t(__fastcall*)(void*, const uint64_t*);
+using EventLinkFn = void(__fastcall*)(void*, void*);
 
 struct RuntimeApi {
     FNameFn fname = nullptr;
     ConstructFn construct = nullptr;
     DestructFn destruct = nullptr;
     CallbackBuildFn callback_build = nullptr;
+    IgnoreSoundInsertFn ignore_sound_insert = nullptr;
+    EventLinkFn event_link = nullptr;
 };
 
 struct EventPlan {
     const SongChartNote* note = nullptr;
+    ff7rp::pipeline::ChartEventEntry entry{};
     float time = 0.0f; // Set exactly once from the parser-published post-original FPS.
     uint64_t fname = 0;
-    uint32_t ordinal = 0;
+    std::array<uint64_t, 3> ignore_sounds{};
+    std::size_t ignore_sound_count = 0;
+};
+
+struct LinkJournalEntry {
+    std::size_t root_index = 0;
+    std::size_t child_index = 0;
+    void* root_head = nullptr;
+    void* child_parent = nullptr;
+    void* child_next = nullptr;
 };
 
 struct Transaction {
@@ -71,21 +88,34 @@ struct Transaction {
     bool reserve_mismatch = false;
     void* wrapper = nullptr;
     void* chart_row = nullptr;
-    void* side = nullptr;
+    void* right_side = nullptr;
+    void* left_side = nullptr;
     uintptr_t caller_rva = 0;
     EventHeader* expected_header = nullptr;
     void* reserved_data = nullptr;
     int32_t reserved_capacity = 0;
-    int32_t target_count = 0;
+    int32_t source_row_count = 0;
+    int32_t prefix_event_count = 0;
+    int32_t native_event_count = 0;
+    int32_t required_action_count = 0;
     int32_t expected_capacity = 0;
     std::size_t constructed_tail_count = 0;
     bool large_allocation_regime = false;
     std::vector<EventPlan> plans;
+    ff7rp::pipeline::ChartEventPlan physical_plan;
+    std::vector<int32_t> expected_parent;
+    std::vector<int32_t> expected_next;
+    std::vector<int32_t> expected_head;
+    std::vector<LinkJournalEntry> link_journal;
+    uint8_t original_group_byte = 0;
+    bool group_byte_captured = false;
+    bool links_applied = false;
     const SongDescriptor* song = nullptr;
     const SongDifficultyProfile* profile = nullptr;
     std::uint64_t registry_generation = 0;
     std::uint64_t policy_generation = 0;
     std::uint64_t descriptor_hash = 0;
+    std::uint64_t physical_digest = 0;
     void* controller = nullptr;
     void* controller_control_block = nullptr;
     ChartAudioExpandTlsSnapshot tls{};
@@ -108,7 +138,11 @@ struct CommittedExtended {
     std::uint64_t activation_generation = 0;
     std::uint64_t preparation_ordinal = 0;
     std::uint64_t route_lifecycle_epoch = 0;
-    int32_t target_count = 0;
+    int32_t source_row_count = 0;
+    int32_t prefix_event_count = 0;
+    int32_t native_event_count = 0;
+    int32_t required_action_count = 0;
+    std::uint64_t physical_digest = 0;
 };
 
 struct ActivationSerialState {
@@ -162,30 +196,58 @@ void write_at(void* base, std::size_t offset, const T& value) {
     std::memcpy(static_cast<uint8_t*>(base) + offset, &value, sizeof(value));
 }
 
-bool restricted_note(const SongChartNote& note) {
-    return !note.monotone_id.empty() && note.chord_id.empty() && note.group_index == 0
-        && note.camera_switch_timing == 0 && note.dot_type == 0
-        && (note.note_type == 2 || note.note_type == 3)
-        && std::all_of(note.ignore_sound_ids.begin(), note.ignore_sound_ids.end(),
-            [](const std::string& id) { return id.empty(); });
+bool stored_profile_shape_valid(const SongDifficultyProfile& profile) {
+    const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
+    const std::size_t rows = profile.source_row_count;
+    return policy.playable_extended_available
+        && rows > ff7rp::pipeline::kMaxChartRows
+        && rows <= ff7rp::pipeline::kMaximumExtendedChartRows
+        && profile.chart_notes.size() == ff7rp::pipeline::kMaxChartRows
+        && profile.extended_chart_tail_notes.size() == rows - ff7rp::pipeline::kMaxChartRows
+        && profile.native_prefix_event_count >= ff7rp::pipeline::kMaxChartRows
+        && profile.native_prefix_event_count <= ff7rp::pipeline::kMaxChartRows * 2u
+        && profile.native_event_count > profile.native_prefix_event_count
+        && profile.native_event_count <= ff7rp::pipeline::kMaximumNativeChartEvents
+        && profile.required_action_count > 0
+        && profile.required_action_count <= profile.native_event_count
+        && profile.note_count == static_cast<int32_t>(profile.required_action_count)
+        && profile.physical_chart_digest != 0
+        && profile.diagnostic_descriptor_hash != 0
+        && profile.diagnostic_policy_generation == policy.generation;
+}
+
+const SongChartNote* profile_row(const SongDifficultyProfile& profile, const std::size_t index) {
+    if (index < profile.chart_notes.size()) return &profile.chart_notes[index];
+    const std::size_t tail = index - profile.chart_notes.size();
+    return tail < profile.extended_chart_tail_notes.size()
+        ? &profile.extended_chart_tail_notes[tail] : nullptr;
+}
+
+bool derive_runtime_plan(const SongDifficultyProfile& profile,
+    ff7rp::pipeline::ChartEventPlan& plan) {
+    if (!stored_profile_shape_valid(profile)) return false;
+    std::vector<ff7rp::pipeline::ChartEventRow> rows;
+    rows.reserve(profile.source_row_count);
+    for (const SongChartNote& row : profile.chart_notes)
+        rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+    for (const SongChartNote& row : profile.extended_chart_tail_notes)
+        rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+    plan = ff7rp::pipeline::derive_chart_event_plan(rows);
+    return plan.valid()
+        && plan.source_row_count == profile.source_row_count
+        && plan.native_prefix_event_count == profile.native_prefix_event_count
+        && plan.native_event_count == profile.native_event_count
+        && plan.required_action_count == profile.required_action_count
+        && plan.physical_digest == profile.physical_chart_digest
+        && plan.events.size() == plan.native_event_count
+        && plan.required_action_count == plan.native_event_count - plan.links.size();
 }
 
 bool eligible_profile(const SongDifficultyProfile& profile) {
-    const std::size_t target = profile.note_count > 0
-        ? static_cast<std::size_t>(profile.note_count) : 0u;
-    const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
-    return ff7rp::pipeline::extended_chart_row_count_in_range(target)
-        && policy.playable_extended_available
-        && profile.diagnostic_source_rows == target
-        && profile.diagnostic_native_prefix_rows == ff7rp::pipeline::kMaxChartRows
-        && profile.diagnostic_tail_rows == target - ff7rp::pipeline::kMaxChartRows
-        && profile.extended_chart_tail_notes.size() == profile.diagnostic_tail_rows
-        && profile.diagnostic_descriptor_hash != 0
-        && profile.diagnostic_policy_generation == policy.generation
-        && profile.chart_notes.size() == ff7rp::pipeline::kMaxChartRows
-        && std::all_of(profile.extended_chart_tail_notes.begin(),
-            profile.extended_chart_tail_notes.end(), restricted_note)
-        && std::all_of(profile.chart_notes.begin(), profile.chart_notes.end(), restricted_note);
+    try {
+        ff7rp::pipeline::ChartEventPlan plan;
+        return derive_runtime_plan(profile, plan);
+    } catch (...) { return false; }
 }
 
 bool read_controller_binding(void* chart, void*& controller, void*& control_block)
@@ -208,7 +270,8 @@ bool read_controller_binding(void* chart, void*& controller, void*& control_bloc
 bool exact_identity(const Transaction& tx, void* wrapper, void* chart_row, uintptr_t caller_rva) {
     void* controller = nullptr;
     void* control_block = nullptr;
-    void* side = nullptr;
+    void* right_side = nullptr;
+    void* left_side = nullptr;
     const uintptr_t chart_address = reinterpret_cast<uintptr_t>(wrapper);
     const bool header_exact = chart_address != 0
         && chart_address <= std::numeric_limits<uintptr_t>::max() - kHeaderOffset
@@ -221,7 +284,11 @@ bool exact_identity(const Transaction& tx, void* wrapper, void* chart_row, uintp
         && tx.authority.selection.generation == tx.registry_generation
         && tx.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
         && tx.profile && tx.profile->diagnostic_descriptor_hash == tx.descriptor_hash
-        && core::safe_read_field(chart_row, kSideOffset, side) && side == tx.side
+        && tx.profile->physical_chart_digest == tx.physical_digest
+        && core::safe_read_field(chart_row, kRightSideOffset, right_side)
+        && right_side == tx.right_side
+        && core::safe_read_field(chart_row, kLeftSideOffset, left_side)
+        && left_side == tx.left_side
         && header_exact && read_controller_binding(wrapper, controller, control_block)
         && controller == tx.controller
         && control_block == tx.controller_control_block;
@@ -271,21 +338,46 @@ bool callback_empty(const void* event) {
         state.data(), state.size()) && state == zero;
 }
 
-bool event_valid(const void* event, void* chart, void* side, uint32_t ordinal,
-    float time, const SongChartNote& note, uint64_t fname, bool require_callback) {
+bool ignore_sounds_valid(const void* event, const EventPlan& plan) {
+    uintptr_t data = 0;
+    int32_t count = -1, capacity = -1;
+    if (!read_at(event, 0x38, data) || !read_at(event, 0x40, count)
+        || !read_at(event, 0x44, capacity)
+        || count != static_cast<int32_t>(plan.ignore_sound_count) || capacity < count)
+        return false;
+    if (!count) return data == 0 && capacity == 0;
+    if (!data) return false;
+    std::array<uint64_t, 3> values{};
+    return core::safe_copy_bytes(reinterpret_cast<void*>(data), values.data(),
+        static_cast<std::size_t>(count) * sizeof(uint64_t))
+        && std::equal(values.begin(), values.begin() + count, plan.ignore_sounds.begin());
+}
+
+bool ignore_sounds_empty(const void* event) {
+    uintptr_t data = 1; int32_t count = -1, capacity = -1;
+    return read_at(event, 0x38, data) && data == 0
+        && read_at(event, 0x40, count) && count == 0
+        && read_at(event, 0x44, capacity) && capacity == 0;
+}
+
+bool event_valid(const void* event, void* chart, void* side,
+    const EventPlan& plan, bool require_callback, bool require_null_links = true,
+    bool require_complete_ignore_sounds = true) {
+    const SongChartNote& note = *plan.note;
     void* event_chart = nullptr; void* event_side = nullptr; uintptr_t parent = 1, successor = 1;
     uint32_t actual_ordinal = 0; float actual_time = -1.0f, strength = -1.0f;
-    uint64_t actual_fname = 0, owned = 1; int32_t owned_count = -1, owned_capacity = -1;
+    uint64_t actual_fname = 0;
     uint8_t assignment = 8, lookup_path = 2, state = 1, note_type = 0, dot_type = 0; uint8_t trailing[3]{};
     return read_at(event, 0x00, event_chart) && event_chart == chart
         && read_at(event, 0x08, event_side) && event_side == side
-        && read_at(event, 0x10, parent) && parent == 0 && read_at(event, 0x18, successor) && successor == 0
-        && read_at(event, 0x20, actual_ordinal) && actual_ordinal == ordinal
-        && read_at(event, 0x24, actual_time) && std::isfinite(actual_time) && actual_time == time
+        && read_at(event, 0x10, parent) && read_at(event, 0x18, successor)
+        && (!require_null_links || (parent == 0 && successor == 0))
+        && read_at(event, 0x20, actual_ordinal) && actual_ordinal == plan.entry.ordinal
+        && read_at(event, 0x24, actual_time) && std::isfinite(actual_time) && actual_time == plan.time
         && read_at(event, 0x28, strength) && strength == 0.0f
-        && read_at(event, 0x2c, actual_fname) && actual_fname == fname
-        && read_at(event, 0x38, owned) && owned == 0 && read_at(event, 0x40, owned_count) && owned_count == 0
-        && read_at(event, 0x44, owned_capacity) && owned_capacity == 0
+        && read_at(event, 0x2c, actual_fname) && actual_fname == plan.fname
+        && (require_complete_ignore_sounds
+            ? ignore_sounds_valid(event, plan) : ignore_sounds_empty(event))
         && read_at(event, 0x48, assignment) && assignment != 8
         && read_at(event, 0x49, lookup_path) && lookup_path <= 1
         && read_at(event, 0x4a, state) && state == 0
@@ -357,7 +449,7 @@ bool exact_header_state(const Transaction& tx, const int32_t count, EventHeader&
 {
     return tx.expected_header && tx.reserved_data
         && tx.reserved_capacity == tx.expected_capacity
-        && tx.reserved_capacity >= tx.target_count
+        && tx.reserved_capacity >= tx.native_event_count
         && core::safe_copy_bytes(tx.expected_header, &header, sizeof(header))
         && header.data == tx.reserved_data && header.count == count
         && header.capacity == tx.reserved_capacity;
@@ -368,15 +460,15 @@ bool exact_private_tail_slot(const Transaction& tx, void* wrapper, void* chart_r
 {
     EventHeader header{};
     tail = nullptr;
-    const std::size_t tail_count = static_cast<std::size_t>(tx.target_count)
-        - kNativeEventCount;
+    const std::size_t tail_count = static_cast<std::size_t>(tx.native_event_count)
+        - static_cast<std::size_t>(tx.prefix_event_count);
     if (tail_index >= tail_count) return false;
-    const std::size_t row = kNativeEventCount + tail_index;
+    const std::size_t row = static_cast<std::size_t>(tx.prefix_event_count) + tail_index;
     if (row > std::numeric_limits<std::size_t>::max() / kEventSize) return false;
     const std::size_t offset = row * kEventSize;
     if (offset > std::numeric_limits<std::size_t>::max() - kEventSize) return false;
     if (!exact_identity(tx, wrapper, chart_row, caller_rva)
-        || !exact_header_state(tx, 512, header)) return false;
+        || !exact_header_state(tx, tx.prefix_event_count, header)) return false;
     const uintptr_t base = reinterpret_cast<uintptr_t>(header.data);
     if (base > (std::numeric_limits<uintptr_t>::max)() - offset) return false;
     tail = reinterpret_cast<void*>(base + offset);
@@ -408,10 +500,12 @@ bool publish_committed_extended(const Transaction& tx)
         || g_activation_serial.route_lifecycle_epoch != tx.authority.route_lifecycle_epoch
         || g_activation_serial.preparation_ordinal != tx.authority.preparation_ordinal
         || g_activation_serial.failed) {
-        core::log(core::LogLevel::Error,
-            lifecycle_handoff_invalid
-                ? "[extended_chart] committed_extended=rejected reason=invalid_lifecycle_transition rollback=synchronous"
-                : "[extended_chart] committed_extended=rejected reason=failed_activation_terminal rollback=synchronous");
+        try {
+            core::log(core::LogLevel::Error,
+                lifecycle_handoff_invalid
+                    ? "[extended_chart] committed_extended=rejected reason=invalid_lifecycle_transition rollback=synchronous"
+                    : "[extended_chart] committed_extended=rejected reason=failed_activation_terminal rollback=synchronous");
+        } catch (...) {}
         return false;
     }
     g_committed = {};
@@ -429,7 +523,11 @@ bool publish_committed_extended(const Transaction& tx)
     g_committed.activation_generation = tx.authority.activation_generation;
     g_committed.preparation_ordinal = tx.authority.preparation_ordinal;
     g_committed.route_lifecycle_epoch = tx.authority.route_lifecycle_epoch;
-    g_committed.target_count = tx.target_count;
+    g_committed.source_row_count = tx.source_row_count;
+    g_committed.prefix_event_count = tx.prefix_event_count;
+    g_committed.native_event_count = tx.native_event_count;
+    g_committed.required_action_count = tx.required_action_count;
+    g_committed.physical_digest = tx.physical_digest;
     return true;
 }
 
@@ -441,7 +539,12 @@ bool committed_selection_matches_locked(const SelectionSnapshot& selection)
         && selection.generation == g_committed.registry_generation
         && selection.generation == g_committed.selection_generation
         && selection.profile && eligible_profile(*selection.profile)
-        && selection.profile->note_count == g_committed.target_count
+        && selection.profile->source_row_count == static_cast<std::size_t>(g_committed.source_row_count)
+        && selection.profile->native_prefix_event_count == static_cast<std::size_t>(g_committed.prefix_event_count)
+        && selection.profile->native_event_count == static_cast<std::size_t>(g_committed.native_event_count)
+        && selection.profile->required_action_count == static_cast<std::size_t>(g_committed.required_action_count)
+        && selection.profile->note_count == g_committed.required_action_count
+        && selection.profile->physical_chart_digest == g_committed.physical_digest
         && g_committed.policy_generation == ff7rp::pipeline::chart_row_policy_generation()
         && selection.profile->diagnostic_descriptor_hash == g_committed.descriptor_hash;
 }
@@ -514,19 +617,19 @@ void __fastcall reserve_detour(EventHeader* header, int32_t requested) noexcept 
         && exact_identity(tx, tx.wrapper, tx.chart_row, tx.caller_rva);
     if (candidate) {
         tx.reserve_hit = true;
-        g_original_reserve(header, tx.target_count);
+        g_original_reserve(header, tx.native_event_count);
         EventHeader reserved{};
         if (core::safe_copy_bytes(header, &reserved, sizeof(reserved))
             && reserved.data && reserved.count == 0
             && reserved.capacity == tx.expected_capacity
-            && reserved.capacity >= tx.target_count
+            && reserved.capacity >= tx.native_event_count
             && reserved.capacity <= kMaximumEventCapacity) {
             tx.reserved_data = reserved.data;
             tx.reserved_capacity = reserved.capacity;
             try {
                 std::ostringstream out;
                 out << "[extended_chart] phase=reserve reserve_hit=1 reserve_validated=1"
-                    << " requested=" << tx.target_count
+                    << " requested=" << tx.native_event_count
                     << " capacity=" << reserved.capacity
                     << " allocation_regime=" << (tx.large_allocation_regime ? "large" : "small")
                     << " controller_reciprocal=exact header_relation=exact"
@@ -575,6 +678,7 @@ bool validate_research_helpers(HMODULE module, std::string& mismatch) {
     if (core::generated::kBuildId != kExactBuild
         || !rva::PersistentChartExpandCaller
         || runtime_layouts::PianoScoreWrapper::controller_capture != 0x118
+        || runtime_layouts::PianoScoreWrapper::final_group_index != 0xa3
         || runtime_layouts::PianoChartController::chart != 0xf48
         || runtime_layouts::PianoChartController::chart_control_block != 0xf50
         || !core::bytes_equal(reinterpret_cast<const uint8_t*>(
@@ -584,7 +688,9 @@ bool validate_research_helpers(HMODULE module, std::string& mismatch) {
         return false;
     }
     constexpr const char* ids[] = {"piano_event_vector_reserve", "piano_event_vector_reserve_call",
-        "piano_event_callback_build", "piano_event_result_callback"};
+        "piano_event_callback_build", "piano_event_result_callback",
+        "piano_event_ignore_sound_insert", "piano_event_ignore_sound_insert_call",
+        "piano_event_link"};
     for (const char* id : ids) {
         const RvaSignatureSpec* spec = find_rva_signature(id);
         if (!spec || !spec->rva || spec->expected_prologue.empty()
@@ -810,6 +916,8 @@ ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, boo
             reinterpret_cast<ConstructFn>(base + rva::PianoEventConstruct),
             reinterpret_cast<DestructFn>(base + rva::PianoEventDestruct),
             reinterpret_cast<CallbackBuildFn>(base + rva::PianoEventCallbackBuild),
+            reinterpret_cast<IgnoreSoundInsertFn>(base + rva::PianoEventIgnoreSoundInsert),
+            reinterpret_cast<EventLinkFn>(base + rva::PianoEventLink),
         };
     } else {
         g_api = {};
@@ -890,46 +998,88 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     if (!selection_audio_admission_authority_matches(authority))
         return reject("selection_admission_mismatch");
     if (!selection.song || !selection.profile) return reject("selection_missing");
-    diagnostic_target_count = selection.profile->note_count;
-    if (!eligible_profile(*selection.profile)) return reject("profile_ineligible");
+    diagnostic_target_count = static_cast<int32_t>(selection.profile->native_event_count);
+    ff7rp::pipeline::ChartEventPlan physical_plan;
+    try {
+        if (!derive_runtime_plan(*selection.profile, physical_plan))
+            return reject("profile_plan_mismatch");
+    } catch (...) { return reject("profile_plan_exception"); }
     if (transaction.generation != authority.activation_generation
         || transaction.selection_generation != selection.generation
         || transaction.route_generation != authority.token.route_generation
         || transaction.lease_generation != authority.token.lease_generation
         || transaction.song_key != authority.token.song_key)
         return reject("activation_identity_mismatch");
-    const int32_t target_count = selection.profile->note_count;
+    const int32_t source_rows = static_cast<int32_t>(physical_plan.source_row_count);
+    const int32_t prefix_events = static_cast<int32_t>(physical_plan.native_prefix_event_count);
+    const int32_t native_events = static_cast<int32_t>(physical_plan.native_event_count);
+    const int32_t actions = static_cast<int32_t>(physical_plan.required_action_count);
     int32_t expected_capacity = 0;
     bool large_regime = false;
     std::vector<EventPlan> plans;
+    std::vector<int32_t> expected_parent;
+    std::vector<int32_t> expected_next;
+    std::vector<int32_t> expected_head;
+    std::vector<LinkJournalEntry> link_journal;
     try {
-        if (!expected_event_capacity(target_count, expected_capacity, large_regime))
+        if (!expected_event_capacity(native_events, expected_capacity, large_regime))
             return reject("target_capacity_invalid");
-        const std::size_t tail_count = static_cast<std::size_t>(target_count)
-            - kNativeEventCount;
-        plans.reserve(tail_count);
-        for (std::size_t i = 0; i < tail_count; ++i) {
-            const std::size_t row = kNativeEventCount + i;
-            if (row > std::numeric_limits<uint32_t>::max() / 2u)
-                return reject("tail_ordinal_overflow", i);
-            const SongChartNote& note = selection.profile->extended_chart_tail_notes[i];
-            EventPlan plan{&note, 0.0f, 0, static_cast<uint32_t>(row * 2u)};
-            if (!restricted_note(note)) return reject("tail_shape_invalid", i);
-            if (!resolve_name(note.monotone_id, plan.fname))
-                return reject("tail_fname_find_failed", i);
+        plans.reserve(physical_plan.events.size());
+        expected_parent.assign(physical_plan.events.size(), -1);
+        expected_next.assign(physical_plan.events.size(), -1);
+        expected_head.assign(physical_plan.events.size(), -1);
+        link_journal.reserve(physical_plan.links.size());
+        for (std::size_t i = 0; i < physical_plan.events.size(); ++i) {
+            const auto& entry = physical_plan.events[i];
+            const SongChartNote* note = profile_row(*selection.profile, entry.source_row_index);
+            if (!note || entry.compact_event_index != i)
+                return reject("event_plan_index_mismatch", i);
+            EventPlan plan{};
+            plan.note = note;
+            plan.entry = entry;
+            const std::string& event_name = entry.kind == ff7rp::pipeline::ChartEventKind::Monotone
+                ? note->monotone_id : note->chord_id;
+            if (!resolve_name(event_name, plan.fname))
+                return reject("event_fname_find_failed", i);
+            if (entry.kind == ff7rp::pipeline::ChartEventKind::Chord) {
+                for (const std::string& id : note->ignore_sound_ids) {
+                    if (id.empty()) continue;
+                    uint64_t packed = 0;
+                    if (!resolve_name(id, packed)) return reject("ignore_fname_find_failed", i);
+                    bool duplicate = false;
+                    for (std::size_t j = 0; j < plan.ignore_sound_count; ++j)
+                        duplicate = duplicate || plan.ignore_sounds[j] == packed;
+                    if (!duplicate) plan.ignore_sounds[plan.ignore_sound_count++] = packed;
+                }
+            }
             plans.push_back(plan);
         }
+        for (const auto& link : physical_plan.links) {
+            if (link.root_event_index >= plans.size() || link.child_event_index >= plans.size()
+                || link.root_event_index == link.child_event_index
+                || expected_parent[link.child_event_index] != -1
+                || expected_parent[link.root_event_index] != -1)
+                return reject("link_plan_invalid");
+            expected_parent[link.child_event_index] = static_cast<int32_t>(link.root_event_index);
+            expected_next[link.child_event_index] = expected_head[link.root_event_index];
+            expected_head[link.root_event_index] = static_cast<int32_t>(link.child_event_index);
+        }
+        if (physical_plan.required_action_count
+            != physical_plan.native_event_count - physical_plan.links.size())
+            return reject("action_link_count_mismatch");
     } catch (...) {
         return reject("preflight_exception");
     }
     bool expected = false;
     if (!g_global_claim.compare_exchange_strong(expected, true, std::memory_order_acq_rel))
         return reject("global_claim_busy");
-    void* side = nullptr;
+    void* right_side = nullptr;
+    void* left_side = nullptr;
     void* controller = nullptr;
     void* control_block = nullptr;
     const uintptr_t chart_address = reinterpret_cast<uintptr_t>(wrapper);
-    if (!core::safe_read_field(chart_row, kSideOffset, side) || !side
+    if (!core::safe_read_field(chart_row, kRightSideOffset, right_side) || !right_side
+        || !core::safe_read_field(chart_row, kLeftSideOffset, left_side) || !left_side
         || !read_controller_binding(wrapper, controller, control_block)
         || chart_address > std::numeric_limits<uintptr_t>::max() - kHeaderOffset) {
         g_global_claim.store(false, std::memory_order_release);
@@ -956,7 +1106,8 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     g_transaction.claimed = true;
     g_transaction.wrapper = wrapper;
     g_transaction.chart_row = chart_row;
-    g_transaction.side = side;
+    g_transaction.right_side = right_side;
+    g_transaction.left_side = left_side;
     g_transaction.caller_rva = caller_rva;
     g_transaction.expected_header = reinterpret_cast<EventHeader*>(chart_address + kHeaderOffset);
     g_transaction.song = selection.song;
@@ -964,14 +1115,23 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     g_transaction.registry_generation = selection.generation;
     g_transaction.policy_generation = ff7rp::pipeline::chart_row_policy_generation();
     g_transaction.descriptor_hash = selection.profile->diagnostic_descriptor_hash;
+    g_transaction.physical_digest = physical_plan.physical_digest;
     g_transaction.controller = controller;
     g_transaction.controller_control_block = control_block;
     g_transaction.tls = transaction;
     g_transaction.authority = authority;
-    g_transaction.target_count = target_count;
+    g_transaction.source_row_count = source_rows;
+    g_transaction.prefix_event_count = prefix_events;
+    g_transaction.native_event_count = native_events;
+    g_transaction.required_action_count = actions;
     g_transaction.expected_capacity = expected_capacity;
     g_transaction.large_allocation_regime = large_regime;
     g_transaction.plans = std::move(plans);
+    g_transaction.physical_plan = std::move(physical_plan);
+    g_transaction.expected_parent = std::move(expected_parent);
+    g_transaction.expected_next = std::move(expected_next);
+    g_transaction.expected_head = std::move(expected_head);
+    g_transaction.link_journal = std::move(link_journal);
     try {
         std::ostringstream out;
         out << "[extended_chart] transaction=admitted authority_source=selection_admission+synchronous_native"
@@ -979,8 +1139,9 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
             << " registry_generation=" << selection.generation
             << " policy_generation=" << g_transaction.policy_generation
             << " descriptor_hash=" << g_transaction.descriptor_hash
-            << " target_count=" << target_count
-            << " tail_count=" << g_transaction.plans.size()
+            << " R=" << source_rows << " P=" << prefix_events
+            << " E=" << native_events << " A=" << actions
+            << " tail_count=" << (native_events - prefix_events)
             << " allocation_regime=" << (large_regime ? "large" : "small")
             << " time_authority=post_original_pending";
         core::log(core::LogLevel::Info, out.str());
@@ -1000,12 +1161,14 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     };
     const auto unresolved = [&](const char* reason) {
         block_custom_audio_route_for_unresolved_chart_mutation();
-        std::ostringstream out;
-        out << "[extended_chart] mutation_available=1 count_commit=unknown rollback=preserved"
-            << " custom_route=blocked failure=" << reason
-            << " registry_generation=" << tx.registry_generation
-            << " policy_generation=" << tx.policy_generation;
-        core::log(core::LogLevel::Error, out.str());
+        try {
+            std::ostringstream out;
+            out << "[extended_chart] mutation_available=1 count_commit=unknown rollback=preserved"
+                << " custom_route=blocked failure=" << reason
+                << " R=" << tx.source_row_count << " P=" << tx.prefix_event_count
+                << " E=" << tx.native_event_count << " A=" << tx.required_action_count;
+            core::log(core::LogLevel::Error, out.str());
+        } catch (...) {}
         return finish();
     };
     const auto reject = [&](const char* reason,
@@ -1027,12 +1190,14 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     };
     if (!tx.reserve_hit || tx.reserve_mismatch || !exact_identity(tx, wrapper, chart_row, caller_rva))
         return reject("reserve_or_identity");
-    core::log(core::LogLevel::Info,
-        "[extended_chart] phase=post_original authority_source=selection_admission+synchronous_native controller_capture_stable=1 reciprocal=exact header_relation=exact");
+    try {
+        core::log(core::LogLevel::Info,
+            "[extended_chart] phase=post_original authority_source=selection_admission+synchronous_native controller_capture_stable=1 reciprocal=exact header_relation=exact");
+    } catch (...) {}
     EventHeader header{};
     std::size_t event_bytes = 0;
     if (!core::safe_copy_bytes(tx.expected_header, &header, sizeof(header)) || header.data != tx.reserved_data
-        || header.count != 512 || header.capacity < ff7rp::pipeline::kMinimumExtendedChartRows
+        || header.count != tx.prefix_event_count || header.capacity < tx.native_event_count
         || header.capacity != tx.reserved_capacity
         || !event_extent_bytes(header.capacity, event_bytes) || !memory_writable(header.data, event_bytes))
         return reject("prefix_header");
@@ -1042,35 +1207,23 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     if (!read_at(wrapper, kMaxTimeOffset, old_max) || !std::isfinite(old_max))
         return reject("post_max_time_invalid");
     float prefix_max = 0, previous = 0;
-    // The evidence proves sentinel 8, not a general numeric range. Use only assignment
-    // values already produced by this exact parser-built monotone prefix.
-    std::array<bool, 256> prefix_assignments{};
-    uint8_t prefix_lookup_path = 2;
-    for (std::size_t i = 0; i < kNativeEventCount; ++i) {
-        float time = 0; uint64_t name = 0;
-        uint8_t assignment = 8, lookup_path = 2;
-        if (!parse_time(tx.profile->chart_notes[i].time_str, fps, time) || (i && time < previous)
-            || !resolve_name(tx.profile->chart_notes[i].monotone_id, name)
-            || !event_valid(static_cast<uint8_t*>(header.data) + i * kEventSize, wrapper, tx.side,
-                static_cast<uint32_t>(2u * i), time, tx.profile->chart_notes[i], name, true)
-            || !event_assignment(static_cast<uint8_t*>(header.data) + i * kEventSize, assignment)
-            || !event_lookup_path(static_cast<uint8_t*>(header.data) + i * kEventSize, lookup_path)
-            || (i && lookup_path != prefix_lookup_path))
-            return reject("prefix_event");
-        if (!i) prefix_lookup_path = lookup_path;
-        prefix_assignments[assignment] = true;
-        previous = time; prefix_max = std::max(prefix_max, time);
-    }
-    if (old_max != prefix_max) return reject("prefix_max_time");
-    // The parser writes chart FPS only after its reserve call. Decode every tail
-    // from that post-original value before constructing the first tail event.
     for (std::size_t i = 0; i < tx.plans.size(); ++i) {
         EventPlan& plan = tx.plans[i];
-        if (!parse_time(plan.note->time_str, fps, plan.time))
-            return reject("tail_time_parse_failed", i);
-        if (plan.time < previous) return reject("tail_time_not_monotonic", i);
+        if (!parse_time(plan.note->time_str, fps, plan.time) || (i && plan.time < previous))
+            return reject("event_time_preflight", i);
         previous = plan.time;
+        if (i < static_cast<std::size_t>(tx.prefix_event_count))
+            prefix_max = std::max(prefix_max, plan.time);
     }
+    for (std::size_t i = 0; i < static_cast<std::size_t>(tx.prefix_event_count); ++i) {
+        const EventPlan& plan = tx.plans[i];
+        void* const side = plan.entry.hand == ff7rp::pipeline::ChartEventHand::Right
+            ? tx.right_side : tx.left_side;
+        if (!event_valid(static_cast<uint8_t*>(header.data) + i * kEventSize,
+                wrapper, side, plan, true, true))
+            return reject("prefix_event", i);
+    }
+    if (old_max != prefix_max) return reject("prefix_max_time");
     const float new_max = std::max(old_max, previous);
     const auto cleanup_slot = [&](const std::size_t index) {
         void* slot = nullptr;
@@ -1090,9 +1243,13 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         }
         return true;
     };
-    for (std::size_t i = 0; i < tx.plans.size(); ++i) {
-        const EventPlan& plan = tx.plans[i];
+    const std::size_t prefix = static_cast<std::size_t>(tx.prefix_event_count);
+    for (std::size_t compact = prefix; compact < tx.plans.size(); ++compact) {
+        const std::size_t i = compact - prefix;
+        const EventPlan& plan = tx.plans[compact];
         const SongChartNote& note = *plan.note;
+        void* const side = plan.entry.hand == ff7rp::pipeline::ChartEventHand::Right
+            ? tx.right_side : tx.left_side;
         void* slot_void = nullptr;
         if (!exact_private_tail_slot(tx, wrapper, chart_row, caller_rva, i, slot_void))
             return unresolved("tail_slot_identity_before_zero");
@@ -1102,27 +1259,38 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         if (!exact_private_tail_slot(tx, wrapper, chart_row, caller_rva, i, rechecked)
             || rechecked != tail) return unresolved("tail_slot_identity_before_constructor");
         // Native allocator/constructor faults remain outside the recoverable contract.
-        void* const constructed = g_api.construct(tail, wrapper, tx.side, plan.ordinal,
+        void* const constructed = g_api.construct(tail, wrapper, side, plan.entry.ordinal,
             plan.time, 0.0f, static_cast<uint8_t>(note.note_type),
             static_cast<uint8_t>(note.dot_type), plan.fname);
         if (constructed != tail) return unresolved("tail_constructor_ownership_unproved");
-        if (!event_valid(tail, wrapper, tx.side, plan.ordinal, plan.time,
-                note, plan.fname, false)) {
+        if (!event_valid(tail, wrapper, side, plan, false, true, false)) {
             if (!cleanup_slot(i) || !cleanup_constructed())
                 return unresolved("tail_constructor_cleanup_identity");
             return reject("tail_constructor_validation");
         }
+        for (std::size_t ignored = 0; ignored < plan.ignore_sound_count; ++ignored) {
+            const uint32_t inserted = g_api.ignore_sound_insert(tail + 0x38,
+                &plan.ignore_sounds[ignored]);
+            if (inserted != ignored) {
+                if (!cleanup_slot(i) || !cleanup_constructed())
+                    return unresolved("ignore_sound_cleanup_identity");
+                return reject("ignore_sound_insert_validation", compact);
+            }
+        }
         if (!exact_private_tail_slot(tx, wrapper, chart_row, caller_rva, i, rechecked)
-            || rechecked != tail
-            || !event_valid(tail, wrapper, tx.side, plan.ordinal, plan.time,
-                note, plan.fname, false)) return unresolved("tail_identity_before_callback");
+            || rechecked != tail)
+            return unresolved("tail_identity_before_callback");
+        if (!event_valid(tail, wrapper, side, plan, false, true, true)) {
+            if (!cleanup_slot(i) || !cleanup_constructed())
+                return unresolved("ignore_sound_validation_cleanup_identity");
+            return reject("ignore_sound_vector_validation", compact);
+        }
         void* captured = wrapper;
         g_api.callback_build(tail + 0x50, &captured);
         uint8_t assignment = 8, lookup_path = 2;
-        if (!event_valid(tail, wrapper, tx.side, plan.ordinal, plan.time,
-                note, plan.fname, true)
-            || !event_assignment(tail, assignment) || !prefix_assignments[assignment]
-            || !event_lookup_path(tail, lookup_path) || lookup_path != prefix_lookup_path
+        if (!event_valid(tail, wrapper, side, plan, true, true, true)
+            || !event_assignment(tail, assignment)
+            || !event_lookup_path(tail, lookup_path)
             || !exact_identity(tx, wrapper, chart_row, caller_rva)) {
             if (!cleanup_slot(i) || !cleanup_constructed())
                 return unresolved("tail_callback_cleanup_identity");
@@ -1131,12 +1299,12 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         ++tx.constructed_tail_count;
     }
     const auto tails_valid = [&](const int32_t expected_count) {
-        if (tx.constructed_tail_count != tx.plans.size()) return false;
+        if (tx.constructed_tail_count != tx.plans.size() - prefix) return false;
         EventHeader current{};
         if (!exact_identity(tx, wrapper, chart_row, caller_rva)
             || !exact_header_state(tx, expected_count, current)) return false;
-        for (std::size_t i = 0; i < tx.plans.size(); ++i) {
-            const std::size_t row = kNativeEventCount + i;
+        for (std::size_t i = 0; i < tx.constructed_tail_count; ++i) {
+            const std::size_t row = prefix + i;
             if (row > (std::numeric_limits<std::size_t>::max)() / kEventSize)
                 return false;
             const std::size_t offset = row * kEventSize;
@@ -1144,87 +1312,205 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             if (base > (std::numeric_limits<uintptr_t>::max)() - offset)
                 return false;
             void* slot = reinterpret_cast<void*>(base + offset);
-            const EventPlan& plan = tx.plans[i];
-            uint8_t assignment = 8;
-            uint8_t lookup_path = 2;
+            const EventPlan& plan = tx.plans[row];
+            void* const side = plan.entry.hand == ff7rp::pipeline::ChartEventHand::Right
+                ? tx.right_side : tx.left_side;
             if (!memory_writable(slot, kEventSize)
-                || !event_valid(slot, wrapper, tx.side, plan.ordinal, plan.time,
-                    *plan.note, plan.fname, true)
-                || !event_assignment(slot, assignment) || !prefix_assignments[assignment]
-                || !event_lookup_path(slot, lookup_path)
-                || lookup_path != prefix_lookup_path) return false;
+                || !event_valid(slot, wrapper, side, plan, true, !tx.links_applied, true))
+                return false;
         }
         return true;
     };
+
+    const auto event_pointer = [&](const std::size_t index, const int32_t expected_count,
+        void*& result) {
+        result = nullptr;
+        EventHeader current{};
+        if (index >= tx.plans.size() || !exact_identity(tx, wrapper, chart_row, caller_rva)
+            || !exact_header_state(tx, expected_count, current)
+            || index > (std::numeric_limits<std::size_t>::max)() / kEventSize) return false;
+        const std::size_t offset = index * kEventSize;
+        const uintptr_t base = reinterpret_cast<uintptr_t>(current.data);
+        if (base > (std::numeric_limits<uintptr_t>::max)() - offset) return false;
+        result = reinterpret_cast<void*>(base + offset);
+        return memory_writable(result, kEventSize);
+    };
+    const auto rollback_links = [&](const int32_t expected_count) {
+        while (!tx.link_journal.empty()) {
+            const LinkJournalEntry entry = tx.link_journal.back();
+            void* root = nullptr; void* child = nullptr;
+            if (!event_pointer(entry.root_index, expected_count, root)
+                || !event_pointer(entry.child_index, expected_count, child)) return false;
+            uintptr_t current_head = 0, current_parent = 0, current_next = 0;
+            if (!read_at(root, 0x18, current_head)
+                || current_head != reinterpret_cast<uintptr_t>(child)
+                || !read_at(child, 0x10, current_parent)
+                || current_parent != reinterpret_cast<uintptr_t>(root)
+                || !read_at(child, 0x18, current_next)
+                || current_next != reinterpret_cast<uintptr_t>(entry.root_head)) return false;
+            write_at(root, 0x18, entry.root_head);
+            write_at(child, 0x10, entry.child_parent);
+            write_at(child, 0x18, entry.child_next);
+            uintptr_t root_head = 1, child_parent = 1, child_next = 1;
+            if (!read_at(root, 0x18, root_head) || root_head != reinterpret_cast<uintptr_t>(entry.root_head)
+                || !read_at(child, 0x10, child_parent) || child_parent != reinterpret_cast<uintptr_t>(entry.child_parent)
+                || !read_at(child, 0x18, child_next) || child_next != reinterpret_cast<uintptr_t>(entry.child_next))
+                return false;
+            tx.link_journal.pop_back();
+        }
+        if (tx.group_byte_captured) {
+            write_at(wrapper, kFinalGroupOffset, tx.original_group_byte);
+            uint8_t restored = 0xff;
+            if (!read_at(wrapper, kFinalGroupOffset, restored) || restored != tx.original_group_byte)
+                return false;
+        }
+        tx.links_applied = false;
+        return true;
+    };
+    const auto links_valid = [&](const int32_t expected_count) {
+        uint8_t group = 0;
+        if (!read_at(wrapper, kFinalGroupOffset, group)
+            || group != tx.physical_plan.final_group_index) return false;
+        for (std::size_t i = 0; i < tx.plans.size(); ++i) {
+            void* event = nullptr; void* parent_ptr = nullptr; void* successor_ptr = nullptr;
+            if (!event_pointer(i, expected_count, event)) return false;
+            const EventPlan& plan = tx.plans[i];
+            void* const side = plan.entry.hand == ff7rp::pipeline::ChartEventHand::Right
+                ? tx.right_side : tx.left_side;
+            if (!event_valid(event, wrapper, side, plan, true, false, true)) return false;
+            const int32_t parent_index = tx.expected_parent[i];
+            const int32_t successor_index = tx.expected_head[i] >= 0
+                ? tx.expected_head[i] : tx.expected_next[i];
+            if (parent_index >= 0 && !event_pointer(parent_index, expected_count, parent_ptr)) return false;
+            if (successor_index >= 0 && !event_pointer(successor_index, expected_count, successor_ptr)) return false;
+            uintptr_t parent = 1, successor = 1;
+            if (!read_at(event, 0x10, parent) || parent != reinterpret_cast<uintptr_t>(parent_ptr)
+                || !read_at(event, 0x18, successor)
+                || successor != reinterpret_cast<uintptr_t>(successor_ptr)) return false;
+        }
+        return true;
+    };
+
+    if (!read_at(wrapper, kFinalGroupOffset, tx.original_group_byte))
+        return unresolved("group_state_read_before_links");
+    if (tx.original_group_byte != 0) {
+        if (!cleanup_constructed()) return unresolved("group_state_cleanup_identity");
+        return reject("group_state_not_suppressed");
+    }
+    tx.group_byte_captured = true;
+    for (const auto& link : tx.physical_plan.links) {
+        void* root = nullptr; void* child = nullptr;
+        if (!event_pointer(link.root_event_index, tx.prefix_event_count, root)
+            || !event_pointer(link.child_event_index, tx.prefix_event_count, child))
+            return unresolved("link_slot_identity");
+        LinkJournalEntry journal{link.root_event_index, link.child_event_index};
+        if (!read_at(root, 0x18, journal.root_head)
+            || !read_at(child, 0x10, journal.child_parent)
+            || !read_at(child, 0x18, journal.child_next))
+            return unresolved("link_prestate");
+        void* prior_head = nullptr;
+        const int32_t prior_head_index = tx.expected_next[link.child_event_index];
+        if (prior_head_index >= 0
+            && !event_pointer(prior_head_index, tx.prefix_event_count, prior_head))
+            return unresolved("link_prior_head_identity");
+        if (journal.root_head != prior_head || journal.child_parent || journal.child_next) {
+            if (!rollback_links(tx.prefix_event_count) || !cleanup_constructed())
+                return unresolved("link_prestate_rollback_identity");
+            return reject("link_prestate_mismatch");
+        }
+        tx.link_journal.push_back(journal);
+        g_api.event_link(root, child);
+    }
+    EventHeader link_header{};
+    if (!exact_identity(tx, wrapper, chart_row, caller_rva)
+        || !exact_header_state(tx, tx.prefix_event_count, link_header))
+        return unresolved("group_write_identity");
+    write_at(wrapper, kFinalGroupOffset, tx.physical_plan.final_group_index);
+    tx.links_applied = true;
+    if (!links_valid(tx.prefix_event_count)) {
+        if (!rollback_links(tx.prefix_event_count) || !cleanup_constructed())
+            return unresolved("link_rollback_identity");
+        return reject("link_validation");
+    }
     float current_max = 0;
-    if (!tails_valid(512)
+    if (!tails_valid(tx.prefix_event_count) || !links_valid(tx.prefix_event_count)
         || !read_at(wrapper, kMaxTimeOffset, current_max) || current_max != old_max)
         return unresolved("max_time_prewrite_identity");
     write_at(wrapper, kMaxTimeOffset, new_max);
     float committed_max = 0;
     if (!read_at(wrapper, kMaxTimeOffset, committed_max) || committed_max != new_max
-        || !tails_valid(512))
+        || !tails_valid(tx.prefix_event_count) || !links_valid(tx.prefix_event_count))
         return unresolved("max_time_postwrite_identity");
-    if (!tails_valid(512)
+    if (!tails_valid(tx.prefix_event_count) || !links_valid(tx.prefix_event_count)
         || !read_at(wrapper, kMaxTimeOffset, committed_max) || committed_max != new_max)
         return unresolved("count_commit_identity");
-    tx.expected_header->count = tx.target_count; // Ownership publication is deliberately last.
+    tx.expected_header->count = tx.native_event_count; // Ownership publication is deliberately last.
     EventHeader committed{};
     if (core::safe_copy_bytes(tx.expected_header, &committed, sizeof(committed))
-        && committed.data == header.data && committed.count == tx.target_count
+        && committed.data == header.data && committed.count == tx.native_event_count
         && committed.capacity == header.capacity
         && read_at(wrapper, kMaxTimeOffset, committed_max) && committed_max == new_max
-        && tails_valid(tx.target_count)
+        && tails_valid(tx.native_event_count) && links_valid(tx.native_event_count)
         && exact_identity(tx, wrapper, chart_row, caller_rva)) {
         if (publish_committed_extended(tx)) {
             success = true;
-            std::ostringstream out;
-            out << "[extended_chart] prefix_validated=1 tails_constructed="
-                << tx.constructed_tail_count << " first_ordinal=" << tx.plans.front().ordinal
-                << " last_ordinal=" << tx.plans.back().ordinal
-                << " callback_validated=1 count_commit=" << tx.target_count
-                << " committed_extended=pending rollback=none authority_source=selection_admission+synchronous_native";
-            core::log(core::LogLevel::Info, out.str());
+            try {
+                std::ostringstream out;
+                out << "[extended_chart] prefix_validated=1 tails_constructed="
+                    << tx.constructed_tail_count << " first_ordinal=" << tx.plans[prefix].entry.ordinal
+                    << " last_ordinal=" << tx.plans.back().entry.ordinal
+                    << " links=" << tx.physical_plan.links.size()
+                    << " ignore_values=validated count_commit=" << tx.native_event_count
+                    << " required_actions=" << tx.required_action_count
+                    << " committed_extended=pending rollback=none authority_source=selection_admission+synchronous_native";
+                core::log(core::LogLevel::Info, out.str());
+            } catch (...) {}
             return finish();
         }
-        core::log(core::LogLevel::Error,
-            "[extended_chart] count_commit=extended publication=rejected reason=failed_terminal rollback=required");
+        try { core::log(core::LogLevel::Error,
+            "[extended_chart] count_commit=extended publication=rejected reason=failed_terminal rollback=required"); }
+        catch (...) {}
     }
     EventHeader live{};
     float live_max = 0;
     if (core::safe_copy_bytes(tx.expected_header, &live, sizeof(live)) && live.data == header.data
-        && live.count == tx.target_count && live.capacity == header.capacity
+        && live.count == tx.native_event_count && live.capacity == header.capacity
         && read_at(wrapper, kMaxTimeOffset, live_max) && live_max == new_max
-        && tails_valid(tx.target_count)) {
-        tx.expected_header->count = 512;
+        && tails_valid(tx.native_event_count) && links_valid(tx.native_event_count)) {
+        tx.expected_header->count = tx.prefix_event_count;
         EventHeader restored{};
         const bool count_restored = core::safe_copy_bytes(tx.expected_header, &restored, sizeof(restored))
-            && restored.data == header.data && restored.count == 512 && restored.capacity == header.capacity
+            && restored.data == header.data && restored.count == tx.prefix_event_count && restored.capacity == header.capacity
             && exact_identity(tx, wrapper, chart_row, caller_rva);
         if (count_restored) {
             float rollback_max = 0;
-            if (!tails_valid(512)
+            if (!tails_valid(tx.prefix_event_count) || !links_valid(tx.prefix_event_count)
                 || !read_at(wrapper, kMaxTimeOffset, rollback_max) || rollback_max != new_max)
                 return unresolved("post_count_max_restore_identity");
             write_at(wrapper, kMaxTimeOffset, old_max);
             float restored_max = 0;
             const bool max_restored = read_at(wrapper, kMaxTimeOffset, restored_max) && restored_max == old_max;
-            if (!max_restored || !tails_valid(512))
+            if (!max_restored || !tails_valid(tx.prefix_event_count)
+                || !links_valid(tx.prefix_event_count))
                 return unresolved("post_count_max_restore_verification");
-            if (cleanup_constructed()) {
-                core::log(core::LogLevel::Error,
-                    "[extended_chart] rollback=completed count_restore=proved max_restore=proved tails_reverse_cleaned=1 failure=post_count_validation");
+            if (rollback_links(tx.prefix_event_count) && cleanup_constructed()) {
+                try { core::log(core::LogLevel::Error,
+                    "[extended_chart] rollback=completed count_restore=proved max_restore=proved links_reverse_replayed=1 tails_reverse_cleaned=1 failure=post_count_validation"); }
+                catch (...) {}
             } else {
                 return unresolved("post_count_cleanup_identity");
             }
         } else {
             block_custom_audio_route_for_unresolved_chart_mutation();
-            core::log(core::LogLevel::Error,
-                    "[extended_chart] count_commit=extended rollback=preserved count_restore=unresolved failure=post_count_validation");
+                try { core::log(core::LogLevel::Error,
+                    "[extended_chart] count_commit=extended rollback=preserved count_restore=unresolved failure=post_count_validation"); }
+                catch (...) {}
         }
     } else {
         block_custom_audio_route_for_unresolved_chart_mutation();
-        core::log(core::LogLevel::Error, "[extended_chart] count_commit=unknown rollback=preserved failure=external_drift");
+        try { core::log(core::LogLevel::Error,
+            "[extended_chart] count_commit=unknown rollback=preserved failure=external_drift"); }
+        catch (...) {}
     }
     return finish();
 }

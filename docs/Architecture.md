@@ -115,6 +115,32 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
   rather than interpreted under the new layout. Version 44 also identifies the
   canonical-contour monotone planner and profile-derived grouping policy.
+- Generalized playable MIDI adds a MIDI-only generation identity to cache keys;
+  ordinary authored charts and legacy/disabled MIDI retain their existing v44
+  identity. Format 14 remains sufficient because source rows, prefix events,
+  native events, required actions, physical digest, and group-root topology are
+  deterministically rederived from the already-counted prefix/tail rows. Manifests
+  expose those derived counts only under the generalized policy.
+- A profile descriptor keeps the first 512 source rows in `chart_notes` and owns
+  the remainder in `extended_chart_tail_notes`. `source_row_count`,
+  `native_prefix_event_count`, `native_event_count`, and `required_action_count`
+  are distinct authoritative facts; compatibility `note_count` means required
+  actions. Native event order within a row is monotone then chord. Runtime support
+  for generalized mixed row-level groups, explicit dual rows, generated one-event
+  equal-time rows, chord/IgnoreSound tails, and
+  event-count allocation remains a separate qualification gate; offline authority
+  does not authorize mutation on an older runtime.
+- `ChartEventRow` is the game-neutral compiled-row projection used by the canonical
+  `derive_chart_event_plan` engine. The resulting immutable plan contains stable
+  monotone-then-chord event entries and ordered root/child links in addition to
+  R/P/E/A. Runtime reconstructs these rows from `chart_notes` plus
+  `extended_chart_tail_notes`; format 14 does not serialize a redundant plan.
+  `physical_chart_digest` hashes complete compiled/runtime physical semantics
+  (`TimeStr`, monotone/chord IDs, note/dot/camera fields, and IgnoreSound) while
+  excluding only GroupIndex topology. R/P/E/A and links are separately rederived
+  and checked for every profile. Source pitch spelling, authored IgnoreSound, and
+  retained MIDI chord voicing remain protected by diagnostic/cache semantic hashes;
+  they are deliberately outside the runtime-reconstructible physical digest.
 - The offline pipeline owns an immutable exact-spelling constituent table for all
   63 non-null chord IDs supported by MIDI chord inference. IgnoreSound resolution
   consults only that evidence table; it neither reads game memory nor constructs

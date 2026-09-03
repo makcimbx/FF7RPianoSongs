@@ -26,6 +26,13 @@ struct SongDifficultyProfile {
     std::wstring title;
     int difficulty = 1;
     int note_count = 0;
+    // Source rows, expanded native events, and required parentless actions are
+    // distinct. note_count remains the compatibility required-action value.
+    std::size_t source_row_count = 0;
+    std::size_t native_prefix_event_count = 0;
+    std::size_t native_event_count = 0;
+    std::size_t required_action_count = 0;
+    std::uint64_t physical_chart_digest = 0;
     float bpm = 0.0f;
     std::array<int32_t, 4> score_thresholds{0, 1200, 2400, 3600};
     std::array<int32_t, 2> mode_change_combo_counts{8, 16};

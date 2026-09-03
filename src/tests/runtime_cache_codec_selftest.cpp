@@ -1,5 +1,6 @@
 #include "pipeline/cache.h"
 #include "pipeline/chart_compiler.h"
+#include "pipeline/chart_event_plan.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/runtime_cache_codec.h"
 
@@ -220,6 +221,16 @@ LoadedSong playable_extended_oracle_song(const std::size_t row_count = 520u) {
         complete.notes[index].pitch = "C4";
         complete.notes[index].chord_id.clear();
     }
+    if (row_count >= 513u) {
+        complete.notes[510].group_index = 7;
+        complete.notes[511].group_index = 7;
+        complete.notes[512].group_index = 7;
+    }
+    if (row_count >= 520u && row_count < kMaximumExtendedChartRows) {
+        complete.notes[513].chord_id = "pca_C";
+        complete.notes[514].pitch.clear();
+        complete.notes[514].chord_id = "pca_D";
+    }
     DiagnosticChartRetention diagnostic;
     if (!compile_chart(complete, &song.chart, &diagnostic, kMaximumExtendedChartRows).ok()) return {};
     complete.notes.resize(kMaxChartRows);
@@ -323,6 +334,14 @@ int main() {
             "exact-520 playable tail did not decode")
         || !expect(playable_520_decoded.difficulty_profiles.front().diagnostic_chart.tail_rows.size() == 8,
             "exact-520 playable tail changed during cache round trip")) return 1;
+    ChartEventPlan playable_520_plan;
+    if (!expect(derive_profile_event_plan(
+            playable_520_decoded.difficulty_profiles.front(), &playable_520_plan)
+            && playable_520_plan.source_row_count == 520u
+            && playable_520_plan.native_prefix_event_count == 512u
+            && playable_520_plan.native_event_count == 521u
+            && playable_520_plan.required_action_count == 519u,
+            "generalized grouped/dual/chord counts changed during cache round trip")) return 1;
     LoadedSong old_policy_destination = playable_520_decoded;
     old_policy_destination.chart_policy_identity = kDiagnosticChartRowPolicyIdentity;
     if (!expect(!decode_runtime_cache(
