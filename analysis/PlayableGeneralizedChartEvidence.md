@@ -2,23 +2,24 @@
 
 This file retains the exact 1.005 static evidence and bounded implementation
 authority for generalizing the accepted monotone-only extended-chart transaction
-to the chart shapes emitted by the MIDI generator: monotone, chord, ungrouped
-dual-hand, chord IgnoreSound, RH-only run grouping, prefix-to-tail group crossings,
-equal-time grouped monotones, and run-local GroupIndex reuse.
+to the chart shapes emitted by the MIDI generator: monotone, chord, dual-hand,
+chord IgnoreSound, mixed-hand row-level grouping, prefix-to-tail group crossings,
+equal-time grouped events, and run-local GroupIndex reuse.
 
 It supersedes the “future work” disposition for those shapes in
 [PlayableMultiTailEvidence.md](PlayableMultiTailEvidence.md), but only under the
 executable, policy, helper, validation, ownership, and rollback gates below. It is
 not runtime qualification, a release claim, authority for another executable, or
-authority to launch the game. Camera cues, nonzero strength, nonzero dot behavior,
-and generator-produced grouped-dual rows remain excluded.
+authority to launch the game. Camera cues, nonzero strength, and nonzero dot
+behavior remain excluded.
 
 ## Evidence Classes, Checkpoint, And Executable Identity
 
-Repository source checkpoint used for this investigation:
+Repository source checkpoints used for this investigation:
 
 ```text
-e8335860e62d1589135000d5d94f111245b16348
+original generalized recovery: e8335860e62d1589135000d5d94f111245b16348
+mixed-group authorization:     c490655b48a65cc3bfcfc694adfe9a9a10dcc626
 ```
 
 All native addresses, bytes, ABIs, layouts, and implementation authority in this
@@ -314,10 +315,56 @@ The parser tracks previous GroupIndex at chart `+0xA3` and one run-local root:
 5. Store the current ID to chart `+0xA3` after processing the row.
 
 Because link prepends, a continuation dual row produces a chain whose immediate
-order is chord then monotone then the old child chain. Grouped-dual semantics are
-therefore understood but remain excluded from the first generated-MIDI policy.
-That policy authorizes groups only when every row in the run is RH-only monotone;
-chord-only and dual-hand rows must use GroupIndex zero.
+order is chord then monotone then the old child chain.
+
+### Root-row and continuation semantics
+
+The native algorithm is row-level, not hand-restricted. `piano_event_link` does
+not inspect or change the hand/side, FName, IgnoreSound, NoteType, DotType, time,
+assignment, or callback of either event. Consequently all of these parser-native
+run shapes are implementation-authorized:
+
+| First row | Parentless events established on first row | Required first-row actions | Run root used for later links |
+| --- | --- | ---: | --- |
+| Monotone-only | Monotone | 1 | Monotone |
+| Chord-only | Chord | 1 | Chord |
+| Dual | Monotone and chord | 2 | Monotone; the first-row chord remains a separate parentless event |
+
+Every event on a continuation row with the same nonzero GroupIndex is linked to
+the one run root. The exact calls are monotone first and chord second. Both
+therefore become children and add zero parentless actions; prepend semantics
+leave the chord at the child-chain head. This yields:
+
+- **chord-only run:** the first chord is the root; later chord, monotone, or dual
+  row events can all be children of that chord root;
+- **monotone -> chord:** one monotone root action owns the later chord child;
+- **monotone -> dual:** one monotone root action owns both events of every later
+  dual row;
+- **dual root:** the first monotone is the run root and the first chord stays
+  parentless, so two first-row actions remain; later events link only to the
+  monotone root;
+- **mixed continuation:** a continuation row may be monotone-only, chord-only, or
+  dual regardless of the root hand.
+
+For count and expected input semantics, `FUN_1439A0744` / RVA `0x039A0744`
+independently proves that only events with null parent `+0x10` contribute to the
+native/list required-action count. The bounded native-group interpretation is that
+linked children are not independent required inputs. Each event retains its own
+side, FName, assignment, callback, and IgnoreSound state, so mixed children retain
+their own native sound identity. The parser itself emits these mixed link shapes,
+which is direct static authority to construct the same shape after relocation is
+impossible; the exact input-matcher branch remains a runtime assurance gap.
+
+For terminal/scoring semantics, `FUN_1439A6758` terminalizes a root once and, for
+recovered result states 5 and 6, traverses root `+0x18` and marks each child
+`+0x4F=1`. `FUN_1439BA628` / RVA `0x039BA628` still traverses all `E` events twice
+for update and completion. Therefore grouped children retain their event/audio
+identity and participate in native update/completion traversal but do not add to
+the parentless action count; root handling is expected to make them terminal so
+completion can finish. The exact child-audio dispatch and result-counter increment
+instructions are not recovered. Mixed-hand audio playback, required input
+behavior, `result_sum==A`, and natural completion remain mandatory runtime
+observations rather than static acceptance claims.
 
 ### Suppression and reconstruction strategy
 
@@ -342,11 +389,25 @@ runs wholly in the prefix, wholly in the tail, and runs whose root is in row 511
 and whose first tail child is in row 512.
 
 Equal `TimeStr` values are valid for adjacent rows: the grouping algorithm depends
-on source order and adjacent GroupIndex, not a strict time increase. The runtime
-plan must preserve stable generator order and require nondecreasing decoded times.
-Several same-time RH monotones may therefore become separate events in one RH-only
-run and one parentless required action. This is a game-mechanic approximation of
-polyphonic RH MIDI, not a claim of multiple independent simultaneous RH inputs.
+on deterministic source order and adjacent GroupIndex, not a strict time increase.
+The runtime plan must preserve generator order and require nondecreasing decoded
+times.
+
+The recommended generated representation is one physical native event per source
+row: one monotone or one chord, never a generator-created dual row. At one frame,
+emit stable-ordered monotones first and chords second, retain their original
+time/duration/identity, and use one nonzero run ID when that profile intends one
+automated required action. The first monotone becomes root and later same-time
+monotones/chords become children. This changes neither physical musical events nor
+format-14 representation; it only exposes their deterministic row order and
+profile-specific grouping. It is a game-mechanic approximation of polyphonic MIDI,
+not a claim of multiple independent simultaneous RH inputs.
+
+Explicit authored dual rows remain supported by the runtime plan. When a dual row
+starts a run it requires two actions; when it continues a run both hand events are
+children. A generator that wants one input for a same-time monotone and chord
+should use the recommended split monotone-root then chord-follower layout, not a
+dual root row.
 
 Group IDs are run-local bytes. IDs 1 through 255 may cycle indefinitely when the
 next intended run is separated by zero or uses a different adjacent ID. Reusing
@@ -368,6 +429,20 @@ All addresses are derived from checked indices only after final allocation
 identity is known. Prefix links must initially be null because parser grouping was
 suppressed; tails must be constructor-null. Repeated mutations of one root are
 journaled separately, so reverse replay restores the exact prior chain.
+
+Post-link validation must prove, without trusting retained pointers from an
+earlier allocation:
+
+- every root/child address is re-derived from a checked compact index inside the
+  current `E*0x90` allocation;
+- every planned child has `+0x10` equal to its planned root and `+0x18` equal to
+  the child that preceded it in the final prepended chain;
+- every root `+0x18` equals the last child linked to that root;
+- every unplanned event remains parentless, and every planned child appears once;
+- bounded root-chain walks remain inside the allocation, contain no duplicates or
+  cycles, and collectively contain exactly `links.size()` children;
+- recounting null `+0x10` fields yields `A==E-links.size()`; and
+- chart `+0xA3` equals the final source row's GroupIndex, including zero.
 
 Normal rollback order is:
 
@@ -398,6 +473,48 @@ T = E - P
 
 Each nonempty monotone contributes one event and each nonempty chord contributes
 one event. Every accepted row must contain at least one event.
+
+Derive all four counts and links in one immutable source-row pass:
+
+```text
+events = []
+links = []
+A = 0
+previous_group = 0
+root_index = none
+
+for each row r in stable source order:
+    row_events = []
+    if monotone is present:
+        append event(compact_index, r, monotone, ordinal=2*r) to events/row_events
+    if chord is present:
+        append event(compact_index, r, chord, ordinal=2*r+1) to events/row_events
+
+    if r < 512:
+        P += size(row_events)
+
+    if GroupIndex == 0:
+        A += size(row_events)
+        root_index = none
+    else if root_index is none or GroupIndex != previous_group:
+        root_index = first monotone index in row_events, else first chord index
+        A += size(row_events) // all first-row events remain parentless
+    else:
+        append link(root_index, each row event in monotone-then-chord order)
+        // continuation events add zero to A
+
+    previous_group = GroupIndex
+
+R = number of rows
+E = size(events)
+T = E - P
+```
+
+The planner rejects an empty `row_events`, checked ordinal overflow, a nonzero run
+without a root, any compact-index mismatch, or any link whose root/child is out of
+range or identical. `A` must also equal `E-links.size()` because every link gives
+one previously parentless event exactly one parent. This equality is a plan
+integrity check, not an alternative independently maintained count formula.
 
 The exact consumer contract is:
 
@@ -479,7 +596,7 @@ Generalized mutation requires a new policy identity and generation. One suitable
 identity is:
 
 ```text
-chart_rows=native512+generated;events<=8192;hands=mono,chord,dual;ignore=verified;groups=rh-runlocal;build=1005
+chart_rows=native512+generated;events<=8192;hands=mono,chord,dual;ignore=verified;groups=row-runlocal-mixed;generated=split-single-event;build=1005
 ```
 
 The exact final string is an Integration decision, but it must identify the
@@ -511,8 +628,10 @@ validation, descriptor construction, manifest rendering, runtime preflight, and
 tests. MIDI generation must replace the one-row-per-frame map with stable ordered
 multi-row storage, recycle GroupIndex by adjacent run semantics, and remove the
 diagnostic-fixture-only retention gate only when the generalized policy is active.
-The first policy rejects empty rows, grouped chord/dual rows, camera, nonzero
-strength, and nonzero dot before cache publication.
+The policy rejects empty rows, unstable equal-frame order, camera, nonzero
+strength, and nonzero dot before cache publication. It permits grouped chord and
+dual rows according to the exact row-level plan, while generated MIDI should use
+split one-event rows and reserve explicit dual rows for authored input.
 
 ## Fail-Closed Generalized Transaction
 
@@ -525,7 +644,7 @@ Before native mutation:
 2. Require the new exact policy identity/generation and the verified 1.005
    executable.
 3. Derive one immutable checked event/link plan and exact `R/P/E/A`.
-4. Enforce the event/source bounds and RH-only group policy.
+4. Enforce the event/source bounds and exact mixed row-level group plan.
 5. Require camera zero, strength zero, supported NoteType, and DotType zero.
 6. Strictly resolve every event and IgnoreSound FName and retain only packed
    values, indices, times, fields, and immutable descriptor identity.
@@ -595,38 +714,49 @@ child pointers.
 
 ## Representative Single-Session Qualification Contract
 
-One deterministic maximum profile can cover every newly authorized first-policy
+One deterministic maximum profile can cover every newly authorized row-level
 shape:
 
 ```text
 R source rows:          4099
 dual-hand rows:         4093
-monotone-only rows:        4
-chord-only rows:           2
-E native events:        4093*2 + 4 + 2 = 8192
+monotone-only rows:        3
+chord-only rows:           3
+E native events:        4093*2 + 3 + 3 = 8192
 P prefix events:        510*2 + 2 = 1022
 T tail events:          8192 - 1022 = 7170
-grouped child events:      2
-A parentless actions:   8192 - 2 = 8190
+group/link child events:   9
+A parentless actions:   8192 - 9 = 8183
 ```
 
 Exact shape:
 
-- chord-only rows 100 and 600;
-- monotone-only rows 511, 512, 2000, and 2001;
-- all other rows dual-hand and ungrouped;
-- rows 511 and 512 use GroupIndex 1, proving a prefix-root to tail-child link;
-- rows 2000 and 2001 reuse GroupIndex 1 after zero-group separators and share
-  equal `TimeStr`, proving run-local ID reuse and equal-time RH grouping;
-- all other rows use GroupIndex zero;
-- tail chord-bearing rows include ordered IgnoreSound cardinalities one, two,
-  and three, for example dual rows 700/701 and chord-only row 600;
+- chord-only rows 100, 512, and 600;
+- monotone-only rows 511, 800, and 2000;
+- all other rows are dual-hand;
+- rows 511 and 512 share equal `TimeStr` and GroupIndex 1, proving the recommended
+  split monotone-root/chord-follower layout across the prefix-tail boundary;
+- chord-only row 600 and dual row 601 use GroupIndex 2, proving chord-root to mixed
+  dual continuation;
+- dual rows 700 and 701 use GroupIndex 3, proving dual-root semantics: both row-700
+  events stay parentless while both row-701 events link to the monotone root;
+- monotone-only row 800 and dual row 801 use GroupIndex 4, proving monotone-root to
+  dual continuation;
+- monotone-only row 2000 and dual row 2001 reuse GroupIndex 1 after zero-group
+  separators, proving run-local ID reuse with mixed continuation;
+- every listed pair shares equal `TimeStr`; all other rows use GroupIndex zero;
+- tail chord-bearing events carry ordered IgnoreSound cardinalities one, two, and
+  three, for example row-600 chord root, row-601 chord child, and row-700
+  first-row parentless chord;
 - camera, strength, and dot remain zero.
 
 The arithmetic is exact: the first 512 rows contain 510 dual rows plus two
 single-hand rows, hence `P=1022`. The remaining 3587 rows contain 3583 dual rows
-plus four single-hand rows, hence `T=7170`. Each two-row RH-only run contributes
-one linked child, so `A=8190`.
+plus four single-hand rows, hence `T=7170`. The crossing split run links one chord;
+the chord-root mixed run links two row-601 events; the dual-root run links two
+row-701 events while retaining two row-700 roots; and each monotone-to-dual run
+links two events. There are exactly nine links, so exactly nine events become
+children and `A=E-9=8183`.
 
 A single reviewed, human-controlled runtime session must establish:
 
@@ -636,8 +766,9 @@ A single reviewed, human-controlled runtime session must establish:
    growth;
 3. monotone-only, chord-only, and dual-hand tail field/callback correctness;
 4. one-, two-, and three-entry tail IgnoreSound ownership and validation;
-5. prefix-tail link crossing, equal-time run, and GroupIndex-1 reuse;
-6. displayed/list/action count 8190, result-counter sum 8190, and natural
+5. prefix-tail mixed link crossing, chord-root, dual-root, monotone-to-dual,
+   equal-time split layout, exact child-chain order, and GroupIndex-1 reuse;
+6. displayed/list/action count 8183, result-counter sum 8183, and natural
    completion across all 8192 events;
 7. replacement by an ordinary 481-event song, old immutable-token invalidation,
    native destruction, replacement playback, and clean exit.
@@ -671,6 +802,11 @@ human-controlled runtime gate.
 
 ### Implementation prerequisites, not new research blockers
 
+There is no remaining direct static-evidence blocker to implementing mixed
+row-level groups on the exact verified 1.005 path. The following are fail-closed
+Integration work and review gates, not requests for another reverse-engineering
+experiment:
+
 - Add the catalog/runtime-spec entry and startup signature check for
   `piano_event_ignore_sound_insert` using the exact bytes above.
 - Promote `piano_event_link` from signature-only evidence to a checked callable
@@ -692,8 +828,9 @@ human-controlled runtime gate.
   interruption, or SEH is claimed.
 - No cross-thread quiescence beyond repeated synchronous identity checks is
   proved.
-- Grouped-dual native semantics are described but generator production remains
-  excluded; RH-only runs are the first policy.
+- Grouped chord and dual semantics are implementation-authorized but have no
+  generalized runtime qualification. Generated MIDI should use deterministic
+  split one-event rows; explicit authored dual rows remain supported.
 - Camera-tail ownership, nonzero strength source/semantics, and nonzero DotType
   gameplay remain excluded.
 - Assignment success for every generated FName domain remains a runtime gate;
@@ -708,4 +845,4 @@ human-controlled runtime gate.
 | --- | --- |
 | Camera | Camera events use the separate chart vector at `chart+0x70`. Tail append identity, relocation, element ownership, rollback, and native destruction are not recovered as one complete transaction. |
 | Strength | The constructor parameter position is known, but the MIDI/source mapping and native update/scoring meaning of nonzero strength are not established. Generalized tails must pass `0.0f` and validate it. |
-| DotType | Constructor storage at event `+0x4C` is known, but nonzero-dot timing, input, scoring, and completion behavior are not runtime-qualified. The first policy requires zero even though the field can be constructed. |
+| DotType | Constructor storage at event `+0x4C` is known, but nonzero-dot timing, input, scoring, and completion behavior are not runtime-qualified. The bounded policy requires zero even though the field can be constructed. |
