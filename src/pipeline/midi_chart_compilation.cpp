@@ -2690,12 +2690,19 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         // at or after its authoritative normalized MIDI tick.
         for (const MeterChange& meter : meters) {
             if (!meter.explicit_event) continue;
-            const auto boundary = std::find_if(physical_rows.begin(), physical_rows.end(),
-                [&](const PhysicalRow& row) { return row.source.tick >= meter.tick; });
-            if (boundary == physical_rows.end()) continue;
-            std::size_t row = static_cast<std::size_t>(std::distance(physical_rows.begin(), boundary));
-            while (row > 0 && mandatory_edge[row]) --row;
-            roots[row] = true;
+            for (std::size_t begin = 0; begin < physical_rows.size();) {
+                std::size_t end = begin + 1u;
+                while (end < physical_rows.size() && mandatory_edge[end]) ++end;
+                int unit_start_tick = physical_rows[begin].source.tick;
+                for (std::size_t row = begin + 1u; row < end; ++row) {
+                    unit_start_tick = std::min(unit_start_tick, physical_rows[row].source.tick);
+                }
+                if (unit_start_tick >= meter.tick) {
+                    roots[begin] = true;
+                    break;
+                }
+                begin = end;
+            }
         }
 
         constexpr std::size_t kMaximumVanillaFollowers = 7;
@@ -2763,7 +2770,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         std::size_t root_count = static_cast<std::size_t>(std::count(roots.begin(), roots.end(), true));
         if (root_count > target_maximum) {
             result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
-                "inherited generalized roots exceed the current physical-domain target band");
+                "mandatory/inherited generalized roots exceed the current physical-domain target band");
             return result;
         }
 

@@ -225,6 +225,24 @@ std::vector<unsigned char> physical_frame_midi_bytes(
     return file;
 }
 
+std::vector<unsigned char> humanized_meter_boundary_midi_bytes() {
+    constexpr int base_tick = 1920;
+    std::vector<MidiEvent> melody;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    add_note(&melody, base_tick, 8, 60, 100);
+    add_note(&melody, base_tick + 112, 8, 62, 100);
+    melody.push_back({base_tick + 115, 0, {0xff, 0x58, 0x04, 0x03, 0x02, 24, 8}});
+    add_note(&melody, base_tick + 118, 8, 64, 100);
+    add_note(&melody, base_tick + 256, 8, 65, 100);
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    return file;
+}
+
 class Fingerprint {
 public:
     void integer(const std::uint64_t value) {
@@ -961,15 +979,62 @@ int main(int argc, char** argv) {
 
     const Observation meter_boundary = generate_physical_fixture(
         "meter-boundary.mid", {{0, {60}}, {40, {62}}, {80, {64}}}, {{40, 3}});
+    const std::filesystem::path humanized_meter_path = temporary.path() / "humanized-meter-boundary.mid";
+    const std::vector<unsigned char> humanized_meter_fixture = humanized_meter_boundary_midi_bytes();
+    {
+        std::ofstream stream(humanized_meter_path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(humanized_meter_fixture.data()),
+            static_cast<std::streamsize>(humanized_meter_fixture.size()));
+    }
+    ff7rp::pipeline::NormalizedMidiSource humanized_meter_source;
+    const Status humanized_meter_normalization = ff7rp::pipeline::normalize_midi_source(
+        humanized_meter_path.string(), &humanized_meter_source);
+    const auto has_source_note = [&](const int tick, const int pitch) {
+        return std::any_of(humanized_meter_source.notes.begin(), humanized_meter_source.notes.end(),
+            [&](const auto& note) { return note.source.tick == tick && note.source.pitch == pitch; });
+    };
+    const bool has_straddled_meter = std::any_of(
+        humanized_meter_source.meters.begin(), humanized_meter_source.meters.end(),
+        [](const auto& meter) { return meter.explicit_event && meter.tick == 2035; });
+    const Observation humanized_meter_boundary = generate(
+        humanized_meter_path, no_audio, envelope_config(1));
     const Observation downbeat_preference = generate_physical_fixture(
         "downbeat-preference.mid", {{0, {60}}, {30, {60}}, {60, {60}}, {90, {60}}}, {{0, 3}});
     if (!meter_boundary.status.ok() || !topology_root(meter_boundary.notes, 1u)
+        || !humanized_meter_normalization.ok() || !has_source_note(2032, 62)
+        || !has_source_note(2038, 64) || !has_straddled_meter
+        || !humanized_meter_boundary.status.ok() || humanized_meter_boundary.notes.size() != 4u
+        || topology_root(humanized_meter_boundary.notes, 1u)
+        || topology_root(humanized_meter_boundary.notes, 2u)
+        || !topology_root(humanized_meter_boundary.notes, 3u)
+        || std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0)
+            != std::llround(humanized_meter_boundary.notes[2].beat * 3600.0 / 120.0)
         || !downbeat_preference.status.ok() || !topology_root(downbeat_preference.notes, 3u)
         || downbeat_preference.stats.selected_actions != 2u) {
         return fail("meter boundaries or downbeat root preference were not preserved: meter_status=["
             + meter_boundary.status.message + "] meter_rows=" + std::to_string(meter_boundary.notes.size())
             + " meter_middle_root=" + std::to_string(meter_boundary.notes.size() > 1u
-                && topology_root(meter_boundary.notes, 1u)) + " downbeat_status=["
+                && topology_root(meter_boundary.notes, 1u)) + " humanized_status=["
+            + humanized_meter_boundary.status.message + "] humanized_rows="
+            + std::to_string(humanized_meter_boundary.notes.size()) + " humanized_roots="
+            + (humanized_meter_boundary.notes.empty() ? std::string{} :
+                std::to_string(topology_root(humanized_meter_boundary.notes, 0u)))
+            + (humanized_meter_boundary.notes.size() < 2u ? std::string{} :
+                std::to_string(topology_root(humanized_meter_boundary.notes, 1u)))
+            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
+                std::to_string(topology_root(humanized_meter_boundary.notes, 2u)))
+            + (humanized_meter_boundary.notes.size() < 4u ? std::string{} :
+                std::to_string(topology_root(humanized_meter_boundary.notes, 3u)))
+            + " humanized_beats="
+            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
+                std::to_string(humanized_meter_boundary.notes[1].beat) + ","
+                + std::to_string(humanized_meter_boundary.notes[2].beat))
+            + " humanized_frames="
+            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
+                std::to_string(std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0))
+                + "," + std::to_string(std::llround(
+                    humanized_meter_boundary.notes[2].beat * 3600.0 / 120.0)))
+            + " downbeat_status=["
             + downbeat_preference.status.message + "] downbeat_rows="
             + std::to_string(downbeat_preference.notes.size()) + " downbeat_root="
             + std::to_string(downbeat_preference.notes.size() > 3u
@@ -1022,33 +1087,49 @@ int main(int argc, char** argv) {
         return fail("generalized exact R/P/E/A identity changed across profile topology");
     }
 
-    const std::filesystem::path nested_gap_path = write_physical_fixture("nested-label-gaps.mid",
-        {{0, {60}}, {30, {61}}, {60, {62}}, {90, {63}}, {120, {64}}, {150, {65}},
-         {180, {66}}, {210, {67}}});
+    // Production-reachable omission: the vanilla envelope makes five roots mandatory.
+    // Lv.1's physical target band can expose at most four, and Lv.2 remains route
+    // infeasible, so Lv.3 is the first visible profile and Lv.4 inherits its topology.
+    const std::filesystem::path earliest_omission_path = write_physical_fixture(
+        "earliest-mandatory-root-omission.mid",
+        {{0, {60}}, {1, {61}}, {2, {62}}, {3, {63}}, {108, {64}}});
     ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    const Observation visible_lv1 = generate(nested_gap_path, no_audio, envelope_config(1));
-    const Observation visible_lv3 = generate(
-        nested_gap_path, no_audio, envelope_config(3), &visible_lv1.notes);
-    const Observation visible_lv6 = generate(
-        nested_gap_path, no_audio, envelope_config(6), &visible_lv3.notes);
+    const Observation omitted_lv1 = generate(
+        earliest_omission_path, no_audio, envelope_config(1));
+    const Observation omitted_lv1_repeat = generate(
+        earliest_omission_path, no_audio, envelope_config(1));
+    const Observation omitted_lv2 = generate(
+        earliest_omission_path, no_audio, envelope_config(2));
+    const Observation first_visible_lv3 = generate(
+        earliest_omission_path, no_audio, envelope_config(3));
+    const Observation inherited_lv4 = generate(
+        earliest_omission_path, no_audio, envelope_config(4), &first_visible_lv3.notes);
     ff7rp::pipeline::configure_chart_row_limit(false, false);
-    ff7rp::pipeline::ChartEventPlan visible_lv1_plan;
-    ff7rp::pipeline::ChartEventPlan visible_lv3_plan;
-    ff7rp::pipeline::ChartEventPlan visible_lv6_plan;
-    if (!visible_lv1.status.ok() || !visible_lv3.status.ok() || !visible_lv6.status.ok()
-        || !physical_plan(visible_lv1, 1, &visible_lv1_plan)
-        || !physical_plan(visible_lv3, 3, &visible_lv3_plan)
-        || !physical_plan(visible_lv6, 6, &visible_lv6_plan)
-        || visible_lv1_plan.physical_digest != visible_lv3_plan.physical_digest
-        || visible_lv3_plan.physical_digest != visible_lv6_plan.physical_digest) {
-        return fail("visible generalized profiles around omitted labels changed physical identity");
+    constexpr std::string_view expected_omission =
+        "mandatory/inherited generalized roots exceed the current physical-domain target band";
+    ff7rp::pipeline::ChartEventPlan first_visible_plan;
+    ff7rp::pipeline::ChartEventPlan inherited_plan;
+    if (omitted_lv1.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
+        || omitted_lv1.status.message != expected_omission
+        || omitted_lv1_repeat.status.code != omitted_lv1.status.code
+        || omitted_lv1_repeat.status.message != omitted_lv1.status.message
+        || omitted_lv2.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
+        || !first_visible_lv3.status.ok() || !inherited_lv4.status.ok()
+        || first_visible_lv3.stats.selected_actions != 5u
+        || !physical_plan(first_visible_lv3, 3, &first_visible_plan)
+        || !physical_plan(inherited_lv4, 4, &inherited_plan)
+        || first_visible_plan.physical_digest != inherited_plan.physical_digest
+        || first_visible_plan.source_row_count != inherited_plan.source_row_count
+        || first_visible_plan.native_event_count != inherited_plan.native_event_count) {
+        return fail("earliest mandatory-root omission did not preserve the later visible profile chain");
     }
-    for (std::size_t index = 0; index < visible_lv1.notes.size(); ++index) {
-        if ((topology_root(visible_lv1.notes, index) && !topology_root(visible_lv3.notes, index))
-            || (topology_root(visible_lv3.notes, index) && !topology_root(visible_lv6.notes, index))) {
-            return fail("root nesting did not survive omitted intermediate labels (1 -> 3 -> 6)");
+    for (std::size_t index = 0; index < first_visible_lv3.notes.size(); ++index) {
+        if (topology_root(first_visible_lv3.notes, index)
+            && !topology_root(inherited_lv4.notes, index)) {
+            return fail("roots were not nested after the first feasible generalized profile");
         }
     }
+
     std::string cleanup_error;
     if (!temporary.cleanup(&cleanup_error)) return fail("temporary cleanup failed: " + cleanup_error);
     return 0;
