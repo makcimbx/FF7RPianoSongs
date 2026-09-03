@@ -41,16 +41,30 @@ dual rows remain supported by the shared model. Mandatory equal-time RH edges ar
 always grouped. A compact selector works directly on canonical physical-row
 identities; it never translates roots from the legacy reduced candidate domain and
 never removes physical rows. Previously visible roots are pinned, and later profiles
-add only physical-row roots, so easier root sets remain subsets of harder ones. At
-each addition the selector considers a bounded deterministic frontier favoring
-canonical/salient rows and temporal coverage, then chooses the candidate with the
-best exact root-only route ratio. Group
+add only physical-row roots, so easier root sets remain subsets of harder ones.
+Before route selection, consecutive equal-frame monotones become indivisible
+atomic units and a deterministic planner adds the smallest root set needed to
+stay inside the vanilla-derived automation envelope: at most seven followers,
+125 frames from root to last follower, 102 frames between adjacent run rows, and
+no more than zero, one, and two positive-delay followers within 3, 6, and 15
+frames of the root respectively. Same-frame followers count toward the total but
+not those positive-delay windows. A chord is always a separate mandatory root,
+as is the first physical unit at or after an explicit MIDI meter change. An
+atomic unit that cannot satisfy the envelope by itself rejects the profile.
+
+At each later addition the selector considers a bounded deterministic frontier
+favoring downbeats, canonical melody and salience, contour reversals, leaps of at
+least seven semitones, and temporal undercoverage. Thirty-frame run spans and
+twenty-frame adjacent gaps are soft coverage targets, not extra rejection
+limits; repeated pitches alone never create a boundary. Exact root-only route
+quality breaks otherwise equal ranked choices. Group
 IDs are run-local serialization values and cycle through 1..255 after a zero or
 different separator. Every event on a continuation row is automated and does not
 enter action, strain, score-growth, or recognizability counts. Calibrated APM and
 tolerance define a target band over the complete physical active span. The selector
 uses the lower edge of that band as its deterministic minimum and never drops below
-inherited roots. If no selected physical-domain topology passes the root-only route,
+inherited roots. If mandatory or inherited roots exceed the profile target band,
+or no selected physical-domain topology passes the root-only route,
 that label is omitted; physical events are never deleted.
 
 Without verified generalized policy (including build 1.004), the accepted v44

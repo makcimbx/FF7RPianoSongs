@@ -2522,6 +2522,9 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             SourceIdentity source;
             int sector_pitch = 0;
             bool preserve_root = false;
+            bool downbeat = false;
+            bool contour_reversal = false;
+            bool large_leap = false;
         };
         std::map<long long, std::vector<Attack>> rights_by_frame;
         std::map<long long, std::vector<Attack>> chords_by_frame;
@@ -2540,6 +2543,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             row->source = attack.event.source;
             row->sector_pitch = attack.event.source.pitch;
             row->preserve_root = melody_sources.count(attack.event.source) != 0;
+            row->downbeat = attack.metric_accent >= 1.0 - kComparisonEpsilon;
             row->note.pitch = pitch_name(attack.event.source.pitch);
             const auto alternate = physical_alternate_plan.find(attack.event.source);
             row->note.alternate_monotone = alternate != physical_alternate_plan.end() && alternate->second;
@@ -2551,6 +2555,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             row->source = attack.event.source;
             row->sector_pitch = attack.event.source.pitch;
             row->preserve_root = true;
+            row->downbeat = attack.metric_accent >= 1.0 - kComparisonEpsilon;
             row->note.chord_id = attack.chord_id;
             row->note.ignore_sound_pitches = attack.ignore_sound_pitches;
             row->note.source_chord_pitches = attack.source_chord_pitches;
@@ -2607,13 +2612,35 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             return result;
         }
 
-        // Generalized selection operates only on compact roots in the prepared
-        // physical-row domain. Physical rows are immutable and never pruned.
+        // Consecutive equal-frame monotones are one indivisible physical unit.
+        // Its first row is the only selectable root; all remaining rows are
+        // mandatory followers. Chords remain separate one-row units and roots.
         std::vector<bool> mandatory_edge(physical_rows.size(), false);
         for (std::size_t row = 1; row < physical_rows.size(); ++row) {
             const PhysicalRow& previous = physical_rows[row - 1];
             const PhysicalRow& current = physical_rows[row];
             mandatory_edge[row] = previous.frame == current.frame && previous.right && current.right;
+        }
+        std::vector<bool> cluster_start(physical_rows.size(), true);
+        for (std::size_t row = 1; row < physical_rows.size(); ++row) {
+            cluster_start[row] = !mandatory_edge[row];
+        }
+        std::vector<std::size_t> right_cluster_starts;
+        for (std::size_t row = 0; row < physical_rows.size(); ++row) {
+            if (cluster_start[row] && physical_rows[row].right) right_cluster_starts.push_back(row);
+        }
+        for (std::size_t item = 1; item < right_cluster_starts.size(); ++item) {
+            const std::size_t previous = right_cluster_starts[item - 1u];
+            const std::size_t current = right_cluster_starts[item];
+            physical_rows[current].large_leap =
+                std::abs(physical_rows[current].sector_pitch - physical_rows[previous].sector_pitch) >= 7;
+            if (item + 1u < right_cluster_starts.size()) {
+                const std::size_t next = right_cluster_starts[item + 1u];
+                const int incoming = physical_rows[current].sector_pitch - physical_rows[previous].sector_pitch;
+                const int outgoing = physical_rows[next].sector_pitch - physical_rows[current].sector_pitch;
+                physical_rows[current].contour_reversal = incoming != 0 && outgoing != 0
+                    && ((incoming < 0) != (outgoing < 0));
+            }
         }
         const auto is_continuation = [](const std::vector<Note>& notes, const std::size_t row) {
             return row > 0 && notes[row].group_index != 0
@@ -2641,16 +2668,81 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                         "generalized MIDI baseline physical identity changed");
                     return result;
                 }
-                if (!is_continuation(*preferred_baseline, row)) roots[row] = true;
+                if (!is_continuation(*preferred_baseline, row)) {
+                    if (!cluster_start[row]) {
+                        result.status = Status::error(StatusCode::InvalidChart,
+                            "generalized MIDI baseline split an atomic same-frame monotone cluster");
+                        return result;
+                    }
+                    roots[row] = true;
+                }
             }
         }
 
-        // Secondary simultaneous RH rows are mandatory followers. A same-frame
-        // chord remains available as an independent physical-domain root.
+        // Chords are mandatory roots on every difficulty. Equal-frame monotone
+        // followers can never be promoted independently.
         for (std::size_t row = 1; row < physical_rows.size(); ++row) {
             if (mandatory_edge[row]) roots[row] = false;
-            if (config.difficulty == 6 && physical_rows[row].left
-                && physical_rows[row - 1u].frame == physical_rows[row].frame) roots[row] = true;
+            if (physical_rows[row].left) roots[row] = true;
+        }
+
+        // A meter change starts a new automation run at the first physical unit
+        // at or after its authoritative normalized MIDI tick.
+        for (const MeterChange& meter : meters) {
+            if (!meter.explicit_event) continue;
+            const auto boundary = std::find_if(physical_rows.begin(), physical_rows.end(),
+                [&](const PhysicalRow& row) { return row.source.tick >= meter.tick; });
+            if (boundary == physical_rows.end()) continue;
+            std::size_t row = static_cast<std::size_t>(std::distance(physical_rows.begin(), boundary));
+            while (row > 0 && mandatory_edge[row]) --row;
+            roots[row] = true;
+        }
+
+        constexpr std::size_t kMaximumVanillaFollowers = 7;
+        constexpr long long kMaximumVanillaRunSpanFrames = 125;
+        constexpr long long kMaximumVanillaAdjacentGapFrames = 102;
+        constexpr long long kSoftVanillaRunSpanFrames = 30;
+        constexpr long long kSoftVanillaAdjacentGapFrames = 20;
+        const auto segment_obeys_vanilla_envelope = [&](const std::size_t root,
+                                                         const std::size_t end) {
+            if (root >= end || end > physical_rows.size()) return false;
+            if (end - root - 1u > kMaximumVanillaFollowers) return false;
+            std::array<std::size_t, 3> positive_delay_followers{};
+            constexpr std::array<long long, 3> windows{{3, 6, 15}};
+            for (std::size_t row = root + 1u; row < end; ++row) {
+                const long long delay = physical_rows[row].frame - physical_rows[root].frame;
+                const long long adjacent = physical_rows[row].frame - physical_rows[row - 1u].frame;
+                if (delay > kMaximumVanillaRunSpanFrames
+                    || adjacent > kMaximumVanillaAdjacentGapFrames) return false;
+                if (delay <= 0) continue;
+                for (std::size_t window = 0; window < windows.size(); ++window) {
+                    if (delay <= windows[window]) ++positive_delay_followers[window];
+                }
+            }
+            return positive_delay_followers[0] == 0u
+                && positive_delay_followers[1] <= 1u
+                && positive_delay_followers[2] <= 2u;
+        };
+
+        // Establish the smallest deterministic hard-envelope root set before
+        // route optimization. Units are considered whole, so an infeasible
+        // equal-frame cluster rejects instead of being split or pruned.
+        std::size_t active_root = 0;
+        for (std::size_t begin = 0; begin < physical_rows.size();) {
+            std::size_t end = begin + 1u;
+            while (end < physical_rows.size() && mandatory_edge[end]) ++end;
+            if (begin == 0 || roots[begin]) {
+                active_root = begin;
+            } else if (!segment_obeys_vanilla_envelope(active_root, end)) {
+                roots[begin] = true;
+                active_root = begin;
+            }
+            if (!segment_obeys_vanilla_envelope(active_root, end)) {
+                result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
+                    "atomic generalized MIDI cluster exceeds the vanilla automation envelope");
+                return result;
+            }
+            begin = end;
         }
 
         long long supported_frames = 0;
@@ -2695,12 +2787,15 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         struct PhysicalRootState {
             std::vector<bool> roots;
             MidiRouteValidation route;
+            std::size_t preference_rank = 0;
             std::size_t added_row = 0;
         };
         std::vector<PhysicalRootState> root_beam{
             PhysicalRootState{roots,
-                validate_midi_difficulty_route(root_notes(roots), chart_bpm, config.difficulty), 0}};
+                validate_midi_difficulty_route(root_notes(roots), chart_bpm, config.difficulty), 0, 0}};
         const auto root_state_less = [](const PhysicalRootState& a, const PhysicalRootState& b) {
+            if (a.route.feasible != b.route.feasible) return a.route.feasible;
+            if (a.preference_rank != b.preference_rank) return a.preference_rank < b.preference_rank;
             if (a.route.ratio != b.route.ratio) return a.route.ratio < b.route.ratio;
             if (a.added_row != b.added_row) return a.added_row < b.added_row;
             return std::lexicographical_compare(
@@ -2712,7 +2807,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                 std::vector<std::size_t> candidates;
                 std::vector<long long> separations(physical_rows.size(), -1);
                 for (std::size_t row = 0; row < physical_rows.size(); ++row) {
-                    if (state.roots[row] || mandatory_edge[row]) continue;
+                    if (state.roots[row] || !cluster_start[row]) continue;
                     long long separation = std::numeric_limits<long long>::max();
                     for (std::size_t selected = 0; selected < physical_rows.size(); ++selected) {
                         if (!state.roots[selected]) continue;
@@ -2723,8 +2818,26 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                     candidates.push_back(row);
                 }
                 std::sort(candidates.begin(), candidates.end(), [&](const std::size_t a, const std::size_t b) {
+                    const auto soft_undercovered = [&](const std::size_t row) {
+                        std::size_t previous_root = row;
+                        while (previous_root > 0 && !state.roots[previous_root]) --previous_root;
+                        const long long run_span = physical_rows[row].frame - physical_rows[previous_root].frame;
+                        const long long adjacent_gap = row == 0 ? 0 :
+                            physical_rows[row].frame - physical_rows[row - 1u].frame;
+                        return run_span > kSoftVanillaRunSpanFrames
+                            || adjacent_gap > kSoftVanillaAdjacentGapFrames;
+                    };
+                    if (physical_rows[a].downbeat != physical_rows[b].downbeat)
+                        return physical_rows[a].downbeat;
                     if (physical_rows[a].preserve_root != physical_rows[b].preserve_root)
                         return physical_rows[a].preserve_root;
+                    if (physical_rows[a].contour_reversal != physical_rows[b].contour_reversal)
+                        return physical_rows[a].contour_reversal;
+                    if (physical_rows[a].large_leap != physical_rows[b].large_leap)
+                        return physical_rows[a].large_leap;
+                    const bool a_undercovered = soft_undercovered(a);
+                    const bool b_undercovered = soft_undercovered(b);
+                    if (a_undercovered != b_undercovered) return a_undercovered;
                     if (physical_rows[a].salience != physical_rows[b].salience)
                         return physical_rows[a].salience > physical_rows[b].salience;
                     const long long sa = separations[a], sb = separations[b];
@@ -2735,6 +2848,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                 const std::size_t breadth = std::min(frontier, candidates.size());
                 for (std::size_t index = 0; index < breadth; ++index) {
                     PhysicalRootState child = state;
+                    child.preference_rank += index;
                     child.added_row = candidates[index];
                     child.roots[child.added_row] = true;
                     child.route = validate_midi_difficulty_route(
@@ -2778,6 +2892,16 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         };
         std::vector<Note> notes;
         materialize_topology(&notes);
+        for (std::size_t root = 0; root < physical_rows.size();) {
+            std::size_t next = root + 1u;
+            while (next < physical_rows.size() && !roots[next]) ++next;
+            if (!segment_obeys_vanilla_envelope(root, next)) {
+                result.status = Status::error(StatusCode::InvalidChart,
+                    "materialized generalized MIDI topology exceeds the vanilla automation envelope");
+                return result;
+            }
+            root = next;
+        }
         MidiRouteValidation route = validate_midi_difficulty_route(notes, chart_bpm, config.difficulty);
         const std::size_t actions = required_action_count(notes);
         if (actions != root_count) {

@@ -190,6 +190,41 @@ std::vector<unsigned char> profile_group_fixture_midi_bytes(const int fast_spaci
     return file;
 }
 
+struct PhysicalFrame {
+    int frame = 0;
+    std::vector<int> pitches;
+    int velocity = 100;
+};
+
+std::vector<unsigned char> physical_frame_midi_bytes(
+    const std::vector<PhysicalFrame>& frames,
+    const std::vector<std::pair<int, int>>& meter_changes = {}) {
+    constexpr int base_tick = 1920;
+    constexpr int ticks_per_frame = 16;
+    std::vector<MidiEvent> melody;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    if (std::none_of(meter_changes.begin(), meter_changes.end(),
+            [](const auto& change) { return change.first == 0; })) {
+        melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    }
+    for (const auto& [frame, numerator] : meter_changes) {
+        melody.push_back({base_tick + frame * ticks_per_frame, 0,
+            {0xff, 0x58, 0x04, static_cast<unsigned char>(numerator), 0x02, 24, 8}});
+    }
+    for (const PhysicalFrame& frame : frames) {
+        for (const int pitch : frame.pitches) {
+            add_note(&melody, base_tick + frame.frame * ticks_per_frame, 8,
+                pitch, frame.velocity);
+        }
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    return file;
+}
+
 class Fingerprint {
 public:
     void integer(const std::uint64_t value) {
@@ -448,6 +483,14 @@ int main(int argc, char** argv) {
     };
     const std::filesystem::path profile_group_path = write_group_fixture("profile-group.mid", 105);
     const std::filesystem::path multi_follower_path = write_group_fixture("multi-follower-group.mid", 35);
+    const auto write_physical_fixture = [&](const char* name, const std::vector<PhysicalFrame>& frames,
+                                             const std::vector<std::pair<int, int>>& meters = {}) {
+        const std::filesystem::path path = temporary.path() / name;
+        const std::vector<unsigned char> fixture = physical_frame_midi_bytes(frames, meters);
+        std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+        stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
+        return path;
+    };
 
     const WavAudio no_audio;
     const auto find_pitch = [](const Observation& observation, const std::string_view pitch) {
@@ -850,6 +893,160 @@ int main(int argc, char** argv) {
         if (right_root(physical_ambiguous_easy.notes, index)
             && !right_root(physical_ambiguous.notes, index)) {
             return fail("generalized easy-profile roots were not nested in the hard profile");
+        }
+    }
+    const auto topology_root = [](const std::vector<Note>& notes, const std::size_t index) {
+        return notes[index].group_index == 0 || index == 0
+            || notes[index - 1u].group_index != notes[index].group_index;
+    };
+    const auto envelope_config = [](const int difficulty) {
+        SongConfig config = config_for(difficulty);
+        config.midi_audio_alignment_seconds = 0.0;
+        config.midi_audio_offset_seconds = 0.0;
+        return config;
+    };
+    const auto generate_physical_fixture = [&](const char* name, const std::vector<PhysicalFrame>& frames,
+                                                const std::vector<std::pair<int, int>>& meters = {}) {
+        return generate(write_physical_fixture(name, frames, meters), no_audio, envelope_config(1));
+    };
+
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    const Observation window3 = generate_physical_fixture("window-3.mid", {{0, {60}}, {3, {62}}});
+    const Observation window6 = generate_physical_fixture("window-6.mid", {{0, {60}}, {6, {62}}});
+    const Observation window15 = generate_physical_fixture(
+        "window-15.mid", {{0, {60}}, {7, {62}}, {15, {64}}});
+    const Observation window15_over = generate_physical_fixture(
+        "window-15-over.mid", {{0, {60}}, {7, {62}}, {14, {64}}, {15, {65}}});
+    if (!window3.status.ok() || window3.notes.size() != 2u || !topology_root(window3.notes, 1u)
+        || !window6.status.ok() || window6.notes.size() != 2u || topology_root(window6.notes, 1u)
+        || !window15.status.ok() || window15.notes.size() != 3u
+        || topology_root(window15.notes, 1u) || topology_root(window15.notes, 2u)
+        || !window15_over.status.ok() || window15_over.notes.size() != 4u
+        || !topology_root(window15_over.notes, 3u)) {
+        return fail("3/6/15-frame positive-delay envelope boundaries were not inclusive and deterministic");
+    }
+
+    const Observation seven_followers = generate_physical_fixture(
+        "seven-followers.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55}}});
+    const Observation eight_followers = generate_physical_fixture(
+        "eight-followers.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
+    const Observation eight_followers_repeat = generate_physical_fixture(
+        "eight-followers-repeat.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
+    if (!seven_followers.status.ok() || seven_followers.notes.size() != 8u
+        || std::count_if(seven_followers.notes.begin(), seven_followers.notes.end(),
+            [&](const Note& note) { return topology_root(seven_followers.notes,
+                static_cast<std::size_t>(&note - seven_followers.notes.data())); }) != 1
+        || eight_followers.status.ok()
+        || eight_followers.status.message.find("atomic") == std::string::npos
+        || eight_followers_repeat.status.code != eight_followers.status.code
+        || eight_followers_repeat.status.message != eight_followers.status.message) {
+        return fail("same-frame atomic monotone clusters did not preserve the 7/8 follower boundary");
+    }
+
+    const Observation gap102 = generate_physical_fixture("gap-102.mid", {{0, {60}}, {102, {62}}});
+    const Observation gap103 = generate_physical_fixture("gap-103.mid", {{0, {60}}, {103, {62}}});
+    if (!gap102.status.ok() || topology_root(gap102.notes, 1u)
+        || !gap103.status.ok() || !topology_root(gap103.notes, 1u)) {
+        return fail("102/103-frame adjacent-gap envelope boundary changed");
+    }
+
+    const Observation span125 = generate_physical_fixture(
+        "span-125.mid", {{0, {60}, 90}, {100, {62}, 127}, {125, {64}, 20}});
+    const Observation span126 = generate_physical_fixture(
+        "span-126.mid", {{0, {60}, 90}, {100, {62}, 127}, {126, {64}, 20}});
+    if (!span125.status.ok() || span125.notes.size() != 3u || topology_root(span125.notes, 2u)
+        || !span126.status.ok() || span126.notes.size() != 3u || !topology_root(span126.notes, 2u)) {
+        return fail("125/126-frame root-span envelope boundary changed");
+    }
+
+    const Observation meter_boundary = generate_physical_fixture(
+        "meter-boundary.mid", {{0, {60}}, {40, {62}}, {80, {64}}}, {{40, 3}});
+    const Observation downbeat_preference = generate_physical_fixture(
+        "downbeat-preference.mid", {{0, {60}}, {30, {60}}, {60, {60}}, {90, {60}}}, {{0, 3}});
+    if (!meter_boundary.status.ok() || !topology_root(meter_boundary.notes, 1u)
+        || !downbeat_preference.status.ok() || !topology_root(downbeat_preference.notes, 3u)
+        || downbeat_preference.stats.selected_actions != 2u) {
+        return fail("meter boundaries or downbeat root preference were not preserved: meter_status=["
+            + meter_boundary.status.message + "] meter_rows=" + std::to_string(meter_boundary.notes.size())
+            + " meter_middle_root=" + std::to_string(meter_boundary.notes.size() > 1u
+                && topology_root(meter_boundary.notes, 1u)) + " downbeat_status=["
+            + downbeat_preference.status.message + "] downbeat_rows="
+            + std::to_string(downbeat_preference.notes.size()) + " downbeat_root="
+            + std::to_string(downbeat_preference.notes.size() > 3u
+                && topology_root(downbeat_preference.notes, 3u)) + " actions="
+            + std::to_string(downbeat_preference.stats.selected_actions) + " roots="
+            + (downbeat_preference.notes.empty() ? std::string{} :
+                std::to_string(topology_root(downbeat_preference.notes, 0u)))
+            + (downbeat_preference.notes.size() < 2u ? std::string{} :
+                std::to_string(topology_root(downbeat_preference.notes, 1u)))
+            + (downbeat_preference.notes.size() < 3u ? std::string{} :
+                std::to_string(topology_root(downbeat_preference.notes, 2u)))
+            + (downbeat_preference.notes.size() < 4u ? std::string{} :
+                std::to_string(topology_root(downbeat_preference.notes, 3u))));
+    }
+
+    const Observation physical_exact_easy = generate(exact_path, no_audio, config_for(1));
+    if (!physical_exact_easy.status.ok()) return fail("easy generalized chord fixture failed");
+    for (std::size_t index = 0; index < physical_exact_easy.notes.size(); ++index) {
+        if (!physical_exact_easy.notes[index].chord_id.empty()
+            && !topology_root(physical_exact_easy.notes, index)) {
+            return fail("generated chord row was not an independent root on every difficulty");
+        }
+    }
+
+    std::vector<PhysicalFrame> id_frames;
+    id_frames.reserve(256u);
+    for (int index = 0; index < 256; ++index) {
+        id_frames.push_back({index * 103, {48 + index % 12, 72 + index % 12}});
+    }
+    const Observation id_reuse = generate_physical_fixture("id-reuse.mid", id_frames);
+    if (!id_reuse.status.ok() || id_reuse.notes.size() != 512u
+        || id_reuse.notes[0].group_index != 1u || id_reuse.notes[1].group_index != 1u
+        || id_reuse.notes[508].group_index != 255u || id_reuse.notes[509].group_index != 255u
+        || id_reuse.notes[510].group_index != 1u || id_reuse.notes[511].group_index != 1u) {
+        return fail("run-local group IDs did not cycle safely through 1..255");
+    }
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+
+    ff7rp::pipeline::ChartEventPlan exact_easy_plan;
+    ff7rp::pipeline::ChartEventPlan exact_hard_plan;
+    if (!physical_plan(physical_exact_easy, 1, &exact_easy_plan)
+        || !physical_plan(physical_exact, 6, &exact_hard_plan)
+        || exact_easy_plan.physical_digest != exact_hard_plan.physical_digest
+        || exact_easy_plan.source_row_count != physical_exact_easy.notes.size()
+        || exact_easy_plan.native_event_count != physical_exact_easy.notes.size()
+        || exact_easy_plan.required_action_count != physical_exact_easy.stats.selected_actions
+        || exact_hard_plan.source_row_count != physical_exact.notes.size()
+        || exact_hard_plan.native_event_count != physical_exact.notes.size()
+        || exact_hard_plan.required_action_count != physical_exact.stats.selected_actions) {
+        return fail("generalized exact R/P/E/A identity changed across profile topology");
+    }
+
+    const std::filesystem::path nested_gap_path = write_physical_fixture("nested-label-gaps.mid",
+        {{0, {60}}, {30, {61}}, {60, {62}}, {90, {63}}, {120, {64}}, {150, {65}},
+         {180, {66}}, {210, {67}}});
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    const Observation visible_lv1 = generate(nested_gap_path, no_audio, envelope_config(1));
+    const Observation visible_lv3 = generate(
+        nested_gap_path, no_audio, envelope_config(3), &visible_lv1.notes);
+    const Observation visible_lv6 = generate(
+        nested_gap_path, no_audio, envelope_config(6), &visible_lv3.notes);
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    ff7rp::pipeline::ChartEventPlan visible_lv1_plan;
+    ff7rp::pipeline::ChartEventPlan visible_lv3_plan;
+    ff7rp::pipeline::ChartEventPlan visible_lv6_plan;
+    if (!visible_lv1.status.ok() || !visible_lv3.status.ok() || !visible_lv6.status.ok()
+        || !physical_plan(visible_lv1, 1, &visible_lv1_plan)
+        || !physical_plan(visible_lv3, 3, &visible_lv3_plan)
+        || !physical_plan(visible_lv6, 6, &visible_lv6_plan)
+        || visible_lv1_plan.physical_digest != visible_lv3_plan.physical_digest
+        || visible_lv3_plan.physical_digest != visible_lv6_plan.physical_digest) {
+        return fail("visible generalized profiles around omitted labels changed physical identity");
+    }
+    for (std::size_t index = 0; index < visible_lv1.notes.size(); ++index) {
+        if ((topology_root(visible_lv1.notes, index) && !topology_root(visible_lv3.notes, index))
+            || (topology_root(visible_lv3.notes, index) && !topology_root(visible_lv6.notes, index))) {
+            return fail("root nesting did not survive omitted intermediate labels (1 -> 3 -> 6)");
         }
     }
     std::string cleanup_error;
