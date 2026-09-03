@@ -183,7 +183,10 @@ void model_terminal(PublicationState& state, std::uint64_t generation,
 
 enum class GeneralizedFailure {
     None, Preflight, ConstructorNonTail, IgnoreSound, Callback,
-    Link, MaxPublish, CountValidation, UncertainOwnership,
+    Link, GroupPrePublishRead, GroupPrePublishDrift,
+    GroupPostWriteRead, GroupPostWriteMismatch,
+    GroupRollbackRead, GroupRollbackDrift,
+    MaxPublish, CountValidation, UncertainOwnership,
 };
 
 struct GeneralizedRequest {
@@ -205,6 +208,11 @@ struct GeneralizedResult {
     std::size_t published_actions = 0;
     std::size_t constructed_tails = 0;
     std::size_t applied_links = 0;
+    std::uint8_t group_byte = 0;
+    std::size_t group_write_count = 0;
+    std::size_t group_restore_count = 0;
+    bool group_byte_published = false;
+    bool group_byte_final_verified = false;
     std::vector<std::size_t> destroyed_compact_indices;
     std::vector<std::size_t> rolled_back_link_indices;
 };

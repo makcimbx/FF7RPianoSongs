@@ -220,6 +220,72 @@ bool test_generalized_representative_plan()
         || success.constructed_tails != 7170 || success.applied_links != 9)
         return false;
 
+    // A zero-link plan whose final byte already equals the suppressed parser
+    // state must prove that state without issuing a redundant group-byte write.
+    std::vector<ChartEventRow> ungrouped_rows(513);
+    for (auto& row : ungrouped_rows) { row.time_str = "00_00"; row.monotone_id = "C4"; }
+    const ChartEventPlan ungrouped_plan = derive_chart_event_plan(ungrouped_rows);
+    GeneralizedRequest ungrouped_request{&ungrouped_plan};
+    const GeneralizedResult ungrouped_success = run_generalized(ungrouped_request);
+    if (!ungrouped_success.count_committed || ungrouped_success.group_write_count != 0
+        || ungrouped_success.group_restore_count != 0
+        || ungrouped_success.group_byte_published
+        || !ungrouped_success.group_byte_final_verified) return false;
+    ungrouped_request.failure = GeneralizedFailure::MaxPublish;
+    const GeneralizedResult ungrouped_rollback = run_generalized(ungrouped_request);
+    if (!ungrouped_rollback.rollback_completed
+        || ungrouped_rollback.group_write_count != 0
+        || ungrouped_rollback.group_restore_count != 0
+        || ungrouped_rollback.group_byte != 0
+        || ungrouped_rollback.destroyed_compact_indices.empty()) return false;
+
+    // A crossing run leaves a nonzero final parser-equivalent byte, exercising
+    // verified publication and ownership-proven restoration.
+    std::vector<ChartEventRow> grouped_rows = ungrouped_rows;
+    grouped_rows[511].group_index = grouped_rows[512].group_index = 1;
+    const ChartEventPlan grouped_plan = derive_chart_event_plan(grouped_rows);
+    if (!grouped_plan.valid() || grouped_plan.links.size() != 1
+        || grouped_plan.final_group_index != 1) return false;
+    GeneralizedRequest grouped_request{&grouped_plan};
+    const GeneralizedResult grouped_success = run_generalized(grouped_request);
+    if (!grouped_success.count_committed || grouped_success.group_write_count != 1
+        || !grouped_success.group_byte_published
+        || !grouped_success.group_byte_final_verified
+        || grouped_success.group_byte != grouped_plan.final_group_index) return false;
+    for (const auto failure : {GeneralizedFailure::GroupPrePublishRead,
+            GeneralizedFailure::GroupPrePublishDrift}) {
+        grouped_request.failure = failure;
+        const GeneralizedResult failed = run_generalized(grouped_request);
+        if (!failed.ownership_preserved || failed.group_write_count != 0
+            || failed.group_byte_published || !failed.destroyed_compact_indices.empty()
+            || !failed.rolled_back_link_indices.empty()) return false;
+    }
+    for (const auto failure : {GeneralizedFailure::GroupPostWriteRead,
+            GeneralizedFailure::GroupPostWriteMismatch}) {
+        grouped_request.failure = failure;
+        const GeneralizedResult failed = run_generalized(grouped_request);
+        if (!failed.ownership_preserved || failed.group_write_count != 1
+            || failed.group_byte_published || failed.group_restore_count != 0
+            || !failed.destroyed_compact_indices.empty()
+            || !failed.rolled_back_link_indices.empty()) return false;
+    }
+    for (const auto failure : {GeneralizedFailure::GroupRollbackRead,
+            GeneralizedFailure::GroupRollbackDrift}) {
+        grouped_request.failure = failure;
+        const GeneralizedResult failed = run_generalized(grouped_request);
+        if (!failed.ownership_preserved || failed.group_write_count != 1
+            || failed.group_restore_count != 0 || !failed.group_byte_published
+            || !failed.destroyed_compact_indices.empty()
+            || !failed.rolled_back_link_indices.empty()) return false;
+    }
+    grouped_request.failure = GeneralizedFailure::MaxPublish;
+    const GeneralizedResult grouped_rollback = run_generalized(grouped_request);
+    if (!grouped_rollback.rollback_completed || grouped_rollback.group_write_count != 1
+        || grouped_rollback.group_restore_count != 1 || grouped_rollback.group_byte != 0
+        || grouped_rollback.group_byte_published
+        || grouped_rollback.rolled_back_link_indices.size() != 1
+        || grouped_rollback.destroyed_compact_indices.empty()) return false;
+
     const std::size_t tail_count = plan.native_event_count - plan.native_prefix_event_count;
     for (const auto failure : {GeneralizedFailure::IgnoreSound, GeneralizedFailure::Callback}) {
         for (const std::size_t index : {std::size_t{0}, tail_count / 2, tail_count - 1}) {

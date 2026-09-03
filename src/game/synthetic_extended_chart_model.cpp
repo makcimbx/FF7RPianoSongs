@@ -445,27 +445,65 @@ GeneralizedResult run_generalized(const GeneralizedRequest& request)
         }
         ++result.applied_links;
     }
-    if (request.failure == GeneralizedFailure::UncertainOwnership) {
+    if (request.failure == GeneralizedFailure::GroupPrePublishRead
+        || request.failure == GeneralizedFailure::GroupPrePublishDrift) {
         result.ownership_preserved = true;
+        if (request.failure == GeneralizedFailure::GroupPrePublishDrift)
+            result.group_byte = 0xff;
         return result;
     }
-    if (request.failure == GeneralizedFailure::MaxPublish) {
+    if (plan.final_group_index != result.group_byte) {
+        ++result.group_write_count;
+        result.group_byte = plan.final_group_index;
+        if (request.failure == GeneralizedFailure::GroupPostWriteRead
+            || request.failure == GeneralizedFailure::GroupPostWriteMismatch) {
+            result.ownership_preserved = true;
+            if (request.failure == GeneralizedFailure::GroupPostWriteMismatch)
+                result.group_byte ^= 0xff;
+            return result;
+        }
+        result.group_byte_published = true;
+    }
+    result.group_byte_final_verified = true;
+    const auto rollback_group_links_and_tails = [&]() {
+        if (request.failure == GeneralizedFailure::GroupRollbackRead
+            || request.failure == GeneralizedFailure::GroupRollbackDrift) {
+            result.ownership_preserved = true;
+            if (request.failure == GeneralizedFailure::GroupRollbackDrift)
+                result.group_byte ^= 0xff;
+            return false;
+        }
+        if (result.group_byte_published) {
+            ++result.group_restore_count;
+            result.group_byte = 0;
+            result.group_byte_published = false;
+        } else if (result.group_byte != 0) {
+            result.ownership_preserved = true;
+            return false;
+        }
         for (std::size_t j = result.applied_links; j; --j)
             result.rolled_back_link_indices.push_back(j - 1);
         clean_tails(result.constructed_tails);
         result.constructed_tails = result.applied_links = 0;
+        result.group_byte_final_verified = false;
         result.rollback_completed = true;
+        return true;
+    };
+    if (request.failure == GeneralizedFailure::UncertainOwnership) {
+        result.ownership_preserved = true;
+        return result;
+    }
+    if (request.failure == GeneralizedFailure::MaxPublish
+        || request.failure == GeneralizedFailure::GroupRollbackRead
+        || request.failure == GeneralizedFailure::GroupRollbackDrift) {
+        (void)rollback_group_links_and_tails();
         return result;
     }
     result.final_count = plan.native_event_count;
     result.count_committed = true;
     if (request.failure == GeneralizedFailure::CountValidation) {
         result.final_count = plan.native_prefix_event_count;
-        for (std::size_t j = result.applied_links; j; --j)
-            result.rolled_back_link_indices.push_back(j - 1);
-        clean_tails(result.constructed_tails);
-        result.constructed_tails = result.applied_links = 0;
-        result.rollback_completed = true;
+        (void)rollback_group_links_and_tails();
         return result;
     }
     result.published_actions = plan.required_action_count;

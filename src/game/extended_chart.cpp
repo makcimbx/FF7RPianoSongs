@@ -109,6 +109,9 @@ struct Transaction {
     std::vector<LinkJournalEntry> link_journal;
     uint8_t original_group_byte = 0;
     bool group_byte_captured = false;
+    bool group_byte_write_performed = false;
+    bool group_byte_published = false;
+    bool group_byte_final_verified = false;
     bool links_applied = false;
     const SongDescriptor* song = nullptr;
     const SongDifficultyProfile* profile = nullptr;
@@ -1335,7 +1338,23 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         result = reinterpret_cast<void*>(base + offset);
         return memory_writable(result, kEventSize);
     };
+    const auto group_byte_equals = [&](const int32_t expected_count,
+        const uint8_t expected) {
+        EventHeader current{};
+        uint8_t value = 0;
+        return exact_identity(tx, wrapper, chart_row, caller_rva)
+            && exact_header_state(tx, expected_count, current)
+            && read_at(wrapper, kFinalGroupOffset, value)
+            && value == expected;
+    };
     const auto rollback_links = [&](const int32_t expected_count) {
+        // Prove group-byte ownership before changing either links or the byte.
+        // A write whose outcome was not verified is never eligible for rollback.
+        if (tx.group_byte_write_performed && !tx.group_byte_published) return false;
+        const uint8_t owned_group_byte = tx.group_byte_published
+            ? tx.physical_plan.final_group_index : tx.original_group_byte;
+        if (!tx.group_byte_captured || !group_byte_equals(expected_count, owned_group_byte))
+            return false;
         while (!tx.link_journal.empty()) {
             const LinkJournalEntry entry = tx.link_journal.back();
             void* root = nullptr; void* child = nullptr;
@@ -1358,18 +1377,25 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
                 return false;
             tx.link_journal.pop_back();
         }
-        if (tx.group_byte_captured) {
-            write_at(wrapper, kFinalGroupOffset, tx.original_group_byte);
-            uint8_t restored = 0xff;
-            if (!read_at(wrapper, kFinalGroupOffset, restored) || restored != tx.original_group_byte)
+        if (tx.group_byte_published) {
+            if (!group_byte_equals(expected_count, tx.physical_plan.final_group_index))
                 return false;
+            write_at(wrapper, kFinalGroupOffset, tx.original_group_byte);
+            if (!group_byte_equals(expected_count, tx.original_group_byte))
+                return false;
+        } else if (!group_byte_equals(expected_count, tx.original_group_byte)) {
+            // Includes the zero-link/ungrouped path. No redundant write occurs.
+            return false;
         }
+        tx.group_byte_published = false;
+        tx.group_byte_final_verified = false;
         tx.links_applied = false;
         return true;
     };
     const auto links_valid = [&](const int32_t expected_count) {
         uint8_t group = 0;
-        if (!read_at(wrapper, kFinalGroupOffset, group)
+        if (!tx.group_byte_final_verified
+            || !read_at(wrapper, kFinalGroupOffset, group)
             || group != tx.physical_plan.final_group_index) return false;
         for (std::size_t i = 0; i < tx.plans.size(); ++i) {
             void* event = nullptr; void* parent_ptr = nullptr; void* successor_ptr = nullptr;
@@ -1391,7 +1417,10 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         return true;
     };
 
-    if (!read_at(wrapper, kFinalGroupOffset, tx.original_group_byte))
+    EventHeader group_capture_header{};
+    if (!exact_identity(tx, wrapper, chart_row, caller_rva)
+        || !exact_header_state(tx, tx.prefix_event_count, group_capture_header)
+        || !read_at(wrapper, kFinalGroupOffset, tx.original_group_byte))
         return unresolved("group_state_read_before_links");
     if (tx.original_group_byte != 0) {
         if (!cleanup_constructed()) return unresolved("group_state_cleanup_identity");
@@ -1421,12 +1450,29 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         tx.link_journal.push_back(journal);
         g_api.event_link(root, child);
     }
-    EventHeader link_header{};
-    if (!exact_identity(tx, wrapper, chart_row, caller_rva)
-        || !exact_header_state(tx, tx.prefix_event_count, link_header))
-        return unresolved("group_write_identity");
-    write_at(wrapper, kFinalGroupOffset, tx.physical_plan.final_group_index);
     tx.links_applied = true;
+    EventHeader link_header{};
+    uint8_t group_before_publish = 0;
+    if (!exact_identity(tx, wrapper, chart_row, caller_rva)
+        || !exact_header_state(tx, tx.prefix_event_count, link_header)
+        || !read_at(wrapper, kFinalGroupOffset, group_before_publish))
+        return unresolved("group_publish_prestate_read");
+    if (group_before_publish != tx.original_group_byte)
+        return unresolved("group_publish_prestate_drift");
+    if (tx.physical_plan.final_group_index != tx.original_group_byte) {
+        tx.group_byte_write_performed = true;
+        write_at(wrapper, kFinalGroupOffset, tx.physical_plan.final_group_index);
+        uint8_t group_after_publish = 0;
+        if (!exact_identity(tx, wrapper, chart_row, caller_rva)
+            || !exact_header_state(tx, tx.prefix_event_count, link_header)
+            || !read_at(wrapper, kFinalGroupOffset, group_after_publish)
+            || group_after_publish != tx.physical_plan.final_group_index)
+            return unresolved("group_publish_verification");
+        tx.group_byte_published = true;
+    } else if (!group_byte_equals(tx.prefix_event_count, tx.original_group_byte)) {
+        return unresolved("group_publish_unchanged_verification");
+    }
+    tx.group_byte_final_verified = true;
     if (!links_valid(tx.prefix_event_count)) {
         if (!rollback_links(tx.prefix_event_count) || !cleanup_constructed())
             return unresolved("link_rollback_identity");
