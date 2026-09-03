@@ -944,6 +944,18 @@ int main(int argc, char** argv) {
         return fail("3/6/15-frame positive-delay envelope boundaries were not inclusive and deterministic");
     }
 
+    // The frame-120 downbeat is the preferred added root, but making it a root
+    // moves the frame-122 follower inside the forbidden inclusive three-frame
+    // window. The beam must reject that child and retain an envelope-valid split.
+    const Observation nonmonotone_split = generate_physical_fixture(
+        "nonmonotone-envelope-split.mid", {{112, {60}}, {120, {62}}, {122, {64}}, {212, {65}}});
+    if (!nonmonotone_split.status.ok() || nonmonotone_split.notes.size() != 4u
+        || nonmonotone_split.stats.selected_actions != 2u
+        || topology_root(nonmonotone_split.notes, 1u)
+        || !topology_root(nonmonotone_split.notes, 3u)) {
+        return fail("beam accepted a root insertion that invalidated its downstream envelope segment");
+    }
+
     const Observation seven_followers = generate_physical_fixture(
         "seven-followers.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55}}});
     const Observation eight_followers = generate_physical_fixture(

@@ -64,7 +64,9 @@ enter action, strain, score-growth, or recognizability counts. Calibrated APM an
 tolerance define a target band over the complete physical active span. The selector
 uses the lower edge of that band as its deterministic minimum, never drops below
 inherited roots, and continues adding roots up to the upper edge when necessary to
-find a route-feasible topology. Infeasible beam states are ranked by exact root-only
+find a route-feasible topology. Every candidate insertion must leave both adjacent
+automation segments inside the hard envelope before it can enter the beam. Infeasible
+beam states are ranked by exact root-only
 route load normalized by that route's evidence margin before soft musical preference;
 feasible states retain the documented
 musical ranking. If mandatory or inherited roots exceed the profile target band,

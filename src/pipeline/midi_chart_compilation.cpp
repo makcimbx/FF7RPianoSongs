@@ -2859,18 +2859,33 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                     return a < b;
                 });
                 const std::size_t frontier = config.difficulty == kLowestMidiDifficulty ? 128u : 64u;
-                const std::size_t breadth = std::min(frontier, candidates.size());
-                for (std::size_t index = 0; index < breadth; ++index) {
+                std::size_t accepted_children = 0;
+                for (std::size_t index = 0;
+                     index < candidates.size() && accepted_children < frontier; ++index) {
                     PhysicalRootState child = state;
                     child.preference_rank += index;
                     child.added_row = candidates[index];
                     child.roots[child.added_row] = true;
+                    std::size_t previous_root = child.added_row;
+                    while (previous_root > 0 && !child.roots[previous_root - 1u]) --previous_root;
+                    if (previous_root > 0) --previous_root;
+                    std::size_t next_root = child.added_row + 1u;
+                    while (next_root < physical_rows.size() && !child.roots[next_root]) ++next_root;
+                    if (!segment_obeys_vanilla_envelope(previous_root, child.added_row)
+                        || !segment_obeys_vanilla_envelope(child.added_row, next_root)) {
+                        continue;
+                    }
                     child.route = validate_midi_difficulty_route(
                         root_notes(child.roots), chart_bpm, config.difficulty);
                     next_beam.push_back(std::move(child));
+                    ++accepted_children;
                 }
             }
-            if (next_beam.empty()) break;
+            if (next_beam.empty()) {
+                result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
+                    "physical-domain root selector cannot satisfy a supported difficulty route within its target band");
+                return result;
+            }
             std::sort(next_beam.begin(), next_beam.end(), root_state_less);
             constexpr std::size_t kPhysicalRootBeamWidth = 4;
             if (next_beam.size() > kPhysicalRootBeamWidth)
