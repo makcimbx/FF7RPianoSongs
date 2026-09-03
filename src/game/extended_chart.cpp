@@ -1561,6 +1561,21 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     return finish();
 }
 
+bool extended_chart_parser_count_preservation_exact(
+    void* wrapper, const uintptr_t caller_rva) noexcept
+{
+    try {
+        Transaction& tx = g_transaction;
+        EventHeader header{};
+        return tx.active && tx.claimed && tx.reserve_hit && !tx.reserve_mismatch
+            && wrapper == tx.wrapper && caller_rva == tx.caller_rva
+            && exact_identity(tx, wrapper, tx.chart_row, caller_rva)
+            && exact_header_state(tx, tx.prefix_event_count, header);
+    } catch (...) {
+        return false;
+    }
+}
+
 void abort_extended_chart_transaction() noexcept {
     invalidate_extended_chart_commit("transaction_aborted");
     release_transaction();

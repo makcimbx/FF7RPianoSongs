@@ -30,6 +30,10 @@ void begin_extended_chart_transaction(
     void* chart_row, uintptr_t caller_rva) noexcept;
 bool finish_extended_chart_transaction(void* wrapper, void* chart_row,
     uintptr_t caller_rva) noexcept;
+// Read-only synchronous handoff used by chart-source cleanup. True only while
+// the exact admitted transaction still owns the parser-produced P-event header.
+bool extended_chart_parser_count_preservation_exact(
+    void* wrapper, uintptr_t caller_rva) noexcept;
 void abort_extended_chart_transaction() noexcept;
 void invalidate_extended_chart_commit(const char* reason) noexcept;
 void extended_chart_activation_terminal(

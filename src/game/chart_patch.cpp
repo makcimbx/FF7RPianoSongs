@@ -1117,6 +1117,14 @@ bool try_plan_descriptor_chart_patch(
     }
 }
 
+bool should_cap_wrapper_count_after_expand(
+    const int32_t copied_count, const int32_t published_source_rows,
+    const bool preserve_generalized_parser_count) noexcept
+{
+    return !preserve_generalized_parser_count
+        && copied_count > published_source_rows;
+}
+
 #ifndef FF7RP_CHART_PATCH_SELFTEST
 bool find_live_pianoscore_object(void*& object, ChartMemoryLayout& layout, std::string& reason)
 {
@@ -1737,6 +1745,16 @@ bool chart_patch_ignore_sound_selftest()
     ff7rp::pipeline::configure_chart_row_limit(false, false, false);
     if (!suppression_ok) return fail();
 
+    // Generalized cleanup preserves exact compact P only with synchronous
+    // authority. Missing authority and legacy diagnostics retain the cap;
+    // ordinary equal counts never produce a duplicate native write.
+    if (should_cap_wrapper_count_after_expand(1022, 512, true)
+        || !should_cap_wrapper_count_after_expand(1022, 512, false)
+        || should_cap_wrapper_count_after_expand(512, 512, false)
+        || !should_cap_wrapper_count_after_expand(520, 512, false)) {
+        return fail();
+    }
+
     PlannedDescriptorChartPatch planned;
     std::string reason;
     const SongDifficultyProfile root_profile = make_profile({"A", "", "C"}, {"", "B", ""});
@@ -2212,10 +2230,19 @@ void finish_active_chart_row_patch_after_expand(
 
     const int32_t patched_count = static_cast<int32_t>(rows.size());
     int32_t copied_count = -1;
-    if (!core::safe_read_field(wrapper, runtime_layouts::PianoScoreWrapper::copied_row_count, copied_count)
-        || copied_count <= patched_count) {
+    if (!core::safe_read_field(wrapper,
+            runtime_layouts::PianoScoreWrapper::copied_row_count, copied_count)) {
         return;
     }
+
+#ifndef FF7RP_CHART_PATCH_SELFTEST
+    const bool preserve_generalized_parser_count
+        = extended_chart_parser_count_preservation_exact(wrapper, caller_rva);
+#else
+    const bool preserve_generalized_parser_count = false;
+#endif
+    if (!should_cap_wrapper_count_after_expand(
+            copied_count, patched_count, preserve_generalized_parser_count)) return;
 
     const bool wrote = core::safe_write_field(
         wrapper, runtime_layouts::PianoScoreWrapper::copied_row_count, patched_count);
