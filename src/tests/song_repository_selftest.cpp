@@ -1,6 +1,7 @@
 #include "pipeline/cache.h"
 #include "pipeline/audio_loudness.h"
 #include "pipeline/audio_reader.h"
+#include "pipeline/chart_event_plan.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/mabf_builder.h"
 #include "pipeline/midi_chart_generator.h"
@@ -1059,9 +1060,12 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
     const std::filesystem::path song_directory = root / "PhysicalMidiCacheFixture";
     std::filesystem::create_directories(song_directory);
     MidiTrack track;
-    for (int index = 0; index < 8; ++index) add_note(&track, index * 960, 120, 72 + index % 5, 110);
-    if (!write_bytes(song_directory / "song.mid", build_midi(std::move(track)))
-        || !write_silent_wav(song_directory / "song.wav", 8.5)
+    constexpr int onset_count = 630;
+    for (int index = 0; index < onset_count; ++index) {
+        add_note(&track, index * 348, 80, 72 + index % 5, 110);
+    }
+    if (!write_bytes(song_directory / "song.mid", build_midi(std::move(track), 460000u))
+        || !write_silent_wav(song_directory / "song.wav", 220.0)
         || !write_song_json(song_directory / "song.json", "Physical MIDI Cache Fixture", true)) {
         return fail("failed to write generalized physical MIDI cache fixture");
     }
@@ -1079,13 +1083,41 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
         || manifest.find("profile_physical_digests=") == std::string::npos) {
         return fail("generalized physical MIDI manifest omitted derived event counts");
     }
+    const auto extended = std::find_if(cold.difficulty_profiles.begin(), cold.difficulty_profiles.end(),
+        [](const auto& profile) { return profile.diagnostic_chart.source_row_count > 512u; });
+    ff7rp::pipeline::ChartEventPlan extended_plan;
+    if (extended == cold.difficulty_profiles.end()
+        || extended->config.notes.size() != ff7rp::pipeline::kMaxChartRows
+        || extended->chart.notes.size() != ff7rp::pipeline::kMaxChartRows
+        || extended->diagnostic_chart.native_prefix_row_count != ff7rp::pipeline::kMaxChartRows
+        || extended->diagnostic_chart.tail_rows.empty()
+        || !ff7rp::pipeline::derive_profile_event_plan(*extended, &extended_plan)
+        || extended_plan.source_row_count <= ff7rp::pipeline::kMaxChartRows
+        || extended_plan.native_prefix_event_count != ff7rp::pipeline::kMaxChartRows
+        || extended_plan.source_row_count != extended_plan.native_event_count
+        || extended_plan.native_event_count != extended_plan.required_action_count
+        || extended_plan.required_action_count != extended->diagnostics.selected_actions
+        || extended_plan.physical_digest == 0
+        || std::any_of(extended->config.notes.begin(), extended->config.notes.end(), [](const auto& note) {
+            return note.group_index != 0;
+        }) || std::any_of(extended->diagnostic_chart.tail_rows.begin(),
+            extended->diagnostic_chart.tail_rows.end(), [](const auto& row) {
+                return row.source.group_index != 0 || row.compiled.group_index != 0;
+            })) {
+        return fail("generated extended MIDI profile was clipped, grouped, or had inconsistent R/P/E/A");
+    }
 
     ff7rp::pipeline::LoadedSong warm;
-    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &warm);
+    std::string warm_trace;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &warm,
+        [&](const char* stage) {
+            if (!warm_trace.empty()) warm_trace += ',';
+            warm_trace += stage;
+        });
     if (!status.ok() || !warm.loaded_from_runtime_cache
         || warm.difficulty_profiles.size() != cold.difficulty_profiles.size()
         || read_text(warm.cache_manifest_path) != manifest) {
-        return fail("generalized physical MIDI runtime cache did not round-trip");
+        return fail("generalized physical MIDI runtime cache did not round-trip: " + warm_trace);
     }
     for (std::size_t index = 0; index < cold.difficulty_profiles.size(); ++index) {
         if (!configs_equal(warm.difficulty_profiles[index].config, cold.difficulty_profiles[index].config)
@@ -1097,6 +1129,40 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
                 cold.difficulty_profiles[index].diagnostic_chart)) {
             return fail("generalized physical MIDI cold/warm profile semantics changed");
         }
+    }
+    const auto warm_extended = std::find_if(warm.difficulty_profiles.begin(), warm.difficulty_profiles.end(),
+        [&](const auto& profile) { return profile.config.difficulty == extended->config.difficulty; });
+    ff7rp::pipeline::ChartEventPlan warm_extended_plan;
+    if (warm_extended == warm.difficulty_profiles.end()
+        || !ff7rp::pipeline::derive_profile_event_plan(*warm_extended, &warm_extended_plan)
+        || warm_extended_plan.source_row_count != extended_plan.source_row_count
+        || warm_extended_plan.native_prefix_event_count != extended_plan.native_prefix_event_count
+        || warm_extended_plan.native_event_count != extended_plan.native_event_count
+        || warm_extended_plan.required_action_count != extended_plan.required_action_count
+        || warm_extended_plan.physical_digest != extended_plan.physical_digest) {
+        return fail("generated extended MIDI event plan changed across cold/warm cache round-trip");
+    }
+
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    ff7rp::pipeline::LoadedSong unsupported;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &unsupported);
+    if (!status.ok() || unsupported.loaded_from_runtime_cache
+        || std::any_of(unsupported.difficulty_profiles.begin(), unsupported.difficulty_profiles.end(),
+            [](const auto& profile) {
+                return profile.config.notes.size() > ff7rp::pipeline::kMaxChartRows
+                    || profile.chart.notes.size() > ff7rp::pipeline::kMaxChartRows
+                    || profile.diagnostic_chart.present();
+            })) {
+        return fail("unsupported generated MIDI policy clipped or published an extended profile");
+    }
+    const auto oversized_omission = std::find_if(
+        unsupported.difficulty_profile_omissions.begin(), unsupported.difficulty_profile_omissions.end(),
+        [](const auto& omission) {
+            return omission.reason == "minimum_target_exceeds_row_limit"
+                && omission.desired_rows > ff7rp::pipeline::kMaxChartRows;
+        });
+    if (oversized_omission == unsupported.difficulty_profile_omissions.end()) {
+        return fail("unsupported generated MIDI policy did not omit the complete profile above 512 rows");
     }
     return 0;
 }

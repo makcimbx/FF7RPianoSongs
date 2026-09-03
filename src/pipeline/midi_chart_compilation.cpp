@@ -1748,6 +1748,41 @@ IncrementalSelection select_incremental_rows(
     constexpr std::size_t beam_width = 384;
     constexpr std::size_t states_per_route_and_row_count = 10;
     const std::size_t maximum_search_rows = std::max(baseline_actions, target_maximum_rows);
+    // Each frame group can retain one state and analyze each source-backed candidate for
+    // every beam state. Candidate work performs both full-chart and finalized-prefix
+    // local-skill passes, each bounded by the largest permitted selected chart. Bound
+    // that deterministic row-visit projection before entering the parallel beam loop.
+    constexpr std::size_t maximum_projected_analysis_row_visits = 1'500'000'000u;
+    std::size_t candidate_frame_count = 0;
+    for (std::size_t begin = 0; begin < candidates.size();) {
+        std::size_t end = begin + 1;
+        while (end < candidates.size() && candidates[end].frame == candidates[begin].frame) ++end;
+        ++candidate_frame_count;
+        begin = end;
+    }
+    const auto multiplication_exceeds = [](const std::size_t value, const std::size_t factor,
+                                            const std::size_t limit) {
+        return factor != 0 && value > limit / factor;
+    };
+    std::size_t projected_analysis_row_visits = candidate_frame_count;
+    bool projected_work_exceeds_budget = candidates.size() >
+        std::numeric_limits<std::size_t>::max() - projected_analysis_row_visits;
+    if (!projected_work_exceeds_budget) projected_analysis_row_visits += candidates.size();
+    for (const std::size_t factor : std::array<std::size_t, 3>{
+             beam_width, std::max<std::size_t>(1, maximum_search_rows), 2u}) {
+        if (projected_work_exceeds_budget || multiplication_exceeds(
+                projected_analysis_row_visits, factor, maximum_projected_analysis_row_visits)) {
+            projected_work_exceeds_budget = true;
+            break;
+        }
+        projected_analysis_row_visits *= factor;
+    }
+    if (projected_work_exceeds_budget ||
+        projected_analysis_row_visits > maximum_projected_analysis_row_visits) {
+        result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
+            "incremental MIDI selector projected analysis work exceeds deterministic budget");
+        return result;
+    }
     std::vector<IncrementalState> beam;
     beam.reserve(profile.route_count);
     for (std::size_t route = 0; route < profile.route_count; ++route) {

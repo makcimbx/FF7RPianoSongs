@@ -379,6 +379,7 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         normalized_config.score_thresholds = song.config.score_thresholds;
         normalized_config.mode_change_combo_counts = song.config.mode_change_combo_counts;
         normalized_config.notes = song.config.notes;
+        normalized_config.diagnostic_extended_chart_fixture = song.config.diagnostic_extended_chart_fixture;
         SongConfig complete_config = profile.config;
         for (const auto& row : profile.diagnostic_chart.tail_rows) complete_config.notes.push_back(row.source);
         const ProfileActionCounts counts = profile_action_counts(complete_config);

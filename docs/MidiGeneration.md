@@ -51,6 +51,15 @@ clipped: an ineligible or oversized profile is omitted fail-closed. This changes
 only offline selection and generated cache identity; runtime chart representation
 and explicit JSON grouping support are unchanged.
 
+The 8192 representation limit is not an authorization for unbounded selector work.
+Before incremental beam expansion, generation computes an overflow-safe upper bound
+on full-chart and finalized-prefix local-skill row visits from candidate frames,
+candidate actions, beam width, and the profile's maximum selected rows. A projection
+above the fixed offline analysis budget fails closed with `ChartStrainLimitExceeded`;
+it does not use elapsed time, reduce the target band, clip rows, or publish a partial
+profile. Sparse extended charts and ordinary protected-corpus-sized reductions remain
+inside this separate computational contract.
+
 Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Authored calibration routes overlap, and incomplete recovered evidence is treated as unknown rather than as rests or easy material.
 
 ## Timing And Audio

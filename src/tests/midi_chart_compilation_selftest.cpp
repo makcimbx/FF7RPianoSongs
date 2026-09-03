@@ -882,9 +882,15 @@ int main(int argc, char** argv) {
         verified_chord_runs_midi_bytes(600u, 54));
     ff7rp::pipeline::configure_chart_row_limit(true, true, true);
     const Observation extended = generate(extended_path, no_audio, envelope_config(6));
+    const std::filesystem::path pathological_path = write_bytes_fixture("pathological-selector-work.mid",
+        verified_chord_runs_midi_bytes(2000u, 54));
+    const Observation pathological = generate(pathological_path, no_audio, envelope_config(6));
+    const Observation pathological_repeat = generate(pathological_path, no_audio, envelope_config(6));
 
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     const Observation ordinary = generate(extended_path, no_audio, envelope_config(6));
+    constexpr std::string_view work_budget_diagnostic =
+        "incremental MIDI selector projected analysis work exceeds deterministic budget";
     if (!extended.status.ok() || extended.notes.size() <= ff7rp::pipeline::kMaxChartRows
         || extended.notes.size() > ff7rp::pipeline::kMaximumExtendedChartRows
         || extended.stats.selected_actions != extended.notes.size()
@@ -896,6 +902,14 @@ int main(int argc, char** argv) {
             + std::to_string(extended.notes.size()) + "/" + std::to_string(extended.stats.selected_actions)
             + " [" + extended.status.message + "] ordinary=" + std::to_string(ordinary.notes.size())
             + "/" + std::to_string(ordinary.stats.selected_actions) + " [" + ordinary.status.message + "]");
+    }
+    if (pathological.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
+        || pathological.status.message != work_budget_diagnostic || !pathological.notes.empty()
+        || pathological_repeat.status.code != pathological.status.code
+        || pathological_repeat.status.message != pathological.status.message
+        || !pathological_repeat.notes.empty()) {
+        return fail("pathological incremental MIDI selection did not fail fast and deterministically: "
+            + pathological.status.message);
     }
 
     ff7rp::pipeline::ChartEventPlan exact_easy_plan;
