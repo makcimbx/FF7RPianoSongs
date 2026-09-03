@@ -1130,6 +1130,74 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Three mandatory one-frame root gaps reproduce the production conflict. Each
+    // needs one intermediate root before its closing meter boundary; every Lv.6
+    // lower-edge topology leaves one interval unrepaired, while the upper edge fits all three.
+    const std::filesystem::path route_repair_path = write_physical_fixture(
+        "route-repair-inside-target-band.mid",
+        {{0, {60}}, {1, {61}}, {7, {62}}, {40, {63}}, {110, {64}}, {111, {65}},
+            {117, {66}}, {150, {67}}, {220, {68}}, {221, {69}}, {227, {70}}, {260, {71}}},
+        {{40, 3}, {110, 4}, {150, 3}, {220, 4}, {260, 3}});
+    std::array<Observation, 6> route_repair_profiles;
+    const std::vector<Note>* last_visible = nullptr;
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    for (int difficulty = 1; difficulty <= 6; ++difficulty) {
+        Observation& profile = route_repair_profiles[static_cast<std::size_t>(difficulty - 1)];
+        profile = generate(route_repair_path, no_audio, envelope_config(difficulty), last_visible);
+        if (profile.status.ok()) last_visible = &profile.notes;
+    }
+    const Observation impossible_route = generate(
+        write_physical_fixture("genuinely-impossible-root-route.mid",
+            {{0, {36}}, {20, {50}}, {40, {64}}, {60, {78}}, {80, {92}}}, {{80, 3}}),
+        no_audio, envelope_config(6));
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    constexpr std::string_view route_failure =
+        "physical-domain root selector cannot satisfy a supported difficulty route within its target band";
+    ff7rp::pipeline::ChartEventPlan repaired_lv5_plan;
+    ff7rp::pipeline::ChartEventPlan repaired_lv6_plan;
+    if (route_repair_profiles[0].status.ok() || route_repair_profiles[1].status.ok()
+        || route_repair_profiles[2].status.ok() || route_repair_profiles[3].status.ok()
+        || !route_repair_profiles[4].status.ok() || !route_repair_profiles[5].status.ok()
+        || route_repair_profiles[4].stats.selected_actions != 12u
+        || route_repair_profiles[4].stats.selected_actions
+            <= route_repair_profiles[4].stats.target_minimum_rows
+        || route_repair_profiles[4].stats.selected_actions
+            > route_repair_profiles[4].stats.target_maximum_rows
+        || route_repair_profiles[5].stats.selected_actions != 12u
+        || route_repair_profiles[5].stats.selected_actions
+            > route_repair_profiles[5].stats.target_maximum_rows
+        || !physical_plan(route_repair_profiles[4], 5, &repaired_lv5_plan)
+        || !physical_plan(route_repair_profiles[5], 6, &repaired_lv6_plan)
+        || repaired_lv5_plan.physical_digest != repaired_lv6_plan.physical_digest
+        || repaired_lv6_plan.source_row_count != 12u
+        || repaired_lv6_plan.native_event_count != 12u) {
+        std::string detail = "generalized route repair did not search the complete physical target band:";
+        for (std::size_t index = 0; index < route_repair_profiles.size(); ++index) {
+            const Observation& profile = route_repair_profiles[index];
+            detail += " lv" + std::to_string(index + 1u) + "=[" + profile.status.message
+                + "] actions=" + std::to_string(profile.stats.selected_actions)
+                + " band=" + std::to_string(profile.stats.target_minimum_rows) + "-"
+                + std::to_string(profile.stats.target_maximum_rows) + " ratio="
+                + std::to_string(profile.stats.local_skills.satisfied_route_ratio) + "/"
+                + std::to_string(profile.stats.local_skills.satisfied_route_margin) + " skill="
+                + std::to_string(profile.stats.local_skills.dominant_skill);
+        }
+        return fail(detail);
+    }
+    for (std::size_t index = 0; index < route_repair_profiles[4].notes.size(); ++index) {
+        if (topology_root(route_repair_profiles[4].notes, index)
+            && !topology_root(route_repair_profiles[5].notes, index)) {
+            return fail("route-repaired generalized roots were not nested across visible profiles");
+        }
+    }
+    if (impossible_route.status.code
+            != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
+        || impossible_route.status.message != route_failure
+        || impossible_route.notes.size() != 5u
+        || impossible_route.stats.selected_actions != 5u) {
+        return fail("genuinely impossible generalized root route did not omit fail-closed");
+    }
+
     std::string cleanup_error;
     if (!temporary.cleanup(&cleanup_error)) return fail("temporary cleanup failed: " + cleanup_error);
     return 0;

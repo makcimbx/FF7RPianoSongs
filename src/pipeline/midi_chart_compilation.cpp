@@ -2790,7 +2790,6 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         // only root bits and route results, never copies or regroups the full
         // physical chart. Each state expands a deterministic frontier of
         // canonical, salient, and temporally underrepresented rows.
-        const std::size_t selection_goal = std::max(root_count, target_minimum);
         struct PhysicalRootState {
             std::vector<bool> roots;
             MidiRouteValidation route;
@@ -2802,13 +2801,18 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                 validate_midi_difficulty_route(root_notes(roots), chart_bpm, config.difficulty), 0, 0}};
         const auto root_state_less = [](const PhysicalRootState& a, const PhysicalRootState& b) {
             if (a.route.feasible != b.route.feasible) return a.route.feasible;
+            if (!a.route.feasible && a.route.ratio != b.route.ratio)
+                return a.route.ratio < b.route.ratio;
             if (a.preference_rank != b.preference_rank) return a.preference_rank < b.preference_rank;
             if (a.route.ratio != b.route.ratio) return a.route.ratio < b.route.ratio;
             if (a.added_row != b.added_row) return a.added_row < b.added_row;
             return std::lexicographical_compare(
                 a.roots.begin(), a.roots.end(), b.roots.begin(), b.roots.end());
         };
-        while (root_count < selection_goal) {
+        while (!root_beam.empty()) {
+            std::sort(root_beam.begin(), root_beam.end(), root_state_less);
+            if (root_count >= target_minimum && root_beam.front().route.feasible) break;
+            if (root_count >= target_maximum) break;
             std::vector<PhysicalRootState> next_beam;
             for (const PhysicalRootState& state : root_beam) {
                 std::vector<std::size_t> candidates;

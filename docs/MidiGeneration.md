@@ -62,9 +62,12 @@ IDs are run-local serialization values and cycle through 1..255 after a zero or
 different separator. Every event on a continuation row is automated and does not
 enter action, strain, score-growth, or recognizability counts. Calibrated APM and
 tolerance define a target band over the complete physical active span. The selector
-uses the lower edge of that band as its deterministic minimum and never drops below
-inherited roots. If mandatory or inherited roots exceed the profile target band,
-or no selected physical-domain topology passes the root-only route,
+uses the lower edge of that band as its deterministic minimum, never drops below
+inherited roots, and continues adding roots up to the upper edge when necessary to
+find a route-feasible topology. Infeasible beam states are ranked by exact root-only
+route load before soft musical preference; feasible states retain the documented
+musical ranking. If mandatory or inherited roots exceed the profile target band,
+or no physical-domain topology in that band passes the root-only route,
 that label is omitted; physical events are never deleted.
 
 Without verified generalized policy (including build 1.004), the accepted v44
