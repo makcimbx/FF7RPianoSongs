@@ -2801,8 +2801,11 @@ MidiChartCompilationResult compile_normalized_midi_chart(
                 validate_midi_difficulty_route(root_notes(roots), chart_bpm, config.difficulty), 0, 0}};
         const auto root_state_less = [](const PhysicalRootState& a, const PhysicalRootState& b) {
             if (a.route.feasible != b.route.feasible) return a.route.feasible;
-            if (!a.route.feasible && a.route.ratio != b.route.ratio)
-                return a.route.ratio < b.route.ratio;
+            if (!a.route.feasible) {
+                const double a_load = a.route.ratio / a.route.margin;
+                const double b_load = b.route.ratio / b.route.margin;
+                if (a_load != b_load) return a_load < b_load;
+            }
             if (a.preference_rank != b.preference_rank) return a.preference_rank < b.preference_rank;
             if (a.route.ratio != b.route.ratio) return a.route.ratio < b.route.ratio;
             if (a.added_row != b.added_row) return a.added_row < b.added_row;

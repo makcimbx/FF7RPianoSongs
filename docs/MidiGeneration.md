@@ -65,7 +65,8 @@ tolerance define a target band over the complete physical active span. The selec
 uses the lower edge of that band as its deterministic minimum, never drops below
 inherited roots, and continues adding roots up to the upper edge when necessary to
 find a route-feasible topology. Infeasible beam states are ranked by exact root-only
-route load before soft musical preference; feasible states retain the documented
+route load normalized by that route's evidence margin before soft musical preference;
+feasible states retain the documented
 musical ranking. If mandatory or inherited roots exceed the profile target band,
 or no physical-domain topology in that band passes the root-only route,
 that label is omitted; physical events are never deleted.
