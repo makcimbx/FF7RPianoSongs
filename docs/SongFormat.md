@@ -67,7 +67,7 @@ Unknown fields are rejected. The root accepts these fields:
 | `gain_envelope` | Optional ordered array described below. |
 | `metronome` | Optional object described below. |
 | `notes` | Optional non-empty explicit chart described below. |
-| `diagnostic_extended_chart_fixture` | Reserved read-only diagnostic flag. Do not use for publishable songs. |
+| `diagnostic_extended_chart_fixture` | Reserved engineering flag for bounded extended-chart evidence. On verified build 1.005 it may activate the restricted 513–8192 path documented in `ChartLimits.md`; it is not general user-song authoring. |
 
 Minimal MIDI-backed example:
 

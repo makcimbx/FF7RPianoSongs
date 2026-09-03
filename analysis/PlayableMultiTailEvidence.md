@@ -682,61 +682,57 @@ the key boundary, not authorization for global invalidation. A future serialized
 field change may require a format bump; widening the current counted validator
 alone does not.
 
-## Next Runtime Qualification
+## 2026-09-02 Accepted Maximum-Bound Qualification
 
-No additional observation-only run is required before a reviewed, reversible
-Integration candidate. The lead decision is one maximum-bound Development
-qualification at exact 8192 rather than staged manual 520, 798, and 1024 runs.
-This is a decision about validation cost and product scope, not evidence that
-intermediate counts have already run.
+The maximum-bound scenario was accepted after one failed, non-mutating diagnostic
+run exposed a parser-ordering defect. Session
+`20260902T194536Z-9f7510c0c596` retained the complete `8192/512/7680` cache but
+published only the native prefix. Static follow-up proved that the candidate read
+`chart+0x48` before the parser initialized the current frame rate. Checkpoint
+`827a7c8d6800b4a47330c74539a88a22610a1bd2` moved FPS-dependent time validation
+after parser return while retaining complete tail-time validation before the first
+tail constructor. The failed candidate performed no extended native mutation and
+was rolled back.
 
-### Exact 8192 scenario
-
-Use a deterministic generated fixture with:
+The corrected focused Development session is:
 
 ```text
-title:               Extended Chart Maximum 8192 Development Test
-shape:               8192 C4 monotone rows, one event per row
-group/chord/camera:  zero/absent/absent
-IgnoreSound:         empty
-strength:            0.0
-absolute frame r:    4*r at 60 FPS
-last frame/time:     32764 / 546 seconds + 4 frames
-audio:               deterministic silent sidecar longer than the final event
-                     and no longer than the 600-second product bound
+session:       20260902T202554Z-ba1ee1e9374f
+checkpoint:    827a7c8d6800b4a47330c74539a88a22610a1bd2
+artifact sha:  c1cfeb1f16d207ea1dd6268822dee4c4ba76584469493abdd7d9b7d3ee4aba6c
+game sha:      752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc
+catalog:       ff7rebirth-steam-win64-6a16ced2
+disposition:   Accepted / Development Keep
 ```
 
-Start the selected fixture immediately through the normal readiness predicate;
-do not add or require a delay. Early input must either receive exact guarded
-admission or follow the recoverable native 512 behavior. Four-frame spacing gives
-every event a distinct frame while keeping the chart inside the supported
-duration. Let all events traverse to natural completion, then start the ordinary
-290-event song and
-verify chart, score, and audio recovery before list exit.
+The fixture contained 8192 default `C4` monotone rows with one event per row,
+no groups, chords, camera, IgnoreSound, dots, or strength state. Rows 0 through
+8190 occupied consecutive native frames 30 through 8220; the final sentinel was
+at frame 8249 / 137.483 seconds in a 139-second sidecar. Immediate input was
+accepted without a prescribed wait.
 
-Required structured markers, emitted once per stage rather than per frame:
+The immutable log establishes:
 
 ```text
-candidate: source=8192 prefix=512 tail=7680 target=8192 policy_generation/hash
-authority_pre: caller/admission/TLS/controller/chart/header exact
+candidate: source=8192 prefix=512 tail=7680 target=8192
+authority: selection/admission/TLS/controller/chart/header exact
 reserve: requested=512 substituted=8192 hits=1 capacity=8192
-         allocator_regime=large allocation_exact=1 relocation=0
 parser_post: count=512 capacity=8192 prefix_valid=512
 tails: requested=7680 constructed=7680 first_row=512 last_row=8191
-       first_ordinal=1024 last_ordinal=16382 callbacks=7680
-commit: max_time_valid=1 count_last=8192 terminal_generation_exact=1
-publication: target=8192 pending_then_active exact_playback=1
-identity: target=8192 descriptor/token/policy exact
-result: native_counter_sum=8192 count=8192
+commit: max_time=137.483 count_last=8192 rollback=none
+publication: target=8192 lifecycle/playback exact
+result: counters=8191,1,0,0 total=8192
 completion: natural target=8192
-replacement: prior_target=8192 invalidated ordinary_count=290
+replacement: prior target invalidated, ordinary_count=481
 cleanup: custom_absent=1 exit_cleanup_complete=1 aggregate_exit_complete=1
 ```
 
-Every failure marker must identify the first failed predicate and include target,
-constructed count, header count/capacity, rollback outcome, activation generation,
-and terminal order. Acceptance requires no unresolved ownership, external drift,
-unexpected reserve hit, rollback failure, terminal mismatch, or stale-token reuse.
+No failed predicate, unresolved ownership, external drift, corruption, rollback,
+or terminal rejection occurred in the accepted chain. The user observed prompts
+throughout the fixture and normal chart/audio behavior in the subsequent ordinary
+song. The exact-513 and exact-8192 accepted sessions qualify both endpoints of the
+shared restricted count-driven mechanism; intermediate counts use the same checked
+path but were not separately exercised in game.
 
 ## Physical-Chart-First MIDI Substrate
 
@@ -755,16 +751,16 @@ group policy inside game callbacks.
 
 This evidence does not establish:
 
-- playable multi-tail behavior at 520, 798, 1024, or 8192;
-- any runtime capacity above the accepted 540, including the calculated 8192
-  capacity for request 8192;
+- a distinct in-game scenario for every intermediate count such as 520, 798, or
+  1024, although both shared-path endpoints 513 and 8192 are accepted;
+- any runtime capacity above the accepted 8192-event allocation;
 - safety, acceptable resource use, or product behavior above the lead-selected
   8192 policy bound;
 - arbitrary pitch assignment or tail-only FName behavior;
 - chord, mixed-row, grouped, IgnoreSound, or camera tail safety;
 - recoverable native allocator failure, C++ exception, or SEH handling;
-- acceptable frame time, UI/result behavior, score-weight arithmetic, or natural
-  completion at 8192 before the named Development qualification;
+- universal performance or UI behavior for arbitrary dense charts beyond the
+  accepted deterministic 8192 fixture;
 - cross-thread chart quiescence while the persistent caller is suspended;
 - exact native C++ class names or RTTI identities;
 - exact list-exit destruction instruction, thread, or timing;
