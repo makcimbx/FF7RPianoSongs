@@ -8,7 +8,7 @@ Ordinary publishable explicit and generated charts contain at most 512 rows. The
 
 A noneligible exactly-520-row diagnostic fixture remains read-only: it publishes only the native 512-row prefix and retains eight diagnostic rows. An exact-520 fixture receives extended publication authority only when it satisfies the same complete restricted-shape and verified-policy contract as every other count in the 513–8192 range.
 
-On verified game build 1.005 only, `Experimental.ExtendedCharts=1` may publish one restricted chart with at most 8192 source rows and 8192 compact native events. Rows may contain a monotone, a chord, or both; strength, dot, and camera state remain zero. Chord IgnoreSound slots and run-local groups use the exact native ownership/linking path described below.
+On verified game build 1.005 only, `Experimental.ExtendedCharts=1` may publish one restricted chart with at most 8192 source rows and 8192 compact native events. Rows may contain a monotone, a chord, or both; strength, dot, and camera state remain zero. Automatically generated MIDI rows are ungrouped, while chord IgnoreSound slots and explicitly authored groups use the exact native ownership/linking path described below.
 
 The runtime derives one canonical immutable plan. `R` is source rows, `P` is compact events from the first 512 rows, `E` is all compact events, and `A` is parentless required actions. Reserve and final native count use `E`; parser return and rollback use `P`; UI and result expectation use `A`. Before reserve mutation it validates `R/P/E/A`, digest, checked ordinals and compact order, and resolves every event and IgnoreSound ID with strict `FNAME_Find`. Raw event bytes through `0x20000` use the recovered `0x1000` allocation quantum; larger requests use `0x10000`. Capacity must exactly match that calculation, cover `E`, and remain at or below 8192; `E=8192` therefore requires capacity 8192 (1,179,648 bytes). After the parser returns with exactly `P`, the runtime reads parser-published FPS and decodes all times before constructing the first tail event.
 
@@ -25,7 +25,7 @@ Existing Development sessions qualify the earlier ungrouped monotone endpoints o
 ## Authoring Rule
 
 - Keep ordinary explicit `notes` arrays at or below 512 rows.
-- Expect an independently generated MIDI level to be omitted when its valid minimum exceeds 512 rows.
+- Expect an independently generated MIDI level to be omitted when its valid minimum exceeds 512 rows without verified playable extended policy.
 - Treat only profiles passing the complete restricted 513..8192 eligibility contract as playable extended charts.
 - Do not publish diagnostic-only fixtures as songs.
 

@@ -249,67 +249,6 @@ std::vector<unsigned char> verified_chord_runs_midi_bytes(
     return file;
 }
 
-std::vector<unsigned char> follower_boundary_midi_bytes(const std::size_t followers) {
-    constexpr int base_tick = 1920;
-    constexpr int ticks_per_frame = 16;
-    constexpr std::array<int, 8> follower_frames{{16, 17, 18, 19, 20, 21, 22, 23}};
-    std::vector<MidiEvent> melody;
-    std::vector<MidiEvent> harmony;
-    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
-    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
-    add_note(&melody, base_tick, 8, 72, 104);
-    for (std::size_t index = 0; index < followers; ++index) {
-        add_note(&melody, base_tick + follower_frames[index] * ticks_per_frame,
-            8, 73 + static_cast<int>(index), 104);
-    }
-    add_note(&harmony, base_tick, 8, 48, 84);
-    add_note(&harmony, base_tick, 8, 52, 82);
-    add_note(&harmony, base_tick, 8, 55, 80);
-    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
-    append_u16(&file, 1);
-    append_u16(&file, 2);
-    append_u16(&file, 480);
-    append_midi_track(&file, std::move(melody));
-    append_midi_track(&file, std::move(harmony));
-    return file;
-}
-
-std::vector<unsigned char> humanized_meter_boundary_midi_bytes() {
-    constexpr int base_tick = 1920;
-    std::vector<MidiEvent> melody;
-    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
-    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
-    add_note(&melody, base_tick, 8, 60, 100);
-    add_note(&melody, base_tick + 112, 8, 62, 100);
-    melody.push_back({base_tick + 115, 0, {0xff, 0x58, 0x04, 0x03, 0x02, 24, 8}});
-    add_note(&melody, base_tick + 118, 8, 64, 100);
-    add_note(&melody, base_tick + 256, 8, 65, 100);
-    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
-    append_u16(&file, 0);
-    append_u16(&file, 1);
-    append_u16(&file, 480);
-    append_midi_track(&file, std::move(melody));
-    return file;
-}
-
-std::vector<unsigned char> humanized_timing_boundary_midi_bytes() {
-    std::vector<MidiEvent> melody;
-    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
-    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
-    add_note(&melody, 1800, 8, 60, 100);
-    // These distinct source onsets share one humanized cluster but straddle
-    // native frame 120/121. The tracker deterministically retains the latter.
-    add_note(&melody, 1927, 8, 62, 90);
-    add_note(&melody, 1933, 8, 72, 110);
-    add_note(&melody, 2160, 8, 74, 100);
-    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
-    append_u16(&file, 0);
-    append_u16(&file, 1);
-    append_u16(&file, 480);
-    append_midi_track(&file, std::move(melody));
-    return file;
-}
-
 class Fingerprint {
 public:
     void integer(const std::uint64_t value) {
@@ -485,26 +424,26 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 18> expected{{
-    {"manual-lv1", 812876795192241011ull, 0, ""},
-    {"manual-lv2", 15657760307793846569ull, 0, ""},
-    {"manual-lv3", 2229671639194785098ull, 0, ""},
-    {"manual-lv4", 15842221501682194707ull, 0, ""},
-    {"manual-lv5", 18439861697433635978ull, 0, ""},
-    {"manual-lv6", 17145848053232314335ull, 0, ""},
-    {"baseline-lv1", 18251479632695410273ull, 0, ""},
-    {"baseline-lv2", 7582551267464411896ull, 0, ""},
-    {"baseline-lv3", 13079214097419897187ull, 0, ""},
-    {"baseline-lv4", 7857690322218724421ull, 0, ""},
-    {"baseline-lv5", 13756716813077710487ull, 0, ""},
-    {"baseline-lv6", 16762614854703495817ull, 0, ""},
-    {"automatic-alignment", 5522470204471226344ull, 0, ""},
+    {"manual-lv1", 11922639811070787527ull, 0, ""},
+    {"manual-lv2", 14935626326576169940ull, 0, ""},
+    {"manual-lv3", 815333244954106575ull, 0, ""},
+    {"manual-lv4", 12825470606422220953ull, 0, ""},
+    {"manual-lv5", 3604241986910723758ull, 0, ""},
+    {"manual-lv6", 13071700642153806976ull, 0, ""},
+    {"baseline-lv1", 2249181695306624162ull, 0, ""},
+    {"baseline-lv2", 18015730830025414702ull, 0, ""},
+    {"baseline-lv3", 18274265534125259683ull, 0, ""},
+    {"baseline-lv4", 14309462936905742755ull, 0, ""},
+    {"baseline-lv5", 829147654021093457ull, 0, ""},
+    {"baseline-lv6", 16181430775563729655ull, 0, ""},
+    {"automatic-alignment", 1563318869674342179ull, 0, ""},
     {"timing-domain-empty", 12345897120421995243ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
         "preferred lower-profile action has no source candidate at its native frame"},
     {"visible-growth-bound", 3998143965459286508ull, 8,
         "difficulty target band exceeds the maximum adjacent visible-profile growth"},
-    {"selection-failure-witness", 17110472156722411997ull, 8,
+    {"selection-failure-witness", 17716276405075993264ull, 8,
         "no target-band state satisfies a coherent local-skill route"},
     {"near-feasible-witness", 16264490516427515963ull, 8,
         "near-feasible witness: rows=294 preferred=192 required_rows=297 required_preferred=192 "
@@ -616,59 +555,27 @@ int main(int argc, char** argv) {
     const Observation grouped_hard = generate(profile_group_path, no_audio, config_for(6));
     const Observation multi_follower = generate(multi_follower_path, no_audio, config_for(1));
     const Observation multi_follower_repeat = generate(multi_follower_path, no_audio, config_for(1));
-    bool easy_group_beyond_six_frames = false;
-    std::size_t largest_easy_group = 0;
-    std::size_t current_easy_group = 0;
-    std::uint8_t current_easy_group_id = 0;
-    std::size_t easy_required_actions = 0;
-    std::uint8_t previous_easy_group_id = 0;
-    for (std::size_t index = 1; index < grouped_easy.notes.size(); ++index) {
-        const Note& previous = grouped_easy.notes[index - 1];
-        const Note& current = grouped_easy.notes[index];
-        const long long previous_frame = static_cast<long long>(std::llround(previous.beat * 30.0));
-        const long long current_frame = static_cast<long long>(std::llround(current.beat * 30.0));
-        easy_group_beyond_six_frames = easy_group_beyond_six_frames ||
-            (current.group_index != 0 && current.group_index == previous.group_index &&
-                current_frame - previous_frame > 6);
-    }
-    for (const Note& note : multi_follower.notes) {
-        if (!note.pitch.empty() && (note.group_index == 0 || note.group_index != previous_easy_group_id)) {
-            ++easy_required_actions;
-        }
-        previous_easy_group_id = note.group_index;
-        if (note.group_index != 0 && note.group_index == current_easy_group_id) {
-            ++current_easy_group;
-        } else {
-            current_easy_group_id = note.group_index;
-            current_easy_group = note.group_index == 0 ? 0u : 1u;
-        }
-        largest_easy_group = std::max(largest_easy_group, current_easy_group);
-    }
     if (!grouped_easy.status.ok() || !grouped_hard.status.ok() ||
         canonical_note_bytes(grouped_easy.notes) != canonical_note_bytes(grouped_easy_repeat.notes) ||
-        fingerprint(grouped_easy) != fingerprint(grouped_easy_repeat) || !easy_group_beyond_six_frames ||
-        !multi_follower.status.ok() ||
+        fingerprint(grouped_easy) != fingerprint(grouped_easy_repeat) ||
+        multi_follower.status.code != multi_follower_repeat.status.code ||
+        multi_follower.status.message != multi_follower_repeat.status.message ||
         canonical_note_bytes(multi_follower.notes) != canonical_note_bytes(multi_follower_repeat.notes) ||
-        fingerprint(multi_follower) != fingerprint(multi_follower_repeat) || largest_easy_group < 4u ||
-        multi_follower.stats.selected_actions != easy_required_actions || grouped_easy.notes.size() != 14u ||
-        grouped_hard.notes.size() != 14u ||
-        grouped_hard.stats.selected_actions != grouped_hard.notes.size() ||
-        std::any_of(grouped_hard.notes.begin(), grouped_hard.notes.end(), [](const Note& note) {
+        fingerprint(multi_follower) != fingerprint(multi_follower_repeat) ||
+        grouped_easy.notes.size() >= grouped_hard.notes.size() ||
+        std::any_of(grouped_easy.notes.begin(), grouped_easy.notes.end(), [](const Note& note) {
+            return note.group_index != 0;
+        }) || std::any_of(grouped_hard.notes.begin(), grouped_hard.notes.end(), [](const Note& note) {
+            return note.group_index != 0;
+        }) || std::any_of(multi_follower.notes.begin(), multi_follower.notes.end(), [](const Note& note) {
             return note.group_index != 0;
         })) {
-        return fail("profile spacing did not deterministically automate only the easier fast passage: easy_rows=" +
-            std::to_string(grouped_easy.notes.size()) + " easy_group=" + std::to_string(largest_easy_group) +
-            " easy_actions=" + std::to_string(grouped_easy.stats.selected_actions) + " hard_rows=" +
-            std::to_string(grouped_hard.notes.size()) + " hard_actions=" +
-            std::to_string(grouped_hard.stats.selected_actions) + " easy_status=[" +
-            grouped_easy.status.message + "] hard_status=[" + grouped_hard.status.message + "] multi_rows=" +
-            std::to_string(multi_follower.notes.size()) + " multi_actions=" +
-            std::to_string(multi_follower.stats.selected_actions) + " multi_required=" +
-            std::to_string(easy_required_actions) + " beyond6=" +
-            std::to_string(easy_group_beyond_six_frames ? 1 : 0) + " easy_repeat=" +
-            std::to_string(fingerprint(grouped_easy) == fingerprint(grouped_easy_repeat) ? 1 : 0) +
-            " multi_repeat=" +
-            std::to_string(fingerprint(multi_follower) == fingerprint(multi_follower_repeat) ? 1 : 0));
+        return fail("independent profile spacing was not deterministic and ungrouped: easy=" +
+            std::to_string(grouped_easy.notes.size()) + " hard=" +
+            std::to_string(grouped_hard.notes.size()) + " multi=" +
+            std::to_string(multi_follower.notes.size()) + " statuses=[" +
+            grouped_easy.status.message + "][" + grouped_hard.status.message + "][" +
+            multi_follower.status.message + "]");
     }
     std::vector<std::pair<std::string, Observation>> observations;
     std::array<Observation, 6> manual;
@@ -678,27 +585,22 @@ int main(int argc, char** argv) {
         observations.emplace_back("manual-lv" + std::to_string(difficulty),
             manual[static_cast<std::size_t>(difficulty - 1)]);
     }
-    bool observed_grouped_follower = false;
     bool observed_exact_voicing = false;
     for (const Observation& profile : manual) {
-        std::uint8_t previous_group = 0;
         std::size_t required_actions = 0;
         for (const Note& note : profile.notes) {
-            const bool follower = note.group_index != 0 && note.group_index == previous_group;
-            observed_grouped_follower = observed_grouped_follower || follower;
-            if (!note.pitch.empty() && !follower) ++required_actions;
+            if (note.group_index != 0) return fail("automatic MIDI row serialized a generated group");
+            if (!note.pitch.empty()) ++required_actions;
             if (!note.chord_id.empty()) {
                 ++required_actions;
                 observed_exact_voicing = observed_exact_voicing || !note.source_chord_pitches.empty();
                 if (!note.ignore_sound_pitches.empty()) return fail("generated IgnoreSound guessed without a verified mapping");
             }
-            previous_group = note.group_index;
         }
         if (profile.status.ok() && profile.stats.selected_actions != required_actions) {
-            return fail("grouped follower was counted as a required action");
+            return fail("ungrouped generated event was not counted as a required action");
         }
     }
-    if (!observed_grouped_follower) return fail("fast representable right-hand follower was not grouped");
     if (!observed_exact_voicing) return fail("exact source chord voicing was not preserved");
     const Observation superset = generate(superset_path, no_audio, config_for(6));
     const Observation repeated_superset = generate(superset_path, no_audio, config_for(6));
@@ -869,6 +771,10 @@ int main(int argc, char** argv) {
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
+        != "midi_generation=independent_ungrouped:v9") {
+        return fail("generated MIDI semantic identity did not invalidate grouped output");
+    }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
     const Observation physical_ambiguous = generate(ambiguous_path, no_audio, config_for(6));
     const Observation physical_ambiguous_repeat = generate(ambiguous_path, no_audio, config_for(6));
@@ -889,51 +795,27 @@ int main(int argc, char** argv) {
         || unsupported_pitch.status.message.find("outside C1-C7") == std::string::npos) {
         return fail("generalized out-of-range source pitches did not fail closed before publication");
     }
-    std::size_t maximum_ambiguous_frame_rows = 0;
-    for (std::size_t begin = 0; begin < physical_ambiguous.notes.size();) {
-        std::size_t end = begin + 1u;
-        while (end < physical_ambiguous.notes.size()
-            && physical_ambiguous.notes[end].beat == physical_ambiguous.notes[begin].beat) ++end;
-        maximum_ambiguous_frame_rows = std::max(maximum_ambiguous_frame_rows, end - begin);
-        begin = end;
+    const auto generated_rows_are_ungrouped = [](const Observation& observation) {
+        return std::all_of(observation.notes.begin(), observation.notes.end(), [](const Note& note) {
+            return note.group_index == 0;
+        });
+    };
+    if (!generated_rows_are_ungrouped(physical_ambiguous_easy)
+        || !generated_rows_are_ungrouped(physical_ambiguous)
+        || !generated_rows_are_ungrouped(physical_exact)
+        || canonical_note_bytes(grouped_easy.notes) == canonical_note_bytes(grouped_hard.notes)) {
+        return fail("verified MIDI profiles were not independently reduced and ungrouped");
     }
-    if (maximum_ambiguous_frame_rows != 1u
-        || physical_ambiguous.stats.source_events <= physical_ambiguous.notes.size()
-        || physical_ambiguous.stats.selected_retention >= 1.0
-        || std::any_of(physical_ambiguous.notes.begin(), physical_ambiguous.notes.end(), [](const Note& note) {
-            return !note.chord_id.empty();
-        })) {
-        return fail("ambiguous inner harmony was not reduced to the deterministic tracked melody voice: rows="
-            + std::to_string(physical_ambiguous.notes.size()) + " max_frame_rows="
-            + std::to_string(maximum_ambiguous_frame_rows));
-    }
-    bool split_cross_hand = false;
-    bool hard_chord_is_independent = false;
-    for (std::size_t index = 1; index < physical_exact.notes.size(); ++index) {
-        const Note& previous = physical_exact.notes[index - 1];
-        const Note& current = physical_exact.notes[index];
-        split_cross_hand = split_cross_hand || (previous.beat == current.beat
-            && !previous.pitch.empty() && previous.chord_id.empty()
-            && current.pitch.empty() && !current.chord_id.empty());
-        if (previous.beat == current.beat && !previous.pitch.empty()
-            && !current.chord_id.empty()) {
-            hard_chord_is_independent = current.group_index == 0
-                || current.group_index != previous.group_index;
-        }
-    }
-    if (!split_cross_hand || !hard_chord_is_independent
-        || std::none_of(physical_exact.notes.begin(), physical_exact.notes.end(),
-            [](const Note& note) { return !note.chord_id.empty(); })
-        || std::any_of(physical_exact.notes.begin(), physical_exact.notes.end(),
-            [](const Note& note) { return !note.pitch.empty() && !note.chord_id.empty(); })) {
-        return fail("generated same-frame RH/chord material was not split into stable one-event rows");
+    if (std::none_of(physical_exact.notes.begin(), physical_exact.notes.end(),
+            [](const Note& note) { return !note.chord_id.empty() && !note.source_chord_pitches.empty(); })) {
+        return fail("verified source chord did not survive independent MIDI reduction");
     }
     std::set<std::pair<double, std::string>> reduced_duplicate_rows;
     const bool repeated_same_key = std::any_of(physical_duplicate.notes.begin(), physical_duplicate.notes.end(),
         [&](const Note& note) { return !note.pitch.empty()
             && !reduced_duplicate_rows.emplace(note.beat, note.pitch).second; });
     if (repeated_same_key || physical_duplicate.stats.source_events <= physical_duplicate.notes.size()) {
-        return fail("same-key doubling was not removed by the shared physical reduction");
+        return fail("same-key doubling was not removed by independent reduction");
     }
     const auto physical_plan = [](const Observation& observation, const int difficulty,
                                   ff7rp::pipeline::ChartEventPlan* plan) {
@@ -947,45 +829,26 @@ int main(int argc, char** argv) {
     };
     ff7rp::pipeline::ChartEventPlan easy_plan;
     ff7rp::pipeline::ChartEventPlan hard_plan;
-    if (!physical_plan(physical_ambiguous_easy, 1, &easy_plan)
-        || !physical_plan(physical_ambiguous, 6, &hard_plan)
-        || easy_plan.physical_digest != hard_plan.physical_digest
-        || easy_plan.source_row_count != hard_plan.source_row_count
-        || easy_plan.native_event_count != hard_plan.native_event_count) {
-        return fail("generalized profiles did not preserve one physical chart identity: easy_rows="
-            + std::to_string(easy_plan.source_row_count) + " hard_rows="
-            + std::to_string(hard_plan.source_row_count) + " easy_events="
-            + std::to_string(easy_plan.native_event_count) + " hard_events="
-            + std::to_string(hard_plan.native_event_count) + " easy_digest="
-            + std::to_string(easy_plan.physical_digest) + " hard_digest="
-            + std::to_string(hard_plan.physical_digest));
+    if (!physical_plan(grouped_easy, 1, &easy_plan)
+        || !physical_plan(grouped_hard, 6, &hard_plan)
+        || easy_plan.physical_digest == hard_plan.physical_digest
+        || easy_plan.source_row_count != grouped_easy.notes.size()
+        || hard_plan.source_row_count != grouped_hard.notes.size()) {
+        return fail("independent generated profiles did not preserve distinct source-backed plans");
     }
     const auto selected_inside_band = [](const Observation& observation) {
         return observation.stats.selected_actions >= observation.stats.target_minimum_rows
             && observation.stats.selected_actions <= observation.stats.target_maximum_rows;
     };
-    if (!selected_inside_band(physical_ambiguous_easy) || !selected_inside_band(physical_ambiguous)
-        || easy_plan.required_action_count != physical_ambiguous_easy.stats.selected_actions
-        || hard_plan.required_action_count != physical_ambiguous.stats.selected_actions
-        || easy_plan.source_row_count != physical_ambiguous_easy.notes.size()
-        || hard_plan.source_row_count != physical_ambiguous.notes.size()) {
-        return fail("physical-domain selector changed rows or missed its calibrated root band");
+    if (!selected_inside_band(grouped_easy) || !selected_inside_band(grouped_hard)
+        || easy_plan.required_action_count != grouped_easy.stats.selected_actions
+        || hard_plan.required_action_count != grouped_hard.stats.selected_actions
+        || easy_plan.source_row_count != easy_plan.native_event_count
+        || easy_plan.native_event_count != easy_plan.required_action_count
+        || hard_plan.source_row_count != hard_plan.native_event_count
+        || hard_plan.native_event_count != hard_plan.required_action_count) {
+        return fail("ungrouped generated profile violated exact R/P/E/A accounting or its target band");
     }
-    const auto right_root = [](const std::vector<Note>& notes, const std::size_t index) {
-        const Note& note = notes[index];
-        return !note.pitch.empty() && (note.group_index == 0 || index == 0
-            || notes[index - 1].group_index != note.group_index);
-    };
-    for (std::size_t index = 0; index < physical_ambiguous_easy.notes.size(); ++index) {
-        if (right_root(physical_ambiguous_easy.notes, index)
-            && !right_root(physical_ambiguous.notes, index)) {
-            return fail("generalized easy-profile roots were not nested in the hard profile");
-        }
-    }
-    const auto topology_root = [](const std::vector<Note>& notes, const std::size_t index) {
-        return notes[index].group_index == 0 || index == 0
-            || notes[index - 1u].group_index != notes[index].group_index;
-    };
     const auto envelope_config = [](const int difficulty) {
         SongConfig config = config_for(difficulty);
         config.midi_audio_alignment_seconds = 0.0;
@@ -996,34 +859,6 @@ int main(int argc, char** argv) {
                                                 const std::vector<std::pair<int, int>>& meters = {}) {
         return generate(write_physical_fixture(name, frames, meters), no_audio, envelope_config(1));
     };
-
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    const Observation window3 = generate_physical_fixture("window-3.mid", {{0, {60}}, {3, {62}}});
-    const Observation window6 = generate_physical_fixture("window-6.mid", {{0, {60}}, {6, {62}}});
-    const Observation window15 = generate_physical_fixture(
-        "window-15.mid", {{0, {60}}, {7, {62}}, {15, {64}}});
-    const Observation window15_over = generate_physical_fixture(
-        "window-15-over.mid", {{0, {60}}, {7, {62}}, {14, {64}}, {15, {65}}});
-    if (!window3.status.ok() || window3.notes.size() != 2u || !topology_root(window3.notes, 1u)
-        || !window6.status.ok() || window6.notes.size() != 2u || topology_root(window6.notes, 1u)
-        || !window15.status.ok() || window15.notes.size() != 3u
-        || topology_root(window15.notes, 1u) || topology_root(window15.notes, 2u)
-        || !window15_over.status.ok() || window15_over.notes.size() != 4u
-        || !topology_root(window15_over.notes, 3u)) {
-        return fail("3/6/15-frame positive-delay envelope boundaries were not inclusive and deterministic");
-    }
-
-    // The frame-120 downbeat is the preferred added root, but making it a root
-    // moves the frame-122 follower inside the forbidden inclusive three-frame
-    // window. The beam must reject that child and retain an envelope-valid split.
-    const Observation nonmonotone_split = generate_physical_fixture(
-        "nonmonotone-envelope-split.mid", {{112, {60}}, {120, {62}}, {122, {64}}, {212, {65}}});
-    if (!nonmonotone_split.status.ok() || nonmonotone_split.notes.size() != 4u
-        || nonmonotone_split.stats.selected_actions != 2u
-        || topology_root(nonmonotone_split.notes, 1u)
-        || !topology_root(nonmonotone_split.notes, 3u)) {
-        return fail("beam accepted a root insertion that invalidated its downstream envelope segment");
-    }
 
     const Observation dense_stack = generate_physical_fixture(
         "dense-inner-stack.mid", {{0, {48, 49, 50, 51, 52, 53, 54, 55, 56}}});
@@ -1037,301 +872,43 @@ int main(int argc, char** argv) {
         return fail("dense same-frame inner voices were not reduced deterministically to one melody tone");
     }
 
-    SongConfig eligible_stats_config = envelope_config(1);
-    eligible_stats_config.midi_minimum_lead_in_seconds = 2.25;
-    const Observation eligible_stats = generate(write_physical_fixture(
-        "eligible-retention.mid", {{0, {60}}, {30, {62}}}), no_audio, eligible_stats_config);
-    if (!eligible_stats.status.ok() || eligible_stats.stats.source_events != 2u
-        || eligible_stats.stats.lead_in_rejections != 1u
-        || eligible_stats.stats.candidate_actions != 1u
-        || std::abs(eligible_stats.stats.selected_retention - 1.0) > 1e-9) {
-        return fail("generalized reduction diagnostics did not use the eligible source-event domain");
-    }
-
-    const std::filesystem::path humanized_timing_path = write_bytes_fixture(
-        "humanized-timing-boundary.mid", humanized_timing_boundary_midi_bytes());
-    SongConfig humanized_lead_config = envelope_config(1);
-    humanized_lead_config.midi_minimum_lead_in_seconds = 2.01;
-    const Observation humanized_lead = generate(humanized_timing_path, no_audio, humanized_lead_config);
-    WavAudio bounded_audio;
-    bounded_audio.sample_rate = 1000;
-    bounded_audio.channels = 2;
-    bounded_audio.source_frame_count = 2010;
-    const Observation humanized_duration = generate(
-        humanized_timing_path, bounded_audio, envelope_config(1));
-    if (!humanized_lead.status.ok() || humanized_lead.notes.size() != 2u
-        || humanized_lead.notes.front().pitch != "C5"
-        || std::llround(humanized_lead.notes.front().beat * 3600.0 / 120.0) != 121
-        || humanized_lead.stats.source_events != 4u
-        || humanized_lead.stats.lead_in_rejections != 2u
-        || humanized_lead.stats.candidate_actions != 2u
-        || std::abs(humanized_lead.stats.selected_retention - 1.0) > 1e-9
-        || !humanized_duration.status.ok() || humanized_duration.notes.size() != 1u
-        || std::llround(humanized_duration.notes.front().beat * 3600.0 / 120.0) != 113
-        || humanized_duration.stats.audio_duration_rejections != 2u
-        || humanized_duration.stats.candidate_actions != 2u
-        || std::abs(humanized_duration.stats.selected_retention - 0.5) > 1e-9) {
-        return fail("humanized melody timing did not use authoritative source-event bounds and retention");
-    }
-
-    // The chord is an independent root. Delays 16..23 are outside every short
-    // follower window, so these fixtures isolate only the seven-follower cap.
-    const Observation seven_followers = generate(write_bytes_fixture("seven-followers.mid",
-        follower_boundary_midi_bytes(7u)), no_audio, envelope_config(1));
-    const Observation eight_followers = generate(write_bytes_fixture("eight-followers.mid",
-        follower_boundary_midi_bytes(8u)), no_audio, envelope_config(1));
-    if (!seven_followers.status.ok() || seven_followers.notes.size() != 9u
-        || !topology_root(seven_followers.notes, 1u)
-        || std::any_of(seven_followers.notes.begin() + 2, seven_followers.notes.end(),
-            [&](const Note& note) { return topology_root(seven_followers.notes,
-                static_cast<std::size_t>(&note - seven_followers.notes.data())); })
-        || eight_followers.status.ok()
-        || eight_followers.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
-        || eight_followers.status.message.find("mandatory/inherited generalized roots exceed")
-            == std::string::npos) {
-        return fail("reduced physical rows did not preserve the isolated seven/eight-follower boundary");
-    }
-
-    const Observation gap102 = generate_physical_fixture("gap-102.mid", {{0, {60}}, {102, {62}}});
-    const Observation gap103 = generate_physical_fixture("gap-103.mid", {{0, {60}}, {103, {62}}});
-    if (!gap102.status.ok() || topology_root(gap102.notes, 1u)
-        || !gap103.status.ok() || !topology_root(gap103.notes, 1u)) {
-        return fail("102/103-frame adjacent-gap envelope boundary changed");
-    }
-
-    const Observation span125 = generate_physical_fixture(
-        "span-125.mid", {{0, {60}, 90}, {100, {62}, 127}, {125, {64}, 20}});
-    const Observation span126 = generate_physical_fixture(
-        "span-126.mid", {{0, {60}, 90}, {100, {62}, 127}, {126, {64}, 20}});
-    if (!span125.status.ok() || span125.notes.size() != 3u || topology_root(span125.notes, 2u)
-        || !span126.status.ok() || span126.notes.size() != 3u || !topology_root(span126.notes, 2u)) {
-        return fail("125/126-frame root-span envelope boundary changed");
-    }
-
-    const Observation meter_boundary = generate_physical_fixture(
-        "meter-boundary.mid", {{0, {60}}, {40, {62}}, {80, {64}}}, {{40, 3}});
-    const std::filesystem::path humanized_meter_path = temporary.path() / "humanized-meter-boundary.mid";
-    const std::vector<unsigned char> humanized_meter_fixture = humanized_meter_boundary_midi_bytes();
-    {
-        std::ofstream stream(humanized_meter_path, std::ios::binary | std::ios::trunc);
-        stream.write(reinterpret_cast<const char*>(humanized_meter_fixture.data()),
-            static_cast<std::streamsize>(humanized_meter_fixture.size()));
-    }
-    ff7rp::pipeline::NormalizedMidiSource humanized_meter_source;
-    const Status humanized_meter_normalization = ff7rp::pipeline::normalize_midi_source(
-        humanized_meter_path.string(), &humanized_meter_source);
-    const auto has_source_note = [&](const int tick, const int pitch) {
-        return std::any_of(humanized_meter_source.notes.begin(), humanized_meter_source.notes.end(),
-            [&](const auto& note) { return note.source.tick == tick && note.source.pitch == pitch; });
-    };
-    const bool has_straddled_meter = std::any_of(
-        humanized_meter_source.meters.begin(), humanized_meter_source.meters.end(),
-        [](const auto& meter) { return meter.explicit_event && meter.tick == 2035; });
-    const Observation humanized_meter_boundary = generate(
-        humanized_meter_path, no_audio, envelope_config(1));
-    const Observation downbeat_preference = generate_physical_fixture(
-        "downbeat-preference.mid", {{0, {60}}, {30, {60}}, {60, {60}}, {90, {60}}}, {{0, 3}});
-    if (!meter_boundary.status.ok() || !topology_root(meter_boundary.notes, 1u)
-        || !humanized_meter_normalization.ok() || !has_source_note(2032, 62)
-        || !has_source_note(2038, 64) || !has_straddled_meter
-        || !humanized_meter_boundary.status.ok() || humanized_meter_boundary.notes.size() != 3u
-        || !topology_root(humanized_meter_boundary.notes, 1u)
-        || humanized_meter_boundary.notes[1].pitch != "E4"
-        || std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0) != 127
-        || !downbeat_preference.status.ok() || !topology_root(downbeat_preference.notes, 3u)
-        || downbeat_preference.stats.selected_actions != 2u) {
-        return fail("meter boundaries or downbeat root preference were not preserved: meter_status=["
-            + meter_boundary.status.message + "] meter_rows=" + std::to_string(meter_boundary.notes.size())
-            + " meter_middle_root=" + std::to_string(meter_boundary.notes.size() > 1u
-                && topology_root(meter_boundary.notes, 1u)) + " humanized_status=["
-            + humanized_meter_boundary.status.message + "] humanized_rows="
-            + std::to_string(humanized_meter_boundary.notes.size()) + " humanized_roots="
-            + (humanized_meter_boundary.notes.empty() ? std::string{} :
-                std::to_string(topology_root(humanized_meter_boundary.notes, 0u)))
-            + (humanized_meter_boundary.notes.size() < 2u ? std::string{} :
-                std::to_string(topology_root(humanized_meter_boundary.notes, 1u)))
-            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
-                std::to_string(topology_root(humanized_meter_boundary.notes, 2u)))
-            + (humanized_meter_boundary.notes.size() < 4u ? std::string{} :
-                std::to_string(topology_root(humanized_meter_boundary.notes, 3u)))
-            + " humanized_beats="
-            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
-                std::to_string(humanized_meter_boundary.notes[1].beat) + ","
-                + std::to_string(humanized_meter_boundary.notes[2].beat))
-            + " humanized_pitch="
-            + (humanized_meter_boundary.notes.size() < 2u ? std::string{} :
-                humanized_meter_boundary.notes[1].pitch)
-            + " humanized_frames="
-            + (humanized_meter_boundary.notes.size() < 3u ? std::string{} :
-                std::to_string(std::llround(humanized_meter_boundary.notes[1].beat * 3600.0 / 120.0))
-                + "," + std::to_string(std::llround(
-                    humanized_meter_boundary.notes[2].beat * 3600.0 / 120.0)))
-            + " downbeat_status=["
-            + downbeat_preference.status.message + "] downbeat_rows="
-            + std::to_string(downbeat_preference.notes.size()) + " downbeat_root="
-            + std::to_string(downbeat_preference.notes.size() > 3u
-                && topology_root(downbeat_preference.notes, 3u)) + " actions="
-            + std::to_string(downbeat_preference.stats.selected_actions) + " roots="
-            + (downbeat_preference.notes.empty() ? std::string{} :
-                std::to_string(topology_root(downbeat_preference.notes, 0u)))
-            + (downbeat_preference.notes.size() < 2u ? std::string{} :
-                std::to_string(topology_root(downbeat_preference.notes, 1u)))
-            + (downbeat_preference.notes.size() < 3u ? std::string{} :
-                std::to_string(topology_root(downbeat_preference.notes, 2u)))
-            + (downbeat_preference.notes.size() < 4u ? std::string{} :
-                std::to_string(topology_root(downbeat_preference.notes, 3u))));
-    }
-
     const Observation physical_exact_easy = generate(exact_path, no_audio, config_for(1));
     if (!physical_exact_easy.status.ok()) return fail("easy generalized chord fixture failed");
-    for (std::size_t index = 0; index < physical_exact_easy.notes.size(); ++index) {
-        if (!physical_exact_easy.notes[index].chord_id.empty()
-            && !topology_root(physical_exact_easy.notes, index)) {
-            return fail("generated chord row was not an independent root on every difficulty");
-        }
+    for (const Note& note : physical_exact_easy.notes) {
+        if (note.group_index != 0) return fail("generated chord row was not an independent action");
     }
 
-    const Observation id_reuse = generate(write_bytes_fixture("id-reuse.mid",
-        verified_chord_runs_midi_bytes(310u, 54)), no_audio, envelope_config(1));
-    std::vector<std::uint8_t> grouped_run_ids;
-    for (std::size_t row = 0; row < id_reuse.notes.size(); ++row) {
-        const std::uint8_t id = id_reuse.notes[row].group_index;
-        if (id != 0 && (row == 0 || id_reuse.notes[row - 1u].group_index != id)) {
-            grouped_run_ids.push_back(id);
-        }
-    }
-    if (!id_reuse.status.ok() || id_reuse.notes.size() != 620u
-        || grouped_run_ids.size() <= 255u || grouped_run_ids[254] != 255u
-        || grouped_run_ids[255] != 1u) {
-        return fail("reducer-compatible grouped runs did not cycle GroupIndex safely through 1..255: rows="
-            + std::to_string(id_reuse.notes.size()) + " runs=" + std::to_string(grouped_run_ids.size()));
-    }
+    const std::filesystem::path extended_path = write_bytes_fixture("extended-ungrouped.mid",
+        verified_chord_runs_midi_bytes(600u, 54));
+    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    const Observation extended = generate(extended_path, no_audio, envelope_config(6));
 
     ff7rp::pipeline::configure_chart_row_limit(false, false);
+    const Observation ordinary = generate(extended_path, no_audio, envelope_config(6));
+    if (!extended.status.ok() || extended.notes.size() <= ff7rp::pipeline::kMaxChartRows
+        || extended.notes.size() > ff7rp::pipeline::kMaximumExtendedChartRows
+        || extended.stats.selected_actions != extended.notes.size()
+        || std::any_of(extended.notes.begin(), extended.notes.end(), [](const Note& note) {
+            return note.group_index != 0;
+        }) || ordinary.status.code != ff7rp::pipeline::StatusCode::ChartRowLimitExceeded
+        || !ordinary.notes.empty() || ordinary.stats.selected_actions != 0u) {
+        return fail("verified extended or ordinary MIDI row policy violated ungrouped publication bounds: extended="
+            + std::to_string(extended.notes.size()) + "/" + std::to_string(extended.stats.selected_actions)
+            + " [" + extended.status.message + "] ordinary=" + std::to_string(ordinary.notes.size())
+            + "/" + std::to_string(ordinary.stats.selected_actions) + " [" + ordinary.status.message + "]");
+    }
 
     ff7rp::pipeline::ChartEventPlan exact_easy_plan;
     ff7rp::pipeline::ChartEventPlan exact_hard_plan;
     if (!physical_plan(physical_exact_easy, 1, &exact_easy_plan)
         || !physical_plan(physical_exact, 6, &exact_hard_plan)
-        || exact_easy_plan.physical_digest != exact_hard_plan.physical_digest
         || exact_easy_plan.source_row_count != physical_exact_easy.notes.size()
         || exact_easy_plan.native_event_count != physical_exact_easy.notes.size()
         || exact_easy_plan.required_action_count != physical_exact_easy.stats.selected_actions
         || exact_hard_plan.source_row_count != physical_exact.notes.size()
         || exact_hard_plan.native_event_count != physical_exact.notes.size()
         || exact_hard_plan.required_action_count != physical_exact.stats.selected_actions) {
-        return fail("generalized exact R/P/E/A identity changed across profile topology");
-    }
-
-    // Production-reachable omission: the vanilla envelope makes five roots mandatory.
-    // Lv.1's physical target band can expose at most four, and Lv.2 remains route
-    // infeasible, so Lv.3 is the first visible profile and Lv.4 inherits its topology.
-    const std::filesystem::path earliest_omission_path = write_physical_fixture(
-        "earliest-mandatory-root-omission.mid",
-        {{0, {60}}, {1, {61}}, {2, {62}}, {3, {63}}, {108, {64}}});
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    const Observation omitted_lv1 = generate(
-        earliest_omission_path, no_audio, envelope_config(1));
-    const Observation omitted_lv1_repeat = generate(
-        earliest_omission_path, no_audio, envelope_config(1));
-    const Observation omitted_lv2 = generate(
-        earliest_omission_path, no_audio, envelope_config(2));
-    const Observation first_visible_lv3 = generate(
-        earliest_omission_path, no_audio, envelope_config(3));
-    const Observation inherited_lv4 = generate(
-        earliest_omission_path, no_audio, envelope_config(4), &first_visible_lv3.notes);
-    ff7rp::pipeline::configure_chart_row_limit(false, false);
-    constexpr std::string_view expected_omission =
-        "mandatory/inherited generalized roots exceed the current physical-domain target band";
-    ff7rp::pipeline::ChartEventPlan first_visible_plan;
-    ff7rp::pipeline::ChartEventPlan inherited_plan;
-    if (omitted_lv1.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
-        || omitted_lv1.status.message != expected_omission
-        || omitted_lv1_repeat.status.code != omitted_lv1.status.code
-        || omitted_lv1_repeat.status.message != omitted_lv1.status.message
-        || omitted_lv2.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
-        || !first_visible_lv3.status.ok() || !inherited_lv4.status.ok()
-        || first_visible_lv3.stats.selected_actions != 5u
-        || !physical_plan(first_visible_lv3, 3, &first_visible_plan)
-        || !physical_plan(inherited_lv4, 4, &inherited_plan)
-        || first_visible_plan.physical_digest != inherited_plan.physical_digest
-        || first_visible_plan.source_row_count != inherited_plan.source_row_count
-        || first_visible_plan.native_event_count != inherited_plan.native_event_count) {
-        return fail("earliest mandatory-root omission did not preserve the later visible profile chain");
-    }
-    for (std::size_t index = 0; index < first_visible_lv3.notes.size(); ++index) {
-        if (topology_root(first_visible_lv3.notes, index)
-            && !topology_root(inherited_lv4.notes, index)) {
-            return fail("roots were not nested after the first feasible generalized profile");
-        }
-    }
-
-    // Three mandatory one-frame root gaps reproduce the production conflict. Each
-    // needs one intermediate root before its closing meter boundary; every Lv.6
-    // lower-edge topology leaves one interval unrepaired, while the upper edge fits all three.
-    const std::filesystem::path route_repair_path = write_physical_fixture(
-        "route-repair-inside-target-band.mid",
-        {{0, {60}}, {1, {61}}, {7, {62}}, {40, {63}}, {110, {64}}, {111, {65}},
-            {117, {66}}, {150, {67}}, {220, {68}}, {221, {69}}, {227, {70}}, {260, {71}}},
-        {{40, 3}, {110, 4}, {150, 3}, {220, 4}, {260, 3}});
-    std::array<Observation, 6> route_repair_profiles;
-    const std::vector<Note>* last_visible = nullptr;
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    for (int difficulty = 1; difficulty <= 6; ++difficulty) {
-        Observation& profile = route_repair_profiles[static_cast<std::size_t>(difficulty - 1)];
-        profile = generate(route_repair_path, no_audio, envelope_config(difficulty), last_visible);
-        if (profile.status.ok()) last_visible = &profile.notes;
-    }
-    const Observation impossible_route = generate(
-        write_physical_fixture("genuinely-impossible-root-route.mid",
-            {{0, {36}}, {20, {50}}, {40, {64}}, {60, {78}}, {80, {92}}}, {{80, 3}}),
-        no_audio, envelope_config(6));
-    ff7rp::pipeline::configure_chart_row_limit(false, false);
-    constexpr std::string_view route_failure =
-        "physical-domain root selector cannot satisfy a supported difficulty route within its target band";
-    ff7rp::pipeline::ChartEventPlan repaired_lv5_plan;
-    ff7rp::pipeline::ChartEventPlan repaired_lv6_plan;
-    if (route_repair_profiles[0].status.ok() || route_repair_profiles[1].status.ok()
-        || route_repair_profiles[2].status.ok() || route_repair_profiles[3].status.ok()
-        || !route_repair_profiles[4].status.ok() || !route_repair_profiles[5].status.ok()
-        || route_repair_profiles[4].stats.selected_actions != 12u
-        || route_repair_profiles[4].stats.selected_actions
-            <= route_repair_profiles[4].stats.target_minimum_rows
-        || route_repair_profiles[4].stats.selected_actions
-            > route_repair_profiles[4].stats.target_maximum_rows
-        || route_repair_profiles[5].stats.selected_actions != 12u
-        || route_repair_profiles[5].stats.selected_actions
-            > route_repair_profiles[5].stats.target_maximum_rows
-        || !physical_plan(route_repair_profiles[4], 5, &repaired_lv5_plan)
-        || !physical_plan(route_repair_profiles[5], 6, &repaired_lv6_plan)
-        || repaired_lv5_plan.physical_digest != repaired_lv6_plan.physical_digest
-        || repaired_lv6_plan.source_row_count != 12u
-        || repaired_lv6_plan.native_event_count != 12u) {
-        std::string detail = "generalized route repair did not search the complete physical target band:";
-        for (std::size_t index = 0; index < route_repair_profiles.size(); ++index) {
-            const Observation& profile = route_repair_profiles[index];
-            detail += " lv" + std::to_string(index + 1u) + "=[" + profile.status.message
-                + "] actions=" + std::to_string(profile.stats.selected_actions)
-                + " band=" + std::to_string(profile.stats.target_minimum_rows) + "-"
-                + std::to_string(profile.stats.target_maximum_rows) + " ratio="
-                + std::to_string(profile.stats.local_skills.satisfied_route_ratio) + "/"
-                + std::to_string(profile.stats.local_skills.satisfied_route_margin) + " skill="
-                + std::to_string(profile.stats.local_skills.dominant_skill);
-        }
-        return fail(detail);
-    }
-    for (std::size_t index = 0; index < route_repair_profiles[4].notes.size(); ++index) {
-        if (topology_root(route_repair_profiles[4].notes, index)
-            && !topology_root(route_repair_profiles[5].notes, index)) {
-            return fail("route-repaired generalized roots were not nested across visible profiles");
-        }
-    }
-    if (impossible_route.status.code
-            != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
-        || impossible_route.status.message != route_failure
-        || impossible_route.notes.size() != 5u
-        || impossible_route.stats.selected_actions != 5u) {
-        return fail("genuinely impossible generalized root route did not omit fail-closed");
+        return fail("independent ungrouped exact R/P/E/A accounting changed");
     }
 
     std::string cleanup_error;

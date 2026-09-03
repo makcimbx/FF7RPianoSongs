@@ -372,9 +372,6 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         return true;
     };
     if (!timing_valid(song.config)) return false;
-    const bool physical_midi = song.chart_from_midi
-        && song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
-    std::optional<std::uint64_t> physical_midi_digest;
     for (std::size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
         const LoadedDifficultyProfile& profile = song.difficulty_profiles[index];
         SongConfig normalized_config = profile.config;
@@ -385,13 +382,10 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         SongConfig complete_config = profile.config;
         for (const auto& row : profile.diagnostic_chart.tail_rows) complete_config.notes.push_back(row.source);
         const ProfileActionCounts counts = profile_action_counts(complete_config);
-        if (physical_midi) {
+        if (song.chart_from_midi) {
             ChartEventPlan event_plan;
             if (!derive_profile_event_plan(profile, &event_plan)
-                || event_plan.required_action_count != profile.diagnostics.selected_actions
-                || (physical_midi_digest.has_value()
-                    && *physical_midi_digest != event_plan.physical_digest)) return false;
-            physical_midi_digest = event_plan.physical_digest;
+                || event_plan.required_action_count != profile.diagnostics.selected_actions) return false;
         }
         if (profile.diagnostics.selected_actions != counts.right + counts.left ||
             profile.diagnostics.scheduled_rows != complete_config.notes.size() ||
@@ -401,7 +395,7 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
             (song.chart_from_midi && (profile.config.difficulty < kLowestMidiDifficulty ||
                 profile.config.difficulty > kHighestMidiDifficulty)) ||
             (song.chart_from_midi && (profile.diagnostics.candidate_frames > profile.diagnostics.candidate_actions ||
-                (!physical_midi && profile.diagnostics.dropped_actions !=
+                (profile.diagnostics.dropped_actions !=
                     profile.diagnostics.candidate_actions - profile.diagnostics.candidate_frames) ||
                 profile.diagnostics.selected_actions > profile.diagnostics.candidate_actions ||
                 profile.diagnostics.protected_baseline_actions > profile.diagnostics.candidate_actions ||
@@ -791,9 +785,7 @@ Status load_song_directory(
         song.config.metronome_enabled
             ? "metronome=resolved_mode0_only_before_hca"
             : "metronome=disabled"};
-    if (song.chart_from_midi && chart_policy.playable_extended_available) {
-        cache_identity.push_back(kPhysicalMidiGenerationIdentity);
-    }
+    if (song.chart_from_midi) cache_identity.push_back(kGeneratedMidiGenerationIdentity);
     for (std::size_t role = 0; role < song.audio_sources.authored.size(); ++role) {
         const auto& source = song.audio_sources.authored[role];
         cache_identity.push_back("authored_role=" + std::to_string(role) + ":" +
@@ -905,10 +897,8 @@ Status load_song_directory(
                 }
                 baseline = &complete_baseline;
             }
-            const bool generalized_physical_midi =
-                song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
             std::size_t maximum_visible_rows = 0;
-            if (!generalized_physical_midi && !song.difficulty_profiles.empty()) {
+            if (!song.difficulty_profiles.empty()) {
                 maximum_visible_rows = maximum_midi_visible_profile_actions(
                     song.difficulty_profiles.back().diagnostics.selected_actions);
             }
@@ -990,37 +980,32 @@ Status load_song_directory(
                         const ProfileActionCounts previous_counts = profile_action_counts(previous_profile.config);
                         return previous_counts.right + previous_counts.left;
                     }();
-                if (chart_policy.playable_extended_available) {
-                    profile.diagnostics.retained_actions = std::min(previous_actions, actions);
-                    profile.diagnostics.removed_actions = 0;
-                    profile.diagnostics.replaced_actions = 0;
-                    profile.diagnostics.added_actions = actions - std::min(previous_actions, actions);
-                    profile.diagnostics.overlap_ratio = 1.0;
-                    profile.diagnostics.nested_from_previous = actions >= previous_actions;
-                } else {
-                    const ProfileActionComparison comparison = compare_profiles(previous_profile.config, profile.config);
-                    profile.diagnostics.retained_actions = comparison.retained;
-                    profile.diagnostics.replaced_actions = comparison.replaced;
-                    profile.diagnostics.removed_actions = comparison.removed;
-                    profile.diagnostics.added_actions = comparison.added;
-                    profile.diagnostics.overlap_ratio = comparison.overlap;
-                    profile.diagnostics.nested_from_previous = comparison.nested;
+                SongConfig complete_previous = previous_profile.config;
+                for (const DiagnosticChartTailRow& row : previous_profile.diagnostic_chart.tail_rows) {
+                    complete_previous.notes.push_back(row.source);
                 }
+                SongConfig complete_current = profile.config;
+                for (const DiagnosticChartTailRow& row : profile.diagnostic_chart.tail_rows) {
+                    complete_current.notes.push_back(row.source);
+                }
+                const ProfileActionComparison comparison = compare_profiles(complete_previous, complete_current);
+                profile.diagnostics.retained_actions = comparison.retained;
+                profile.diagnostics.replaced_actions = comparison.replaced;
+                profile.diagnostics.removed_actions = comparison.removed;
+                profile.diagnostics.added_actions = comparison.added;
+                profile.diagnostics.overlap_ratio = comparison.overlap;
+                profile.diagnostics.nested_from_previous = comparison.nested;
                 if (profile.diagnostics.overlap_ratio + 1e-9 < 0.80) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "recognizability_below_80_percent", profile.diagnostics});
                     continue;
                 }
-                if (!chart_policy.playable_extended_available
-                    && actions > maximum_midi_visible_profile_actions(previous_actions)) {
+                if (actions > maximum_midi_visible_profile_actions(previous_actions)) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "maximum_visible_step_exceeded", profile.diagnostics});
                     continue;
                 }
-                const bool distinct_generalized_topology = chart_policy.playable_extended_available
-                    && actions > previous_actions;
-                if (!distinct_generalized_topology
-                    && !has_meaningful_midi_profile_growth(previous_actions, actions)) {
+                if (!has_meaningful_midi_profile_growth(previous_actions, actions)) {
                     song.difficulty_profile_omissions.push_back({difficulty, profile.chart.notes.size(),
                         "insufficient_meaningful_growth", profile.diagnostics});
                     continue;

@@ -177,21 +177,16 @@ ignore behavior. The generator never invents or transposes pitches.
 
 MIDI format 0 and format 1 inputs are supported. Format 2 is rejected. Tempo and meter events are linked into one deterministic timeline. For compatibility with common non-standard exports, a preceding channel running status may resume after a Meta or SysEx event; this exception does not extend to other system status bytes. Notes before the established audio lead-in or after known source-audio duration do not become prompts.
 
-Under verified generalized policy, generated levels share one immutable physical
-chart and differ only by nested right-hand group topology. Source rows, native
-prefix events, total native events, and required root actions are separate counts.
-Exact same-frame/right-hand-pitch duplicates coalesce; other same-frame right-hand
-notes become stable equal-time grouped rows. Generated rows contain one event:
-monotones are ordered first and an unambiguous chord follows in its own row. Explicit
-authored dual rows remain valid. Ambiguous harmony falls back to source
-monotones. Either all physical rows fit the 8192-row and 8192-event limits or
-generation rejects without truncation. Without verified policy, the legacy v44
-reduction path and sparse-label behavior remain.
-Generated charts deterministically group only distinct-frame right-hand events
-that form an uninterrupted run of adjacent spacing violations under the selected
-profile's own constraint. One root may own multiple followers; a playable gap or
-an intervening left-hand, mixed-hand, or non-monotone row ends the run. Generated
-charts plan eligible
+Generated levels are independently reduced from one immutable normalized MIDI
+source. Each generated row contains one selected source-backed monotone or one
+inferred chord and always has `group_index = 0`; every row is therefore a required
+action. Difficulty profiles may select different rows and have different physical
+digests. Exact and uniquely verified chord inference remains available, while
+ambiguous harmony is not invented. Under verified 1.005 extended policy a complete
+generated profile may use the existing 8192-row and 8192-event transport; without
+that policy, generation remains bounded to 512 rows and omits rather than clips an
+oversized profile. Explicit authored dual rows and authored groups are unchanged.
+Generated charts plan eligible
 C/C-sharp `_2` identities from the complete canonical source contour before
 profile reduction, and retain exact source chord voicing for verified IgnoreSound
 derivation. Planner decisions are carried by exact MIDI source identity across

@@ -113,21 +113,19 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - Pipeline cache identity v44 and runtime-cache format 14 include authored group,
   monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
-  rather than interpreted under the new layout. Version 44 also identifies the
-  canonical-contour monotone planner and profile-derived grouping policy.
-- Generalized playable MIDI adds a MIDI-only generation identity to cache keys;
-  ordinary authored charts and legacy/disabled MIDI retain their existing v44
-  identity. Format 14 remains sufficient because source rows, prefix events,
-  native events, required actions, physical digest, and group-root topology are
-  deterministically rederived from the already-counted prefix/tail rows. Manifests
-  expose those derived counts only under the generalized policy.
+  rather than interpreted under the new layout. Generated MIDI adds its own semantic
+  identity to every MIDI cache key; authored charts retain the v44 identity.
+  Format 14 remains sufficient because source rows, prefix events, native events,
+  required actions, physical digest, and any explicitly authored group topology are
+  deterministically rederived from the already-counted prefix/tail rows.
 - A profile descriptor keeps the first 512 source rows in `chart_notes` and owns
   the remainder in `extended_chart_tail_notes`. `source_row_count`,
   `native_prefix_event_count`, `native_event_count`, and `required_action_count`
   are distinct authoritative facts; compatibility `note_count` means required
-  actions. Native event order within a row is monotone then chord. Runtime support
-  for generalized mixed row-level groups, explicit dual rows, generated one-event
-  equal-time rows, chord/IgnoreSound tails, and
+  actions. Native event order within a row is monotone then chord. Automatically
+  generated MIDI rows are ungrouped parentless actions and profiles may have
+  different physical digests. Runtime support for explicit mixed row-level groups,
+  explicit dual rows, generated one-event rows, chord/IgnoreSound tails, and
   event-count allocation remains a separate qualification gate; offline authority
   does not authorize mutation on an older runtime.
 - `ChartEventRow` is the game-neutral compiled-row projection used by the canonical
