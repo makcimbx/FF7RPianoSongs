@@ -64,8 +64,10 @@ struct DescriptorChartRow {
     std::string time_str;
     std::string monotone_id;
     std::string chord_id;
-    int32_t note_type = 3;
-    int32_t dot_type = 0;
+    int32_t monotone_note_type = 0;
+    int32_t monotone_dot_type = 0;
+    int32_t chord_note_type = 0;
+    int32_t chord_dot_type = 0;
     int32_t camera_switch_timing = 0;
     int32_t group_index = 0;
     std::array<std::string, 3> ignore_sound_ids{};
@@ -372,16 +374,28 @@ template <typename T>
 struct has_chord_id_member<T, std::void_t<decltype(std::declval<const T&>().chord_id)>> : std::true_type {};
 
 template <typename T, typename = void>
-struct has_note_type_member : std::false_type {};
+struct has_monotone_note_type_member : std::false_type {};
 
 template <typename T>
-struct has_note_type_member<T, std::void_t<decltype(std::declval<const T&>().note_type)>> : std::true_type {};
+struct has_monotone_note_type_member<T, std::void_t<decltype(std::declval<const T&>().monotone_note_type)>> : std::true_type {};
 
 template <typename T, typename = void>
-struct has_dot_type_member : std::false_type {};
+struct has_monotone_dot_type_member : std::false_type {};
 
 template <typename T>
-struct has_dot_type_member<T, std::void_t<decltype(std::declval<const T&>().dot_type)>> : std::true_type {};
+struct has_monotone_dot_type_member<T, std::void_t<decltype(std::declval<const T&>().monotone_dot_type)>> : std::true_type {};
+
+template <typename T, typename = void>
+struct has_chord_note_type_member : std::false_type {};
+
+template <typename T>
+struct has_chord_note_type_member<T, std::void_t<decltype(std::declval<const T&>().chord_note_type)>> : std::true_type {};
+
+template <typename T, typename = void>
+struct has_chord_dot_type_member : std::false_type {};
+
+template <typename T>
+struct has_chord_dot_type_member<T, std::void_t<decltype(std::declval<const T&>().chord_dot_type)>> : std::true_type {};
 
 template <typename T, typename = void>
 struct has_camera_switch_timing_member : std::false_type {};
@@ -410,11 +424,16 @@ bool chart_row_from_note(const Note& note, DescriptorChartRow& out)
         if constexpr (has_chord_id_member<Note>::value) {
             out.chord_id = note.chord_id;
         }
-        if constexpr (has_note_type_member<Note>::value) {
-            out.note_type = static_cast<int32_t>(note.note_type);
-        }
-        if constexpr (has_dot_type_member<Note>::value) {
-            out.dot_type = static_cast<int32_t>(note.dot_type);
+        if constexpr (has_monotone_note_type_member<Note>::value
+            && has_monotone_dot_type_member<Note>::value
+            && has_chord_note_type_member<Note>::value
+            && has_chord_dot_type_member<Note>::value) {
+            out.monotone_note_type = static_cast<int32_t>(note.monotone_note_type);
+            out.monotone_dot_type = static_cast<int32_t>(note.monotone_dot_type);
+            out.chord_note_type = static_cast<int32_t>(note.chord_note_type);
+            out.chord_dot_type = static_cast<int32_t>(note.chord_dot_type);
+        } else {
+            return false;
         }
         if constexpr (has_camera_switch_timing_member<Note>::value) {
             out.camera_switch_timing = static_cast<int32_t>(note.camera_switch_timing);
@@ -430,6 +449,14 @@ bool chart_row_from_note(const Note& note, DescriptorChartRow& out)
         (void)note;
         return false;
     }
+}
+
+bool valid_descriptor_note_value(const bool present, const int32_t note_type,
+    const int32_t dot_type) noexcept
+{
+    return present
+        ? note_type >= 0 && note_type <= 4 && dot_type >= 0 && dot_type <= 1
+        : note_type == 0 && dot_type == 0;
 }
 
 template <typename Notes>
@@ -1035,10 +1062,17 @@ bool plan_descriptor_chart_patch(
                 return false;
             }
         }
-        arrays->chord_note_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
-        arrays->chord_dot_types[index] = row.chord_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
-        arrays->monotone_note_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
-        arrays->monotone_dot_types[index] = row.monotone_id.empty() ? 0 : static_cast<uint8_t>(std::clamp(row.dot_type, 0, 255));
+        if (!valid_descriptor_note_value(!row.monotone_id.empty(),
+                row.monotone_note_type, row.monotone_dot_type)
+            || !valid_descriptor_note_value(!row.chord_id.empty(),
+                row.chord_note_type, row.chord_dot_type)) {
+            if (fail_reason) *fail_reason = "unsupported_side_specific_note_value";
+            return false;
+        }
+        arrays->chord_note_types[index] = static_cast<uint8_t>(row.chord_note_type);
+        arrays->chord_dot_types[index] = static_cast<uint8_t>(row.chord_dot_type);
+        arrays->monotone_note_types[index] = static_cast<uint8_t>(row.monotone_note_type);
+        arrays->monotone_dot_types[index] = static_cast<uint8_t>(row.monotone_dot_type);
         arrays->camera_switch_timings[index] = static_cast<uint8_t>(std::clamp(row.camera_switch_timing, 0, 255));
         // The generalized transaction relinks only after the final allocation is
         // stable. Suppress parser links for its exact first-512 source prefix.
@@ -1311,9 +1345,15 @@ bool append_chart_row_patch_plan(
         return false;
     }
 
-    const uint8_t note_type = static_cast<uint8_t>(std::clamp(row.note_type, 0, 255));
+    if (!valid_descriptor_note_value(!row.monotone_id.empty(),
+            row.monotone_note_type, row.monotone_dot_type)) {
+        if (fail_reason) *fail_reason = "unsupported_monotone_note_value";
+        return false;
+    }
+    const uint8_t note_type = static_cast<uint8_t>(row.monotone_note_type);
+    const uint8_t dot_type = static_cast<uint8_t>(row.monotone_dot_type);
     if (!append_field_patch(row_base + kChartRowNoteTypeOffset, note_type, "PianoScore.Row.NoteType", row_index, out)
-        || !append_field_patch(row_base + kChartRowDotTypeOffset, row.dot_type, "PianoScore.Row.DotType", row_index, out)
+        || !append_field_patch(row_base + kChartRowDotTypeOffset, dot_type, "PianoScore.Row.DotType", row_index, out)
         || !append_field_patch(row_base + kChartRowCameraSwitchTimingOffset, row.camera_switch_timing, "PianoScore.Row.CameraSwitchTiming", row_index, out)
         || !append_field_patch(row_base + kChartRowGroupIndexOffset, row.group_index, "PianoScore.Row.GroupIndex", row_index, out)) {
         if (fail_reason) {
@@ -1580,8 +1620,10 @@ void log_extended_chart_source_boundary(const std::vector<DescriptorChartRow>& r
             << index << ':' << row.time_str
             << ":m=" << row.monotone_id
             << ":c=" << row.chord_id
-            << ":n=" << row.note_type
-            << ":d=" << row.dot_type
+            << ":mn=" << row.monotone_note_type
+            << ":md=" << row.monotone_dot_type
+            << ":cn=" << row.chord_note_type
+            << ":cd=" << row.chord_dot_type
             << ":cam=" << row.camera_switch_timing
             << ":g=" << row.group_index;
     }
@@ -1640,9 +1682,9 @@ bool chart_patch_ignore_sound_selftest()
         SongDifficultyProfile profile;
         profile.difficulty = 4;
         profile.chart_notes.push_back(
-            {"00_00", "Mono", "Chord", 3, 0, 0, 7, std::move(first)});
+            {"00_00", "Mono", "Chord", 1, 1, 4, 0, 0, 7, std::move(first)});
         profile.chart_notes.push_back(
-            {"00_25", "Mono", "Chord", 3, 0, 0, 8, std::move(second)});
+            {"00_25", "Mono", "Chord", 3, 0, 0, 1, 0, 8, std::move(second)});
         return profile;
     };
     const auto fail = [&]() {
@@ -1662,7 +1704,8 @@ bool chart_patch_ignore_sound_selftest()
             const bool dual_hand = index >= grouped_monotone_rows;
             profile.chart_notes.push_back({
                 "00_00", "Mono", dual_hand ? "Chord" : "",
-                3, 0, 0, grouped && !dual_hand ? 1 : 0, {},
+                2, 0, dual_hand ? 4 : 0, dual_hand ? 1 : 0,
+                0, grouped && !dual_hand ? 1 : 0, {},
             });
         }
         return profile;
@@ -1715,9 +1758,9 @@ bool chart_patch_ignore_sound_selftest()
     SongDifficultyProfile generalized;
     generalized.difficulty = 4;
     generalized.chart_notes.assign(512,
-        SongChartNote{"00_00", "Mono", "", 3, 0, 0, 0, {}});
+        SongChartNote{"00_00", "Mono", "", 2, 0, 0, 0, 0, 0, {}});
     generalized.extended_chart_tail_notes.push_back(
-        SongChartNote{"00_00", "Mono", "", 3, 0, 0, 1, {}});
+        SongChartNote{"00_00", "Mono", "", 3, 1, 0, 0, 0, 1, {}});
     generalized.chart_notes[511].group_index = 1;
     std::vector<ff7rp::pipeline::ChartEventRow> generalized_rows;
     generalized_rows.reserve(513);
@@ -1761,8 +1804,35 @@ bool chart_patch_ignore_sound_selftest()
     if (!try_plan_descriptor_chart_patch(
             root_profile, "selftest-root", layout, resolver, planned, &reason)
         || !planned.arrays
+        || planned.arrays->monotone_note_types != std::vector<uint8_t>({1, 3})
+        || planned.arrays->monotone_dot_types != std::vector<uint8_t>({1, 0})
+        || planned.arrays->chord_note_types != std::vector<uint8_t>({4, 0})
+        || planned.arrays->chord_dot_types != std::vector<uint8_t>({0, 1})
         || planned.arrays->ignore_sound_ids
             != std::vector<uint64_t>({0x2001u, 0u, 0x2003u, 0u, 0x2002u, 0u})) {
+        return fail();
+    }
+
+    SongDifficultyProfile absent_side_profile = root_profile;
+    absent_side_profile.chart_notes[1].chord_id.clear();
+    absent_side_profile.chart_notes[1].chord_note_type = 0;
+    absent_side_profile.chart_notes[1].chord_dot_type = 0;
+    PlannedDescriptorChartPatch absent_side_plan;
+    if (!try_plan_descriptor_chart_patch(absent_side_profile, "selftest-absent-side",
+            layout, resolver, absent_side_plan, &reason)
+        || !absent_side_plan.arrays
+        || absent_side_plan.arrays->chord_note_types != std::vector<uint8_t>({4, 0})
+        || absent_side_plan.arrays->chord_dot_types != std::vector<uint8_t>({0, 0})) {
+        return fail();
+    }
+
+    SongDifficultyProfile malformed_pair = root_profile;
+    malformed_pair.chart_notes[0].monotone_note_type = 5;
+    PlannedDescriptorChartPatch malformed_plan;
+    if (try_plan_descriptor_chart_patch(malformed_pair, "selftest-malformed-pair",
+            layout, resolver, malformed_plan, &reason)
+        || malformed_plan.arrays
+        || reason != "unsupported_side_specific_note_value") {
         return fail();
     }
     OwnedDescriptorChartArrays* const first_owner = planned.arrays.get();

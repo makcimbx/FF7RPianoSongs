@@ -37,6 +37,10 @@ inline bool restricted_extended_source_note(const Note& note)
     return std::isfinite(note.beat) && note.beat >= 0.0
         && std::isfinite(note.duration_beats) && note.duration_beats > 0.0
         && (!note.pitch.empty() || !note.chord_id.empty())
+        && valid_note_value_override(note.monotone_note_value)
+        && valid_note_value_override(note.chord_note_value)
+        && (!note.pitch.empty() || !note.monotone_note_value.provided)
+        && (!note.chord_id.empty() || !note.chord_note_value.provided)
         && (!note.chord_id.empty()
             || (note.source_chord_pitches.empty() && note.ignore_sound_pitches.empty()));
 }
@@ -47,9 +51,7 @@ inline bool restricted_extended_compiled_note(const ChartNote& note)
         && std::isfinite(note.duration_beats) && note.duration_beats > 0.0
         && (!note.monotone_id.empty() || !note.chord_id.empty())
         && (note.pitch.empty() == note.monotone_id.empty())
-        && valid_compiled_time_string(note.time_str)
-        && note.note_type == (note.duration_beats >= 2.0 ? 2 : 3)
-        && note.dot_type == 0 && note.camera_switch_timing == 0;
+        && valid_compiled_time_string(note.time_str);
 }
 
 inline bool restricted_extended_row_pair(
@@ -57,6 +59,7 @@ inline bool restricted_extended_row_pair(
 {
     return restricted_extended_source_note(source)
         && restricted_extended_compiled_note(compiled)
+        && chart_note_semantics_equal(source, compiled)
         && compiled.beat == source.beat
         && compiled.duration_beats == source.duration_beats
         && compiled.pitch == source.pitch

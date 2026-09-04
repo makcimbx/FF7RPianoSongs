@@ -181,6 +181,9 @@ bool test_generalized_representative_plan()
     generated_same_frame[0].monotone_id = "C4";
     generated_same_frame[1].monotone_id = "D4";
     generated_same_frame[2].chord_id = "Chord_C";
+    generated_same_frame[0].monotone_note_type = 3;
+    generated_same_frame[1].monotone_note_type = 3;
+    generated_same_frame[2].chord_note_type = 3;
     const ChartEventPlan generated_order = derive_chart_event_plan(generated_same_frame);
     if (!generated_order.valid() || generated_order.native_event_count != 3
         || generated_order.events[0].kind != ChartEventKind::Monotone
@@ -193,26 +196,106 @@ bool test_generalized_representative_plan()
     explicit_dual.time_str = "00_00";
     explicit_dual.monotone_id = "C4";
     explicit_dual.chord_id = "Chord_C";
+    explicit_dual.monotone_note_type = 0;
+    explicit_dual.monotone_dot_type = 0;
+    explicit_dual.chord_note_type = 4;
+    explicit_dual.chord_dot_type = 1;
     const ChartEventPlan dual_order = derive_chart_event_plan({explicit_dual});
     if (!dual_order.valid() || dual_order.events.size() != 2
         || dual_order.events[0].kind != ChartEventKind::Monotone
         || dual_order.events[1].kind != ChartEventKind::Chord
         || dual_order.events[0].ordinal != 0 || dual_order.events[1].ordinal != 1)
         return false;
+    std::uint8_t selected_type = 0, selected_dot = 0;
+    if (!ff7r::piano::game::synthetic_model::modeled_event_note_value(
+            explicit_dual, ChartEventKind::Monotone, selected_type, selected_dot)
+        || selected_type != 0 || selected_dot != 0
+        || !ff7r::piano::game::synthetic_model::modeled_event_note_value(
+            explicit_dual, ChartEventKind::Chord, selected_type, selected_dot)
+        || selected_type != 4 || selected_dot != 1) {
+        std::cerr << "independent note-value selection failed\n";
+        return false;
+    }
+
+    std::vector<ChartEventRow> retained_dual_rows(513);
+    for (auto& row : retained_dual_rows) {
+        row.time_str = "00_00";
+        row.monotone_id = "C4";
+        row.monotone_note_type = 3;
+        row.monotone_dot_type = 0;
+    }
+    retained_dual_rows.back() = explicit_dual;
+    const ChartEventPlan retained_dual_plan = derive_chart_event_plan(retained_dual_rows);
+    if (!retained_dual_plan.valid()
+        || retained_dual_plan.native_prefix_event_count != 512
+        || retained_dual_plan.native_event_count != 514
+        || retained_dual_plan.events[512].kind != ChartEventKind::Monotone
+        || retained_dual_plan.events[513].kind != ChartEventKind::Chord
+        || retained_dual_plan.events[512].source_row_index != 512
+        || retained_dual_plan.events[513].source_row_index != 512) {
+        std::cerr << "retained dual note-value plan failed\n";
+        return false;
+    }
+
+    ChartEventRow malformed = explicit_dual;
+    malformed.chord_note_type = 5;
+    if (derive_chart_event_plan({malformed}).valid()
+        || ff7r::piano::game::synthetic_model::modeled_event_note_value(
+            malformed, ChartEventKind::Chord, selected_type, selected_dot)) {
+        std::cerr << "malformed chord note-value accepted\n";
+        return false;
+    }
+    malformed = explicit_dual;
+    malformed.chord_id.clear();
+    if (derive_chart_event_plan({malformed}).valid()) {
+        std::cerr << "absent-side nonzero note-value accepted\n";
+        return false;
+    }
+
+    std::vector<ChartEventRow> topology_rows(2, explicit_dual);
+    topology_rows[0].group_index = topology_rows[1].group_index = 1;
+    const ChartEventPlan topology_a = derive_chart_event_plan(topology_rows);
+    topology_rows[0].monotone_note_type = 2;
+    topology_rows[0].monotone_dot_type = 0;
+    topology_rows[1].chord_note_type = 4;
+    topology_rows[1].chord_dot_type = 1;
+    const ChartEventPlan topology_b = derive_chart_event_plan(topology_rows);
+    if (!topology_a.valid() || !topology_b.valid()
+        || topology_a.native_event_count != topology_b.native_event_count
+        || topology_a.required_action_count != topology_b.required_action_count
+        || topology_a.links.size() != topology_b.links.size()
+        || topology_a.final_group_index != topology_b.final_group_index
+        || topology_a.physical_digest == topology_b.physical_digest) {
+        std::cerr << "note-value topology invariance failed\n";
+        return false;
+    }
+    for (std::size_t i = 0; i < topology_a.links.size(); ++i) {
+        if (topology_a.links[i].root_event_index != topology_b.links[i].root_event_index
+            || topology_a.links[i].child_event_index != topology_b.links[i].child_event_index)
+            { std::cerr << "note-value link topology changed\n"; return false; }
+    }
 
     std::vector<ChartEventRow> rows(4099);
     for (ChartEventRow& row : rows) {
         row.time_str = "00_00"; // Equal times are parser-valid and preserve source order.
         row.monotone_id = "C4";
         row.chord_id = "Chord_C";
+        row.monotone_note_type = 3;
+        row.chord_note_type = 3;
     }
     // Exactly 4093 dual, three monotone-only and three chord-only rows.
     rows[0].chord_id.clear();
+    rows[0].chord_note_type = rows[0].chord_dot_type = 0;
     rows[100].monotone_id.clear();
+    rows[100].monotone_note_type = rows[100].monotone_dot_type = 0;
     rows[4095].chord_id.clear();
+    rows[4095].chord_note_type = rows[4095].chord_dot_type = 0;
     rows[4096].monotone_id.clear();
+    rows[4096].monotone_note_type = rows[4096].monotone_dot_type = 0;
     rows[4097].chord_id.clear();
+    rows[4097].chord_note_type = rows[4097].chord_dot_type = 0;
     rows[4098].monotone_id.clear();
+    rows[4098].monotone_note_type = rows[4098].monotone_dot_type = 0;
 
     // Four two-child runs (including the 511->512 boundary) and one
     // single-child reused Group1 run produce exactly nine canonical links.
@@ -238,12 +321,14 @@ bool test_generalized_representative_plan()
     std::vector<ChartEventRow> dual_prefix(513);
     for (auto& row : dual_prefix) {
         row.time_str = "00_00"; row.monotone_id = "C4"; row.chord_id = "Chord_C";
+        row.monotone_note_type = row.chord_note_type = 3;
     }
     const ChartEventPlan p1024 = derive_chart_event_plan(dual_prefix);
     if (!p1024.valid() || p1024.native_prefix_event_count != 1024) return false;
     std::vector<ChartEventRow> too_many_events(4097);
     for (auto& row : too_many_events) {
         row.time_str = "00_00"; row.monotone_id = "C4"; row.chord_id = "Chord_C";
+        row.monotone_note_type = row.chord_note_type = 3;
     }
     if (derive_chart_event_plan(too_many_events).valid()) return false;
     const auto crossing = std::find_if(plan.links.begin(), plan.links.end(),
@@ -265,7 +350,9 @@ bool test_generalized_representative_plan()
     // A zero-link plan whose final byte already equals the suppressed parser
     // state must prove that state without issuing a redundant group-byte write.
     std::vector<ChartEventRow> ungrouped_rows(513);
-    for (auto& row : ungrouped_rows) { row.time_str = "00_00"; row.monotone_id = "C4"; }
+    for (auto& row : ungrouped_rows) {
+        row.time_str = "00_00"; row.monotone_id = "C4"; row.monotone_note_type = 3;
+    }
     const ChartEventPlan ungrouped_plan = derive_chart_event_plan(ungrouped_rows);
     GeneralizedRequest ungrouped_request{&ungrouped_plan};
     const GeneralizedResult ungrouped_success = run_generalized(ungrouped_request);

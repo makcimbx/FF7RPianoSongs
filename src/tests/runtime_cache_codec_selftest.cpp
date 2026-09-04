@@ -15,8 +15,9 @@ namespace {
 
 using namespace ff7rp::pipeline;
 
-constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
-constexpr std::uint32_t kFormat = 14;
+constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '5'};
+constexpr char kFormat14Magic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
+constexpr std::uint32_t kFormat = 15;
 
 bool expect(const bool condition, const char* message) {
     if (!condition) std::cerr << message << '\n';
@@ -49,6 +50,8 @@ LoadedSong representative_song() {
     song.config.difficulty = 3;
     song.config.notes_provided = true;
     song.config.notes = {{0.0, 1.0, "C4", "和音"}, {1.5, 2.0, "E4", ""}};
+    song.config.notes[0].monotone_note_value = {{0, 0}, true};
+    song.config.notes[0].chord_note_value = {{3, 1}, true};
     if (!compile_chart(song.config, &song.chart).ok()) return {};
     LoadedDifficultyProfile profile;
     profile.config = song.config;
@@ -279,7 +282,7 @@ int main() {
     // built in a private temporary workspace. A test-only wrapper called the
     // parent's internal write_runtime_cache for these exact value constructors, then hashed
     // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
-    if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive")) return 1;
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2850u, 0x387b4cb8dfef1090ull, "comprehensive")) return 1;
     const LoadedSong legacy_diagnostic = diagnostic_tail_oracle_song();
     std::vector<std::uint8_t> legacy_diagnostic_bytes;
     if (!expect(!encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
@@ -381,8 +384,8 @@ int main() {
         !expect(encode_runtime_cache(source, kMagic, kFormat, &bytes), "encode failed")) return 1;
 
     const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
-    if (!expect(bytes.size() == 1660u, "encoded byte count changed") ||
-        !expect(hash == 0x5e5f24ba16b3506eull, "encoded byte fixture changed")) {
+    if (!expect(bytes.size() == 1716u, "encoded byte count changed") ||
+        !expect(hash == 0x06e25cf9ca0055efull, "encoded byte fixture changed")) {
         std::cerr << "actual bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
         return 1;
     }
@@ -427,7 +430,8 @@ int main() {
         !rejects_without_publication(std::move(truncated_payload), "truncated payload was accepted") ||
         !rejects_without_publication(std::move(trailing), "trailing bytes were accepted or partially published") ||
         !rejects_without_publication(std::move(corrupt), "corruption was accepted or partially published") ||
-        !expect(!decode_runtime_cache(bytes, wrong_magic, kFormat, &wrong_identity), "wrong magic was accepted") ||
+         !expect(!decode_runtime_cache(bytes, wrong_magic, kFormat, &wrong_identity), "wrong magic was accepted") ||
+         !expect(!decode_runtime_cache(bytes, kFormat14Magic, 14u, &wrong_identity), "format-14 cache was accepted") ||
         !expect(!decode_runtime_cache(bytes, kMagic, kFormat + 1u, &wrong_identity), "wrong version was accepted")) return 1;
 
     wrong_identity = decoded;
@@ -452,8 +456,14 @@ int main() {
     invalid_semantics.config.title.clear();
     invalid_semantics.difficulty_profiles[0].config.title.clear();
     LoadedSong invalid_enum = source;
-    invalid_enum.chart.notes[0].note_type = 99;
-    invalid_enum.difficulty_profiles[0].chart.notes[0].note_type = 99;
+    invalid_enum.chart.notes[0].monotone_note_type = 5;
+    invalid_enum.difficulty_profiles[0].chart.notes[0].monotone_note_type = 5;
+    LoadedSong invalid_absent_side = source;
+    invalid_absent_side.chart.notes[1].chord_note_type = 3;
+    invalid_absent_side.difficulty_profiles[0].chart.notes[1].chord_note_type = 3;
+    LoadedSong invalid_source_override = source;
+    invalid_source_override.config.notes[1].chord_note_value.value = {3, 0};
+    invalid_source_override.difficulty_profiles[0].config.notes[1].chord_note_value.value = {3, 0};
     LoadedSong invalid_count = source;
     invalid_count.config.notes.resize(8193u, source.config.notes.front());
     invalid_count.difficulty_profiles[0].config.notes = invalid_count.config.notes;
@@ -470,6 +480,8 @@ int main() {
             "invalid playable exact-520 tail encoded")) return 1;
     if (!encoded_rejects(std::move(invalid_semantics), "invalid semantic payload was accepted") ||
         !encoded_rejects(std::move(invalid_enum), "invalid chart enum was accepted") ||
+        !encoded_rejects(std::move(invalid_absent_side), "absent-side chart notation was accepted") ||
+        !encoded_rejects(std::move(invalid_source_override), "noncanonical source notation override was accepted") ||
         !encoded_rejects(std::move(invalid_ignore), "invalid IgnoreSound cache mutation was accepted") ||
         !expect(!encode_runtime_cache(invalid_count, kMagic, kFormat, &bytes), "invalid note count was encoded") ||
         !expect(!encode_runtime_cache(invalid_length, kMagic, kFormat, &bytes), "oversized string was encoded")) return 1;

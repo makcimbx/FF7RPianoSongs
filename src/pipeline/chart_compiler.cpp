@@ -179,8 +179,6 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
         note.pitch = source.pitch;
         note.chord_id = source.chord_id;
         note.time_str = beat_to_time_str(source.beat, config.bpm);
-        note.note_type = source.duration_beats >= 2.0 ? 2 : 3;
-        note.dot_type = 0;
         note.camera_switch_timing = 0;
         note.group_index = source.group_index;
 
@@ -195,6 +193,25 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
         }
         if (source.pitch.empty() && source.chord_id.empty()) {
             return Status::error(StatusCode::InvalidChart, "chart row must contain at least one native event");
+        }
+        if (!valid_note_value_override(source.monotone_note_value)
+            || !valid_note_value_override(source.chord_note_value)
+            || (source.pitch.empty() && source.monotone_note_value.provided)
+            || (source.chord_id.empty() && source.chord_note_value.provided)) {
+            return Status::error(StatusCode::InvalidChart,
+                "note-value override is invalid or names an absent side at note index " + std::to_string(i));
+        }
+        if (!source.pitch.empty()) {
+            const NativeNoteValue value = resolved_native_note_value(
+                source.monotone_note_value, source.duration_beats);
+            note.monotone_note_type = value.note_type;
+            note.monotone_dot_type = value.dot_type;
+        }
+        if (!source.chord_id.empty()) {
+            const NativeNoteValue value = resolved_native_note_value(
+                source.chord_note_value, source.duration_beats);
+            note.chord_note_type = value.note_type;
+            note.chord_dot_type = value.dot_type;
         }
 
         if (!source.pitch.empty()) {
@@ -251,12 +268,15 @@ bool diagnostic_charts_equal(
         return a.beat == b.beat && a.duration_beats == b.duration_beats &&
             a.pitch == b.pitch && a.chord_id == b.chord_id && a.group_index == b.group_index &&
             a.alternate_monotone == b.alternate_monotone &&
-            a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches;
+            a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches &&
+            a.monotone_note_value == b.monotone_note_value && a.chord_note_value == b.chord_note_value;
     };
     const auto compiled_equal = [](const ChartNote& a, const ChartNote& b) {
         return a.beat == b.beat && a.duration_beats == b.duration_beats &&
             a.pitch == b.pitch && a.time_str == b.time_str && a.monotone_id == b.monotone_id &&
-            a.chord_id == b.chord_id && a.note_type == b.note_type && a.dot_type == b.dot_type &&
+            a.chord_id == b.chord_id && a.monotone_note_type == b.monotone_note_type &&
+            a.monotone_dot_type == b.monotone_dot_type && a.chord_note_type == b.chord_note_type &&
+            a.chord_dot_type == b.chord_dot_type &&
             a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index &&
             a.ignore_sound_ids == b.ignore_sound_ids;
     };

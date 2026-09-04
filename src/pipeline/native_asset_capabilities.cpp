@@ -5,11 +5,9 @@
 namespace ff7rp::pipeline {
 
 NativeAssetCapabilities native_asset_capabilities_for_catalog(const std::string_view build_id) {
-    if (build_id == "ff7rebirth-steam-win64-6a16ced2") {
-        return {true, "native_assets=pca_Db_voicing:verified1005"};
-    }
-    if (build_id == "ff7rebirth-steam-win64-68fd6fde") {
-        return {false, "native_assets=pca_Db_voicing:unverified1004"};
+    if (build_id == "ff7rebirth-steam-win64-68fd6fde"
+        || build_id == "ff7rebirth-steam-win64-6a16ced2") {
+        return {true, "native_assets=pca_Db_voicing:verified1004+1005"};
     }
     return {false, "native_assets=pca_Db_voicing:unverified_unknown"};
 }

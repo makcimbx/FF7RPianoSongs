@@ -30,8 +30,10 @@ bool chart_note_equal(const SongChartNote& left, const SongChartNote& right)
     return left.time_str == right.time_str &&
         left.monotone_id == right.monotone_id &&
         left.chord_id == right.chord_id &&
-        left.note_type == right.note_type &&
-        left.dot_type == right.dot_type &&
+        left.monotone_note_type == right.monotone_note_type &&
+        left.monotone_dot_type == right.monotone_dot_type &&
+        left.chord_note_type == right.chord_note_type &&
+        left.chord_dot_type == right.chord_dot_type &&
         left.camera_switch_timing == right.camera_switch_timing &&
         left.group_index == right.group_index &&
         left.ignore_sound_ids == right.ignore_sound_ids;
@@ -97,8 +99,14 @@ ChartNote chart_note(
     note.time_str = std::move(time);
     note.monotone_id = std::move(monotone);
     note.chord_id = std::move(chord);
-    note.note_type = note_type;
-    note.dot_type = dot_type;
+    if (!note.monotone_id.empty()) {
+        note.monotone_note_type = note_type;
+        note.monotone_dot_type = dot_type;
+    }
+    if (!note.chord_id.empty()) {
+        note.chord_note_type = note_type;
+        note.chord_dot_type = dot_type;
+    }
     note.camera_switch_timing = camera;
     note.group_index = group;
     note.ignore_sound_ids = {"En2", "Gn2", ""};
@@ -181,8 +189,8 @@ SongDescriptor expected_full_descriptor()
     expected.score_thresholds = {11, 22, 33, 44};
     expected.mode_change_combo_counts = {7, 16};
     expected.chart_notes = {
-        {"1_25", "Cn4", "", 3, 1, 2, 3, {"En2", "Gn2", ""}},
-        {"2_50", "", "pca_C", 4, 5, 6, 7, {"En2", "Gn2", ""}},
+        {"1_25", "Cn4", "", 3, 1, 0, 0, 2, 3, {"En2", "Gn2", ""}},
+        {"2_50", "", "pca_C", 0, 0, 4, 5, 6, 7, {"En2", "Gn2", ""}},
     };
     expected.sidecar_path = L"cache/\u00c9tude.mabf";
     expected.default_profile_index = 0;
@@ -232,7 +240,7 @@ LoadedDifficultyProfile extended_profile_fixture(const std::size_t row_count)
         compiled.pitch = note.pitch;
         compiled.time_str = ff7rp::pipeline::expected_compiled_time_string(note.beat, profile.config.bpm);
         compiled.monotone_id = "Cn4";
-        compiled.note_type = 3;
+        compiled.monotone_note_type = 3;
         if (index < ff7rp::pipeline::kMaxChartRows) {
             profile.config.notes.push_back(std::move(note));
             profile.chart.notes.push_back(std::move(compiled));
@@ -351,6 +359,7 @@ int main()
     auto& chord_diagnostic = chord_tail.difficulty_profiles.front().diagnostic_chart;
     chord_diagnostic.tail_rows.front().source.chord_id = "pca_C";
     chord_diagnostic.tail_rows.front().compiled.chord_id = "pca_C";
+    chord_diagnostic.tail_rows.front().compiled.chord_note_type = 3;
     chord_diagnostic.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
         chord_tail.id, chord_tail.difficulty_profiles.front().config.difficulty,
         chord_tail.difficulty_profiles.front().chart, chord_diagnostic);

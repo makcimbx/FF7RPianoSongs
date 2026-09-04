@@ -15,8 +15,10 @@ struct SongChartNote {
     std::string time_str;
     std::string monotone_id;
     std::string chord_id;
-    int32_t note_type = 3;
-    int32_t dot_type = 0;
+    int32_t monotone_note_type = 0;
+    int32_t monotone_dot_type = 0;
+    int32_t chord_note_type = 0;
+    int32_t chord_dot_type = 0;
     int32_t camera_switch_timing = 0;
     int32_t group_index = 0;
     std::array<std::string, 3> ignore_sound_ids{};

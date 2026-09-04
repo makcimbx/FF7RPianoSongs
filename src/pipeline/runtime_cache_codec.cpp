@@ -180,10 +180,15 @@ bool read_string_vector(RuntimeCacheReader& in, std::vector<std::string>* values
 
 bool write_note(RuntimeCacheWriter& out, const Note& note) {
     const std::uint8_t alternate = note.alternate_monotone ? 1u : 0u;
+    const std::uint8_t monotone_provided = note.monotone_note_value.provided ? 1u : 0u;
+    const std::uint8_t chord_provided = note.chord_note_value.provided ? 1u : 0u;
     return out.pod(note.beat) && out.pod(note.duration_beats) && out.string(note.pitch) &&
         out.string(note.chord_id) && out.pod(note.group_index) && out.pod(alternate) &&
         write_string_vector(out, note.ignore_sound_pitches, 3u) &&
-        write_string_vector(out, note.source_chord_pitches, 16u);
+        write_string_vector(out, note.source_chord_pitches, 16u) &&
+        out.pod(monotone_provided) && out.pod(note.monotone_note_value.value.note_type) &&
+        out.pod(note.monotone_note_value.value.dot_type) && out.pod(chord_provided) &&
+        out.pod(note.chord_note_value.value.note_type) && out.pod(note.chord_note_value.value.dot_type);
 }
 
 bool read_note(RuntimeCacheReader& in, Note* note) {
@@ -193,7 +198,15 @@ bool read_note(RuntimeCacheReader& in, Note* note) {
         !read_string_vector(in, &note->ignore_sound_pitches, 3u) ||
         !read_string_vector(in, &note->source_chord_pitches, 16u)) return false;
     note->alternate_monotone = alternate != 0;
-    return true;
+    std::uint8_t monotone_provided = 0, chord_provided = 0;
+    if (!in.pod(&monotone_provided) || !in.pod(&note->monotone_note_value.value.note_type) ||
+        !in.pod(&note->monotone_note_value.value.dot_type) || !in.pod(&chord_provided) ||
+        !in.pod(&note->chord_note_value.value.note_type) || !in.pod(&note->chord_note_value.value.dot_type) ||
+        monotone_provided > 1u || chord_provided > 1u) return false;
+    note->monotone_note_value.provided = monotone_provided != 0;
+    note->chord_note_value.provided = chord_provided != 0;
+    return valid_note_value_override(note->monotone_note_value)
+        && valid_note_value_override(note->chord_note_value);
 }
 
 bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
@@ -260,7 +273,8 @@ bool write_compiled_chart(RuntimeCacheWriter& out, const CompiledChart& chart) {
     for (const auto& note : chart.notes) {
         if (!out.pod(note.beat) || !out.pod(note.duration_beats) || !out.string(note.pitch) ||
             !out.string(note.time_str) || !out.string(note.monotone_id) || !out.string(note.chord_id)) return false;
-        for (const std::int32_t value : std::array<std::int32_t, 4>{note.note_type, note.dot_type,
+        for (const std::int32_t value : std::array<std::int32_t, 6>{note.monotone_note_type,
+                note.monotone_dot_type, note.chord_note_type, note.chord_dot_type,
                 note.camera_switch_timing, note.group_index}) if (!out.pod(value)) return false;
         for (const auto& id : note.ignore_sound_ids) if (!out.string(id)) return false;
     }
@@ -275,10 +289,11 @@ bool read_compiled_chart(RuntimeCacheReader& in, CompiledChart* chart) {
     for (auto& note : chart->notes) {
         if (!in.pod(&note.beat) || !in.pod(&note.duration_beats) || !in.string(&note.pitch) ||
             !in.string(&note.time_str) || !in.string(&note.monotone_id) || !in.string(&note.chord_id)) return false;
-        std::array<std::int32_t, 4> values{};
+        std::array<std::int32_t, 6> values{};
         for (auto& value : values) if (!in.pod(&value)) return false;
-        note.note_type = values[0]; note.dot_type = values[1];
-        note.camera_switch_timing = values[2]; note.group_index = values[3];
+        note.monotone_note_type = values[0]; note.monotone_dot_type = values[1];
+        note.chord_note_type = values[2]; note.chord_dot_type = values[3];
+        note.camera_switch_timing = values[4]; note.group_index = values[5];
         for (auto& id : note.ignore_sound_ids) if (!in.string(&id)) return false;
     }
     return true;
@@ -295,7 +310,8 @@ bool write_diagnostic_chart(RuntimeCacheWriter& out, const DiagnosticChartRetent
         if (!out.pod(static_cast<std::uint32_t>(row.source_row)) || !write_note(out, row.source) ||
             !out.pod(row.compiled.beat) || !out.pod(row.compiled.duration_beats) || !out.string(row.compiled.pitch) ||
             !out.string(row.compiled.time_str) || !out.string(row.compiled.monotone_id) || !out.string(row.compiled.chord_id)) return false;
-        for (const std::int32_t value : std::array<std::int32_t, 4>{row.compiled.note_type, row.compiled.dot_type,
+        for (const std::int32_t value : std::array<std::int32_t, 6>{row.compiled.monotone_note_type,
+                row.compiled.monotone_dot_type, row.compiled.chord_note_type, row.compiled.chord_dot_type,
                 row.compiled.camera_switch_timing, row.compiled.group_index}) if (!out.pod(value)) return false;
         for (const auto& id : row.compiled.ignore_sound_ids) if (!out.string(id)) return false;
     }
@@ -317,10 +333,11 @@ bool read_diagnostic_chart(RuntimeCacheReader& in, DiagnosticChartRetention* dia
             !in.pod(&row.compiled.duration_beats) || !in.string(&row.compiled.pitch) ||
             !in.string(&row.compiled.time_str) || !in.string(&row.compiled.monotone_id) || !in.string(&row.compiled.chord_id)) return false;
         row.source_row = source_row;
-        std::array<std::int32_t, 4> values{};
+        std::array<std::int32_t, 6> values{};
         for (auto& value : values) if (!in.pod(&value)) return false;
-        row.compiled.note_type = values[0]; row.compiled.dot_type = values[1];
-        row.compiled.camera_switch_timing = values[2]; row.compiled.group_index = values[3];
+        row.compiled.monotone_note_type = values[0]; row.compiled.monotone_dot_type = values[1];
+        row.compiled.chord_note_type = values[2]; row.compiled.chord_dot_type = values[3];
+        row.compiled.camera_switch_timing = values[4]; row.compiled.group_index = values[5];
         for (auto& id : row.compiled.ignore_sound_ids) if (!in.string(&id)) return false;
     }
     return true;
@@ -437,12 +454,14 @@ bool notes_equal(const Note& a, const Note& b) {
     return a.beat == b.beat && a.duration_beats == b.duration_beats && a.pitch == b.pitch &&
         a.chord_id == b.chord_id && a.group_index == b.group_index &&
         a.alternate_monotone == b.alternate_monotone &&
-        a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches;
+        a.ignore_sound_pitches == b.ignore_sound_pitches && a.source_chord_pitches == b.source_chord_pitches &&
+        a.monotone_note_value == b.monotone_note_value && a.chord_note_value == b.chord_note_value;
 }
 bool chart_notes_equal(const ChartNote& a, const ChartNote& b) {
     return a.beat == b.beat && a.duration_beats == b.duration_beats && a.pitch == b.pitch &&
         a.time_str == b.time_str && a.monotone_id == b.monotone_id && a.chord_id == b.chord_id &&
-        a.note_type == b.note_type && a.dot_type == b.dot_type &&
+        a.monotone_note_type == b.monotone_note_type && a.monotone_dot_type == b.monotone_dot_type &&
+        a.chord_note_type == b.chord_note_type && a.chord_dot_type == b.chord_dot_type &&
         a.camera_switch_timing == b.camera_switch_timing && a.group_index == b.group_index &&
         a.ignore_sound_ids == b.ignore_sound_ids;
 }
@@ -506,8 +525,7 @@ bool valid_config_and_chart(const SongConfig& config, const CompiledChart& chart
             compiled.beat != source.beat || compiled.duration_beats != source.duration_beats ||
             compiled.pitch != source.pitch || compiled.chord_id != source.chord_id ||
             compiled.time_str != beat_to_time_str(source.beat, config.bpm) ||
-            compiled.note_type != (source.duration_beats >= 2.0 ? 2 : 3) || compiled.dot_type != 0 ||
-            compiled.camera_switch_timing != 0) return false;
+            !chart_note_semantics_equal(source, compiled)) return false;
         previous = source.beat;
     }
     CompiledChart expected;

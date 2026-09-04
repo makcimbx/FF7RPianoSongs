@@ -436,6 +436,24 @@ Status parse_non_negative_integer(const JsonValue& object, const char* key, int*
 }
 
 Status parse_optional_note_extensions(const JsonValue& object, Note* note, const std::size_t index) {
+    const auto parse_note_value = [&](const char* field, NoteValueOverride* out) -> Status {
+        const JsonValue* value = find_member(object, field);
+        if (!value) return Status::ok_status();
+        NativeNoteValue parsed;
+        if (value->type != JsonValue::Type::String ||
+            !native_note_value_from_name(value->string, &parsed)) {
+            return Status::error(StatusCode::InvalidJson,
+                std::string("note ") + field + " must be a supported note-value string at index " +
+                    std::to_string(index));
+        }
+        out->value = parsed;
+        out->provided = true;
+        return Status::ok_status();
+    };
+    Status status = parse_note_value("monotone_note_value", &note->monotone_note_value);
+    if (!status.ok()) return status;
+    status = parse_note_value("chord_note_value", &note->chord_note_value);
+    if (!status.ok()) return status;
     if (const JsonValue* group = find_member(object, "group_index")) {
         if (group->type != JsonValue::Type::Number || !std::isfinite(group->number) ||
             std::floor(group->number) != group->number || group->number < 0.0 || group->number > 255.0) {
@@ -495,7 +513,8 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
 
         Note note;
         Status status = reject_unknown_members(note_object,
-            {"beat", "duration_beats", "pitch", "chord_id", "group_index", "monotone_variant", "ignore_sound"},
+            {"beat", "duration_beats", "pitch", "chord_id", "group_index", "monotone_variant",
+                "ignore_sound", "monotone_note_value", "chord_note_value"},
             "note index " + std::to_string(i));
         if (!status.ok()) return status;
         status = require_number(note_object, "beat", &note.beat);
@@ -551,6 +570,14 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
         if (!note.ignore_sound_pitches.empty() && note.chord_id.empty()) {
             return Status::error(StatusCode::InvalidJson,
                 "note ignore_sound requires chord_id at index " + std::to_string(i));
+        }
+        if (note.monotone_note_value.provided && note.pitch.empty()) {
+            return Status::error(StatusCode::InvalidJson,
+                "note monotone_note_value requires pitch at index " + std::to_string(i));
+        }
+        if (note.chord_note_value.provided && note.chord_id.empty()) {
+            return Status::error(StatusCode::InvalidJson,
+                "note chord_note_value requires chord_id at index " + std::to_string(i));
         }
         if (previous_beat > note.beat) {
             return Status::error(StatusCode::InvalidJson, "notes must be sorted by non-decreasing beat; invalid note index " + std::to_string(i));

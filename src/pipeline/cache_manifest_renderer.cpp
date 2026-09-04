@@ -257,7 +257,13 @@ Status render_cache_manifest(const LoadedSong& song, const SongConfig& source_co
         for (size_t row = 0; row < omission.witness_notes.size(); ++row) {
             if (row > 0) out << ",";
             const Note& note = omission.witness_notes[row];
-            out << note.beat << "/" << note.duration_beats << "/" << note.pitch << "/" << note.chord_id;
+            out << note.beat << "/" << note.duration_beats << "/" << note.pitch << "/" << note.chord_id
+                << "/m=" << note.monotone_note_value.provided << ":"
+                << static_cast<int>(note.monotone_note_value.value.note_type) << ":"
+                << static_cast<int>(note.monotone_note_value.value.dot_type)
+                << "/c=" << note.chord_note_value.provided << ":"
+                << static_cast<int>(note.chord_note_value.value.note_type) << ":"
+                << static_cast<int>(note.chord_note_value.value.dot_type);
         }
     }
     out << "\n";

@@ -69,6 +69,8 @@ struct EventPlan {
     ff7rp::pipeline::ChartEventEntry entry{};
     float time = 0.0f; // Set exactly once from the parser-published post-original FPS.
     uint64_t fname = 0;
+    uint8_t note_type = 0;
+    uint8_t dot_type = 0;
     std::array<uint64_t, 3> ignore_sounds{};
     std::size_t ignore_sound_count = 0;
 };
@@ -366,7 +368,6 @@ bool ignore_sounds_empty(const void* event) {
 bool event_valid(const void* event, void* chart, void* side,
     const EventPlan& plan, bool require_callback, bool require_null_links = true,
     bool require_complete_ignore_sounds = true) {
-    const SongChartNote& note = *plan.note;
     void* event_chart = nullptr; void* event_side = nullptr; uintptr_t parent = 1, successor = 1;
     uint32_t actual_ordinal = 0; float actual_time = -1.0f, strength = -1.0f;
     uint64_t actual_fname = 0;
@@ -384,8 +385,8 @@ bool event_valid(const void* event, void* chart, void* side,
         && read_at(event, 0x48, assignment) && assignment != 8
         && read_at(event, 0x49, lookup_path) && lookup_path <= 1
         && read_at(event, 0x4a, state) && state == 0
-        && read_at(event, 0x4b, note_type) && note_type == static_cast<uint8_t>(note.note_type)
-        && read_at(event, 0x4c, dot_type) && dot_type == static_cast<uint8_t>(note.dot_type)
+        && read_at(event, 0x4b, note_type) && note_type == plan.note_type
+        && read_at(event, 0x4c, dot_type) && dot_type == plan.dot_type
         && read_at(event, 0x4d, trailing) && trailing[0] == 0 && trailing[1] == 0 && trailing[2] == 0
         && (require_callback
             ? (callback_valid(event) && [&] { uintptr_t captured = 0; return read_at(event, 0x78, captured) && captured == reinterpret_cast<uintptr_t>(chart); }())
@@ -1036,6 +1037,17 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
             EventPlan plan{};
             plan.note = note;
             plan.entry = entry;
+            const int32_t event_note_type =
+                entry.kind == ff7rp::pipeline::ChartEventKind::Monotone
+                ? note->monotone_note_type : note->chord_note_type;
+            const int32_t event_dot_type =
+                entry.kind == ff7rp::pipeline::ChartEventKind::Monotone
+                ? note->monotone_dot_type : note->chord_dot_type;
+            if (event_note_type < 0 || event_note_type > 4
+                || event_dot_type < 0 || event_dot_type > 1)
+                return reject("event_note_value_unsupported", i);
+            plan.note_type = static_cast<uint8_t>(event_note_type);
+            plan.dot_type = static_cast<uint8_t>(event_dot_type);
             const std::string& event_name = entry.kind == ff7rp::pipeline::ChartEventKind::Monotone
                 ? note->monotone_id : note->chord_id;
             if (!resolve_name(event_name, plan.fname))
@@ -1246,7 +1258,6 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
     for (std::size_t compact = prefix; compact < tx.plans.size(); ++compact) {
         const std::size_t i = compact - prefix;
         const EventPlan& plan = tx.plans[compact];
-        const SongChartNote& note = *plan.note;
         void* const side = plan.entry.hand == ff7rp::pipeline::ChartEventHand::Right
             ? tx.right_side : tx.left_side;
         void* slot_void = nullptr;
@@ -1259,8 +1270,7 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             || rechecked != tail) return unresolved("tail_slot_identity_before_constructor");
         // Native allocator/constructor faults remain outside the recoverable contract.
         void* const constructed = g_api.construct(tail, wrapper, side, plan.entry.ordinal,
-            plan.time, 0.0f, static_cast<uint8_t>(note.note_type),
-            static_cast<uint8_t>(note.dot_type), plan.fname);
+            plan.time, 0.0f, plan.note_type, plan.dot_type, plan.fname);
         if (constructed != tail) return unresolved("tail_constructor_ownership_unproved");
         if (!event_valid(tail, wrapper, side, plan, false, true, false)) {
             if (!cleanup_slot(i) || !cleanup_constructed())

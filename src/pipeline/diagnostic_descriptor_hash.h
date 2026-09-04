@@ -34,6 +34,12 @@ inline std::uint64_t compute_diagnostic_descriptor_hash(
         append_string(note.chord_id);
         append(&note.group_index, sizeof(note.group_index));
         append(&note.alternate_monotone, sizeof(note.alternate_monotone));
+        append(&note.monotone_note_value.provided, sizeof(note.monotone_note_value.provided));
+        append(&note.monotone_note_value.value.note_type, sizeof(note.monotone_note_value.value.note_type));
+        append(&note.monotone_note_value.value.dot_type, sizeof(note.monotone_note_value.value.dot_type));
+        append(&note.chord_note_value.provided, sizeof(note.chord_note_value.provided));
+        append(&note.chord_note_value.value.note_type, sizeof(note.chord_note_value.value.note_type));
+        append(&note.chord_note_value.value.dot_type, sizeof(note.chord_note_value.value.dot_type));
         const std::uint64_t ignore_count = note.ignore_sound_pitches.size();
         const std::uint64_t voicing_count = note.source_chord_pitches.size();
         append(&ignore_count, sizeof(ignore_count));
@@ -48,8 +54,10 @@ inline std::uint64_t compute_diagnostic_descriptor_hash(
         append_string(note.time_str);
         append_string(note.monotone_id);
         append_string(note.chord_id);
-        append(&note.note_type, sizeof(note.note_type));
-        append(&note.dot_type, sizeof(note.dot_type));
+        append(&note.monotone_note_type, sizeof(note.monotone_note_type));
+        append(&note.monotone_dot_type, sizeof(note.monotone_dot_type));
+        append(&note.chord_note_type, sizeof(note.chord_note_type));
+        append(&note.chord_dot_type, sizeof(note.chord_dot_type));
         append(&note.camera_switch_timing, sizeof(note.camera_switch_timing));
         append(&note.group_index, sizeof(note.group_index));
         for (const auto& id : note.ignore_sound_ids) append_string(id);

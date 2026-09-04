@@ -304,7 +304,9 @@ bool write_authored_profiles_song_json(const std::filesystem::path& path) {
         out << "    { \"difficulty\": " << difficulty << ", \"notes\": [\n";
         for (int row = 0; row < rows; ++row) {
             out << "      { \"beat\": " << row * 0.25
-                << ", \"duration_beats\": 0.125, \"pitch\": \"C4\" }"
+                << ", \"duration_beats\": 0.125, \"pitch\": \"C4\"";
+            if (profile == 1 && row == 0) out << ", \"monotone_note_value\": \"dotted_quarter\"";
+            out << " }"
                 << (row + 1 == rows ? "\n" : ",\n");
         }
         out << "    ] }" << (profile == 0 ? ",\n" : "\n");
@@ -622,7 +624,8 @@ bool charts_equal(const ff7rp::pipeline::CompiledChart& a, const ff7rp::pipeline
         const auto& y = b.notes[i];
         if (x.beat != y.beat || x.duration_beats != y.duration_beats || x.pitch != y.pitch ||
             x.time_str != y.time_str || x.monotone_id != y.monotone_id || x.chord_id != y.chord_id ||
-            x.note_type != y.note_type || x.dot_type != y.dot_type ||
+            x.monotone_note_type != y.monotone_note_type || x.monotone_dot_type != y.monotone_dot_type ||
+            x.chord_note_type != y.chord_note_type || x.chord_dot_type != y.chord_dot_type ||
             x.camera_switch_timing != y.camera_switch_timing || x.group_index != y.group_index ||
             x.ignore_sound_ids != y.ignore_sound_ids) {
             return false;
@@ -661,7 +664,9 @@ bool configs_equal(const ff7rp::pipeline::SongConfig& a, const ff7rp::pipeline::
             a.notes[index].group_index != b.notes[index].group_index ||
             a.notes[index].alternate_monotone != b.notes[index].alternate_monotone ||
             a.notes[index].ignore_sound_pitches != b.notes[index].ignore_sound_pitches ||
-            a.notes[index].source_chord_pitches != b.notes[index].source_chord_pitches) return false;
+            a.notes[index].source_chord_pitches != b.notes[index].source_chord_pitches ||
+            a.notes[index].monotone_note_value != b.notes[index].monotone_note_value ||
+            a.notes[index].chord_note_value != b.notes[index].chord_note_value) return false;
     }
     return true;
 }
@@ -1426,7 +1431,11 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
                     return note.group_index == 0
                         && (note.pitch.empty() || note.pitch == "C6"
                             || note.pitch == "Db6" || note.pitch == "D6")
-                        && (note.chord_id.empty() || note.chord_id == expected_flat_chord);
+                        && (note.chord_id.empty() || note.chord_id == expected_flat_chord)
+                        && (note.pitch.empty() || note.monotone_note_value
+                            == ff7rp::pipeline::NoteValueOverride{{3, 0}, true})
+                        && (note.chord_id.empty() || note.chord_note_value
+                            == ff7rp::pipeline::NoteValueOverride{{2, 0}, true});
                 });
         });
     };
@@ -1478,9 +1487,9 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
         "ff7rebirth-steam-win64-68fd6fde");
     const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-6a16ced2");
-    if (assets_1004.cache_identity() != "native_assets=pca_Db_voicing:unverified1004" ||
-        assets_1005.cache_identity() != "native_assets=pca_Db_voicing:verified1005" ||
-        assets_1004.cache_identity() == assets_1005.cache_identity()) {
+    if (assets_1004.cache_identity() != "native_assets=pca_Db_voicing:verified1004+1005" ||
+        assets_1005.cache_identity() != "native_assets=pca_Db_voicing:verified1004+1005" ||
+        assets_1004.cache_identity() != assets_1005.cache_identity()) {
         return fail("offline artifact golden native-asset identities changed");
     }
 
@@ -1489,17 +1498,14 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        expected_cache_key = 0x59a13b30b2b9d2ebull;
-        expected_normalized_manifest_digest = 0x16cbbcd1aa6407f4ull;
-    } else if (selected_asset_identity == assets_1005.cache_identity()) {
-        expected_cache_key = 0xfe28f1ba0dd04bdfull;
-        expected_normalized_manifest_digest = 0x20a78aff9f096fc1ull;
+        expected_cache_key = 0x1eb60341e8603007ull;
+        expected_normalized_manifest_digest = 0xf0d9344e9424394dull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
     }
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
-    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=65b4d2930e70b47f";
+    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=15e8f64ad017720d";
     if (generated.cache_key != expected_cache_key ||
         normalized_manifest_digest != expected_normalized_manifest_digest ||
         manifest.size() != kExpectedNormalizedManifestBytes ||
@@ -1517,9 +1523,12 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto& compiled = generated.chart.notes.front();
     if (generated.config.bpm != 120.0 || source.beat != 0.0 || source.duration_beats != 0.25 ||
         source.pitch != "C4" || !source.chord_id.empty() ||
+        source.monotone_note_value != ff7rp::pipeline::NoteValueOverride{{2, 0}, true} ||
+        source.chord_note_value.provided ||
         compiled.beat != 0.0 || compiled.duration_beats != 0.25 || compiled.pitch != "C4" ||
         compiled.time_str != "00_00" || compiled.monotone_id != "Cn4" ||
-        !compiled.chord_id.empty() || compiled.note_type != 3 || compiled.dot_type != 0 ||
+        !compiled.chord_id.empty() || compiled.monotone_note_type != 2 ||
+        compiled.monotone_dot_type != 0 || compiled.chord_note_type != 0 || compiled.chord_dot_type != 0 ||
         compiled.camera_switch_timing != 0 || compiled.group_index != 0) {
         return fail("offline MIDI/chart compiled value golden changed: bpm=" +
             std::to_string(generated.config.bpm) + ", beat=" + std::to_string(source.beat) +
@@ -2163,7 +2172,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v45") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v46") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -2246,9 +2255,9 @@ int test_authored_profiles(const std::filesystem::path& root) {
         second.config.mode_change_combo_counts != std::vector<int>({10, 20}) ||
         first.diagnostics.selected_actions != 4u || second.diagnostics.selected_actions != 20u ||
         first.diagnostics.scheduled_rows != 4u || second.diagnostics.scheduled_rows != 20u ||
-        second.diagnostics.retained_actions != 4u || second.diagnostics.added_actions != 16u ||
-        second.diagnostics.removed_actions != 0u || second.diagnostics.replaced_actions != 0u ||
-        second.diagnostics.overlap_ratio != 1.0 || !second.diagnostics.nested_from_previous) {
+        second.diagnostics.retained_actions != 3u || second.diagnostics.added_actions != 16u ||
+        second.diagnostics.removed_actions != 0u || second.diagnostics.replaced_actions != 1u ||
+        second.diagnostics.overlap_ratio != 0.75 || second.diagnostics.nested_from_previous) {
         return fail("authored profile metadata or deterministic comparison diagnostics changed");
     }
     ff7rp::pipeline::LoadedSong cached;

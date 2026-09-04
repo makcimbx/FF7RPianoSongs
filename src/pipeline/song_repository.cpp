@@ -47,8 +47,8 @@
 namespace ff7rp::pipeline {
 namespace {
 
-constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
-constexpr std::uint32_t kRuntimeCacheFormat = 14;
+constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '5'};
+constexpr std::uint32_t kRuntimeCacheFormat = 15;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
 
@@ -227,11 +227,13 @@ struct ProfileActionIdentity {
     std::uint64_t beat = 0;
     std::uint64_t duration = 0;
     std::uint8_t hand = 0;
+    NativeNoteValue note_value{};
     std::string value;
 
     bool operator<(const ProfileActionIdentity& other) const {
-        return std::tie(beat, duration, hand, value) <
-            std::tie(other.beat, other.duration, other.hand, other.value);
+        return std::tie(beat, duration, hand, note_value.note_type, note_value.dot_type, value) <
+            std::tie(other.beat, other.duration, other.hand,
+                other.note_value.note_type, other.note_value.dot_type, other.value);
     }
 };
 
@@ -264,7 +266,10 @@ void normalized_profile_actions(
         const auto append = [&](const std::uint8_t hand, const std::string& value) {
             const std::uint64_t beat = double_identity(note.beat);
             const std::uint64_t duration = double_identity(note.duration_beats);
-            ++(*identities)[{beat, duration, hand, value}];
+            const NativeNoteValue notation = hand == 0
+                ? resolved_native_note_value(note.monotone_note_value, note.duration_beats)
+                : resolved_native_note_value(note.chord_note_value, note.duration_beats);
+            ++(*identities)[{beat, duration, hand, notation, value}];
             ++(*slots)[{beat, duration, hand}];
         };
         if (!note.pitch.empty() && !continuation) append(0, note.pitch);

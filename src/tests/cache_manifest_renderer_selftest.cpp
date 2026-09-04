@@ -159,6 +159,9 @@ LoadedSong comprehensive_song(SongConfig* source_config) {
     omission.reason = "omitted:semicolon;colon:\nΩ";
     omission.diagnostics = diagnostics(700);
     omission.witness_notes = {{2.25, 0.75, "F4", "pca_witness/Ω"}, {4.5, 1.5, "", "pca_second"}};
+    omission.witness_notes[0].monotone_note_value = {{3, 1}, true};
+    omission.witness_notes[0].chord_note_value = {{1, 0}, true};
+    omission.witness_notes[1].chord_note_value = {{0, 1}, true};
     song.difficulty_profile_omissions.push_back(std::move(omission));
 
     *source_config = song.config;
@@ -204,16 +207,16 @@ int main() {
     // The oracle includes the generated pipeline cache identity. It was
     // regenerated for authored difficulty profiles without changing the cache
     // manifest schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5593u, 0xe6ef31e69191ae1dull, "comprehensive")) return 1;
+    if (!check_golden(comprehensive, source_config, 5625u, 0x636c62b6ac2c3737ull, "comprehensive")) return 1;
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3715u, 0xd08b08b15eae1aa9ull, "empty")) return 1;
+    if (!check_golden(empty, empty_source, 3715u, 0x56c3c5bd99160298ull, "empty")) return 1;
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3716u, 0x9b2873abd01feeb5ull, "nonfinite")) return 1;
+    if (!check_golden(nonfinite, empty_source, 3716u, 0xd91d97759f5786aeull, "nonfinite")) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);
@@ -235,6 +238,9 @@ int main() {
                 text.find("profile_row_limit_exceeded=0,1,1\n") != std::string::npos &&
                 text.find("profile_nested_from_previous=1,1,0\n") != std::string::npos,
             "diagnostics boolean signatures changed")
+        && expect(text.find("/m=1:3:1/c=1:1:0") != std::string::npos &&
+                text.find("/m=0:0:0/c=1:0:1") != std::string::npos,
+            "omission witness side-specific notation missing")
         )) return 1;
 
     LoadedSong generalized = comprehensive;

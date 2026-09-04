@@ -82,7 +82,8 @@ Minimal MIDI-backed example:
 ## Explicit Notes
 
 Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
-`group_index`, `monotone_variant`, and `ignore_sound`:
+`monotone_note_value`, `chord_note_value`, `group_index`, `monotone_variant`,
+and `ignore_sound`:
 
 ```json
 {
@@ -94,6 +95,21 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
 
 - `beat` is finite, non-negative, and nondecreasing across the array.
 - `duration_beats` is finite and greater than zero.
+- `monotone_note_value` and `chord_note_value` independently control the native
+  notation shown for their present side. The accepted strings map as follows:
+  `whole` `(0,0)`, `dotted_whole` `(0,1)`, `half` `(1,0)`, `dotted_half`
+  `(1,1)`, `quarter` `(2,0)`, `dotted_quarter` `(2,1)`, `eighth` `(3,0)`,
+  `dotted_eighth` `(3,1)`, `sixteenth` `(4,0)`, and `dotted_sixteenth`
+  `(4,1)`. Native types 5 (one third) and 6 (one sixth) are intentionally not
+  exposed by this authoring contract. A monotone override requires `pitch`; a chord override requires
+  `chord_id`. Unknown names, wrong types, and absent-side overrides reject.
+  Without an override, each present side independently retains the legacy
+  mapping unchanged: `duration_beats >= 2` uses `(2,0)` and a shorter duration
+  uses `(3,0)`. Under the exact native scale above these historical fallback
+  pairs are quarter and eighth respectively. `duration_beats` remains the row's timing and completion
+  duration; notation does not alter it. A dual row may use different values
+  for its monotone and chord sides. Whole `(0,0)` remains distinguishable from
+  an absent side because the corresponding pitch/chord identity is present.
 - Provide at least one of `pitch` or `chord_id`.
 - `pitch` must be a non-empty supported pitch name. For the verified black-key
   pairs, authored spelling is exact: `C#`/`Db`, `D#`/`Eb`, `F#`/`Gb`,
@@ -102,10 +118,11 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
   mapping. No separate native-ID field is required.
 - `chord_id` must be a valid native `pca_*` identifier. Enharmonic chord IDs
   are exact identities, not aliases: `pca_Db` uses verified native sounds
-  `Db2`, `Fn2`, and `Ab2` on the exact build-1.005 catalog where that row was
-  recovered, while `pca_Cs` uses `Cs2`, `Fn2`, and `Gs2`. A bare authored
-  `pca_Db` remains syntactically valid, but its constituent row does not
-  authorize IgnoreSound on build 1.004 or an unknown catalog.
+  `Db2`, `Fn2`, and `Ab2` on exact builds 1.004 and 1.005, while `pca_Cs` uses
+  `Cs2`, `Fn2`, and `Gs2`. Their verified-equal 170-row piano assets authorize
+  exact `pca_Db` IgnoreSound constituents on both supported catalogs. A bare
+  authored `pca_Db` remains syntactically valid on an unknown catalog, but the
+  unknown catalog cannot use that row to authorize IgnoreSound.
 - `group_index` is an optional integer from 0 through 255. Zero or omission means
   ungrouped. A nonzero value must identify one contiguous run of at least two
   pitch-only rows. An identity may be reused by a later disjoint run after a zero
@@ -125,7 +142,7 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
   Ninth assignments contain root, third, fifth, and ninth only; the template
   seventh is not a native member and cannot be named in `ignore_sound`.
 
-Omitting all three fields preserves the behavior of existing schema-v2 songs.
+Omitting the optional fields preserves the behavior of existing schema-v2 songs.
 Unknown fields and malformed, ambiguous, or unsupported combinations are rejected.
 
 On a runtime build with proven playable extended capability, an authored chart may
@@ -199,7 +216,7 @@ digests. Exact and uniquely verified chord inference remains available. Ordinary
 pitch-class-1 major harmony selects `pca_Db` only when every source constituent
 shares one unambiguous flat key-signature context and the compile-selected exact
 catalog has verified D-flat-major asset evidence. Missing, neutral, positive,
-conflicting, boundary-straddling, build-1.004, or unknown-build evidence retains
+  conflicting, boundary-straddling, or unknown-build evidence retains
 `pca_Cs`. Ambiguous harmony is not invented. Under verified exact-build extended policy a complete
 generated profile may use the existing 8192-row and 8192-event transport; without
 that policy, generation remains bounded to 512 rows and omits rather than clips an

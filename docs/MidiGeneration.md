@@ -74,6 +74,19 @@ Generated level is not a simple function of row count, actions per minute, pitch
 
 Generated charts preserve source onset identity. MIDI offset, alignment, and minimum lead-in participate in chart/audio alignment and cache identity. The required base audio owns chart timing and descriptor duration. Optional metronome guide synthesis changes only resolved MABF `Mode0`; `Mode1` and `Mode2` remain their clean resolved sources. It does not change chart timestamps, selected difficulty, or source duration.
 
+Generated notation is independent per side and does not change row timing. A
+retained monotone receives an explicit native note/dot value only when its
+authoritative source tick length exactly equals one of the ten schema values
+(whole through dotted sixteenth) as a rational multiple of the MIDI ticks per
+quarter. An inferred chord receives an explicit value only when every represented
+constituent has the same exact supported tick length. The resulting native types
+are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
+5 and 6 are intentionally unsupported. Nonmatching or heterogeneous
+lengths use that side's legacy fallback from the generated row `duration_beats`.
+Integer tick-ratio comparisons are deterministic; no floating-point duration
+guessing is used. Generated rows remain ungrouped. This derivation is covered by
+`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values:v11`.
+
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
 monotone identities by a contour planner. For each event, the immediately
@@ -92,14 +105,15 @@ the separately verified ordinary D-flat major assignment. Pitch-class-1 major
 harmony uses `pca_Db` only when every source constituent's authoritative tick
 resolves to the same unambiguous flat key-signature context and the
 compile-selected exact generated catalog exposes verified D-flat-major asset
-evidence. Missing, neutral, positive, conflicting, boundary-straddling, build
-1.004, and unknown-build evidence retains `pca_Cs`. Exact and safe-superset
+  evidence. Missing, neutral, positive, conflicting, boundary-straddling, and
+  unknown-build evidence retains `pca_Cs`. Exact and safe-superset
 paths make the same identity decision before IgnoreSound is derived from that
 selected chord's complete verified constituent row. The selected native-asset
 capability identity participates in every authored-JSON and MIDI repository
-cache key. The exact asset evidence is scoped to build 1.005; runtime name
-resolution remains fail closed, and this offline rule is not a 1.004 runtime
-qualification.
+  cache key. Exact 1.004 and 1.005 use one verified asset capability after
+  semantic equality of all 170 rows and the owner's exact-source provenance
+  attestation; runtime name resolution remains fail closed. This offline rule
+  is not a human runtime qualification for build 1.004.
 Exact source chord voicing is retained until IgnoreSound
 derivation. Exact chord matches remain preferred and unchanged. A partial source
 harmony of at least three distinct pitch classes may use a native chord superset

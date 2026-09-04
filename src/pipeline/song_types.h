@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "note_value.h"
+
 namespace ff7rp::pipeline {
 
 enum class AudioSourceRole : std::uint8_t {
@@ -69,6 +71,8 @@ struct Note {
     // voicing retained for verified offline constituent resolution.
     std::vector<std::string> ignore_sound_pitches;
     std::vector<std::string> source_chord_pitches;
+    NoteValueOverride monotone_note_value;
+    NoteValueOverride chord_note_value;
 };
 
 struct GainEnvelopePoint {
@@ -125,8 +129,10 @@ struct ChartNote {
     std::string time_str;
     std::string monotone_id;
     std::string chord_id;
-    int note_type = 3;
-    int dot_type = 0;
+    std::int32_t monotone_note_type = 0;
+    std::int32_t monotone_dot_type = 0;
+    std::int32_t chord_note_type = 0;
+    std::int32_t chord_dot_type = 0;
     int camera_switch_timing = 0;
     int group_index = 0;
     std::array<std::string, 3> ignore_sound_ids{};

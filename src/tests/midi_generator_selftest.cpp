@@ -325,7 +325,9 @@ bool notes_equal(
     if (a.size() != b.size()) return false;
     for (std::size_t i = 0; i < a.size(); ++i) {
         if (a[i].beat != b[i].beat || a[i].duration_beats != b[i].duration_beats ||
-            a[i].pitch != b[i].pitch || a[i].chord_id != b[i].chord_id) {
+            a[i].pitch != b[i].pitch || a[i].chord_id != b[i].chord_id ||
+            a[i].monotone_note_value != b[i].monotone_note_value ||
+            a[i].chord_note_value != b[i].chord_note_value) {
             return false;
         }
     }

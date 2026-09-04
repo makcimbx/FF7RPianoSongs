@@ -231,7 +231,7 @@ bool test_release_authority_parser(std::string* error_message)
 int main()
 {
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
-        != "ff7rpianosongs.pipeline.v45") {
+        != "ff7rpianosongs.pipeline.v46") {
         return fail("pipeline cache identity did not invalidate legacy accidental canonicalization");
     }
     const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
@@ -241,9 +241,9 @@ int main()
     const auto assets_unknown = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-unknown");
     const auto selected_assets = ff7rp::pipeline::selected_native_asset_capabilities();
-    if (assets_1004.has_verified_pca_db_voicing() || !assets_1005.has_verified_pca_db_voicing()
+    if (!assets_1004.has_verified_pca_db_voicing() || !assets_1005.has_verified_pca_db_voicing()
         || assets_unknown.has_verified_pca_db_voicing()
-        || assets_1004.cache_identity() == assets_1005.cache_identity()
+        || assets_1004.cache_identity() != assets_1005.cache_identity()
         || assets_1004.cache_identity() == assets_unknown.cache_identity()
         || assets_1005.cache_identity() == assets_unknown.cache_identity()
         || selected_assets.cache_identity() != ff7rp::pipeline::native_asset_capabilities_for_catalog(
@@ -256,8 +256,8 @@ int main()
             {"fixture", std::string(assets_1004.cache_identity())}, &assets_1004_key).ok()
         || !ff7rp::pipeline::fnv1a64_files_and_strings({},
             {"fixture", std::string(assets_1005.cache_identity())}, &assets_1005_key).ok()
-        || assets_1004_key == assets_1005_key) {
-        return fail("native-asset capability identities did not produce distinct cache keys");
+        || assets_1004_key != assets_1005_key) {
+        return fail("equivalent verified native-asset capabilities did not produce one cache identity");
     }
     const char* json = R"json({
         "schema": "ff7rpianosongs.song.v2",
@@ -385,8 +385,63 @@ int main()
             return fail("omitted note extensions changed schema-v2 chart behavior");
         }
     }
-    if (chart.notes[0].note_type != 3 || chart.notes[1].note_type != 2) {
+    if (chart.notes[0].monotone_note_type != 3 || chart.notes[0].chord_note_type != 3 ||
+        chart.notes[1].monotone_note_type != 2 || chart.notes[1].chord_note_type != 0 ||
+        chart.notes[2].monotone_note_type != 0 || chart.notes[2].chord_note_type != 3) {
         return fail("unexpected note type mapping");
+    }
+    const char* note_values_json = R"json({
+      "schema":"v2","title":"note values","bpm":120,"notes":[
+        {"beat":0,"duration_beats":0.25,"pitch":"C4","chord_id":"pca_C",
+         "monotone_note_value":"whole","chord_note_value":"dotted_sixteenth"},
+        {"beat":1,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"dotted_whole"},
+        {"beat":2,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"half"},
+        {"beat":3,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"dotted_half"},
+        {"beat":4,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"quarter"},
+        {"beat":5,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"dotted_quarter"},
+        {"beat":6,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"eighth"},
+        {"beat":7,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"dotted_eighth"},
+        {"beat":8,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"sixteenth"},
+        {"beat":9,"duration_beats":0.25,"pitch":"C4","monotone_note_value":"dotted_sixteenth"}
+      ]})json";
+    ff7rp::pipeline::SongConfig note_values_config;
+    ff7rp::pipeline::CompiledChart note_values_chart;
+    status = ff7rp::pipeline::parse_song_json_string(note_values_json, &note_values_config);
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(note_values_config, &note_values_chart).ok()
+        || note_values_chart.notes.size() != 10u
+        || note_values_chart.notes[0].monotone_note_type != 0
+        || note_values_chart.notes[0].monotone_dot_type != 0
+        || note_values_chart.notes[0].chord_note_type != 4
+        || note_values_chart.notes[0].chord_dot_type != 1) {
+        return fail("independent dual-side note values did not compile exactly");
+    }
+    const std::array<ff7rp::pipeline::NativeNoteValue, 9> expected_note_values{{
+        {0, 1}, {1, 0}, {1, 1}, {2, 0}, {2, 1}, {3, 0}, {3, 1}, {4, 0}, {4, 1}}};
+    if (!ff7rp::pipeline::supported_native_note_value({0, 0})
+        || !ff7rp::pipeline::supported_native_note_value({4, 1})
+        || ff7rp::pipeline::supported_native_note_value({5, 0})
+        || ff7rp::pipeline::supported_native_note_value({6, 0})) {
+        return fail("native note-value authoring domain did not remain exactly types 0 through 4");
+    }
+    for (std::size_t index = 1; index < note_values_chart.notes.size(); ++index) {
+        const auto expected = expected_note_values[index - 1u];
+        if (note_values_chart.notes[index].monotone_note_type != expected.note_type
+            || note_values_chart.notes[index].monotone_dot_type != expected.dot_type
+            || note_values_chart.notes[index].chord_note_type != 0
+            || note_values_chart.notes[index].chord_dot_type != 0) {
+            return fail("authored note-value mapping or absent-side zeroing changed");
+        }
+    }
+    for (const char* invalid_note : {
+            R"json({"beat":0,"duration_beats":1,"pitch":"C4","monotone_note_value":4})json",
+            R"json({"beat":0,"duration_beats":1,"pitch":"C4","monotone_note_value":"thirty_second"})json",
+            R"json({"beat":0,"duration_beats":1,"chord_id":"pca_C","monotone_note_value":"quarter"})json",
+            R"json({"beat":0,"duration_beats":1,"pitch":"C4","chord_note_value":"quarter"})json"}) {
+        ff7rp::pipeline::SongConfig rejected;
+        const std::string invalid_json = std::string(R"json({"schema":"v2","title":"bad","notes":[)json")
+            + invalid_note + "]}";
+        if (ff7rp::pipeline::parse_song_json_string(invalid_json, &rejected).ok())
+            return fail("invalid or side-less note-value override was accepted");
     }
     const char* exact_accidental_json = R"json({
         "schema":"v2","title":"Exact accidentals","bpm":120,"notes":[
@@ -490,6 +545,8 @@ int main()
     append_mixed(0.5, "D4", "pca_D", 9);    // explicit-dual continuation
     append_mixed(0.75, "E4", "pca_E", 10);  // explicit-dual root: two actions
     append_mixed(1.0, "", "pca_F", 10);      // chord continuation
+    mixed_group_config.notes[2].monotone_note_value = {{0, 0}, true};
+    mixed_group_config.notes[2].chord_note_value = {{3, 1}, true};
     ff7rp::pipeline::CompiledChart mixed_group_chart;
     ff7rp::pipeline::ChartEventPlan mixed_group_plan;
     if (!ff7rp::pipeline::compile_chart(mixed_group_config, &mixed_group_chart).ok()
@@ -497,7 +554,11 @@ int main()
             mixed_group_config.notes, mixed_group_chart.notes, &mixed_group_plan)
         || mixed_group_plan.source_row_count != 5u
         || mixed_group_plan.native_event_count != 7u
-        || mixed_group_plan.required_action_count != 3u) {
+        || mixed_group_plan.required_action_count != 3u
+        || mixed_group_chart.notes[2].monotone_note_type != 0
+        || mixed_group_chart.notes[2].monotone_dot_type != 0
+        || mixed_group_chart.notes[2].chord_note_type != 3
+        || mixed_group_chart.notes[2].chord_dot_type != 1) {
         return fail("mixed row-level GroupIndex roots and continuations were not derived exactly");
     }
     std::vector<ff7rp::pipeline::ChartEventRow> runtime_rows;
@@ -507,8 +568,10 @@ int main()
         runtime.time_str = compiled.time_str;
         runtime.monotone_id = compiled.monotone_id;
         runtime.chord_id = compiled.chord_id;
-        runtime.note_type = compiled.note_type;
-        runtime.dot_type = compiled.dot_type;
+        runtime.monotone_note_type = compiled.monotone_note_type;
+        runtime.monotone_dot_type = compiled.monotone_dot_type;
+        runtime.chord_note_type = compiled.chord_note_type;
+        runtime.chord_dot_type = compiled.chord_dot_type;
         runtime.camera_switch_timing = compiled.camera_switch_timing;
         runtime.group_index = compiled.group_index;
         runtime.ignore_sound_ids = compiled.ignore_sound_ids;
@@ -560,6 +623,13 @@ int main()
         || changed_physical_plan.physical_digest == runtime_mixed_plan.physical_digest) {
         return fail("compiled physical-row mutation did not change the physical digest");
     }
+    physical_mutation = runtime_rows;
+    physical_mutation[2].chord_dot_type = 0;
+    const auto changed_articulation_plan = ff7rp::pipeline::derive_chart_event_plan(physical_mutation);
+    if (!changed_articulation_plan.valid()
+        || changed_articulation_plan.physical_digest == runtime_mixed_plan.physical_digest) {
+        return fail("side-specific articulation mutation did not change the physical digest");
+    }
     const char* ignore_sound_json = R"json({
         "schema":"v2","title":"Exact ignores","bpm":120,"notes":[
             {"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En2"]},
@@ -596,18 +666,19 @@ int main()
             std::array<std::string, 3>{"Db2", "Fn2", "Ab2"}) {
         return fail("exact verified pca_Db IgnoreSound members did not compile");
     }
-    ff7rp::pipeline::SongConfig db_no_ignore_1004 = db_ignore_config;
-    db_no_ignore_1004.notes.resize(1u);
-    ff7rp::pipeline::CompiledChart db_no_ignore_1004_chart;
     ff7rp::pipeline::CompiledChart db_ignore_1004_chart;
     const auto db_ignore_1004 = ff7rp::pipeline::compile_chart(
         db_ignore_config, &db_ignore_1004_chart, nullptr, 0, assets_1004);
-    if (!ff7rp::pipeline::compile_chart(db_no_ignore_1004, &db_no_ignore_1004_chart,
-            nullptr, 0, assets_1004).ok()
-        || db_ignore_1004.code != ff7rp::pipeline::StatusCode::InvalidChart
-        || db_ignore_1004.message !=
+    ff7rp::pipeline::CompiledChart db_ignore_unknown_chart;
+    const auto db_ignore_unknown = ff7rp::pipeline::compile_chart(
+        db_ignore_config, &db_ignore_unknown_chart, nullptr, 0, assets_unknown);
+    if (!db_ignore_1004.ok()
+        || db_ignore_1004_chart.notes.back().ignore_sound_ids !=
+            std::array<std::string, 3>{"Db2", "Fn2", "Ab2"}
+        || db_ignore_unknown.code != ff7rp::pipeline::StatusCode::InvalidChart
+        || db_ignore_unknown.message !=
             "ignore_sound must name unique exact constituents of the row's verified native chord") {
-        return fail("unverified 1.004 pca_Db IgnoreSound did not fail closed independently of chord syntax");
+        return fail("build-scoped pca_Db IgnoreSound constituent authority was not exact");
     }
     for (const char* invalid_note_semantics : {
             R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"D4","monotone_variant":"alternate"}]})json",
@@ -736,7 +807,10 @@ int main()
     for (std::size_t row = 0; row < 520u; ++row) {
         if (row) fixture_json << ',';
         fixture_json << "{\"beat\":" << row * 0.25
-                     << ",\"duration_beats\":0.125,\"pitch\":\"C4\"}";
+                     << ",\"duration_beats\":0.125,\"pitch\":\"C4\"";
+        if (row == 511u) fixture_json << ",\"monotone_note_value\":\"whole\"";
+        if (row == 512u) fixture_json << ",\"monotone_note_value\":\"dotted_sixteenth\"";
+        fixture_json << '}';
     }
     fixture_json << "]}";
     ff7rp::pipeline::SongConfig fixture_config;
@@ -764,7 +838,12 @@ int main()
         diagnostic.native_prefix_row_count != 512u || diagnostic.tail_rows.size() != 8u ||
         diagnostic.tail_rows.front().source_row != 512u || diagnostic.tail_rows.back().source_row != 519u ||
         chart.notes.back().beat != fixture_config.notes[511].beat ||
-        diagnostic.tail_rows.front().source.beat != fixture_config.notes[512].beat) {
+        chart.notes.back().monotone_note_type != 0 || chart.notes.back().monotone_dot_type != 0 ||
+        diagnostic.tail_rows.front().source.beat != fixture_config.notes[512].beat ||
+        diagnostic.tail_rows.front().source.monotone_note_value
+            != ff7rp::pipeline::NoteValueOverride{{4, 1}, true} ||
+        diagnostic.tail_rows.front().compiled.monotone_note_type != 4 ||
+        diagnostic.tail_rows.front().compiled.monotone_dot_type != 1) {
         return fail("extended compiler did not isolate the exact 512+8 split");
     }
     ff7rp::pipeline::SongConfig reused_256_groups;
@@ -900,8 +979,12 @@ int main()
         auto& compiled = representative_runtime_rows[row];
         compiled.time_str = ff7rp::pipeline::beat_to_time_str(static_cast<double>(row), 60.0);
         compiled.monotone_id = "Cn4";
+        compiled.monotone_note_type = 3;
         const bool single = row == 510u || row == 511u || row >= 4095u;
-        if (!single) compiled.chord_id = "pca_C";
+        if (!single) {
+            compiled.chord_id = "pca_C";
+            compiled.chord_note_type = 3;
+        }
         if (row >= 510u && row <= 512u) compiled.group_index = 1;
         if (row >= 513u && row <= 516u) compiled.group_index = 2;
     }

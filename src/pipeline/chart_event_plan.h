@@ -21,8 +21,10 @@ struct ChartEventRow {
     std::string time_str;
     std::string monotone_id;
     std::string chord_id;
-    std::int32_t note_type = 3;
-    std::int32_t dot_type = 0;
+    std::int32_t monotone_note_type = 0;
+    std::int32_t monotone_dot_type = 0;
+    std::int32_t chord_note_type = 0;
+    std::int32_t chord_dot_type = 0;
     std::int32_t camera_switch_timing = 0;
     std::int32_t group_index = 0;
     std::array<std::string, 3> ignore_sound_ids{};
@@ -32,7 +34,10 @@ template <typename CompiledOrRuntimeRow>
 inline ChartEventRow chart_event_row_from_compiled(const CompiledOrRuntimeRow& row)
 {
     return {row.time_str, row.monotone_id, row.chord_id,
-        static_cast<std::int32_t>(row.note_type), static_cast<std::int32_t>(row.dot_type),
+        static_cast<std::int32_t>(row.monotone_note_type),
+        static_cast<std::int32_t>(row.monotone_dot_type),
+        static_cast<std::int32_t>(row.chord_note_type),
+        static_cast<std::int32_t>(row.chord_dot_type),
         static_cast<std::int32_t>(row.camera_switch_timing),
         static_cast<std::int32_t>(row.group_index), row.ignore_sound_ids};
 }
@@ -118,6 +123,10 @@ inline bool chart_event_plans_equal(const ChartEventPlan& left, const ChartEvent
 
 inline bool chart_note_semantics_equal(const Note& source, const ChartNote& compiled)
 {
+    const NativeNoteValue monotone = resolved_native_note_value(
+        source.monotone_note_value, source.duration_beats);
+    const NativeNoteValue chord = resolved_native_note_value(
+        source.chord_note_value, source.duration_beats);
     return std::isfinite(source.beat) && source.beat >= 0.0
         && std::isfinite(source.duration_beats) && source.duration_beats > 0.0
         && compiled.beat == source.beat
@@ -125,8 +134,13 @@ inline bool chart_note_semantics_equal(const Note& source, const ChartNote& comp
         && compiled.pitch == source.pitch
         && compiled.chord_id == source.chord_id
         && compiled.group_index == source.group_index
-        && compiled.note_type == (source.duration_beats >= 2.0 ? 2 : 3)
-        && compiled.dot_type == 0 && compiled.camera_switch_timing == 0;
+        && valid_note_value_override(source.monotone_note_value)
+        && valid_note_value_override(source.chord_note_value)
+        && compiled.monotone_note_type == (source.pitch.empty() ? 0 : monotone.note_type)
+        && compiled.monotone_dot_type == (source.pitch.empty() ? 0 : monotone.dot_type)
+        && compiled.chord_note_type == (source.chord_id.empty() ? 0 : chord.note_type)
+        && compiled.chord_dot_type == (source.chord_id.empty() ? 0 : chord.dot_type)
+        && compiled.camera_switch_timing == 0;
 }
 
 inline std::uint64_t chart_event_append(
@@ -198,8 +212,15 @@ inline ChartEventPlan derive_chart_event_plan(const std::vector<ChartEventRow>& 
         const ChartEventRow& row = rows[row_index];
         const bool right = !row.monotone_id.empty();
         const bool left = !row.chord_id.empty();
-        if ((!right && !left) || (row.note_type != 2 && row.note_type != 3)
-            || row.dot_type != 0 || row.camera_switch_timing != 0
+        const auto valid_side = [](const std::int32_t note_type, const std::int32_t dot_type) {
+            return note_type >= 0 && note_type <= 4 && dot_type >= 0 && dot_type <= 1;
+        };
+        if ((!right && !left)
+            || (right ? !valid_side(row.monotone_note_type, row.monotone_dot_type)
+                      : row.monotone_note_type != 0 || row.monotone_dot_type != 0)
+            || (left ? !valid_side(row.chord_note_type, row.chord_dot_type)
+                     : row.chord_note_type != 0 || row.chord_dot_type != 0)
+            || row.camera_switch_timing != 0
             || (!left && (row.ignore_sound_ids[0].size() || row.ignore_sound_ids[1].size()
                 || row.ignore_sound_ids[2].size()))) {
             plan.error = ChartEventPlanError::InvalidRow;
@@ -259,9 +280,13 @@ inline ChartEventPlan derive_chart_event_plan(const std::vector<ChartEventRow>& 
         plan.physical_digest = chart_event_append_string(plan.physical_digest, row.monotone_id);
         plan.physical_digest = chart_event_append_string(plan.physical_digest, row.chord_id);
         plan.physical_digest = chart_event_append(
-            plan.physical_digest, &row.note_type, sizeof(row.note_type));
+            plan.physical_digest, &row.monotone_note_type, sizeof(row.monotone_note_type));
         plan.physical_digest = chart_event_append(
-            plan.physical_digest, &row.dot_type, sizeof(row.dot_type));
+            plan.physical_digest, &row.monotone_dot_type, sizeof(row.monotone_dot_type));
+        plan.physical_digest = chart_event_append(
+            plan.physical_digest, &row.chord_note_type, sizeof(row.chord_note_type));
+        plan.physical_digest = chart_event_append(
+            plan.physical_digest, &row.chord_dot_type, sizeof(row.chord_dot_type));
         plan.physical_digest = chart_event_append(
             plan.physical_digest, &row.camera_switch_timing, sizeof(row.camera_switch_timing));
         for (const std::string& id : row.ignore_sound_ids)

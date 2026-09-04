@@ -85,8 +85,10 @@ game::SongDescriptor build_song_descriptor(
         chart_note.time_str = note.time_str;
         chart_note.monotone_id = note.monotone_id;
         chart_note.chord_id = note.chord_id;
-        chart_note.note_type = note.note_type;
-        chart_note.dot_type = note.dot_type;
+        chart_note.monotone_note_type = note.monotone_note_type;
+        chart_note.monotone_dot_type = note.monotone_dot_type;
+        chart_note.chord_note_type = note.chord_note_type;
+        chart_note.chord_dot_type = note.chord_dot_type;
         chart_note.camera_switch_timing = note.camera_switch_timing;
         chart_note.group_index = note.group_index;
         chart_note.ignore_sound_ids = note.ignore_sound_ids;
@@ -124,8 +126,10 @@ game::SongDescriptor build_song_descriptor(
         }
         profile.chart_notes.reserve(source_profile.chart.notes.size());
         for (const auto& note : source_profile.chart.notes) {
-            profile.chart_notes.push_back({note.time_str, note.monotone_id, note.chord_id, note.note_type,
-                note.dot_type, note.camera_switch_timing, note.group_index, note.ignore_sound_ids});
+            profile.chart_notes.push_back({note.time_str, note.monotone_id, note.chord_id,
+                note.monotone_note_type, note.monotone_dot_type,
+                note.chord_note_type, note.chord_dot_type,
+                note.camera_switch_timing, note.group_index, note.ignore_sound_ids});
         }
         profile.diagnostic_source_rows = source_profile.diagnostic_chart.source_row_count;
         profile.diagnostic_native_prefix_rows = source_profile.diagnostic_chart.native_prefix_row_count;
@@ -150,8 +154,10 @@ game::SongDescriptor build_song_descriptor(
             for (const auto& tail_row : source_profile.diagnostic_chart.tail_rows) {
                 const auto& note = tail_row.compiled;
                 profile.extended_chart_tail_notes.push_back(game::SongChartNote{
-                note.time_str, note.monotone_id, note.chord_id, note.note_type,
-                note.dot_type, note.camera_switch_timing, note.group_index,
+                note.time_str, note.monotone_id, note.chord_id,
+                note.monotone_note_type, note.monotone_dot_type,
+                note.chord_note_type, note.chord_dot_type,
+                note.camera_switch_timing, note.group_index,
                 note.ignore_sound_ids});
             }
             const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();

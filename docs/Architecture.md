@@ -110,18 +110,19 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   been atomically published. Logical source-frame metadata, chart/profile semantics,
   descriptor inputs, cache identity, and sidecar artifact paths remain available for
   lexical settlement and runtime admission.
-- Pipeline cache identity v45 and runtime-cache format 14 include authored group,
+- Pipeline cache identity v46 and runtime-cache format 15 include authored group,
   monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
-  identity to every MIDI cache key. Version 45 preserves exact authored black-key
-  sharp/flat monotone identity; generated MIDI's v10 identity additionally covers
-  normalized key-signature-based accidental orientation. Every authored-JSON and
+  identity to every MIDI cache key. Version 46 preserves exact authored black-key
+  sharp/flat identity and independent monotone/chord note/dot values; generated
+  MIDI's v11 identity additionally covers normalized key-signature orientation and
+  exact rational source-length notation. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
   identity selected from the exact generated catalog build ID; descriptive game
-  version strings never grant asset authority. Runtime-cache format 14
-  already stores the resulting exact pitch/native names and therefore does not change.
-  Format 14 remains sufficient because source rows, prefix events, native events,
+  version strings never grant asset authority. Runtime-cache format 15 serializes
+  both source-side overrides and the separate compiled monotone/chord pairs.
+  Source rows, prefix events, native events,
   required actions, physical digest, and any explicitly authored group topology are
   deterministically rederived from the already-counted prefix/tail rows.
 - A profile descriptor keeps the first 512 source rows in `chart_notes` and owns
@@ -140,14 +141,15 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   the same complete 512-prefix-plus-tail transport through 8192 rows/events.
   Without that capability, authored charts above 512 reject and generated profiles
   above 512 omit. The legacy JSON diagnostic flag is accepted only as inert input;
-  actual tail presence determines the internal format-14 transport marker.
+  actual tail presence determines the internal format-15 transport marker.
 - `ChartEventRow` is the game-neutral compiled-row projection used by the canonical
   `derive_chart_event_plan` engine. The resulting immutable plan contains stable
   monotone-then-chord event entries and ordered root/child links in addition to
   R/P/E/A. Runtime reconstructs these rows from `chart_notes` plus
-  `extended_chart_tail_notes`; format 14 does not serialize a redundant plan.
+  `extended_chart_tail_notes`; format 15 does not serialize a redundant plan.
   `physical_chart_digest` hashes complete compiled/runtime physical semantics
-  (`TimeStr`, monotone/chord IDs, note/dot/camera fields, and IgnoreSound) while
+  (`TimeStr`, monotone/chord IDs, each side's note/dot fields, camera fields, and
+  IgnoreSound) while
   excluding only GroupIndex topology. R/P/E/A and links are separately rederived
   and checked for every profile. Source pitch spelling, authored IgnoreSound, and
   retained MIDI chord voicing remain protected by diagnostic/cache semantic hashes;
@@ -156,8 +158,9 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   chord identities, including distinct `pca_Cs` and `pca_Db` rows. Build-scoped
   entries are available to IgnoreSound and MIDI inference only when the
   compile-selected exact generated catalog exposes the matching immutable asset
-  capability. Build 1.005 currently exposes the recovered `pca_Db` row; build
-  1.004 and unknown catalogs do not. Resolution neither reads game memory nor
+  capability. Exact builds 1.004 and 1.005 expose the verified-equal `pca_Db`
+  row under one `verified1004+1005` capability identity; unknown catalogs do
+  not. Resolution neither reads game memory nor
   constructs native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
 - Diagnostic helper availability without playable runtime capability does not

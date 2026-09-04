@@ -134,7 +134,8 @@ std::vector<unsigned char> profile_witness_midi_bytes() {
 }
 
 std::vector<unsigned char> single_chord_midi_bytes(
-    const std::initializer_list<int> pitches, const bool flat_key = false) {
+    const std::initializer_list<int> pitches, const bool flat_key = false,
+    const bool heterogeneous_lengths = false) {
     std::vector<MidiEvent> melody;
     std::vector<MidiEvent> harmony;
     melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
@@ -144,7 +145,11 @@ std::vector<unsigned char> single_chord_midi_bytes(
         const int tick = event * 960;
         add_note(&melody, tick, 360, 72 + event % 5, 104);
         int velocity = 82;
-        for (const int pitch : pitches) add_note(&harmony, tick, 720, pitch, velocity--);
+        std::size_t pitch_index = 0;
+        for (const int pitch : pitches) {
+            add_note(&harmony, tick, heterogeneous_lengths && pitch_index++ == 1u ? 480 : 720,
+                pitch, velocity--);
+        }
     }
 
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
@@ -287,6 +292,7 @@ struct PhysicalFrame {
     int frame = 0;
     std::vector<int> pitches;
     int velocity = 100;
+    int duration_ticks = 8;
 };
 
 std::vector<unsigned char> physical_frame_midi_bytes(
@@ -306,7 +312,7 @@ std::vector<unsigned char> physical_frame_midi_bytes(
     }
     for (const PhysicalFrame& frame : frames) {
         for (const int pitch : frame.pitches) {
-            add_note(&melody, base_tick + frame.frame * ticks_per_frame, 8,
+            add_note(&melody, base_tick + frame.frame * ticks_per_frame, frame.duration_ticks,
                 pitch, frame.velocity);
         }
     }
@@ -384,6 +390,12 @@ std::vector<std::uint8_t> canonical_note_bytes(const std::vector<Note>& notes) {
         for (const std::string& value : note.ignore_sound_pitches) append_string(value);
         append_u64(note.source_chord_pitches.size());
         for (const std::string& value : note.source_chord_pitches) append_string(value);
+        bytes.push_back(note.monotone_note_value.provided ? 1u : 0u);
+        bytes.push_back(note.monotone_note_value.value.note_type);
+        bytes.push_back(note.monotone_note_value.value.dot_type);
+        bytes.push_back(note.chord_note_value.provided ? 1u : 0u);
+        bytes.push_back(note.chord_note_value.value.note_type);
+        bytes.push_back(note.chord_note_value.value.dot_type);
     }
     return bytes;
 }
@@ -484,6 +496,12 @@ std::uint64_t fingerprint(const Observation& value) {
         for (const auto& pitch : note.ignore_sound_pitches) out.text(pitch);
         out.integer(note.source_chord_pitches.size());
         for (const auto& pitch : note.source_chord_pitches) out.text(pitch);
+        out.integer(note.monotone_note_value.provided);
+        out.integer(note.monotone_note_value.value.note_type);
+        out.integer(note.monotone_note_value.value.dot_type);
+        out.integer(note.chord_note_value.provided);
+        out.integer(note.chord_note_value.value.note_type);
+        out.integer(note.chord_note_value.value.dot_type);
     }
     append_stats(&out, value.stats);
     return out.value();
@@ -519,19 +537,19 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 18> expected{{
-    {"manual-lv1", 11922639811070787527ull, 0, ""},
-    {"manual-lv2", 14935626326576169940ull, 0, ""},
-    {"manual-lv3", 815333244954106575ull, 0, ""},
-    {"manual-lv4", 12825470606422220953ull, 0, ""},
-    {"manual-lv5", 3604241986910723758ull, 0, ""},
-    {"manual-lv6", 13071700642153806976ull, 0, ""},
-    {"baseline-lv1", 2249181695306624162ull, 0, ""},
-    {"baseline-lv2", 18015730830025414702ull, 0, ""},
-    {"baseline-lv3", 18274265534125259683ull, 0, ""},
-    {"baseline-lv4", 14309462936905742755ull, 0, ""},
-    {"baseline-lv5", 829147654021093457ull, 0, ""},
-    {"baseline-lv6", 16181430775563729655ull, 0, ""},
-    {"automatic-alignment", 1563318869674342179ull, 0, ""},
+    {"manual-lv1", 6773119318625811841ull, 0, ""},
+    {"manual-lv2", 13917796721266263578ull, 0, ""},
+    {"manual-lv3", 3422253880615500361ull, 0, ""},
+    {"manual-lv4", 8893295841173198285ull, 0, ""},
+    {"manual-lv5", 14940100557045089030ull, 0, ""},
+    {"manual-lv6", 2786189282108214522ull, 0, ""},
+    {"baseline-lv1", 18382197050995942130ull, 0, ""},
+    {"baseline-lv2", 14470395282069359180ull, 0, ""},
+    {"baseline-lv3", 8443132770364117ull, 0, ""},
+    {"baseline-lv4", 9589817132494063679ull, 0, ""},
+    {"baseline-lv5", 4163578994208223256ull, 0, ""},
+    {"baseline-lv6", 5932381222701315157ull, 0, ""},
+    {"automatic-alignment", 17191488344814720703ull, 0, ""},
     {"timing-domain-empty", 12345897120421995243ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
@@ -540,7 +558,7 @@ constexpr std::array<Expected, 18> expected{{
         "difficulty target band exceeds the maximum adjacent visible-profile growth"},
     {"selection-failure-witness", 17716276405075993264ull, 8,
         "no target-band state satisfies a coherent local-skill route"},
-    {"near-feasible-witness", 16264490516427515963ull, 8,
+    {"near-feasible-witness", 16306373482813534199ull, 8,
         "near-feasible witness: rows=294 preferred=192 required_rows=297 required_preferred=192 "
         "route=OneWingedAngel ratio=3.000000 margin=1.150000 dominant_skill=5 interval=global"},
 }};
@@ -644,6 +662,14 @@ int main(int argc, char** argv) {
         "exact-tick-flat-db-chord.mid", db_chord_context_midi_bytes(DbChordContext::ExactTickFlat));
     const std::filesystem::path straddling_db_chord_path = write_bytes_fixture(
         "straddling-db-chord.mid", db_chord_context_midi_bytes(DbChordContext::Straddling));
+    const std::filesystem::path heterogeneous_db_chord_path = write_bytes_fixture(
+        "heterogeneous-db-chord-lengths.mid", single_chord_midi_bytes({49, 53, 56}, true, true));
+    const std::filesystem::path exact_note_values_path = write_physical_fixture(
+        "exact-note-values.mid", {
+            {0, {60}, 100, 1920}, {200, {61}, 100, 2880}, {400, {62}, 100, 960},
+            {600, {63}, 100, 1440}, {800, {64}, 100, 480}, {1000, {65}, 100, 720},
+            {1200, {66}, 100, 240}, {1400, {67}, 100, 360}, {1600, {68}, 100, 120},
+            {1800, {69}, 100, 180}});
 
     const WavAudio no_audio;
     const auto find_pitch = [](const Observation& observation, const std::string_view pitch) {
@@ -953,6 +979,9 @@ int main(int argc, char** argv) {
         exact_tick_db_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
     const Observation straddling_db_chord = generate(
         straddling_db_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
+    const Observation heterogeneous_db_chord = generate(
+        heterogeneous_db_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
+    const Observation exact_note_values = generate(exact_note_values_path, no_audio, config_for(6));
     const std::array<std::string_view, 7> expected_accidentals{
         "C#4", "Db4", "C#4", "C#4", "Db4", "C#4", "Db4"
     };
@@ -989,8 +1018,30 @@ int main(int argc, char** argv) {
             canonical_note_bytes(flat_c_sharp_chord_repeat.notes)
         || !exact_chord_identity(exact_tick_db_chord, "pca_Db")
         || !exact_chord_identity(straddling_db_chord, "pca_Cs")
-        || !exact_chord_identity(flat_c_sharp_chord_1004, "pca_Cs")) {
+        || !exact_chord_identity(flat_c_sharp_chord_1004, "pca_Db")) {
         return fail("Db chord inference did not preserve exact flat context and boundary fallback");
+    }
+    const std::array<ff7rp::pipeline::NativeNoteValue, 10> exact_values{{
+        {0, 0}, {0, 1}, {1, 0}, {1, 1}, {2, 0},
+        {2, 1}, {3, 0}, {3, 1}, {4, 0}, {4, 1}}};
+    if (!exact_note_values.status.ok() || exact_note_values.notes.size() != exact_values.size()) {
+        return fail("exact MIDI source lengths did not survive reduction");
+    }
+    for (std::size_t index = 0; index < exact_values.size(); ++index) {
+        if (exact_note_values.notes[index].monotone_note_value !=
+                ff7rp::pipeline::NoteValueOverride{exact_values[index], true}
+            || exact_note_values.notes[index].chord_note_value.provided) {
+            return fail("exact MIDI monotone length did not map to the expected native notation");
+        }
+    }
+    const auto chord_notation = [](const Observation& observed) -> ff7rp::pipeline::NoteValueOverride {
+        for (const Note& note : observed.notes) if (!note.chord_id.empty()) return note.chord_note_value;
+        return {};
+    };
+    if (chord_notation(flat_c_sharp_chord) != ff7rp::pipeline::NoteValueOverride{{2, 1}, true}
+        || chord_notation(heterogeneous_db_chord).provided
+        || !exact_chord_identity(heterogeneous_db_chord, "pca_Db")) {
+        return fail("homogeneous or heterogeneous MIDI chord length notation was not exact");
     }
     for (const std::filesystem::path& path : sharp_fallback_chord_paths) {
         if (!exact_chord_identity(generate(path, no_audio, config_for(6)), "pca_Cs")) {
@@ -1013,20 +1064,23 @@ int main(int argc, char** argv) {
         return fail("enharmonic generated identities did not change the physical digest");
     }
     ff7rp::pipeline::ChartEventPlan flat_chord_plan;
+    ff7rp::pipeline::ChartEventPlan heterogeneous_chord_plan;
     const Observation sharp_chord = generate(sharp_fallback_chord_paths.front(), no_audio, config_for(6));
     ff7rp::pipeline::ChartEventPlan sharp_chord_plan;
     if (!compile_plan(flat_c_sharp_chord, &flat_chord_plan)
+        || !compile_plan(heterogeneous_db_chord, &heterogeneous_chord_plan)
         || !compile_plan(sharp_chord, &sharp_chord_plan)
         || flat_chord_plan.source_row_count != flat_chord_plan.native_event_count
         || flat_chord_plan.native_prefix_event_count != flat_chord_plan.source_row_count
         || flat_chord_plan.source_row_count != flat_chord_plan.required_action_count
-        || flat_chord_plan.physical_digest == sharp_chord_plan.physical_digest) {
+        || flat_chord_plan.physical_digest == sharp_chord_plan.physical_digest
+        || flat_chord_plan.physical_digest == heterogeneous_chord_plan.physical_digest) {
         return fail("automatic Db chord accounting or physical identity was not exact");
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:key_signature_spelling:v10") {
+        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values:v11") {
         return fail("generated MIDI semantic identity did not invalidate legacy accidental spelling");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));

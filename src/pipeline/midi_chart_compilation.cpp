@@ -22,6 +22,41 @@
 namespace ff7rp::pipeline {
 namespace {
 
+NoteValueOverride exact_midi_note_value(
+    const MidiSourceIdentity& source, const int ticks_per_quarter)
+{
+    NoteValueOverride result;
+    const std::int64_t ticks = static_cast<std::int64_t>(source.end_tick) - source.tick;
+    if (ticks <= 0 || ticks_per_quarter <= 0) return result;
+    struct Candidate { std::int64_t numerator; std::int64_t denominator; NativeNoteValue value; };
+    constexpr Candidate candidates[] = {
+        {4, 1, {0, 0}}, {6, 1, {0, 1}}, {2, 1, {1, 0}}, {3, 1, {1, 1}},
+        {1, 1, {2, 0}}, {3, 2, {2, 1}}, {1, 2, {3, 0}}, {3, 4, {3, 1}},
+        {1, 4, {4, 0}}, {3, 8, {4, 1}},
+    };
+    for (const Candidate& candidate : candidates) {
+        if (ticks * candidate.denominator ==
+            static_cast<std::int64_t>(ticks_per_quarter) * candidate.numerator) {
+            result.value = candidate.value;
+            result.provided = true;
+            break;
+        }
+    }
+    return result;
+}
+
+NoteValueOverride exact_midi_chord_note_value(
+    const std::vector<MidiSourceIdentity>& sources, const int ticks_per_quarter)
+{
+    if (sources.empty()) return {};
+    const NoteValueOverride first = exact_midi_note_value(sources.front(), ticks_per_quarter);
+    if (!first.provided) return {};
+    for (std::size_t index = 1; index < sources.size(); ++index) {
+        if (exact_midi_note_value(sources[index], ticks_per_quarter) != first) return {};
+    }
+    return first;
+}
+
 constexpr double kAudioPlaybackDelaySeconds = 0.007;
 constexpr double kPrimaryVoiceEvidence = 0.46;
 constexpr double kComparisonEpsilon = 1e-9;
@@ -2429,7 +2464,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         if (a.right != b.right) return a.right;
         return a.attack.event.source < b.attack.event.source;
     };
-    const auto make_row = [chart_bpm, &alternate_monotone_plan, &accidental_orientation](
+    const auto make_row = [chart_bpm, &alternate_monotone_plan, &accidental_orientation,
+                              ticks_per_quarter](
                               const long long frame, const OutputAction& action) {
         OutputRow row;
         row.note.beat = (static_cast<double>(frame) / 60.0) * chart_bpm / 60.0;
@@ -2444,12 +2480,16 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             const bool flat_spelling = row.note.pitch.size() == 3u && row.note.pitch[1] == 'b';
             row.note.alternate_monotone = !flat_spelling &&
                 planned != alternate_monotone_plan.end() && planned->second;
+            row.note.monotone_note_value = exact_midi_note_value(
+                action.attack.event.source, ticks_per_quarter);
         } else {
             row.has_left = true;
             row.left = action.attack;
             row.note.chord_id = action.attack.chord_id;
             row.note.ignore_sound_pitches = action.attack.ignore_sound_pitches;
             row.note.source_chord_pitches = action.attack.source_chord_pitches;
+            row.note.chord_note_value = exact_midi_chord_note_value(
+                action.attack.chord_sources, ticks_per_quarter);
         }
         return row;
     };
@@ -2460,8 +2500,12 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         return action.right ?
             note.chord_id.empty() && note.pitch == generated_pitch_name(
                 action.attack.event.source.pitch, midi_accidental_orientation_at_tick(
-                    accidental_orientation, action.attack.event.source.tick)) :
-            note.pitch.empty() && note.chord_id == action.attack.chord_id;
+                    accidental_orientation, action.attack.event.source.tick)) &&
+                note.monotone_note_value == exact_midi_note_value(
+                    action.attack.event.source, ticks_per_quarter) :
+            note.pitch.empty() && note.chord_id == action.attack.chord_id &&
+                note.chord_note_value == exact_midi_chord_note_value(
+                    action.attack.chord_sources, ticks_per_quarter);
     };
     if (preferred_baseline) {
         for (const Note& note : *preferred_baseline) {

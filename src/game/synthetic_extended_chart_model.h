@@ -218,5 +218,8 @@ struct GeneralizedResult {
 };
 
 GeneralizedResult run_generalized(const GeneralizedRequest& request);
+bool modeled_event_note_value(const ff7rp::pipeline::ChartEventRow& row,
+    ff7rp::pipeline::ChartEventKind kind, std::uint8_t& note_type,
+    std::uint8_t& dot_type) noexcept;
 
 } // namespace ff7r::piano::game::synthetic_model
