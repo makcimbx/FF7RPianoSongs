@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string_view>
 
@@ -18,6 +19,19 @@ struct NoteValueOverride {
 
     bool operator==(const NoteValueOverride&) const = default;
 };
+
+struct NamedNativeNoteValue {
+    std::string_view name;
+    NativeNoteValue value;
+};
+
+inline constexpr std::array<NamedNativeNoteValue, 10> kSupportedNamedNoteValues{{
+    {"whole", {0, 0}}, {"dotted_whole", {0, 1}},
+    {"half", {1, 0}}, {"dotted_half", {1, 1}},
+    {"quarter", {2, 0}}, {"dotted_quarter", {2, 1}},
+    {"eighth", {3, 0}}, {"dotted_eighth", {3, 1}},
+    {"sixteenth", {4, 0}}, {"dotted_sixteenth", {4, 1}},
+}};
 
 inline constexpr bool supported_native_note_value(const NativeNoteValue value)
 {
@@ -45,15 +59,7 @@ inline constexpr bool native_note_value_from_name(
     const std::string_view name, NativeNoteValue* out)
 {
     if (!out) return false;
-    struct Entry { std::string_view name; NativeNoteValue value; };
-    constexpr Entry entries[] = {
-        {"whole", {0, 0}}, {"dotted_whole", {0, 1}},
-        {"half", {1, 0}}, {"dotted_half", {1, 1}},
-        {"quarter", {2, 0}}, {"dotted_quarter", {2, 1}},
-        {"eighth", {3, 0}}, {"dotted_eighth", {3, 1}},
-        {"sixteenth", {4, 0}}, {"dotted_sixteenth", {4, 1}},
-    };
-    for (const Entry& entry : entries) {
+    for (const NamedNativeNoteValue& entry : kSupportedNamedNoteValues) {
         if (entry.name == name) {
             *out = entry.value;
             return true;

@@ -39,7 +39,8 @@ End/Binaries/Win64/
     song.mid | song.midi          (optional)
 ```
 
-The package contains no music. See [Song Format](docs/SongFormat.md) to create or check a song.
+The package contains no music. Every archive includes the complete [Song Format](docs/SongFormat.md)
+authoring reference; use that bundled copy to create or check a song.
 
 ## Use
 
@@ -85,6 +86,7 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 ## Compatibility and Limitations
 
 - Each download supports exactly one cataloged Windows x64 game build. Updating or rolling back the game can require a different download.
+- Exact build 1.004 has catalog/static/offline compatibility but remains **runtime-untested** for the current extended-chart and split-articulation claims; 1.005 evidence does not transfer to it.
 - Ordinary and noneligible charts remain limited to the native 512-row prefix. Reviewed extended transport is attempted automatically only for an exact supported executable build and remains fail-closed unless every build-specific gate and hook succeeds.
 - Replace, remove, or update the ASI only while the game is stopped. Live unload/reload is unsupported.
 - Looped HCA and arbitrary CRI encoder profiles are unsupported.

@@ -1,6 +1,8 @@
 #include "tests/documentation_parity.h"
 
 #include "core/generated/build_identity.generated.h"
+#include "pipeline/native_chord_constituents.h"
+#include "pipeline/note_value.h"
 
 #include <algorithm>
 #include <array>
@@ -19,6 +21,8 @@ namespace fs = std::filesystem;
 
 namespace ff7rp::tests {
 namespace {
+
+bool fail(std::string* error_message, std::string message);
 
 static_assert(ff7r::piano::core::generated::kRvaCatalogSha256.size() == 64);
 static_assert(ff7r::piano::core::generated::kRvaGeneratorSha256.size() == 64);
@@ -53,6 +57,21 @@ constexpr std::array<RoleDefinition, 21> kRequiredRoles{{
     {"chart-event-abi-evidence", "repository"},
     {"developer-tools", "repository"},
 }};
+
+template <std::size_t Size>
+bool require_documented_tokens(const std::string_view text,
+    const std::array<std::string_view, Size>& tokens, const std::string_view category,
+    std::string* error_message)
+{
+    for (const std::string_view token : tokens) {
+        const std::string rendered = "`" + std::string(token) + "`";
+        if (text.find(rendered) == std::string_view::npos) {
+            return fail(error_message, "SongFormat is missing documented " +
+                std::string(category) + " token: " + std::string(token));
+        }
+    }
+    return true;
+}
 
 class ReleaseJsonParser {
 public:
@@ -671,6 +690,91 @@ bool validate_ini_documentation(const fs::path& source_root, std::string* error_
 
 } // namespace
 
+bool verify_song_format_contract_text(
+    const std::string_view text, std::string* error_message)
+{
+    constexpr std::array<std::string_view, 19> root_fields{{
+        "schema", "title", "bpm", "difficulty", "score_thresholds",
+        "mode_change_combo_counts", "midi_audio_offset_seconds",
+        "midi_audio_alignment_seconds", "midi_minimum_lead_in_seconds",
+        "loudness_normalization", "loudness_target_lufs",
+        "loudness_peak_ceiling_dbfs", "gain_envelope", "metronome", "notes",
+        "profiles", "diagnostic_extended_chart_fixture", "song.mid", "song.midi",
+    }};
+    constexpr std::array<std::string_view, 9> note_fields{{
+        "beat", "duration_beats", "pitch", "chord_id", "group_index",
+        "monotone_variant", "ignore_sound", "monotone_note_value", "chord_note_value",
+    }};
+    constexpr std::array<std::string_view, 2> profile_fields{{"difficulty", "notes"}};
+    constexpr std::array<std::string_view, 3> metronome_fields{{
+        "enabled", "level", "beat_zero_offset_seconds",
+    }};
+    constexpr std::array<std::string_view, 2> gain_fields{{"time_seconds", "gain_db"}};
+    constexpr std::array<std::string_view, 18> required_sections{{
+        "# Song Format Reference", "## Folder and source selection", "## Root object",
+        "## Explicit notes", "### Pitch spelling", "### Note values",
+        "### Chords and `ignore_sound`", "### Groups and dual rows",
+        "## Difficulty profiles", "## MIDI-backed songs", "## Metronome",
+        "## Audio, modes, loudness, and gain", "## Extended charts and build policy",
+        "## Failure behavior", "### Minimal explicit chart", "### Dual row, chord filtering, note values, and grouping",
+        "### Explicit difficulty profiles", "### MIDI-backed song",
+    }};
+    constexpr std::array<std::string_view, 5> required_example_sections{{
+        "### Metronome and gain envelope", "### Mode audio filenames",
+        "unknown fields are rejected", "`song.mode0.*` is rejected",
+        "including an explicit `0`",
+    }};
+    if (!require_documented_tokens(text, root_fields, "root/source field", error_message)
+        || !require_documented_tokens(text, note_fields, "note field", error_message)
+        || !require_documented_tokens(text, profile_fields, "profile field", error_message)
+        || !require_documented_tokens(text, metronome_fields, "metronome field", error_message)
+        || !require_documented_tokens(text, gain_fields, "gain-envelope field", error_message)) {
+        return false;
+    }
+    for (const std::string_view section : required_sections) {
+        if (text.find(section) == std::string_view::npos) {
+            return fail(error_message, "SongFormat is missing required authoring section/example: " +
+                std::string(section));
+        }
+    }
+    for (const std::string_view marker : required_example_sections) {
+        if (text.find(marker) == std::string_view::npos) {
+            return fail(error_message, "SongFormat is missing required authoring contract marker: " +
+                std::string(marker));
+        }
+    }
+    for (const auto& entry : ff7rp::pipeline::kSupportedNamedNoteValues) {
+        const std::string row = "| `" + std::string(entry.name) + "` | `(" +
+            std::to_string(entry.value.note_type) + "," + std::to_string(entry.value.dot_type) + ")` |";
+        if (text.find(row) == std::string_view::npos) {
+            return fail(error_message, "SongFormat note-value table is missing or incorrect for " +
+                std::string(entry.name));
+        }
+    }
+    for (const auto& chord : ff7rp::pipeline::kVerifiedNativeChordConstituents) {
+        std::string row = "| `" + std::string(chord.chord_id) + "` | ";
+        for (std::size_t index = 0; index < chord.sound_count; ++index) {
+            if (index != 0u) row += ", ";
+            row += "`" + std::string(chord.sound_names[index]) + "`";
+        }
+        row += " |";
+        if (text.find(row) == std::string_view::npos) {
+            return fail(error_message, "SongFormat verified chord table is missing or incorrect for " +
+                std::string(chord.chord_id));
+        }
+    }
+    constexpr std::array<std::string_view, 8> pitch_contract{{
+        "`[A-G](#|b)?[0-9]`", "`B#0`", "`Cb1`", "`B#6`", "`Cb7`", "`C7`",
+        "C1 through C7 inclusive", "case-sensitive",
+    }};
+    for (const std::string_view marker : pitch_contract) {
+        if (text.find(marker) == std::string_view::npos) {
+            return fail(error_message, "SongFormat pitch grammar is incomplete: " + std::string(marker));
+        }
+    }
+    return true;
+}
+
 bool parse_release_authority(
     const std::string& json, ReleaseAuthority* release, std::string* error_message)
 {
@@ -868,12 +972,23 @@ bool verify_documentation_parity_at(const fs::path& source_root, std::string* er
     if (!load_release_authority(source_root, &release, error_message)) return false;
     DocumentationRegistry registry;
     if (!load_documentation_registry(source_root, &registry, error_message)) return false;
+    const auto song_format = std::find_if(registry.documents.begin(), registry.documents.end(),
+        [](const CanonicalDocument& document) { return document.role == "song-format"; });
+    if (song_format == registry.documents.end() || song_format->distribution != "package"
+        || song_format->source != fs::path("docs/SongFormat.md")
+        || song_format->destination != fs::path("docs/SongFormat.md")) {
+        return fail(error_message,
+            "song-format package role must map docs/SongFormat.md to docs/SongFormat.md");
+    }
     for (const CanonicalDocument& document : registry.documents) {
         if (!fs::is_regular_file(source_root / document.source)) {
             return fail(error_message, "missing registered canonical document: " + document.source.generic_string());
         }
     }
     if (!validate_current_status(source_root, error_message)) return false;
+    std::string song_format_text;
+    if (!read_bytes(source_root / song_format->source, &song_format_text)
+        || !verify_song_format_contract_text(song_format_text, error_message)) return false;
     if (!validate_package_prose(source_root, registry, error_message)) return false;
     if (!validate_ini_documentation(source_root, error_message)) return false;
     if (!validate_release_document_parity(source_root, release, error_message)) return false;

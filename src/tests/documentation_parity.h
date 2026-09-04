@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ff7rp::tests {
@@ -78,5 +79,8 @@ bool verify_staged_documentation_parity(
     const std::filesystem::path& package_root,
     std::string* error_message);
 bool verify_documentation_parity(std::string* error_message);
+bool verify_song_format_contract_text(
+    std::string_view text,
+    std::string* error_message);
 
 } // namespace ff7rp::tests

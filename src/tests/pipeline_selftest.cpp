@@ -46,6 +46,8 @@ std::string expected_monotone(int semitone)
     return std::string(ids[semitone % 12]) + std::to_string(semitone / 12);
 }
 
+bool replace_once(std::string* text, const std::string& from, const std::string& to);
+
 bool test_staged_documentation_failures(std::string* error_message)
 {
     namespace fs = std::filesystem;
@@ -63,6 +65,39 @@ bool test_staged_documentation_failures(std::string* error_message)
     if (!ff7rp::tests::verify_staged_documentation_parity(
             source_root, package_root, &parity_error)) {
         *error_message = "valid staged documentation was rejected: " + parity_error;
+        return false;
+    }
+
+    std::ifstream song_format_stream(source_root / "docs/SongFormat.md", std::ios::binary);
+    const std::string song_format((std::istreambuf_iterator<char>(song_format_stream)), {});
+    if (song_format.empty()) {
+        *error_message = "canonical SongFormat fixture is unreadable";
+        return false;
+    }
+    const auto require_semantic_rejection = [&](const std::string& removed,
+                                                const char* description) {
+        std::string mutated = song_format;
+        bool found = false;
+        for (std::size_t position = mutated.find(removed); position != std::string::npos;
+             position = mutated.find(removed)) {
+            mutated.erase(position, removed.size());
+            found = true;
+        }
+        if (!found) {
+            *error_message = std::string("SongFormat negative fixture is missing ") + description;
+            return false;
+        }
+        std::string semantic_error;
+        if (ff7rp::tests::verify_song_format_contract_text(mutated, &semantic_error)) {
+            *error_message = std::string("SongFormat semantic audit accepted missing ") + description;
+            return false;
+        }
+        return true;
+    };
+    if (!require_semantic_rejection("`midi_audio_alignment_seconds`", "public root field")
+        || !require_semantic_rejection("| `dotted_sixteenth` | `(4,1)` |", "note-value enum")
+        || !require_semantic_rejection("| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "verified chord row")
+        || !require_semantic_rejection("### Mode audio filenames", "required example")) {
         return false;
     }
 
@@ -84,9 +119,14 @@ bool test_staged_documentation_failures(std::string* error_message)
     }
     fs::copy_file(source_root / "docs/SongFormat.md", package_root / "docs/SongFormat.md");
 
+    std::string incomplete_staged = song_format;
+    if (!replace_once(&incomplete_staged, "| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "")) {
+        *error_message = "staged SongFormat semantic mutation could not be constructed";
+        return false;
+    }
     {
-        std::ofstream mutated(package_root / "docs/SongFormat.md", std::ios::binary | std::ios::app);
-        mutated << "\nmutated\n";
+        std::ofstream mutated(package_root / "docs/SongFormat.md", std::ios::binary | std::ios::trunc);
+        mutated << incomplete_staged;
     }
     if (ff7rp::tests::verify_staged_documentation_parity(source_root, package_root, &parity_error)) {
         *error_message = "mutated staged documentation was accepted";
@@ -1097,7 +1137,7 @@ int main()
         ff7rp::pipeline::CompiledChart compiled;
         return ff7rp::pipeline::compile_chart(alternate, &compiled);
     };
-    for (const char* pitch : {"C1", "C7", "C#2", "C#6"}) {
+    for (const char* pitch : {"C1", "C7", "B#0", "B#3", "B#6", "C#2", "C#6"}) {
         if (!compile_alternate(pitch).ok()) {
             return fail("verified alternate monotone was rejected: " + std::string(pitch));
         }
