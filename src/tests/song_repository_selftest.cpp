@@ -30,6 +30,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -2440,6 +2441,18 @@ int test_resolved_song_output(const std::filesystem::path& root) {
         std::filesystem::exists(ff7rp::pipeline::cache_last_error_path(song_directory.string()))) {
         return fail("resolved-song write obstruction rejected the song or damaged prior output");
     }
+    ff7rp::pipeline::LoadedSong throwing_trace;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &throwing_trace,
+        [](const char* stage) {
+            if (std::string_view(stage) == "resolved_song_write_failed") {
+                throw std::runtime_error("test-only resolved output trace failure");
+            }
+        });
+    if (!status.ok() || !throwing_trace.loaded_from_runtime_cache ||
+        read_text(resolved) != cold_json ||
+        std::filesystem::exists(ff7rp::pipeline::cache_last_error_path(song_directory.string()))) {
+        return fail("resolved-song failure reporting escaped best-effort publication");
+    }
     std::filesystem::remove_all(obstruction);
 
     if (!write_source("Resolved Two")) return fail("failed to update resolved-song source fixture");
@@ -2451,6 +2464,22 @@ int test_resolved_song_output(const std::filesystem::path& root) {
         !ff7rp::pipeline::parse_song_json_string(changed_json, &parsed).ok() ||
         parsed.config.title != "Resolved Two") {
         return fail("source change did not atomically refresh stale resolved-song output");
+    }
+
+    const std::string malformed_title("Invalid \xc0\xaf", 10);
+    if (!write_source(malformed_title)) return fail("failed to write malformed-UTF-8 source fixture");
+    trace.clear();
+    ff7rp::pipeline::LoadedSong invalid_utf8;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &invalid_utf8,
+        [&](const char* stage) {
+            if (!trace.empty()) trace += ',';
+            trace += stage;
+        });
+    if (!status.ok() || invalid_utf8.loaded_from_runtime_cache ||
+        trace.find("resolved_song_render_failed") == std::string::npos ||
+        read_text(resolved) != changed_json ||
+        std::filesystem::exists(ff7rp::pipeline::cache_last_error_path(song_directory.string()))) {
+        return fail("resolved-song UTF-8 render failure escaped cold best-effort publication");
     }
     return 0;
 }

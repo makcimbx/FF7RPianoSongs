@@ -16,7 +16,51 @@ Status invalid_projection(const std::string& detail) {
     return Status::error(StatusCode::InvalidChart, "cannot render resolved song JSON: " + detail);
 }
 
-void append_escaped_json_string(std::string* out, const std::string_view value) {
+bool well_formed_utf8(const std::string_view value) {
+    const auto continuation = [](const unsigned char byte) {
+        return byte >= 0x80u && byte <= 0xbfu;
+    };
+    for (std::size_t index = 0; index < value.size();) {
+        const unsigned char first = static_cast<unsigned char>(value[index]);
+        if (first <= 0x7fu) {
+            ++index;
+            continue;
+        }
+        if (first >= 0xc2u && first <= 0xdfu) {
+            if (index + 1u >= value.size() ||
+                !continuation(static_cast<unsigned char>(value[index + 1u]))) return false;
+            index += 2u;
+            continue;
+        }
+        if (first >= 0xe0u && first <= 0xefu) {
+            if (index + 2u >= value.size()) return false;
+            const unsigned char second = static_cast<unsigned char>(value[index + 1u]);
+            const unsigned char third = static_cast<unsigned char>(value[index + 2u]);
+            if (!continuation(third) ||
+                (first == 0xe0u ? second < 0xa0u || second > 0xbfu
+                                : first == 0xedu ? second < 0x80u || second > 0x9fu
+                                                 : !continuation(second))) return false;
+            index += 3u;
+            continue;
+        }
+        if (first >= 0xf0u && first <= 0xf4u) {
+            if (index + 3u >= value.size()) return false;
+            const unsigned char second = static_cast<unsigned char>(value[index + 1u]);
+            if ((first == 0xf0u ? second < 0x90u || second > 0xbfu
+                                : first == 0xf4u ? second < 0x80u || second > 0x8fu
+                                                 : !continuation(second)) ||
+                !continuation(static_cast<unsigned char>(value[index + 2u])) ||
+                !continuation(static_cast<unsigned char>(value[index + 3u]))) return false;
+            index += 4u;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+bool append_escaped_json_string(std::string* out, const std::string_view value) {
+    if (!well_formed_utf8(value)) return false;
     constexpr char kHex[] = "0123456789abcdef";
     out->push_back('"');
     for (const unsigned char byte : value) {
@@ -40,6 +84,7 @@ void append_escaped_json_string(std::string* out, const std::string_view value) 
         }
     }
     out->push_back('"');
+    return true;
 }
 
 bool append_number(std::string* out, const double value) {
@@ -84,21 +129,29 @@ Status append_note(std::string* out, const Note& source, const ChartNote& compil
     if (!append_number(out, source.duration_beats)) return invalid_projection("duration is not renderable");
     if (!source.pitch.empty()) {
         out->append(", \"pitch\": ");
-        append_escaped_json_string(out, source.pitch);
+        if (!append_escaped_json_string(out, source.pitch)) {
+            return invalid_projection("pitch is not well-formed UTF-8");
+        }
         const std::string_view value = note_value_name(
             compiled.monotone_note_type, compiled.monotone_dot_type);
         if (value.empty()) return invalid_projection("monotone note value is unsupported");
         out->append(", \"monotone_note_value\": ");
-        append_escaped_json_string(out, value);
+        if (!append_escaped_json_string(out, value)) {
+            return invalid_projection("monotone note value is not well-formed UTF-8");
+        }
         if (source.alternate_monotone) out->append(", \"monotone_variant\": \"alternate\"");
     }
     if (!source.chord_id.empty()) {
         out->append(", \"chord_id\": ");
-        append_escaped_json_string(out, source.chord_id);
+        if (!append_escaped_json_string(out, source.chord_id)) {
+            return invalid_projection("chord ID is not well-formed UTF-8");
+        }
         const std::string_view value = note_value_name(compiled.chord_note_type, compiled.chord_dot_type);
         if (value.empty()) return invalid_projection("chord note value is unsupported");
         out->append(", \"chord_note_value\": ");
-        append_escaped_json_string(out, value);
+        if (!append_escaped_json_string(out, value)) {
+            return invalid_projection("chord note value is not well-formed UTF-8");
+        }
     }
     if (source.group_index != 0u) {
         out->append(", \"group_index\": ");
@@ -108,7 +161,9 @@ Status append_note(std::string* out, const Note& source, const ChartNote& compil
         out->append(", \"ignore_sound\": [");
         for (std::size_t index = 0; index < source.ignore_sound_pitches.size(); ++index) {
             if (index != 0u) out->append(", ");
-            append_escaped_json_string(out, source.ignore_sound_pitches[index]);
+            if (!append_escaped_json_string(out, source.ignore_sound_pitches[index])) {
+                return invalid_projection("IgnoreSound identity is not well-formed UTF-8");
+            }
         }
         out->push_back(']');
     }
@@ -160,7 +215,9 @@ Status append_root_settings(std::string* out, const LoadedSong& song, const bool
         return invalid_projection("effective public settings are not finite");
     }
     out->append("{\n  \"schema\": \"ff7rpianosongs.song.v2\",\n  \"title\": ");
-    append_escaped_json_string(out, config.title);
+    if (!append_escaped_json_string(out, config.title)) {
+        return invalid_projection("title is not well-formed UTF-8");
+    }
     out->append(",\n  \"bpm\": ");
     if (!append_number(out, config.bpm)) return invalid_projection("BPM is not renderable");
     if (!emit_profiles) {

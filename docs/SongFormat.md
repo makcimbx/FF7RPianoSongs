@@ -318,6 +318,8 @@ written as complete root `notes`; authored or MIDI profile sets are written as c
 `profiles`, preserving sparse labels and any rows retained beyond the 512-row descriptor prefix.
 Each present side has an explicit final `monotone_note_value` or `chord_note_value`. Internal IDs,
 diagnostics, source witnesses, camera state, paths, hashes, and cache-policy data are omitted.
+Dynamic strings must be well-formed UTF-8. Valid multibyte text is preserved byte-for-byte except
+for JSON-required escaping; malformed UTF-8 makes only this best-effort render fail.
 
 The file is convenience output only: it is never discovered as source, never part of a cache key or
 manifest, and never runtime or gameplay authority. Do not hand-edit `.cache` expecting gameplay

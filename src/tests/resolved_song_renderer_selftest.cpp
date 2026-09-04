@@ -1,3 +1,5 @@
+#include <array>
+#include <array>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -48,7 +50,9 @@ bool compile_profile(ff7rp::pipeline::SongConfig config,
 int main() {
     using namespace ff7rp::pipeline;
 
-    SongConfig config = base_config("Resolved \"Root\"", 3);
+    const std::string cyrillic_text = "\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82";
+    const std::string cyrillic_title = "Resolved \"" + cyrillic_text + "\"";
+    SongConfig config = base_config(cyrillic_title, 3);
     Note dual;
     dual.beat = 0.0;
     dual.duration_beats = 1.0;
@@ -82,7 +86,8 @@ int main() {
     }
     ParsedSongSource parsed_root;
     if (!parse_song_json_string(root_json, &parsed_root).ok() ||
-        !parsed_root.authored_profiles.empty() || parsed_root.config.title != "Resolved \"Root\"" ||
+        !parsed_root.authored_profiles.empty() || parsed_root.config.title != cyrillic_title ||
+        root_json.find(cyrillic_text) == std::string::npos ||
         parsed_root.config.notes.size() != 2u) {
         return fail("root projection did not parse as explicit source JSON");
     }
@@ -95,6 +100,23 @@ int main() {
         root_json.find("source_chord_pitches") != std::string::npos ||
         root_json.find("camera") != std::string::npos || root_json.find("cache_key") != std::string::npos) {
         return fail("root projection lost public row semantics or exposed internal fields");
+    }
+
+    const std::array<std::string, 5> malformed_utf8{{
+        std::string("\xe2\x82", 2),
+        std::string("\xc0\xaf", 2),
+        std::string("\xed\xa0\x80", 3),
+        std::string("\xf4\x90\x80\x80", 4),
+        std::string("\xe2\x28\xa1", 3),
+    }};
+    for (const std::string& malformed : malformed_utf8) {
+        LoadedSong invalid_utf8 = root_song;
+        invalid_utf8.config.title = malformed;
+        std::string rejected = "unchanged";
+        if (render_resolved_song_json(invalid_utf8, false, &rejected).ok() ||
+            rejected != "unchanged") {
+            return fail("malformed UTF-8 was rendered or changed the prior output buffer");
+        }
     }
 
     SongConfig harder = config;

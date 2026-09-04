@@ -87,17 +87,33 @@ bool read_runtime_cache(LoadedSong* song) {
     return decode_runtime_cache(bytes, kRuntimeCacheMagic, kRuntimeCacheFormat, song);
 }
 
-void publish_resolved_song_best_effort(
-    const LoadedSong& song, const bool source_declared_profiles, const SongLoadTrace& trace) {
-    std::string rendered;
-    const Status render_status = render_resolved_song_json(song, source_declared_profiles, &rendered);
-    if (!render_status.ok()) {
-        if (trace) trace("resolved_song_render_failed");
-        return;
+void report_resolved_song_stage_best_effort(
+    const SongLoadTrace& trace, const char* stage) noexcept {
+    if (!trace) return;
+    try {
+        trace(stage);
+    } catch (...) {
     }
-    const std::vector<std::uint8_t> bytes(rendered.begin(), rendered.end());
-    const Status write_status = write_binary_file(resolved_song_json_path(song.directory), bytes);
-    if (trace) trace(write_status.ok() ? "resolved_song_write_ready" : "resolved_song_write_failed");
+}
+
+void publish_resolved_song_best_effort(
+    const LoadedSong& song, const bool source_declared_profiles, const SongLoadTrace& trace) noexcept {
+    const char* exception_stage = "resolved_song_render_failed";
+    try {
+        std::string rendered;
+        const Status render_status = render_resolved_song_json(song, source_declared_profiles, &rendered);
+        if (!render_status.ok()) {
+            report_resolved_song_stage_best_effort(trace, "resolved_song_render_failed");
+            return;
+        }
+        exception_stage = "resolved_song_write_failed";
+        const std::vector<std::uint8_t> bytes(rendered.begin(), rendered.end());
+        const Status write_status = write_binary_file(resolved_song_json_path(song.directory), bytes);
+        report_resolved_song_stage_best_effort(
+            trace, write_status.ok() ? "resolved_song_write_ready" : "resolved_song_write_failed");
+    } catch (...) {
+        report_resolved_song_stage_best_effort(trace, exception_stage);
+    }
 }
 
 int round_to_hundred(const int value) {
