@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "native_asset_capabilities.h"
+
 #include "song_types.h"
 
 namespace ff7rp::pipeline {
@@ -177,7 +179,8 @@ Status generate_notes_from_midi(
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats = nullptr,
     const std::vector<Note>* preferred_baseline = nullptr,
-    std::size_t maximum_visible_rows = 0);
+    std::size_t maximum_visible_rows = 0,
+    NativeAssetCapabilities native_assets = selected_native_asset_capabilities());
 
 Status generate_notes_from_normalized_midi(
     const NormalizedMidiSource& source,
@@ -186,6 +189,7 @@ Status generate_notes_from_normalized_midi(
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats = nullptr,
     const std::vector<Note>* preferred_baseline = nullptr,
-    std::size_t maximum_visible_rows = 0);
+    std::size_t maximum_visible_rows = 0,
+    NativeAssetCapabilities native_assets = selected_native_asset_capabilities());
 
 } // namespace ff7rp::pipeline

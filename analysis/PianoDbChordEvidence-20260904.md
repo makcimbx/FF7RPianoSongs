@@ -36,7 +36,12 @@ IgnoreSound behavior.
 ## Disposition And Nonclaims
 
 This evidence authorizes the offline verified-constituent row and deterministic
-MIDI selection of `pca_Db` under one unambiguous flat key-signature context.
-Runtime FName lookup remains fail closed. Asset-byte equality for build 1.004
-has not been established, so this record does not qualify `pca_Db` publication
-on 1.004 and does not claim protected runtime validation on 1.005.
+MIDI selection of `pca_Db` only when the compile-selected generated catalog is
+the exact build identity above and the source has one unambiguous flat
+key-signature context. Build 1.004 and unknown catalogs retain `pca_Cs` for
+automatic pitch-class-1 major harmony and cannot use this row to validate
+IgnoreSound. The selected asset-capability identity participates in every JSON
+and MIDI repository cache key. Runtime FName lookup remains fail closed.
+Asset-byte equality for build 1.004 has not been established, so this record
+does not qualify `pca_Db` publication on 1.004 and does not claim protected
+runtime validation on 1.005.

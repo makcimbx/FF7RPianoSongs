@@ -204,16 +204,16 @@ int main() {
     // The oracle includes the generated pipeline cache identity. It was
     // regenerated for authored difficulty profiles without changing the cache
     // manifest schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5593u, 0x22b8fd920ba141b2ull, "comprehensive")) return 1;
+    if (!check_golden(comprehensive, source_config, 5593u, 0xe6ef31e69191ae1dull, "comprehensive")) return 1;
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3715u, 0x7d7365679cf785e2ull, "empty")) return 1;
+    if (!check_golden(empty, empty_source, 3715u, 0xd08b08b15eae1aa9ull, "empty")) return 1;
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3716u, 0x5e6b8790bdba33e4ull, "nonfinite")) return 1;
+    if (!check_golden(nonfinite, empty_source, 3716u, 0x9b2873abd01feeb5ull, "nonfinite")) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);

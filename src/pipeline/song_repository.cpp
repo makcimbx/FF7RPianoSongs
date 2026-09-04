@@ -36,6 +36,7 @@
 #include "mabf_builder.h"
 #include "midi_chart_generator.h"
 #include "midi_source_normalizer.h"
+#include "native_asset_capabilities.h"
 #include "pipeline_limits.h"
 #include "runtime_cache_codec.h"
 #include "runtime_artifact_validator.h"
@@ -783,6 +784,7 @@ Status load_song_directory(
     std::vector<std::string> cache_identity{
         kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
         song.chart_policy_identity,
+        std::string(selected_native_asset_capabilities().cache_identity()),
         "audio_processing=gain_envelope_then_loudness_or_limiter:v1",
         song.config.metronome_enabled
             ? "metronome=resolved_mode0_only_before_hca"

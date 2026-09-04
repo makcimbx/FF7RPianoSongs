@@ -15,7 +15,8 @@ Status generate_notes_from_midi(
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats,
     const std::vector<Note>* preferred_baseline,
-    const std::size_t maximum_visible_rows) {
+    const std::size_t maximum_visible_rows,
+    const NativeAssetCapabilities native_assets) {
     if (!out_notes) return Status::error(StatusCode::InvalidArgument, "out_notes must not be null");
     out_notes->clear();
     if (out_stats) *out_stats = MidiChartStats{};
@@ -32,7 +33,7 @@ Status generate_notes_from_midi(
     if (!normalization_status.ok()) return normalization_status;
 
     return generate_notes_from_normalized_midi(normalized_source, audio, config, out_notes, out_stats,
-        preferred_baseline, maximum_visible_rows);
+        preferred_baseline, maximum_visible_rows, native_assets);
 }
 
 Status generate_notes_from_normalized_midi(
@@ -42,7 +43,8 @@ Status generate_notes_from_normalized_midi(
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats,
     const std::vector<Note>* preferred_baseline,
-    const std::size_t maximum_visible_rows) {
+    const std::size_t maximum_visible_rows,
+    const NativeAssetCapabilities native_assets) {
     if (!out_notes) return Status::error(StatusCode::InvalidArgument, "out_notes must not be null");
     out_notes->clear();
     if (out_stats) *out_stats = MidiChartStats{};
@@ -56,7 +58,7 @@ Status generate_notes_from_normalized_midi(
     }
 
     MidiChartCompilationResult result = compile_normalized_midi_chart({
-        normalized_source, audio, config, preferred_baseline, maximum_visible_rows});
+        normalized_source, audio, config, preferred_baseline, maximum_visible_rows, native_assets});
     *out_notes = std::move(result.notes);
     if (out_stats) *out_stats = std::move(result.stats);
     return std::move(result.status);

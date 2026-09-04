@@ -206,6 +206,7 @@ set(FF7RP_PIPELINE_SOURCES
     src/pipeline/midi_chart_compilation.cpp
     src/pipeline/midi_chart_generator.cpp
     src/pipeline/midi_source_normalizer.cpp
+    src/pipeline/native_asset_capabilities.cpp
     src/pipeline/runtime_cache_codec.cpp
     src/pipeline/runtime_artifact_validator.cpp
     src/pipeline/song_json.cpp
@@ -219,6 +220,7 @@ target_compile_definitions(ff7rp_pipeline PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(ff7rp_pipeline PUBLIC
     "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(ff7rp_pipeline PUBLIC midifile)
+ff7rp_use_generated_catalog(ff7rp_pipeline)
 add_library(FF7RPianoSongs SHARED ${FF7RPIANOSONGS_SOURCES})
 add_dependencies(FF7RPianoSongs check_rva_catalog)
 set_property(TARGET FF7RPianoSongs APPEND PROPERTY LINK_DEPENDS

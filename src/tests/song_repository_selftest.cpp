@@ -5,6 +5,7 @@
 #include "pipeline/chart_compiler.h"
 #include "pipeline/mabf_builder.h"
 #include "pipeline/midi_chart_generator.h"
+#include "pipeline/native_asset_capabilities.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/runtime_cache_codec.h"
 #include "pipeline/song_repository.h"
@@ -1404,23 +1405,28 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
     }
     ff7rp::pipeline::LoadedSong accidental_cold;
     auto status = ff7rp::pipeline::load_song_directory(accidental_directory.string(), &accidental_cold);
-    const auto all_flat = [](const ff7rp::pipeline::LoadedSong& song) {
+    const std::string expected_flat_chord =
+        ff7rp::pipeline::selected_native_asset_capabilities().has_verified_pca_db_voicing()
+        ? "pca_Db" : "pca_Cs";
+    const auto all_flat = [&expected_flat_chord](const ff7rp::pipeline::LoadedSong& song) {
         if (song.difficulty_profiles.empty()) return false;
         bool found_db_chord = false;
         for (const auto& note : song.chart.notes) {
-            if (note.chord_id == "pca_Db") found_db_chord = true;
+            if (note.chord_id == expected_flat_chord) found_db_chord = true;
             if ((!note.monotone_id.empty() && note.monotone_id != "C6"
                     && note.monotone_id != "Db6" && note.monotone_id != "Dn6")
-                || (!note.chord_id.empty() && note.chord_id != "pca_Db")) return false;
+                || (!note.chord_id.empty() && note.chord_id != expected_flat_chord)) return false;
         }
         return found_db_chord &&
-            std::all_of(song.difficulty_profiles.begin(), song.difficulty_profiles.end(), [](const auto& profile) {
+            std::all_of(song.difficulty_profiles.begin(), song.difficulty_profiles.end(),
+                [&expected_flat_chord](const auto& profile) {
             return !profile.config.notes.empty() &&
-                std::all_of(profile.config.notes.begin(), profile.config.notes.end(), [](const auto& note) {
+                std::all_of(profile.config.notes.begin(), profile.config.notes.end(),
+                    [&expected_flat_chord](const auto& note) {
                     return note.group_index == 0
                         && (note.pitch.empty() || note.pitch == "C6"
                             || note.pitch == "Db6" || note.pitch == "D6")
-                        && (note.chord_id.empty() || note.chord_id == "pca_Db");
+                        && (note.chord_id.empty() || note.chord_id == expected_flat_chord);
                 });
         });
     };
@@ -1468,8 +1474,8 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
-    constexpr std::uint64_t kExpectedCacheKey = 0x3c8154f69d6c83acull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x2f86b7ae1c8c587cull;
+    constexpr std::uint64_t kExpectedCacheKey = 0xfe28f1ba0dd04bdfull;
+    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x20a78aff9f096fc1ull;
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=65b4d2930e70b47f";
     if (generated.cache_key != kExpectedCacheKey ||

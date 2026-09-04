@@ -5,6 +5,7 @@
 
 #include "midi_chart_generator.h"
 #include "midi_source_normalizer.h"
+#include "native_asset_capabilities.h"
 
 namespace ff7rp::pipeline {
 
@@ -17,6 +18,7 @@ struct MidiChartCompilationRequest {
     const SongConfig& config;
     const std::vector<Note>* preferred_baseline = nullptr;
     std::size_t maximum_visible_rows = 0;
+    NativeAssetCapabilities native_assets = selected_native_asset_capabilities();
 };
 
 struct MidiChartCompilationResult {

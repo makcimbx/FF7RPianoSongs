@@ -90,12 +90,16 @@ ordinal alternation, or RNG participates. A flat-spelled event never receives a
 C-sharp `_2` identity. Automatic chord IDs remain pitch-class based except for
 the separately verified ordinary D-flat major assignment. Pitch-class-1 major
 harmony uses `pca_Db` only when every source constituent's authoritative tick
-resolves to the same unambiguous flat key-signature context. Missing, neutral,
-positive, conflicting, or boundary-straddling evidence retains `pca_Cs`. Exact
-and safe-superset paths make the same identity decision before IgnoreSound is
-derived from that selected chord's complete verified constituent row.
-The exact asset evidence is scoped to build 1.005; runtime name resolution
-remains fail closed, and this offline rule is not a 1.004 runtime qualification.
+resolves to the same unambiguous flat key-signature context and the
+compile-selected exact generated catalog exposes verified D-flat-major asset
+evidence. Missing, neutral, positive, conflicting, boundary-straddling, build
+1.004, and unknown-build evidence retains `pca_Cs`. Exact and safe-superset
+paths make the same identity decision before IgnoreSound is derived from that
+selected chord's complete verified constituent row. The selected native-asset
+capability identity participates in every authored-JSON and MIDI repository
+cache key. The exact asset evidence is scoped to build 1.005; runtime name
+resolution remains fail closed, and this offline rule is not a 1.004 runtime
+qualification.
 Exact source chord voicing is retained until IgnoreSound
 derivation. Exact chord matches remain preferred and unchanged. A partial source
 harmony of at least three distinct pitch classes may use a native chord superset

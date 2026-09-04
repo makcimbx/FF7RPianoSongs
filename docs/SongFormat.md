@@ -102,7 +102,10 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
   mapping. No separate native-ID field is required.
 - `chord_id` must be a valid native `pca_*` identifier. Enharmonic chord IDs
   are exact identities, not aliases: `pca_Db` uses verified native sounds
-  `Db2`, `Fn2`, and `Ab2`, while `pca_Cs` uses `Cs2`, `Fn2`, and `Gs2`.
+  `Db2`, `Fn2`, and `Ab2` on the exact build-1.005 catalog where that row was
+  recovered, while `pca_Cs` uses `Cs2`, `Fn2`, and `Gs2`. A bare authored
+  `pca_Db` remains syntactically valid, but its constituent row does not
+  authorize IgnoreSound on build 1.004 or an unknown catalog.
 - `group_index` is an optional integer from 0 through 255. Zero or omission means
   ungrouped. A nonzero value must identify one contiguous run of at least two
   pitch-only rows. An identity may be reused by a later disjoint run after a zero
@@ -194,9 +197,10 @@ inferred chord and always has `group_index = 0`; every row is therefore a requir
 action. Difficulty profiles may select different rows and have different physical
 digests. Exact and uniquely verified chord inference remains available. Ordinary
 pitch-class-1 major harmony selects `pca_Db` only when every source constituent
-shares one unambiguous flat key-signature context; missing, neutral, positive,
-conflicting, or boundary-straddling evidence retains `pca_Cs`. Ambiguous harmony
-is not invented. Under verified exact-build extended policy a complete
+shares one unambiguous flat key-signature context and the compile-selected exact
+catalog has verified D-flat-major asset evidence. Missing, neutral, positive,
+conflicting, boundary-straddling, build-1.004, or unknown-build evidence retains
+`pca_Cs`. Ambiguous harmony is not invented. Under verified exact-build extended policy a complete
 generated profile may use the existing 8192-row and 8192-event transport; without
 that policy, generation remains bounded to 512 rows and omits rather than clips an
 oversized profile. Explicit authored dual rows and authored groups are unchanged.

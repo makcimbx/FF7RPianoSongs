@@ -234,6 +234,31 @@ int main()
         != "ff7rpianosongs.pipeline.v45") {
         return fail("pipeline cache identity did not invalidate legacy accidental canonicalization");
     }
+    const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-68fd6fde");
+    const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-6a16ced2");
+    const auto assets_unknown = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-unknown");
+    const auto selected_assets = ff7rp::pipeline::selected_native_asset_capabilities();
+    if (assets_1004.has_verified_pca_db_voicing() || !assets_1005.has_verified_pca_db_voicing()
+        || assets_unknown.has_verified_pca_db_voicing()
+        || assets_1004.cache_identity() == assets_1005.cache_identity()
+        || assets_1004.cache_identity() == assets_unknown.cache_identity()
+        || assets_1005.cache_identity() == assets_unknown.cache_identity()
+        || selected_assets.cache_identity() != ff7rp::pipeline::native_asset_capabilities_for_catalog(
+            ff7r::piano::core::generated::kBuildId).cache_identity()) {
+        return fail("exact catalog native-asset capabilities were not fail-closed and deterministic");
+    }
+    std::uint64_t assets_1004_key = 0;
+    std::uint64_t assets_1005_key = 0;
+    if (!ff7rp::pipeline::fnv1a64_files_and_strings({},
+            {"fixture", std::string(assets_1004.cache_identity())}, &assets_1004_key).ok()
+        || !ff7rp::pipeline::fnv1a64_files_and_strings({},
+            {"fixture", std::string(assets_1005.cache_identity())}, &assets_1005_key).ok()
+        || assets_1004_key == assets_1005_key) {
+        return fail("native-asset capability identities did not produce distinct cache keys");
+    }
     const char* json = R"json({
         "schema": "ff7rpianosongs.song.v2",
         "title": "Self Test Song",
@@ -562,13 +587,27 @@ int main()
     ff7rp::pipeline::SongConfig db_ignore_config;
     ff7rp::pipeline::CompiledChart db_ignore_chart;
     status = ff7rp::pipeline::parse_song_json_string(db_ignore_sound_json, &db_ignore_config);
-    if (!status.ok() || !ff7rp::pipeline::compile_chart(db_ignore_config, &db_ignore_chart).ok()
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(
+            db_ignore_config, &db_ignore_chart, nullptr, 0, assets_1005).ok()
         || db_ignore_chart.notes.size() != 8u
         || db_ignore_chart.notes.front().ignore_sound_ids !=
             std::array<std::string, 3>{"", "", ""}
         || db_ignore_chart.notes.back().ignore_sound_ids !=
             std::array<std::string, 3>{"Db2", "Fn2", "Ab2"}) {
         return fail("exact verified pca_Db IgnoreSound members did not compile");
+    }
+    ff7rp::pipeline::SongConfig db_no_ignore_1004 = db_ignore_config;
+    db_no_ignore_1004.notes.resize(1u);
+    ff7rp::pipeline::CompiledChart db_no_ignore_1004_chart;
+    ff7rp::pipeline::CompiledChart db_ignore_1004_chart;
+    const auto db_ignore_1004 = ff7rp::pipeline::compile_chart(
+        db_ignore_config, &db_ignore_1004_chart, nullptr, 0, assets_1004);
+    if (!ff7rp::pipeline::compile_chart(db_no_ignore_1004, &db_no_ignore_1004_chart,
+            nullptr, 0, assets_1004).ok()
+        || db_ignore_1004.code != ff7rp::pipeline::StatusCode::InvalidChart
+        || db_ignore_1004.message !=
+            "ignore_sound must name unique exact constituents of the row's verified native chord") {
+        return fail("unverified 1.004 pca_Db IgnoreSound did not fail closed independently of chord syntax");
     }
     for (const char* invalid_note_semantics : {
             R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"D4","monotone_variant":"alternate"}]})json",
@@ -583,7 +622,8 @@ int main()
         ff7rp::pipeline::SongConfig rejected;
         ff7rp::pipeline::CompiledChart rejected_chart;
         status = ff7rp::pipeline::parse_song_json_string(invalid_note_semantics, &rejected);
-        if (status.ok() && ff7rp::pipeline::compile_chart(rejected, &rejected_chart).ok()) {
+        if (status.ok() && ff7rp::pipeline::compile_chart(
+                rejected, &rejected_chart, nullptr, 0, assets_1005).ok()) {
             return fail("malformed or unsupported note semantics were accepted: " +
                 std::string(invalid_note_semantics));
         }
@@ -596,7 +636,8 @@ int main()
         ff7rp::pipeline::SongConfig rejected;
         ff7rp::pipeline::CompiledChart rejected_chart;
         status = ff7rp::pipeline::parse_song_json_string(invalid, &rejected);
-        if (status.ok() && ff7rp::pipeline::compile_chart(rejected, &rejected_chart).ok()) {
+        if (status.ok() && ff7rp::pipeline::compile_chart(
+                rejected, &rejected_chart, nullptr, 0, assets_1005).ok()) {
             return fail("invalid exact pca_Db IgnoreSound member was accepted: " +
                 std::string(invalid_db_ignore));
         }

@@ -552,13 +552,16 @@ void ensure_tail_coverage(
 }
 
 const char* native_chord_id(
-    const int root, const ChordQuality quality, const bool flat_db_major) {
-    if (flat_db_major && root == 1 && quality == ChordQuality::Major) return "pca_Db";
+    const int root, const ChordQuality quality, const bool flat_db_major,
+    const NativeAssetCapabilities native_assets) {
+    if (native_assets.has_verified_pca_db_voicing() && flat_db_major &&
+        root == 1 && quality == ChordQuality::Major) return "pca_Db";
     return kNativeChordIds[static_cast<std::size_t>(root)][static_cast<std::size_t>(quality)];
 }
 
 ChordMatch infer_native_chord_match(
-    const std::set<int>& fresh_pitch_classes, const bool flat_db_major) {
+    const std::set<int>& fresh_pitch_classes, const bool flat_db_major,
+    const NativeAssetCapabilities native_assets) {
     if (fresh_pitch_classes.size() < 3) return {};
     std::vector<std::pair<int, ChordQuality>> exact_matches;
     for (int root = 0; root < 12; ++root) {
@@ -573,7 +576,7 @@ ChordMatch infer_native_chord_match(
     }
     if (exact_matches.size() != 1) return {};
     const auto [root, quality] = exact_matches.front();
-    const char* id = native_chord_id(root, quality, flat_db_major);
+    const char* id = native_chord_id(root, quality, flat_db_major, native_assets);
     if (!id) return {};
     return {id, root, quality};
 }
@@ -602,10 +605,11 @@ bool derive_native_superset_ignores(
     const ChordMatch& match,
     const std::set<int>& intended_pitch_classes,
     const std::set<int>& semantic_pitch_classes,
+    const NativeAssetCapabilities native_assets,
     std::vector<std::string>* out) {
     if (!out) return false;
     out->clear();
-    const NativeChordConstituents* mapped = find_verified_native_chord(match.id);
+    const NativeChordConstituents* mapped = find_verified_native_chord(match.id, native_assets);
     if (!mapped) return false;
     std::set<int> native_pitch_classes;
     for (std::size_t index = 0; index < mapped->sound_count; ++index) {
@@ -632,7 +636,8 @@ struct SupersetChordMatch {
 SupersetChordMatch infer_unique_native_chord_superset(
     const std::set<int>& intended_pitch_classes,
     const std::vector<const MidiNoteEvent*>& harmony,
-    const bool flat_db_major) {
+    const bool flat_db_major,
+    const NativeAssetCapabilities native_assets) {
     // Dyads, doubled pitch classes, and cross-track/channel clusters are too
     // under-specified to establish one intended source voicing safely.
     if (intended_pitch_classes.size() < 3u || harmony.size() != intended_pitch_classes.size()) return {};
@@ -652,7 +657,7 @@ SupersetChordMatch infer_unique_native_chord_superset(
     for (int root = 0; root < 12; ++root) {
         if (root != bass_pitch_class) continue;
         for (const ChordTemplate& chord : kChordTemplates) {
-            const char* id = native_chord_id(root, chord.quality, flat_db_major);
+            const char* id = native_chord_id(root, chord.quality, flat_db_major, native_assets);
             if (!id) continue;
             std::set<int> expected;
             for (std::size_t index = 0; index < chord.size; ++index) {
@@ -667,7 +672,7 @@ SupersetChordMatch infer_unique_native_chord_superset(
             SupersetChordMatch candidate;
             candidate.chord = {id, root, chord.quality};
             if (!derive_native_superset_ignores(candidate.chord, intended_pitch_classes,
-                    expected, &candidate.ignored_sounds)) continue;
+                    expected, native_assets, &candidate.ignored_sounds)) continue;
             candidates.push_back(std::move(candidate));
         }
     }
@@ -678,7 +683,8 @@ SupersetChordMatch infer_unique_native_chord_superset(
 std::vector<Attack> build_chord_candidates(
     const std::vector<OnsetCluster>& clusters,
     const std::set<SourceIdentity>& melody_sources,
-    const std::vector<MidiAccidentalOrientationChange>& accidental_orientation) {
+    const std::vector<MidiAccidentalOrientationChange>& accidental_orientation,
+    const NativeAssetCapabilities native_assets) {
     std::vector<Attack> result;
     for (const OnsetCluster& cluster : clusters) {
         std::vector<const MidiNoteEvent*> harmony;
@@ -700,11 +706,12 @@ std::vector<Attack> build_chord_candidates(
             }
             shared_flat_context = context;
         }
-        ChordMatch match = infer_native_chord_match(fresh_pitch_classes, flat_db_major);
+        ChordMatch match = infer_native_chord_match(
+            fresh_pitch_classes, flat_db_major, native_assets);
         std::vector<std::string> ignored_sounds;
         if (match.id.empty()) {
             SupersetChordMatch superset = infer_unique_native_chord_superset(
-                fresh_pitch_classes, harmony, flat_db_major);
+                fresh_pitch_classes, harmony, flat_db_major, native_assets);
             match = std::move(superset.chord);
             ignored_sounds = std::move(superset.ignored_sounds);
         }
@@ -2178,7 +2185,8 @@ std::string infer_native_chord_from_fresh_midi_pitches(const std::vector<int>& m
     for (const int pitch : midi_pitches) {
         if (pitch >= 0 && pitch <= 127) fresh_pitch_classes.insert(pitch % 12);
     }
-    return infer_native_chord_match(fresh_pitch_classes, false).id;
+    return infer_native_chord_match(
+        fresh_pitch_classes, false, selected_native_asset_capabilities()).id;
 }
 
 std::array<int, 2> vanilla_mode_change_counts_for_route(const std::string_view route_name) {
@@ -2327,7 +2335,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     std::vector<Attack> fallback = build_fallback_candidates(
         clusters, voice, melody_sources, primary, profile);
     std::vector<Attack> chords = build_chord_candidates(
-        clusters, melody_sources, accidental_orientation);
+        clusters, melody_sources, accidental_orientation, request.native_assets);
     std::set<SourceIdentity> lead_in_rejection_sources;
     std::set<SourceIdentity> audio_duration_rejection_sources;
     const auto count_timing_rejections = [&](const std::vector<Attack>& attacks) {

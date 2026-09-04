@@ -14,6 +14,7 @@
 #include "pipeline/midi_chart_compilation.h"
 #include "pipeline/midi_analysis_core.h"
 #include "pipeline/midi_source_normalizer.h"
+#include "pipeline/native_asset_capabilities.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/pipeline_limits.h"
@@ -490,10 +491,12 @@ std::uint64_t fingerprint(const Observation& value) {
 
 Observation generate(const std::filesystem::path& path, const WavAudio& audio,
                      const SongConfig& config, const std::vector<Note>* baseline = nullptr,
-                     const std::size_t maximum_visible_rows = 0) {
+                     const std::size_t maximum_visible_rows = 0,
+                     const ff7rp::pipeline::NativeAssetCapabilities native_assets =
+                         ff7rp::pipeline::selected_native_asset_capabilities()) {
     Observation value;
     value.status = ff7rp::pipeline::generate_notes_from_midi(path.string(), audio, config,
-        &value.notes, &value.stats, baseline, maximum_visible_rows);
+        &value.notes, &value.stats, baseline, maximum_visible_rows, native_assets);
     return value;
 }
 
@@ -934,11 +937,22 @@ int main(int argc, char** argv) {
     const Observation accidental_hard = generate(accidental_context_path, no_audio, config_for(6));
     const Observation accidental_repeat = generate(accidental_context_path, no_audio, config_for(6));
     const Observation accidental_legacy = generate(accidental_legacy_path, no_audio, config_for(6));
-    const Observation flat_c_sharp_chord = generate(flat_c_sharp_chord_path, no_audio, config_for(6));
-    const Observation flat_c_sharp_chord_easy = generate(flat_c_sharp_chord_path, no_audio, config_for(1));
-    const Observation flat_c_sharp_chord_repeat = generate(flat_c_sharp_chord_path, no_audio, config_for(6));
-    const Observation exact_tick_db_chord = generate(exact_tick_db_chord_path, no_audio, config_for(6));
-    const Observation straddling_db_chord = generate(straddling_db_chord_path, no_audio, config_for(6));
+    const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-68fd6fde");
+    const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-6a16ced2");
+    const Observation flat_c_sharp_chord = generate(
+        flat_c_sharp_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
+    const Observation flat_c_sharp_chord_easy = generate(
+        flat_c_sharp_chord_path, no_audio, config_for(1), nullptr, 0, assets_1005);
+    const Observation flat_c_sharp_chord_repeat = generate(
+        flat_c_sharp_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
+    const Observation flat_c_sharp_chord_1004 = generate(
+        flat_c_sharp_chord_path, no_audio, config_for(6), nullptr, 0, assets_1004);
+    const Observation exact_tick_db_chord = generate(
+        exact_tick_db_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
+    const Observation straddling_db_chord = generate(
+        straddling_db_chord_path, no_audio, config_for(6), nullptr, 0, assets_1005);
     const std::array<std::string_view, 7> expected_accidentals{
         "C#4", "Db4", "C#4", "C#4", "Db4", "C#4", "Db4"
     };
@@ -974,7 +988,8 @@ int main(int argc, char** argv) {
         || canonical_note_bytes(flat_c_sharp_chord.notes) !=
             canonical_note_bytes(flat_c_sharp_chord_repeat.notes)
         || !exact_chord_identity(exact_tick_db_chord, "pca_Db")
-        || !exact_chord_identity(straddling_db_chord, "pca_Cs")) {
+        || !exact_chord_identity(straddling_db_chord, "pca_Cs")
+        || !exact_chord_identity(flat_c_sharp_chord_1004, "pca_Cs")) {
         return fail("Db chord inference did not preserve exact flat context and boundary fallback");
     }
     for (const std::filesystem::path& path : sharp_fallback_chord_paths) {

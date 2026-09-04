@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include "native_asset_capabilities.h"
+
 namespace ff7rp::pipeline {
 
 struct NativeChordConstituents {
@@ -83,7 +85,9 @@ inline constexpr std::array<NativeChordConstituents, 64> kVerifiedNativeChordCon
     {"pca_B_sus4",   {"Bn2", "En3", "Fs3", ""}, 3},
 }};
 
-constexpr const NativeChordConstituents* find_verified_native_chord(const std::string_view chord_id) {
+constexpr const NativeChordConstituents* find_verified_native_chord(
+    const std::string_view chord_id, const NativeAssetCapabilities capabilities) {
+    if (chord_id == "pca_Db" && !capabilities.has_verified_pca_db_voicing()) return nullptr;
     for (const auto& chord : kVerifiedNativeChordConstituents) {
         if (chord.chord_id == chord_id) return &chord;
     }

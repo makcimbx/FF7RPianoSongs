@@ -63,9 +63,10 @@ bool alternate_monotone_id(const std::string& base, std::string* out) {
     return true;
 }
 
-bool resolve_verified_ignore_sound(const Note& note, std::array<std::string, 3>* out) {
+bool resolve_verified_ignore_sound(const Note& note, std::array<std::string, 3>* out,
+    const NativeAssetCapabilities native_assets) {
     if (!out || note.ignore_sound_pitches.empty() || note.ignore_sound_pitches.size() > out->size()) return false;
-    const NativeChordConstituents* chord = find_verified_native_chord(note.chord_id);
+    const NativeChordConstituents* chord = find_verified_native_chord(note.chord_id, native_assets);
     if (!chord) return false;
     std::set<std::string_view> resolved;
     for (std::size_t requested = 0; requested < note.ignore_sound_pitches.size(); ++requested) {
@@ -140,7 +141,8 @@ std::string beat_to_time_str(double beat, double bpm) {
 }
 
 Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
-    DiagnosticChartRetention* out_diagnostic, const std::size_t input_row_limit) {
+    DiagnosticChartRetention* out_diagnostic, const std::size_t input_row_limit,
+    const NativeAssetCapabilities native_assets) {
     if (!out_chart) {
         return Status::error(StatusCode::InvalidArgument, "out_chart must not be null");
     }
@@ -208,7 +210,7 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
             }
         }
         if (!source.ignore_sound_pitches.empty() &&
-            !resolve_verified_ignore_sound(source, &note.ignore_sound_ids)) {
+            !resolve_verified_ignore_sound(source, &note.ignore_sound_ids, native_assets)) {
             return Status::error(StatusCode::InvalidChart,
                 "ignore_sound must name unique exact constituents of the row's verified native chord");
         }

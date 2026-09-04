@@ -116,7 +116,10 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
   identity to every MIDI cache key. Version 45 preserves exact authored black-key
   sharp/flat monotone identity; generated MIDI's v10 identity additionally covers
-  normalized key-signature-based accidental orientation. Runtime-cache format 14
+  normalized key-signature-based accidental orientation. Every authored-JSON and
+  MIDI repository cache key also includes an immutable native-asset capability
+  identity selected from the exact generated catalog build ID; descriptive game
+  version strings never grant asset authority. Runtime-cache format 14
   already stores the resulting exact pitch/native names and therefore does not change.
   Format 14 remains sufficient because source rows, prefix events, native events,
   required actions, physical digest, and any explicitly authored group topology are
@@ -149,11 +152,13 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   and checked for every profile. Source pitch spelling, authored IgnoreSound, and
   retained MIDI chord voicing remain protected by diagnostic/cache semantic hashes;
   they are deliberately outside the runtime-reconstructible physical digest.
-- The offline pipeline owns an immutable exact-spelling constituent table for all
-  64 chord identities admitted by compilation and MIDI inference, including
-  distinct `pca_Cs` and `pca_Db` rows. IgnoreSound resolution
-  consults only that evidence table; it neither reads game memory nor constructs
-  native FNames from source-note spelling.
+- The offline pipeline owns an immutable exact-spelling evidence table for 64
+  chord identities, including distinct `pca_Cs` and `pca_Db` rows. Build-scoped
+  entries are available to IgnoreSound and MIDI inference only when the
+  compile-selected exact generated catalog exposes the matching immutable asset
+  capability. Build 1.005 currently exposes the recovered `pca_Db` row; build
+  1.004 and unknown catalogs do not. Resolution neither reads game memory nor
+  constructs native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
 - Diagnostic helper availability without playable runtime capability does not
   authorize extended input, cache reuse, or descriptor publication.
