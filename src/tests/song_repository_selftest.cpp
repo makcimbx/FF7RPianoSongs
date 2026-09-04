@@ -1474,12 +1474,34 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
-    constexpr std::uint64_t kExpectedCacheKey = 0xfe28f1ba0dd04bdfull;
-    constexpr std::uint64_t kExpectedNormalizedManifestDigest = 0x20a78aff9f096fc1ull;
+    const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-68fd6fde");
+    const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
+        "ff7rebirth-steam-win64-6a16ced2");
+    if (assets_1004.cache_identity() != "native_assets=pca_Db_voicing:unverified1004" ||
+        assets_1005.cache_identity() != "native_assets=pca_Db_voicing:verified1005" ||
+        assets_1004.cache_identity() == assets_1005.cache_identity()) {
+        return fail("offline artifact golden native-asset identities changed");
+    }
+
+    std::uint64_t expected_cache_key = 0;
+    std::uint64_t expected_normalized_manifest_digest = 0;
+    const auto selected_asset_identity =
+        ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
+    if (selected_asset_identity == assets_1004.cache_identity()) {
+        expected_cache_key = 0x59a13b30b2b9d2ebull;
+        expected_normalized_manifest_digest = 0x16cbbcd1aa6407f4ull;
+    } else if (selected_asset_identity == assets_1005.cache_identity()) {
+        expected_cache_key = 0xfe28f1ba0dd04bdfull;
+        expected_normalized_manifest_digest = 0x20a78aff9f096fc1ull;
+    } else {
+        return fail("offline artifact golden has no expectation for selected native-asset identity: " +
+            std::string(selected_asset_identity));
+    }
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=65b4d2930e70b47f";
-    if (generated.cache_key != kExpectedCacheKey ||
-        normalized_manifest_digest != kExpectedNormalizedManifestDigest ||
+    if (generated.cache_key != expected_cache_key ||
+        normalized_manifest_digest != expected_normalized_manifest_digest ||
         manifest.size() != kExpectedNormalizedManifestBytes ||
         manifest_line(manifest, "config_chart_semantic_hash") != kExpectedSemanticHash) {
         return fail("offline artifact golden changed: cache=" + ff7rp::pipeline::hex64(generated.cache_key) +
