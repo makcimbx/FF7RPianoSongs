@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,25 @@ struct MidiAudioAlignmentResult {
     double seconds = 0.0;
     double confidence = 0.0;
 };
+
+enum class MidiAccidentalOrientation : std::uint8_t {
+    SharpFallback = 0,
+    Flat = 1,
+};
+
+struct MidiAccidentalOrientationChange {
+    int tick = 0;
+    MidiAccidentalOrientation orientation = MidiAccidentalOrientation::SharpFallback;
+};
+
+std::vector<MidiAccidentalOrientationChange> build_midi_accidental_orientation_timeline(
+    const std::vector<MidiKeySignatureChange>& changes);
+
+const MidiAccidentalOrientationChange* midi_accidental_context_at_tick(
+    const std::vector<MidiAccidentalOrientationChange>& timeline, int tick);
+
+MidiAccidentalOrientation midi_accidental_orientation_at_tick(
+    const std::vector<MidiAccidentalOrientationChange>& timeline, int tick);
 
 double tempo_at_tick(const std::vector<MidiTempoChange>& changes, int tick);
 

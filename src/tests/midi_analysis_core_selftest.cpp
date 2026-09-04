@@ -136,6 +136,31 @@ int test_meter_accents() {
     return 0;
 }
 
+int test_accidental_context_boundaries() {
+    using namespace ff7rp::pipeline;
+    const std::vector<MidiKeySignatureChange> signatures{
+        {100, -2, false, 0, 0},
+        {200, -3, false, 0, 1},
+        {300, 2, false, 1, 0},
+        {400, -1, false, 1, 1},
+    };
+    const auto timeline = build_midi_accidental_orientation_timeline(signatures);
+    const MidiAccidentalOrientationChange* first = midi_accidental_context_at_tick(timeline, 199);
+    const MidiAccidentalOrientationChange* second = midi_accidental_context_at_tick(timeline, 200);
+    const MidiAccidentalOrientationChange* conflict = midi_accidental_context_at_tick(timeline, 300);
+    const MidiAccidentalOrientationChange* resolved = midi_accidental_context_at_tick(timeline, 400);
+    if (timeline.size() != 4u || midi_accidental_context_at_tick(timeline, 99) != nullptr
+        || !first || first->tick != 100 || first->orientation != MidiAccidentalOrientation::Flat
+        || !second || second->tick != 200 || second->orientation != MidiAccidentalOrientation::Flat
+        || !conflict || conflict->tick != 300
+        || conflict->orientation != MidiAccidentalOrientation::SharpFallback
+        || !resolved || resolved->tick != 400
+        || resolved->orientation != MidiAccidentalOrientation::Flat) {
+        return fail("accidental context boundaries or per-track consensus changed");
+    }
+    return 0;
+}
+
 int test_source_order_and_humanization_boundaries() {
     using namespace ff7rp::pipeline;
     const std::vector<MidiTempoChange> tempos{{0, 120.0, -1, -1}};
@@ -215,6 +240,7 @@ int run() {
     if (test_empty_and_parent_resolution_behavior() != 0) return 1;
     if (test_tempo_lookup_and_windows() != 0) return 1;
     if (test_meter_accents() != 0) return 1;
+    if (test_accidental_context_boundaries() != 0) return 1;
     if (test_source_order_and_humanization_boundaries() != 0) return 1;
     if (test_alignment_attack_derivation() != 0) return 1;
     return 0;

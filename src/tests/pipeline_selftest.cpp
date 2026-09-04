@@ -230,6 +230,10 @@ bool test_release_authority_parser(std::string* error_message)
 
 int main()
 {
+    if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
+        != "ff7rpianosongs.pipeline.v45") {
+        return fail("pipeline cache identity did not invalidate legacy accidental canonicalization");
+    }
     const char* json = R"json({
         "schema": "ff7rpianosongs.song.v2",
         "title": "Self Test Song",
@@ -359,6 +363,39 @@ int main()
     if (chart.notes[0].note_type != 3 || chart.notes[1].note_type != 2) {
         return fail("unexpected note type mapping");
     }
+    const char* exact_accidental_json = R"json({
+        "schema":"v2","title":"Exact accidentals","bpm":120,"notes":[
+          {"beat":0,"duration_beats":1,"pitch":"C#4"},
+          {"beat":1,"duration_beats":1,"pitch":"Db4"},
+          {"beat":2,"duration_beats":1,"pitch":"D#4"},
+          {"beat":3,"duration_beats":1,"pitch":"Eb4"},
+          {"beat":4,"duration_beats":1,"pitch":"F#4"},
+          {"beat":5,"duration_beats":1,"pitch":"Gb4"},
+          {"beat":6,"duration_beats":1,"pitch":"G#4"},
+          {"beat":7,"duration_beats":1,"pitch":"Ab4"},
+          {"beat":8,"duration_beats":1,"pitch":"A#4"},
+          {"beat":9,"duration_beats":1,"pitch":"Bb4"}
+        ]})json";
+    ff7rp::pipeline::SongConfig exact_accidental_config;
+    ff7rp::pipeline::CompiledChart exact_accidental_chart;
+    status = ff7rp::pipeline::parse_song_json_string(exact_accidental_json, &exact_accidental_config);
+    const std::array<std::string_view, 10> exact_accidental_ids{
+        "Cs4", "Db4", "Ds4", "Eb4", "Fs4", "Gb4", "Gs4", "Ab4", "As4", "Bb4"
+    };
+    const std::array<std::string_view, 10> exact_accidental_pitches{
+        "C#4", "Db4", "D#4", "Eb4", "F#4", "Gb4", "G#4", "Ab4", "A#4", "Bb4"
+    };
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(
+            exact_accidental_config, &exact_accidental_chart).ok()
+        || exact_accidental_chart.notes.size() != exact_accidental_ids.size()) {
+        return fail("exact authored accidental JSON did not compile");
+    }
+    for (std::size_t index = 0; index < exact_accidental_ids.size(); ++index) {
+        if (exact_accidental_config.notes[index].pitch != exact_accidental_pitches[index]
+            || exact_accidental_chart.notes[index].monotone_id != exact_accidental_ids[index]) {
+            return fail("authored accidental spelling was not preserved exactly");
+        }
+    }
     std::size_t three_sound_chords = 0;
     std::size_t four_sound_chords = 0;
     std::set<std::string_view> verified_chord_ids;
@@ -374,7 +411,7 @@ int main()
             }
         }
     }
-    if (verified_chord_ids.size() != 63u || three_sound_chords != 40u || four_sound_chords != 23u) {
+    if (verified_chord_ids.size() != 64u || three_sound_chords != 41u || four_sound_chords != 23u) {
         return fail("verified chord table coverage changed");
     }
     const char* extended_notes_json = R"json({
@@ -511,6 +548,28 @@ int main()
         ignore_chart.notes[1].ignore_sound_ids != std::array<std::string, 3>{"Cn2", "En2", "Gn2"}) {
         return fail("exact verified IgnoreSound members did not compile");
     }
+    const char* db_ignore_sound_json = R"json({
+        "schema":"v2","title":"Exact Db ignores","bpm":120,"notes":[
+            {"beat":0,"duration_beats":1,"chord_id":"pca_Db"},
+            {"beat":1,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Db2"]},
+            {"beat":2,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Fn2"]},
+            {"beat":3,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Ab2"]},
+            {"beat":4,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Db2","Fn2"]},
+            {"beat":5,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Db2","Ab2"]},
+            {"beat":6,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Fn2","Ab2"]},
+            {"beat":7,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":["Db2","Fn2","Ab2"]}
+        ]})json";
+    ff7rp::pipeline::SongConfig db_ignore_config;
+    ff7rp::pipeline::CompiledChart db_ignore_chart;
+    status = ff7rp::pipeline::parse_song_json_string(db_ignore_sound_json, &db_ignore_config);
+    if (!status.ok() || !ff7rp::pipeline::compile_chart(db_ignore_config, &db_ignore_chart).ok()
+        || db_ignore_chart.notes.size() != 8u
+        || db_ignore_chart.notes.front().ignore_sound_ids !=
+            std::array<std::string, 3>{"", "", ""}
+        || db_ignore_chart.notes.back().ignore_sound_ids !=
+            std::array<std::string, 3>{"Db2", "Fn2", "Ab2"}) {
+        return fail("exact verified pca_Db IgnoreSound members did not compile");
+    }
     for (const char* invalid_note_semantics : {
             R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"D4","monotone_variant":"alternate"}]})json",
             R"json({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4","group_index":256}]})json",
@@ -527,6 +586,19 @@ int main()
         if (status.ok() && ff7rp::pipeline::compile_chart(rejected, &rejected_chart).ok()) {
             return fail("malformed or unsupported note semantics were accepted: " +
                 std::string(invalid_note_semantics));
+        }
+    }
+    for (const char* invalid_db_ignore : {
+            "db2", "Cs2", "Db3", "Db2\",\"Db2", "Gn2"}) {
+        const std::string invalid = std::string(
+            R"json({"schema":"v2","title":"bad Db","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_Db","ignore_sound":[")json") +
+            invalid_db_ignore + R"json("]}]})json";
+        ff7rp::pipeline::SongConfig rejected;
+        ff7rp::pipeline::CompiledChart rejected_chart;
+        status = ff7rp::pipeline::parse_song_json_string(invalid, &rejected);
+        if (status.ok() && ff7rp::pipeline::compile_chart(rejected, &rejected_chart).ok()) {
+            return fail("invalid exact pca_Db IgnoreSound member was accepted: " +
+                std::string(invalid_db_ignore));
         }
     }
     if (ff7rp::pipeline::beat_to_time_str(154.84, 60.0) != "154_50"
@@ -852,7 +924,12 @@ int main()
                 std::string monotone;
                 status = ff7rp::pipeline::pitch_to_monotone_id(pitch, &monotone);
                 if (semitone >= 12 && semitone <= 84) {
-                    if (!status.ok() || monotone != expected_monotone(semitone)) {
+                    std::string expected = expected_monotone(semitone);
+                    if (accidental == 'b' &&
+                        (note == 'D' || note == 'E' || note == 'G' || note == 'A' || note == 'B')) {
+                        expected = std::string(1, note) + 'b' + std::to_string(octave);
+                    }
+                    if (!status.ok() || monotone != expected) {
                         return fail("enharmonic pitch mapping failed for " + pitch);
                     }
                 } else if (status.ok()) {
@@ -881,6 +958,30 @@ int main()
     status = ff7rp::pipeline::pitch_to_monotone_id("Cb7", &monotone);
     if (!status.ok() || monotone != "Bn6") {
         return fail("downward octave-crossing enharmonic failed");
+    }
+    const auto compile_alternate = [](const char* pitch) {
+        ff7rp::pipeline::SongConfig alternate;
+        alternate.schema = "v2";
+        alternate.title = "alternate accidental boundary";
+        alternate.bpm = 120.0;
+        alternate.notes_provided = true;
+        ff7rp::pipeline::Note note;
+        note.pitch = pitch;
+        note.duration_beats = 1.0;
+        note.alternate_monotone = true;
+        alternate.notes.push_back(std::move(note));
+        ff7rp::pipeline::CompiledChart compiled;
+        return ff7rp::pipeline::compile_chart(alternate, &compiled);
+    };
+    for (const char* pitch : {"C1", "C7", "C#2", "C#6"}) {
+        if (!compile_alternate(pitch).ok()) {
+            return fail("verified alternate monotone was rejected: " + std::string(pitch));
+        }
+    }
+    for (const char* pitch : {"C#1", "C#7", "Db1", "Db4", "Db6"}) {
+        if (compile_alternate(pitch).ok()) {
+            return fail("unsupported accidental alternate was accepted: " + std::string(pitch));
+        }
     }
 
     const std::string sidecar_path = ff7rp::pipeline::cache_sidecar_mabf_path("Music/TestSong");

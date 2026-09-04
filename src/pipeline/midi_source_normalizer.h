@@ -55,11 +55,20 @@ struct MidiMeterChange {
     bool explicit_event = false;
 };
 
+struct MidiKeySignatureChange {
+    int tick = 0;
+    int fifths = 0;
+    bool minor = false;
+    int track = 0;
+    int ordinal = 0;
+};
+
 struct NormalizedMidiSource {
     int ticks_per_quarter = 0;
     double source_bpm = 120.0;
     std::vector<MidiTempoChange> tempos;
     std::vector<MidiMeterChange> meters;
+    std::vector<MidiKeySignatureChange> key_signatures;
     std::vector<NormalizedMidiNoteEvent> notes;
     std::size_t unsupported_pitch_events = 0;
 };

@@ -95,8 +95,14 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
 - `beat` is finite, non-negative, and nondecreasing across the array.
 - `duration_beats` is finite and greater than zero.
 - Provide at least one of `pitch` or `chord_id`.
-- `pitch` must be a non-empty supported pitch name.
-- `chord_id` must be a valid native `pca_*` identifier.
+- `pitch` must be a non-empty supported pitch name. For the verified black-key
+  pairs, authored spelling is exact: `C#`/`Db`, `D#`/`Eb`, `F#`/`Gb`,
+  `G#`/`Ab`, and `A#`/`Bb` compile to their distinct native monotone names.
+  Other accepted enharmonic boundary spellings retain the canonical semitone
+  mapping. No separate native-ID field is required.
+- `chord_id` must be a valid native `pca_*` identifier. Enharmonic chord IDs
+  are exact identities, not aliases: `pca_Db` uses verified native sounds
+  `Db2`, `Fn2`, and `Ab2`, while `pca_Cs` uses `Cs2`, `Fn2`, and `Gs2`.
 - `group_index` is an optional integer from 0 through 255. Zero or omission means
   ungrouped. A nonzero value must identify one contiguous run of at least two
   pitch-only rows. An identity may be reused by a later disjoint run after a zero
@@ -104,7 +110,9 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
   first row is the required/scored action and later rows are grouped followers.
 - `monotone_variant` is optionally `"default"` or `"alternate"`. Omission is
   `"default"`. `"alternate"` selects the verified `_2` identity and is accepted
-  only for C or C-sharp pitches; it does not change pitch.
+  only for the independently verified natural-C domain and for `C#2` through
+  `C#6`; it does not change pitch. `C#1`, `C#7`, and every flat spelling reject
+  the alternate variant because those exact `_2` native names do not exist.
 - `ignore_sound` is an optional array of one through three unique native
   `SoundName` values on a chord-bearing row, for example `"En2"`. It filters
   audible native chord constituents only and does not affect scoring. Each value
@@ -184,8 +192,11 @@ Generated levels are independently reduced from one immutable normalized MIDI
 source. Each generated row contains one selected source-backed monotone or one
 inferred chord and always has `group_index = 0`; every row is therefore a required
 action. Difficulty profiles may select different rows and have different physical
-digests. Exact and uniquely verified chord inference remains available, while
-ambiguous harmony is not invented. Under verified exact-build extended policy a complete
+digests. Exact and uniquely verified chord inference remains available. Ordinary
+pitch-class-1 major harmony selects `pca_Db` only when every source constituent
+shares one unambiguous flat key-signature context; missing, neutral, positive,
+conflicting, or boundary-straddling evidence retains `pca_Cs`. Ambiguous harmony
+is not invented. Under verified exact-build extended policy a complete
 generated profile may use the existing 8192-row and 8192-event transport; without
 that policy, generation remains bounded to 512 rows and omits rather than clips an
 oversized profile. Explicit authored dual rows and authored groups are unchanged.

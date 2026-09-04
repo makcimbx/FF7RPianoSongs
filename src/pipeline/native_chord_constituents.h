@@ -13,9 +13,10 @@ struct NativeChordConstituents {
     std::uint8_t sound_count;
 };
 
-// Offline evidence extracted from the native PianoChordAssign table. These are
-// exact case-sensitive FName spellings and native voicings, not pitch aliases.
-inline constexpr std::array<NativeChordConstituents, 63> kVerifiedNativeChordConstituents{{
+// Offline evidence joins native PianoChordsAssign identities to their complete
+// PianoChordsConfig rows. These are exact case-sensitive FName spellings and
+// native voicings, not pitch aliases.
+inline constexpr std::array<NativeChordConstituents, 64> kVerifiedNativeChordConstituents{{
     {"pca_C",        {"Cn2", "En2", "Gn2", ""}, 3},
     {"pca_C_m",      {"Cn2", "Ds2", "Gn2", ""}, 3},
     {"pca_C_dim",    {"Cn2", "Ds2", "Fs2", ""}, 3},
@@ -25,6 +26,7 @@ inline constexpr std::array<NativeChordConstituents, 63> kVerifiedNativeChordCon
     {"pca_C_Maj7",   {"Cn2", "En2", "Gn2", "Bn2"}, 4},
     {"pca_C_9",      {"Cn2", "En2", "Gn2", "Dn3"}, 4},
     {"pca_Cs",       {"Cs2", "Fn2", "Gs2", ""}, 3},
+    {"pca_Db",       {"Db2", "Fn2", "Ab2", ""}, 3},
     {"pca_Cs_m",     {"Cs2", "En2", "Gs2", ""}, 3},
     {"pca_Db_sus4",  {"Db2", "Gb2", "Ab2", ""}, 3},
     {"pca_Db_Maj7",  {"Db2", "Fn2", "Ab2", "Cn3"}, 4},

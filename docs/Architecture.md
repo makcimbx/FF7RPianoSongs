@@ -110,11 +110,14 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   been atomically published. Logical source-frame metadata, chart/profile semantics,
   descriptor inputs, cache identity, and sidecar artifact paths remain available for
   lexical settlement and runtime admission.
-- Pipeline cache identity v44 and runtime-cache format 14 include authored group,
+- Pipeline cache identity v45 and runtime-cache format 14 include authored group,
   monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
-  identity to every MIDI cache key; authored charts retain the v44 identity.
+  identity to every MIDI cache key. Version 45 preserves exact authored black-key
+  sharp/flat monotone identity; generated MIDI's v10 identity additionally covers
+  normalized key-signature-based accidental orientation. Runtime-cache format 14
+  already stores the resulting exact pitch/native names and therefore does not change.
   Format 14 remains sufficient because source rows, prefix events, native events,
   required actions, physical digest, and any explicitly authored group topology are
   deterministically rederived from the already-counted prefix/tail rows.
@@ -147,7 +150,8 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   retained MIDI chord voicing remain protected by diagnostic/cache semantic hashes;
   they are deliberately outside the runtime-reconstructible physical digest.
 - The offline pipeline owns an immutable exact-spelling constituent table for all
-  63 non-null chord IDs supported by MIDI chord inference. IgnoreSound resolution
+  64 chord identities admitted by compilation and MIDI inference, including
+  distinct `pca_Cs` and `pca_Db` rows. IgnoreSound resolution
   consults only that evidence table; it neither reads game memory nor constructs
   native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).

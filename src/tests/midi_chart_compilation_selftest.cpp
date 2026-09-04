@@ -12,6 +12,7 @@
 
 #include "pipeline/midi_chart_generator.h"
 #include "pipeline/midi_chart_compilation.h"
+#include "pipeline/midi_analysis_core.h"
 #include "pipeline/midi_source_normalizer.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
@@ -131,11 +132,13 @@ std::vector<unsigned char> profile_witness_midi_bytes() {
     return file;
 }
 
-std::vector<unsigned char> single_chord_midi_bytes(const std::initializer_list<int> pitches) {
+std::vector<unsigned char> single_chord_midi_bytes(
+    const std::initializer_list<int> pitches, const bool flat_key = false) {
     std::vector<MidiEvent> melody;
     std::vector<MidiEvent> harmony;
     melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
     melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    if (flat_key) melody.push_back({0, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
     for (int event = 0; event < 8; ++event) {
         const int tick = event * 960;
         add_note(&melody, tick, 360, 72 + event % 5, 104);
@@ -143,6 +146,56 @@ std::vector<unsigned char> single_chord_midi_bytes(const std::initializer_list<i
         for (const int pitch : pitches) add_note(&harmony, tick, 720, pitch, velocity--);
     }
 
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 1);
+    append_u16(&file, 2);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    append_midi_track(&file, std::move(harmony));
+    return file;
+}
+
+enum class DbChordContext {
+    Missing,
+    Neutral,
+    Sharp,
+    Flat,
+    Conflicting,
+    ExactTickFlat,
+    Straddling,
+};
+
+std::vector<unsigned char> db_chord_context_midi_bytes(const DbChordContext context) {
+    std::vector<MidiEvent> melody;
+    std::vector<MidiEvent> harmony;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    if (context == DbChordContext::Neutral || context == DbChordContext::ExactTickFlat) {
+        melody.push_back({0, 0, {0xff, 0x59, 0x02, 0x00, 0x00}});
+    } else if (context == DbChordContext::Sharp) {
+        melody.push_back({0, 0, {0xff, 0x59, 0x02, 0x02, 0x00}});
+    } else if (context == DbChordContext::Flat || context == DbChordContext::Conflicting) {
+        melody.push_back({0, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
+    }
+    if (context == DbChordContext::Conflicting) {
+        harmony.push_back({0, 0, {0xff, 0x59, 0x02, 0x02, 0x00}});
+    }
+    constexpr int first_tick = 1920;
+    for (int event = 0; event < 8; ++event) {
+        const int tick = first_tick + event * 960;
+        if (context == DbChordContext::ExactTickFlat && event == 0) {
+            melody.push_back({tick, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
+        }
+        if (context == DbChordContext::Straddling) {
+            melody.push_back({tick - 12, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
+            melody.push_back({tick + 3, 0, {0xff, 0x59, 0x02, 0x00, 0x00}});
+        }
+        add_note(&melody, tick, 360, 84 + event % 3, 108);
+        add_note(&harmony, tick, 720, 49, 82);
+        const int upper_tick = context == DbChordContext::Straddling ? tick + 6 : tick;
+        add_note(&harmony, upper_tick, 720, 53, 81);
+        add_note(&harmony, upper_tick, 720, 56, 80);
+    }
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
     append_u16(&file, 1);
     append_u16(&file, 2);
@@ -187,6 +240,45 @@ std::vector<unsigned char> profile_group_fixture_midi_bytes(const int fast_spaci
     append_u16(&file, 1);
     append_u16(&file, 480);
     append_midi_track(&file, std::move(melody));
+    return file;
+}
+
+std::vector<unsigned char> accidental_context_midi_bytes(const bool include_signatures) {
+    std::vector<MidiEvent> melody;
+    std::vector<MidiEvent> context;
+    melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
+    for (const int tick : {960, 1920, 2880, 3840, 4800, 5760, 6720}) {
+        add_note(&melody, tick, 240, 61, 100);
+    }
+    if (include_signatures) {
+        melody.push_back({1920, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}}); // two flats
+        melody.push_back({2880, 0, {0xff, 0x59, 0x02, 0x00, 0x00}}); // neutral
+        melody.push_back({3840, 0, {0xff, 0x59, 0x02, 0x02, 0x00}}); // two sharps
+        melody.push_back({4800, 0, {0xff, 0x59, 0x02, 0xfd, 0x01}}); // three flats, minor
+        context.push_back({5760, 0, {0xff, 0x59, 0x02, 0x02, 0x00}}); // conflicting sharp
+        context.push_back({6720, 0, {0xff, 0x59, 0x02, 0xff, 0x00}}); // resolves flat
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 1);
+    append_u16(&file, 2);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    append_midi_track(&file, std::move(context));
+    return file;
+}
+
+std::vector<unsigned char> malformed_key_signature_midi_bytes(
+    const std::vector<unsigned char>& event) {
+    std::vector<MidiEvent> track;
+    track.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    track.push_back({0, 0, event});
+    add_note(&track, 1920, 240, 61, 100);
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0);
+    append_u16(&file, 1);
+    append_u16(&file, 480);
+    append_midi_track(&file, std::move(track));
     return file;
 }
 
@@ -521,6 +613,34 @@ int main(int argc, char** argv) {
         stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
         return path;
     };
+    const std::filesystem::path accidental_context_path = write_bytes_fixture(
+        "accidental-context.mid", accidental_context_midi_bytes(true));
+    const std::filesystem::path accidental_legacy_path = write_bytes_fixture(
+        "accidental-no-signature.mid", accidental_context_midi_bytes(false));
+    const std::array<std::filesystem::path, 3> malformed_key_signature_paths{
+        write_bytes_fixture("key-signature-shape.mid",
+            malformed_key_signature_midi_bytes({0xff, 0x59, 0x01, 0x00})),
+        write_bytes_fixture("key-signature-fifths.mid",
+            malformed_key_signature_midi_bytes({0xff, 0x59, 0x02, 0x08, 0x00})),
+        write_bytes_fixture("key-signature-mode.mid",
+            malformed_key_signature_midi_bytes({0xff, 0x59, 0x02, 0x00, 0x02})),
+    };
+    const std::filesystem::path flat_c_sharp_chord_path = write_bytes_fixture(
+        "flat-context-c-sharp-chord.mid", db_chord_context_midi_bytes(DbChordContext::Flat));
+    const std::array<std::filesystem::path, 4> sharp_fallback_chord_paths{
+        write_bytes_fixture("missing-context-c-sharp-chord.mid",
+            db_chord_context_midi_bytes(DbChordContext::Missing)),
+        write_bytes_fixture("neutral-context-c-sharp-chord.mid",
+            db_chord_context_midi_bytes(DbChordContext::Neutral)),
+        write_bytes_fixture("sharp-context-c-sharp-chord.mid",
+            db_chord_context_midi_bytes(DbChordContext::Sharp)),
+        write_bytes_fixture("conflicting-context-c-sharp-chord.mid",
+            db_chord_context_midi_bytes(DbChordContext::Conflicting)),
+    };
+    const std::filesystem::path exact_tick_db_chord_path = write_bytes_fixture(
+        "exact-tick-flat-db-chord.mid", db_chord_context_midi_bytes(DbChordContext::ExactTickFlat));
+    const std::filesystem::path straddling_db_chord_path = write_bytes_fixture(
+        "straddling-db-chord.mid", db_chord_context_midi_bytes(DbChordContext::Straddling));
 
     const WavAudio no_audio;
     const auto find_pitch = [](const Observation& observation, const std::string_view pitch) {
@@ -759,21 +879,140 @@ int main(int argc, char** argv) {
                 std::bit_cast<std::uint64_t>(a.beat) == std::bit_cast<std::uint64_t>(b.beat) &&
                 std::bit_cast<std::uint64_t>(a.stream_prior) == std::bit_cast<std::uint64_t>(b.stream_prior);
         });
+    const bool key_signatures_unchanged = std::equal(
+        normalized.key_signatures.begin(), normalized.key_signatures.end(),
+        original.key_signatures.begin(), original.key_signatures.end(), [](const auto& a, const auto& b) {
+            return a.tick == b.tick && a.fifths == b.fifths && a.minor == b.minor &&
+                a.track == b.track && a.ordinal == b.ordinal;
+        });
     if (fingerprint(direct_observation) != expected[3].digest ||
         fingerprint(normalized_facade) != expected[3].digest ||
         normalized.ticks_per_quarter != original.ticks_per_quarter ||
         std::bit_cast<std::uint64_t>(normalized.source_bpm) != std::bit_cast<std::uint64_t>(original.source_bpm) ||
         normalized.tempos.size() != original.tempos.size() || normalized.meters.size() != original.meters.size() ||
+        normalized.key_signatures.size() != original.key_signatures.size() ||
         normalized.notes.size() != original.notes.size() ||
         normalized.unsupported_pitch_events != original.unsupported_pitch_events ||
-        !tempos_unchanged || !meters_unchanged || !notes_unchanged) {
+        !tempos_unchanged || !meters_unchanged || !key_signatures_unchanged || !notes_unchanged) {
         return fail("normalized compilation facade diverged from the path facade oracle or mutated normalized input");
+    }
+
+    ff7rp::pipeline::NormalizedMidiSource accidental_source;
+    const Status accidental_normalization = ff7rp::pipeline::normalize_midi_source(
+        accidental_context_path.string(), &accidental_source);
+    if (!accidental_normalization.ok() || accidental_source.key_signatures.size() != 6u) {
+        return fail("valid MIDI key-signature events were not normalized exactly");
+    }
+    const auto& signatures = accidental_source.key_signatures;
+    if (signatures[0].tick != 1920 || signatures[0].fifths != -2 || signatures[0].minor
+        || signatures[3].tick != 4800 || signatures[3].fifths != -3 || !signatures[3].minor
+        || signatures[4].tick != 5760 || signatures[4].track != 1 || signatures[4].fifths != 2
+        || signatures[5].tick != 6720 || signatures[5].ordinal <= signatures[4].ordinal) {
+        return fail("normalized MIDI key-signature source identity drifted");
+    }
+    const auto orientation = ff7rp::pipeline::build_midi_accidental_orientation_timeline(signatures);
+    using ff7rp::pipeline::MidiAccidentalOrientation;
+    const auto orientation_at = [&](const int tick) {
+        return ff7rp::pipeline::midi_accidental_orientation_at_tick(orientation, tick);
+    };
+    if (orientation_at(1919) != MidiAccidentalOrientation::SharpFallback
+        || orientation_at(1920) != MidiAccidentalOrientation::Flat
+        || orientation_at(2880) != MidiAccidentalOrientation::SharpFallback
+        || orientation_at(4800) != MidiAccidentalOrientation::Flat
+        || orientation_at(5760) != MidiAccidentalOrientation::SharpFallback
+        || orientation_at(6720) != MidiAccidentalOrientation::Flat) {
+        return fail("MIDI accidental orientation did not apply exact-tick changes or conflicts deterministically");
+    }
+    for (const std::filesystem::path& malformed : malformed_key_signature_paths) {
+        ff7rp::pipeline::NormalizedMidiSource rejected;
+        const Status rejected_status = ff7rp::pipeline::normalize_midi_source(malformed.string(), &rejected);
+        if (rejected_status.code != ff7rp::pipeline::StatusCode::InvalidMidi) {
+            return fail("malformed MIDI key-signature event was not rejected: " + malformed.filename().string());
+        }
+    }
+    const Observation accidental_easy = generate(accidental_context_path, no_audio, config_for(1));
+    const Observation accidental_hard = generate(accidental_context_path, no_audio, config_for(6));
+    const Observation accidental_repeat = generate(accidental_context_path, no_audio, config_for(6));
+    const Observation accidental_legacy = generate(accidental_legacy_path, no_audio, config_for(6));
+    const Observation flat_c_sharp_chord = generate(flat_c_sharp_chord_path, no_audio, config_for(6));
+    const Observation flat_c_sharp_chord_easy = generate(flat_c_sharp_chord_path, no_audio, config_for(1));
+    const Observation flat_c_sharp_chord_repeat = generate(flat_c_sharp_chord_path, no_audio, config_for(6));
+    const Observation exact_tick_db_chord = generate(exact_tick_db_chord_path, no_audio, config_for(6));
+    const Observation straddling_db_chord = generate(straddling_db_chord_path, no_audio, config_for(6));
+    const std::array<std::string_view, 7> expected_accidentals{
+        "C#4", "Db4", "C#4", "C#4", "Db4", "C#4", "Db4"
+    };
+    const auto exact_spelling = [&](const Observation& observed) {
+        if (!observed.status.ok() || observed.notes.size() != expected_accidentals.size()) return false;
+        for (std::size_t index = 0; index < expected_accidentals.size(); ++index) {
+            if (observed.notes[index].pitch != expected_accidentals[index]
+                || (expected_accidentals[index] == "Db4" && observed.notes[index].alternate_monotone)) return false;
+        }
+        return true;
+    };
+    if (!exact_spelling(accidental_easy) || !exact_spelling(accidental_hard)
+        || canonical_note_bytes(accidental_hard.notes) != canonical_note_bytes(accidental_repeat.notes)
+        || !accidental_legacy.status.ok() || accidental_legacy.notes.size() != 7u
+        || std::any_of(accidental_legacy.notes.begin(), accidental_legacy.notes.end(), [](const Note& note) {
+            return note.pitch != "C#4";
+        })) {
+        return fail("MIDI key-signature accidental spelling was unstable across contexts or profiles");
+    }
+    const auto exact_chord_identity = [](const Observation& observed, const std::string_view id) {
+        bool found = false;
+        if (!observed.status.ok()) return false;
+        for (const Note& note : observed.notes) {
+            if (note.chord_id.empty()) continue;
+            if (note.chord_id != id || note.source_chord_pitches.empty()
+                || !note.ignore_sound_pitches.empty() || note.group_index != 0) return false;
+            found = true;
+        }
+        return found;
+    };
+    if (!exact_chord_identity(flat_c_sharp_chord, "pca_Db")
+        || !exact_chord_identity(flat_c_sharp_chord_easy, "pca_Db")
+        || canonical_note_bytes(flat_c_sharp_chord.notes) !=
+            canonical_note_bytes(flat_c_sharp_chord_repeat.notes)
+        || !exact_chord_identity(exact_tick_db_chord, "pca_Db")
+        || !exact_chord_identity(straddling_db_chord, "pca_Cs")) {
+        return fail("Db chord inference did not preserve exact flat context and boundary fallback");
+    }
+    for (const std::filesystem::path& path : sharp_fallback_chord_paths) {
+        if (!exact_chord_identity(generate(path, no_audio, config_for(6)), "pca_Cs")) {
+            return fail("Db chord inference did not retain canonical fallback for " + path.filename().string());
+        }
+    }
+    const auto compile_plan = [&](const Observation& observed, ff7rp::pipeline::ChartEventPlan* plan) {
+        SongConfig plan_config = config_for(6);
+        plan_config.notes = observed.notes;
+        plan_config.notes_provided = true;
+        plan_config.bpm = observed.stats.source_bpm;
+        ff7rp::pipeline::CompiledChart compiled;
+        return ff7rp::pipeline::compile_chart(plan_config, &compiled).ok()
+            && ff7rp::pipeline::derive_chart_event_plan(plan_config.notes, compiled.notes, plan);
+    };
+    ff7rp::pipeline::ChartEventPlan flat_plan;
+    ff7rp::pipeline::ChartEventPlan sharp_plan;
+    if (!compile_plan(accidental_hard, &flat_plan) || !compile_plan(accidental_legacy, &sharp_plan)
+        || flat_plan.physical_digest == sharp_plan.physical_digest) {
+        return fail("enharmonic generated identities did not change the physical digest");
+    }
+    ff7rp::pipeline::ChartEventPlan flat_chord_plan;
+    const Observation sharp_chord = generate(sharp_fallback_chord_paths.front(), no_audio, config_for(6));
+    ff7rp::pipeline::ChartEventPlan sharp_chord_plan;
+    if (!compile_plan(flat_c_sharp_chord, &flat_chord_plan)
+        || !compile_plan(sharp_chord, &sharp_chord_plan)
+        || flat_chord_plan.source_row_count != flat_chord_plan.native_event_count
+        || flat_chord_plan.native_prefix_event_count != flat_chord_plan.source_row_count
+        || flat_chord_plan.source_row_count != flat_chord_plan.required_action_count
+        || flat_chord_plan.physical_digest == sharp_chord_plan.physical_digest) {
+        return fail("automatic Db chord accounting or physical identity was not exact");
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:v9") {
-        return fail("generated MIDI semantic identity did not invalidate grouped output");
+        != "midi_generation=independent_ungrouped:key_signature_spelling:v10") {
+        return fail("generated MIDI semantic identity did not invalidate legacy accidental spelling");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
     const Observation physical_ambiguous = generate(ambiguous_path, no_audio, config_for(6));

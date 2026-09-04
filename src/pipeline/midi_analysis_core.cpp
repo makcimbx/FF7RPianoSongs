@@ -6,6 +6,7 @@
 #include <complex>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -22,6 +23,52 @@ double tempo_at_tick(const std::vector<MidiTempoChange>& changes, const int tick
         [](const int value, const MidiTempoChange& change) { return value < change.tick; });
     if (position == changes.begin()) return 120.0;
     return std::prev(position)->bpm;
+}
+
+std::vector<MidiAccidentalOrientationChange> build_midi_accidental_orientation_timeline(
+    const std::vector<MidiKeySignatureChange>& changes) {
+    std::vector<MidiKeySignatureChange> sorted = changes;
+    std::sort(sorted.begin(), sorted.end(), [](const auto& left, const auto& right) {
+        return std::tie(left.tick, left.track, left.ordinal) <
+            std::tie(right.tick, right.track, right.ordinal);
+    });
+    std::map<int, int> active_fifths;
+    std::vector<MidiAccidentalOrientationChange> timeline;
+    for (std::size_t begin = 0; begin < sorted.size();) {
+        const int tick = sorted[begin].tick;
+        std::size_t end = begin;
+        while (end < sorted.size() && sorted[end].tick == tick) {
+            active_fifths[sorted[end].track] = sorted[end].fifths;
+            ++end;
+        }
+        const bool consistently_flat = !active_fifths.empty() &&
+            std::all_of(active_fifths.begin(), active_fifths.end(),
+                [](const auto& entry) { return entry.second < 0; });
+        const MidiAccidentalOrientation orientation = consistently_flat
+            ? MidiAccidentalOrientation::Flat : MidiAccidentalOrientation::SharpFallback;
+        // Retain every signature boundary even when its broad sharp/flat
+        // orientation is unchanged. Chord inference must distinguish one
+        // unambiguous context from a humanized cluster that straddles a change.
+        timeline.push_back({tick, orientation});
+        begin = end;
+    }
+    return timeline;
+}
+
+const MidiAccidentalOrientationChange* midi_accidental_context_at_tick(
+    const std::vector<MidiAccidentalOrientationChange>& timeline, const int tick) {
+    const auto position = std::upper_bound(timeline.begin(), timeline.end(), tick,
+        [](const int value, const MidiAccidentalOrientationChange& change) {
+            return value < change.tick;
+        });
+    return position == timeline.begin() ? nullptr : &*std::prev(position);
+}
+
+MidiAccidentalOrientation midi_accidental_orientation_at_tick(
+    const std::vector<MidiAccidentalOrientationChange>& timeline, const int tick) {
+    const MidiAccidentalOrientationChange* context =
+        midi_accidental_context_at_tick(timeline, tick);
+    return context ? context->orientation : MidiAccidentalOrientation::SharpFallback;
 }
 
 double humanization_window_ticks(

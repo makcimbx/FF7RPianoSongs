@@ -5,7 +5,7 @@
 When a song supplies MIDI, the pipeline can generate source-backed difficulty profiles that fit the native piano interaction. The generator is deterministic: identical semantic inputs produce identical profile data and cache identity.
 
 Repository chart generation parses and normalizes the MIDI source once into immutable
-event, tempo, meter, and source-identity data. Every independently evaluated difficulty
+event, tempo, meter, key-signature, and source-identity data. Every independently evaluated difficulty
 profile consumes that same normalized value; profile generation does not reread or
 renormalize the file and does not share mutable analysis state. Independent consumers,
 such as metronome-beat extraction, may parse the source separately.
@@ -14,6 +14,14 @@ such as metronome-beat extraction, may parse the source separately.
 
 - MIDI format 0 and 1 timelines are supported; format 2 is rejected.
 - Tempo and meter events are linked before chart generation.
+- Valid MIDI key-signature meta events are retained with exact tick, track,
+  event order, signed fifth count, and major/minor mode. MIDI note events carry
+  semitone numbers, not authored sharp/flat spelling. For black keys, generation
+  uses flat spelling only while every track with active key-signature evidence
+  consistently reports negative fifths. Missing signatures, neutral signatures,
+  positive signatures, or conflicting active track evidence retain the legacy
+  sharp spelling. Changes apply at their exact source tick. Titles, filenames,
+  track names, and speculative chord function do not participate.
 - Drum-channel events are ignored. Generated profiles reject a linked pitched
   event outside C1-C7 when verified extended policy is active; unsupported
   policy retains the established safe fallback behavior.
@@ -78,7 +86,17 @@ of lower material prefers `_2`, one at the lower boundary of higher material
 prefers normal, and repeated/tied eligible runs resolve uniformly to normal. The
 result is stored by exact immutable MIDI source identity before profile selection,
 so an event that survives in different profiles keeps the same identity. No hash,
-ordinal alternation, or RNG participates. Exact source chord voicing is retained until IgnoreSound
+ordinal alternation, or RNG participates. A flat-spelled event never receives a
+C-sharp `_2` identity. Automatic chord IDs remain pitch-class based except for
+the separately verified ordinary D-flat major assignment. Pitch-class-1 major
+harmony uses `pca_Db` only when every source constituent's authoritative tick
+resolves to the same unambiguous flat key-signature context. Missing, neutral,
+positive, conflicting, or boundary-straddling evidence retains `pca_Cs`. Exact
+and safe-superset paths make the same identity decision before IgnoreSound is
+derived from that selected chord's complete verified constituent row.
+The exact asset evidence is scoped to build 1.005; runtime name resolution
+remains fail closed, and this offline rule is not a 1.004 runtime qualification.
+Exact source chord voicing is retained until IgnoreSound
 derivation. Exact chord matches remain preferred and unchanged. A partial source
 harmony of at least three distinct pitch classes may use a native chord superset
 only when exactly one supported template contains its pitch classes, its lowest

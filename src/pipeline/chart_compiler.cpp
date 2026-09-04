@@ -54,7 +54,10 @@ bool parse_pitch_semitone(const std::string& pitch, int* out_semitone) {
 
 bool alternate_monotone_id(const std::string& base, std::string* out) {
     if (!out || base.size() < 3u) return false;
-    const bool eligible = base.rfind("Cn", 0) == 0 || base.rfind("Cs", 0) == 0;
+    const bool natural_c = base.rfind("Cn", 0) == 0;
+    const bool supported_c_sharp = base.size() == 3u && base.rfind("Cs", 0) == 0 &&
+        base[2] >= '2' && base[2] <= '6';
+    const bool eligible = natural_c || supported_c_sharp;
     if (!eligible) return false;
     *out = base + "_2";
     return true;
@@ -107,6 +110,14 @@ Status pitch_to_monotone_id(const std::string& pitch, std::string* out_monotone_
     int semitone = 0;
     if (parse_pitch_semitone(pitch, &semitone)
         && semitone >= kLowestSemitone && semitone <= kHighestSemitone) {
+        if (pitch.size() == 3u && pitch[1] == 'b') {
+            switch (pitch[0]) {
+            case 'D': case 'E': case 'G': case 'A': case 'B':
+                *out_monotone_id = pitch.substr(0, 2) + pitch.substr(2);
+                return Status::ok_status();
+            default: break;
+            }
+        }
         *out_monotone_id = supported_pitch_map()[semitone - kLowestSemitone].monotone_id;
         return Status::ok_status();
     }

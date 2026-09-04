@@ -109,6 +109,35 @@ std::vector<unsigned char> build_midi(MidiTrack events, const std::uint32_t temp
     return file;
 }
 
+std::vector<unsigned char> build_format_one_midi(MidiTrack first, MidiTrack second) {
+    first.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    const auto append_track = [](std::vector<unsigned char>* file, MidiTrack events) {
+        std::stable_sort(events.begin(), events.end(), [](const MidiEvent& a, const MidiEvent& b) {
+            if (a.tick != b.tick) return a.tick < b.tick;
+            return a.priority < b.priority;
+        });
+        std::vector<unsigned char> track;
+        int previous_tick = 0;
+        for (const MidiEvent& event : events) {
+            append_variable(&track, event.tick - previous_tick);
+            track.insert(track.end(), event.bytes.begin(), event.bytes.end());
+            previous_tick = event.tick;
+        }
+        append_variable(&track, 0);
+        track.insert(track.end(), {0xff, 0x2f, 0x00});
+        file->insert(file->end(), {'M', 'T', 'r', 'k'});
+        append_be32(file, static_cast<std::uint32_t>(track.size()));
+        file->insert(file->end(), track.begin(), track.end());
+    };
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_be16(&file, 1);
+    append_be16(&file, 2);
+    append_be16(&file, 480);
+    append_track(&file, std::move(first));
+    append_track(&file, std::move(second));
+    return file;
+}
+
 void write_le16(std::ofstream& out, const std::uint16_t value) {
     const std::array<char, 2> bytes{
         static_cast<char>(value & 0xffu), static_cast<char>((value >> 8u) & 0xffu)};
@@ -1353,7 +1382,61 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
     };
 
     if (run_direction("NormalDisabledToExtended", false, true) != 0) return 1;
-    return run_direction("NormalExtendedToDisabled", true, false);
+    if (run_direction("NormalExtendedToDisabled", true, false) != 0) return 1;
+
+    const std::filesystem::path accidental_directory = root / "AccidentalWarmCache";
+    std::filesystem::create_directories(accidental_directory);
+    MidiTrack accidental_melody;
+    MidiTrack accidental_harmony;
+    accidental_melody.push_back({0, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
+    for (int index = 0; index < 8; ++index) {
+        const int tick = 1920 + index * 960;
+        add_note(&accidental_melody, tick, 240, 84 + index % 3, 108);
+        add_note(&accidental_harmony, tick, 480, 49, 82);
+        add_note(&accidental_harmony, tick, 480, 53, 81);
+        add_note(&accidental_harmony, tick, 480, 56, 80);
+    }
+    if (!write_bytes(accidental_directory / "song.mid", build_format_one_midi(
+            std::move(accidental_melody), std::move(accidental_harmony)))
+        || !write_silent_wav(accidental_directory / "song.wav", 20.0)
+        || !write_song_json(accidental_directory / "song.json", "Accidental Warm Cache")) {
+        return fail("failed to create accidental warm-cache fixture");
+    }
+    ff7rp::pipeline::LoadedSong accidental_cold;
+    auto status = ff7rp::pipeline::load_song_directory(accidental_directory.string(), &accidental_cold);
+    const auto all_flat = [](const ff7rp::pipeline::LoadedSong& song) {
+        if (song.difficulty_profiles.empty()) return false;
+        bool found_db_chord = false;
+        for (const auto& note : song.chart.notes) {
+            if (note.chord_id == "pca_Db") found_db_chord = true;
+            if ((!note.monotone_id.empty() && note.monotone_id != "C6"
+                    && note.monotone_id != "Db6" && note.monotone_id != "Dn6")
+                || (!note.chord_id.empty() && note.chord_id != "pca_Db")) return false;
+        }
+        return found_db_chord &&
+            std::all_of(song.difficulty_profiles.begin(), song.difficulty_profiles.end(), [](const auto& profile) {
+            return !profile.config.notes.empty() &&
+                std::all_of(profile.config.notes.begin(), profile.config.notes.end(), [](const auto& note) {
+                    return note.group_index == 0
+                        && (note.pitch.empty() || note.pitch == "C6"
+                            || note.pitch == "Db6" || note.pitch == "D6")
+                        && (note.chord_id.empty() || note.chord_id == "pca_Db");
+                });
+        });
+    };
+    if (!status.ok() || accidental_cold.loaded_from_runtime_cache || !all_flat(accidental_cold)) {
+        return fail("key-signature accidental cache fixture did not cold-generate exact flat identities");
+    }
+    ff7rp::pipeline::LoadedSong accidental_warm;
+    status = ff7rp::pipeline::load_song_directory(accidental_directory.string(), &accidental_warm);
+    if (!status.ok() || !accidental_warm.loaded_from_runtime_cache
+        || accidental_warm.cache_key != accidental_cold.cache_key
+        || !configs_equal(accidental_warm.config, accidental_cold.config)
+        || !charts_equal(accidental_warm.chart, accidental_cold.chart)
+        || !all_flat(accidental_warm)) {
+        return fail("key-signature accidental identities did not round-trip through the warm cache");
+    }
+    return 0;
 }
 
 int test_offline_artifact_goldens(const std::filesystem::path& root) {
@@ -2052,7 +2135,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v44") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v45") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||

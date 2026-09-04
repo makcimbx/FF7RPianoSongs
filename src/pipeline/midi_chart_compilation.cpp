@@ -176,6 +176,16 @@ std::string pitch_name(const int midi) {
         std::to_string(midi / 12 - 1);
 }
 
+std::string generated_pitch_name(
+    const int midi, const MidiAccidentalOrientation orientation) {
+    if (orientation != MidiAccidentalOrientation::Flat) return pitch_name(midi);
+    constexpr std::array<const char*, 12> flat_pitch_classes{
+        "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"
+    };
+    return std::string(flat_pitch_classes[static_cast<std::size_t>(midi % 12)]) +
+        std::to_string(midi / 12 - 1);
+}
+
 void measure_shared_audio_prominence(
     const WavAudio& audio,
     const std::vector<std::vector<Attack>*>& groups,
@@ -541,7 +551,14 @@ void ensure_tail_coverage(
     }
 }
 
-ChordMatch infer_native_chord_match(const std::set<int>& fresh_pitch_classes) {
+const char* native_chord_id(
+    const int root, const ChordQuality quality, const bool flat_db_major) {
+    if (flat_db_major && root == 1 && quality == ChordQuality::Major) return "pca_Db";
+    return kNativeChordIds[static_cast<std::size_t>(root)][static_cast<std::size_t>(quality)];
+}
+
+ChordMatch infer_native_chord_match(
+    const std::set<int>& fresh_pitch_classes, const bool flat_db_major) {
     if (fresh_pitch_classes.size() < 3) return {};
     std::vector<std::pair<int, ChordQuality>> exact_matches;
     for (int root = 0; root < 12; ++root) {
@@ -556,7 +573,7 @@ ChordMatch infer_native_chord_match(const std::set<int>& fresh_pitch_classes) {
     }
     if (exact_matches.size() != 1) return {};
     const auto [root, quality] = exact_matches.front();
-    const char* id = kNativeChordIds[static_cast<std::size_t>(root)][static_cast<std::size_t>(quality)];
+    const char* id = native_chord_id(root, quality, flat_db_major);
     if (!id) return {};
     return {id, root, quality};
 }
@@ -614,7 +631,8 @@ struct SupersetChordMatch {
 
 SupersetChordMatch infer_unique_native_chord_superset(
     const std::set<int>& intended_pitch_classes,
-    const std::vector<const MidiNoteEvent*>& harmony) {
+    const std::vector<const MidiNoteEvent*>& harmony,
+    const bool flat_db_major) {
     // Dyads, doubled pitch classes, and cross-track/channel clusters are too
     // under-specified to establish one intended source voicing safely.
     if (intended_pitch_classes.size() < 3u || harmony.size() != intended_pitch_classes.size()) return {};
@@ -634,7 +652,7 @@ SupersetChordMatch infer_unique_native_chord_superset(
     for (int root = 0; root < 12; ++root) {
         if (root != bass_pitch_class) continue;
         for (const ChordTemplate& chord : kChordTemplates) {
-            const char* id = kNativeChordIds[static_cast<std::size_t>(root)][static_cast<std::size_t>(chord.quality)];
+            const char* id = native_chord_id(root, chord.quality, flat_db_major);
             if (!id) continue;
             std::set<int> expected;
             for (std::size_t index = 0; index < chord.size; ++index) {
@@ -659,7 +677,8 @@ SupersetChordMatch infer_unique_native_chord_superset(
 
 std::vector<Attack> build_chord_candidates(
     const std::vector<OnsetCluster>& clusters,
-    const std::set<SourceIdentity>& melody_sources) {
+    const std::set<SourceIdentity>& melody_sources,
+    const std::vector<MidiAccidentalOrientationChange>& accidental_orientation) {
     std::vector<Attack> result;
     for (const OnsetCluster& cluster : clusters) {
         std::vector<const MidiNoteEvent*> harmony;
@@ -669,10 +688,23 @@ std::vector<Attack> build_chord_candidates(
             harmony.push_back(&note);
             fresh_pitch_classes.insert(note.source.pitch % 12);
         }
-        ChordMatch match = infer_native_chord_match(fresh_pitch_classes);
+        const MidiAccidentalOrientationChange* shared_flat_context = nullptr;
+        bool flat_db_major = !harmony.empty();
+        for (const MidiNoteEvent* note : harmony) {
+            const MidiAccidentalOrientationChange* context = midi_accidental_context_at_tick(
+                accidental_orientation, note->source.tick);
+            if (!context || context->orientation != MidiAccidentalOrientation::Flat ||
+                (shared_flat_context && shared_flat_context->tick != context->tick)) {
+                flat_db_major = false;
+                break;
+            }
+            shared_flat_context = context;
+        }
+        ChordMatch match = infer_native_chord_match(fresh_pitch_classes, flat_db_major);
         std::vector<std::string> ignored_sounds;
         if (match.id.empty()) {
-            SupersetChordMatch superset = infer_unique_native_chord_superset(fresh_pitch_classes, harmony);
+            SupersetChordMatch superset = infer_unique_native_chord_superset(
+                fresh_pitch_classes, harmony, flat_db_major);
             match = std::move(superset.chord);
             ignored_sounds = std::move(superset.ignored_sounds);
         }
@@ -2146,7 +2178,7 @@ std::string infer_native_chord_from_fresh_midi_pitches(const std::vector<int>& m
     for (const int pitch : midi_pitches) {
         if (pitch >= 0 && pitch <= 127) fresh_pitch_classes.insert(pitch % 12);
     }
-    return infer_native_chord_match(fresh_pitch_classes).id;
+    return infer_native_chord_match(fresh_pitch_classes, false).id;
 }
 
 std::array<int, 2> vanilla_mode_change_counts_for_route(const std::string_view route_name) {
@@ -2231,6 +2263,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     std::vector<TempoChange> tempos = normalized_source.tempos;
     std::vector<MeterChange> meters = normalized_source.meters;
     std::vector<MidiNoteEvent> source = normalized_source.notes;
+    const std::vector<MidiAccidentalOrientationChange> accidental_orientation =
+        build_midi_accidental_orientation_timeline(normalized_source.key_signatures);
     const double chart_bpm = config.bpm_provided ? config.bpm : source_bpm;
     std::size_t exact_groups = 0;
     std::size_t humanized_events = 0;
@@ -2292,7 +2326,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     }
     std::vector<Attack> fallback = build_fallback_candidates(
         clusters, voice, melody_sources, primary, profile);
-    std::vector<Attack> chords = build_chord_candidates(clusters, melody_sources);
+    std::vector<Attack> chords = build_chord_candidates(
+        clusters, melody_sources, accidental_orientation);
     std::set<SourceIdentity> lead_in_rejection_sources;
     std::set<SourceIdentity> audio_duration_rejection_sources;
     const auto count_timing_rejections = [&](const std::vector<Attack>& attacks) {
@@ -2386,16 +2421,21 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         if (a.right != b.right) return a.right;
         return a.attack.event.source < b.attack.event.source;
     };
-    const auto make_row = [chart_bpm, &alternate_monotone_plan](const long long frame, const OutputAction& action) {
+    const auto make_row = [chart_bpm, &alternate_monotone_plan, &accidental_orientation](
+                              const long long frame, const OutputAction& action) {
         OutputRow row;
         row.note.beat = (static_cast<double>(frame) / 60.0) * chart_bpm / 60.0;
         row.note.duration_beats = 0.25;
         if (action.right) {
             row.has_right = true;
             row.right = action.attack;
-            row.note.pitch = pitch_name(action.attack.event.source.pitch);
+            row.note.pitch = generated_pitch_name(action.attack.event.source.pitch,
+                midi_accidental_orientation_at_tick(
+                    accidental_orientation, action.attack.event.source.tick));
             const auto planned = alternate_monotone_plan.find(action.attack.event.source);
-            row.note.alternate_monotone = planned != alternate_monotone_plan.end() && planned->second;
+            const bool flat_spelling = row.note.pitch.size() == 3u && row.note.pitch[1] == 'b';
+            row.note.alternate_monotone = !flat_spelling &&
+                planned != alternate_monotone_plan.end() && planned->second;
         } else {
             row.has_left = true;
             row.left = action.attack;
@@ -2410,7 +2450,9 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     std::map<long long, Note> preferred_rows;
     const auto matches_note = [&](const OutputAction& action, const Note& note) {
         return action.right ?
-            note.chord_id.empty() && note.pitch == pitch_name(action.attack.event.source.pitch) :
+            note.chord_id.empty() && note.pitch == generated_pitch_name(
+                action.attack.event.source.pitch, midi_accidental_orientation_at_tick(
+                    accidental_orientation, action.attack.event.source.tick)) :
             note.pitch.empty() && note.chord_id == action.attack.chord_id;
     };
     if (preferred_baseline) {

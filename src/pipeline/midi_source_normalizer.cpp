@@ -99,6 +99,7 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
 
     std::vector<MidiTempoChange> tempos{{0, 120.0, -1, -1}};
     std::vector<MidiMeterChange> meters{{0, 4, 4, -1, -1, false}};
+    std::vector<MidiKeySignatureChange> key_signatures;
     for (int track = 0; track < midi.getTrackCount(); ++track) {
         for (int ordinal = 0; ordinal < midi.getEventCount(track); ++ordinal) {
             const smf::MidiEvent& event = midi[track][ordinal];
@@ -113,6 +114,20 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
                     meters.push_back({event.tick, numerator, 1 << exponent, track, ordinal, true});
                 }
             }
+            if (event.isMetaMessage() && event.getMetaType() == 0x59) {
+                if (!event.isKeySignature() || event.size() != 5u || event[2] != 2u) {
+                    return Status::error(StatusCode::InvalidMidi,
+                        "MIDI key-signature event has malformed shape");
+                }
+                const int fifths = event[3] <= 127u ? static_cast<int>(event[3]) :
+                    static_cast<int>(event[3]) - 256;
+                const int mode = event[4];
+                if (fifths < -7 || fifths > 7 || (mode != 0 && mode != 1)) {
+                    return Status::error(StatusCode::InvalidMidi,
+                        "MIDI key-signature event has invalid fifths or mode");
+                }
+                key_signatures.push_back({event.tick, fifths, mode == 1, track, ordinal});
+            }
         }
     }
     const auto change_less = [](const auto& a, const auto& b) {
@@ -120,6 +135,7 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
     };
     std::sort(tempos.begin(), tempos.end(), change_less);
     std::sort(meters.begin(), meters.end(), change_less);
+    std::sort(key_signatures.begin(), key_signatures.end(), change_less);
     std::vector<MidiTempoChange> collapsed_tempos;
     for (const MidiTempoChange& change : tempos) {
         if (!collapsed_tempos.empty() && collapsed_tempos.back().tick == change.tick) {
@@ -187,6 +203,7 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
     out_source->source_bpm = source_bpm;
     out_source->tempos = std::move(tempos);
     out_source->meters = std::move(meters);
+    out_source->key_signatures = std::move(key_signatures);
     out_source->notes = std::move(source);
     out_source->unsupported_pitch_events = unsupported_pitch_events;
     return Status::ok_status();
