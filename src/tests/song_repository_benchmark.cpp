@@ -17,7 +17,7 @@ int main(int argc, char** argv)
     using Clock = std::chrono::steady_clock;
     int first_directory = 1;
     if (std::string(argv[1]) == "--physical") {
-        ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+        ff7rp::pipeline::configure_chart_row_limit(true, true);
         first_directory = 2;
     }
     if (first_directory == argc) return 2;

@@ -3,6 +3,8 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <array>
+#include <string_view>
 
 #include "core/hooks.h"
 #include "game/chart_patch.h"
@@ -14,15 +16,46 @@ struct RenderSnapshot;
 struct PlaybackSnapshot;
 struct SelectionAudioAdmissionAuthority;
 
-struct ExtendedChartSupport {
-    bool requested = false;
+struct ExtendedChartCapability {
     bool shipping_helpers_valid = false;
+    bool helper_spec_valid = false;
     bool diagnostic_input_available = false;
-    bool mutation_available = false;
+    bool playable_authority_available = false;
     std::uint64_t policy_generation = 0;
 };
 
-ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, bool requested);
+struct ExtendedChartBuildSpec {
+    std::string_view build_id;
+    std::array<std::uint8_t, 5> persistent_expand_call;
+    std::array<std::uint8_t, 32> fname_signature;
+    std::array<std::uintptr_t, 4> callback_vtable_slots;
+};
+
+inline const ExtendedChartBuildSpec* find_extended_chart_build_spec(
+    const std::string_view build_id) noexcept
+{
+    static constexpr ExtendedChartBuildSpec build_1005{
+        "ff7rebirth-steam-win64-6a16ced2",
+        {0xe8, 0xb1, 0xf1, 0x01, 0x00},
+        {0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x56,0xb8,0x40,
+         0x04,0x00,0x00,0xe8,0xa4,0xa3,0x61,0x01,0x48,0x2b,0xe0,0x48,0x8b,0x05,0x1a,0xb0},
+        {0x02805da4, 0x01958660, 0x007a5680, 0x027fcc44}};
+    static constexpr ExtendedChartBuildSpec build_1004{
+        "ff7rebirth-steam-win64-68fd6fde",
+        {0xe8, 0xc5, 0xe8, 0x01, 0x00},
+        {0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x56,0xb8,0x40,
+         0x04,0x00,0x00,0xe8,0x80,0xcc,0x82,0x01,0x48,0x2b,0xe0,0x48,0x8b,0x05,0x46,0x75},
+        {0x020d1d40, 0x018d5bd0, 0x020b6dc0, 0x020b5820}};
+    if (build_id == build_1005.build_id) return &build_1005;
+    if (build_id == build_1004.build_id) return &build_1004;
+    return nullptr;
+}
+inline constexpr bool extended_chart_capability_ready(
+    const bool helper_spec_valid, const bool reserve_hook_installed) noexcept
+{
+    return helper_spec_valid && reserve_hook_installed;
+}
+ExtendedChartCapability configure_extended_chart_capability(HMODULE exe_module);
 bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error);
 void begin_extended_chart_transaction(
     const ChartAudioExpandTlsSnapshot& transaction,

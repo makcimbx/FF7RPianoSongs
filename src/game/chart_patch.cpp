@@ -937,7 +937,7 @@ bool plan_descriptor_chart_patch(
         generalized_extended = false;
     }
     if (rows.size() > static_cast<size_t>(kMaxPatchedChartRows)
-        && ff7rp::pipeline::experimental_extended_charts_requested()) {
+        && ff7rp::pipeline::extended_chart_input_enabled()) {
         rows.resize(static_cast<size_t>(kMaxPatchedChartRows));
     }
     const NativeEventPlanSummary native_events = summarize_native_events(rows);
@@ -1561,7 +1561,7 @@ ChartDescriptorReadiness descriptor_readiness(FNameCtorFn fname_ctor)
 
 void log_extended_chart_source_boundary(const std::vector<DescriptorChartRow>& rows)
 {
-    if (!ff7rp::pipeline::experimental_extended_charts_requested()
+    if (!ff7rp::pipeline::extended_chart_input_enabled()
         || rows.size() <= ff7rp::pipeline::kMaxChartRows) {
         return;
     }
@@ -1726,7 +1726,7 @@ bool chart_patch_ignore_sound_selftest()
     generalized_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(
         generalized.extended_chart_tail_notes.front()));
     const auto generalized_events = ff7rp::pipeline::derive_chart_event_plan(generalized_rows);
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     generalized.source_row_count = generalized_events.source_row_count;
     generalized.native_prefix_event_count = generalized_events.native_prefix_event_count;
     generalized.native_event_count = generalized_events.native_event_count;
@@ -1742,7 +1742,7 @@ bool chart_patch_ignore_sound_selftest()
         && boundary_plan.arrays
         && std::all_of(boundary_plan.arrays->group_indices.begin(),
             boundary_plan.arrays->group_indices.end(), [](const uint8_t value) { return value == 0; });
-    ff7rp::pipeline::configure_chart_row_limit(false, false, false);
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
     if (!suppression_ok) return fail();
 
     // Generalized cleanup preserves exact compact P only with synchronous

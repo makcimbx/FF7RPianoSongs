@@ -136,21 +136,18 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
     if (!std::isfinite(config.bpm) || config.bpm <= 0.0) {
         return Status::error(StatusCode::InvalidChart, "bpm must be positive before chart compilation");
     }
-    const std::size_t row_limit = input_row_limit == 0 ? chart_input_row_limit() : input_row_limit;
+    const std::size_t row_limit = input_row_limit == 0
+        ? chart_row_policy_snapshot().publication_limit : input_row_limit;
     if (config.notes.size() > row_limit) {
         return Status::error(StatusCode::ChartRowLimitExceeded,
             "complete chart requires " + std::to_string(config.notes.size()) +
             " rows, above the accepted chart input limit of " + std::to_string(row_limit));
     }
     const bool has_diagnostic_tail = config.notes.size() > kMaxChartRows;
-    if (has_diagnostic_tail && (!config.diagnostic_extended_chart_fixture || !out_diagnostic ||
+    if (has_diagnostic_tail && (!out_diagnostic ||
         config.notes.size() > kMaximumExtendedChartRows || row_limit < config.notes.size())) {
         return Status::error(StatusCode::ChartRowLimitExceeded,
-            "extended diagnostic input must contain between 513 and 8192 source rows");
-    }
-    if (config.diagnostic_extended_chart_fixture && !has_diagnostic_tail) {
-        return Status::error(StatusCode::InvalidChart,
-            "diagnostic_extended_chart_fixture requires between 513 and 8192 source rows");
+            "extended chart input requires playable policy and between 513 and 8192 source rows");
     }
 
     CompiledChart chart;

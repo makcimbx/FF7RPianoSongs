@@ -371,7 +371,7 @@ bool log_chart_event_plan(void* wrapper, int32_t expected_event_count,
             tail << index << ':' << item.time << ':' << static_cast<int>(item.state);
             ++tail_events;
         }
-        if (ff7rp::pipeline::experimental_extended_charts_requested()
+        if (ff7rp::pipeline::extended_chart_input_enabled()
             && index >= std::max(0, event_count - kBoundaryEventCount)) {
             boundary << " event=" << std::dec << index << std::hex
                      << " addr=0x" << record
@@ -530,10 +530,10 @@ void __fastcall chart_expand_detour(
         && profile->physical_chart_digest != 0;
     const bool synchronous_extended_identity = exact_extended_playable && authority_exact;
     const bool identity_valid = !diagnostic_profile ||
-        (registry_identity_stable && ff7rp::pipeline::experimental_extended_charts_enabled() &&
+        (registry_identity_stable && ff7rp::pipeline::extended_chart_input_enabled() &&
             profile->diagnostic_policy_generation == ff7rp::pipeline::chart_row_policy_generation() &&
             ((exact_520_diagnostic && capture_identity_valid) || synchronous_extended_identity));
-    if (diagnostic_profile || ff7rp::pipeline::experimental_extended_charts_requested()) {
+    if (diagnostic_profile || ff7rp::pipeline::extended_chart_input_enabled()) {
         const uintptr_t owner_address = reinterpret_cast<uintptr_t>(owner.owner);
         const uintptr_t owner_chart_field = owner_address != 0 &&
             owner_address <= std::numeric_limits<uintptr_t>::max() - kPersistentChartOwnerOffset
@@ -541,8 +541,8 @@ void __fastcall chart_expand_detour(
         std::ostringstream identity;
         identity << "[extended_chart_identity] capture_id=" << capture_id
             << " status=" << (identity_valid && diagnostic_profile ? "proven" : "rejected")
-            << " config_requested=" << ff7rp::pipeline::experimental_extended_charts_requested()
-            << " helpers_verified=" << ff7rp::pipeline::experimental_extended_charts_enabled()
+            << " capability_input=" << ff7rp::pipeline::extended_chart_input_enabled()
+            << " playable_authority=" << ff7rp::pipeline::playable_extended_transport_available()
             << " accepted_input_limit=" << ff7rp::pipeline::chart_input_row_limit()
             << " policy_generation=" << ff7rp::pipeline::chart_row_policy_generation()
             << " descriptor_policy_generation=" << profile->diagnostic_policy_generation

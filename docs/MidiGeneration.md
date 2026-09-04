@@ -45,7 +45,7 @@ materialization. Inferred chords retain their established cluster timing. Failed
 labels are omitted without renumbering, and later labels are still evaluated.
 
 Ordinary or unsupported-policy generation remains bounded by 512 rows. When the
-verified 1.005 extended policy is playable, automatic MIDI may select a complete
+verified exact-build extended policy is playable, automatic MIDI may select a complete
 profile through the existing 8192-row and 8192-native-event limits. It is never
 clipped: an ineligible or oversized profile is omitted fail-closed. This changes
 only offline selection and generated cache identity; runtime chart representation

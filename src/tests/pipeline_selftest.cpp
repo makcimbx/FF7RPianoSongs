@@ -618,8 +618,8 @@ int main()
     }
 
     std::ostringstream fixture_json;
-    fixture_json << "{\"schema\":\"ff7rpianosongs.song.v2\",\"title\":\"Diagnostic 520\","
-                 << "\"bpm\":120,\"difficulty\":2,\"diagnostic_extended_chart_fixture\":true,\"notes\":[";
+    fixture_json << "{\"schema\":\"ff7rpianosongs.song.v2\",\"title\":\"Extended 520\","
+                 << "\"bpm\":120,\"difficulty\":2,\"notes\":[";
     for (std::size_t row = 0; row < 520u; ++row) {
         if (row) fixture_json << ',';
         fixture_json << "{\"beat\":" << row * 0.25
@@ -628,17 +628,23 @@ int main()
     fixture_json << "]}";
     ff7rp::pipeline::SongConfig fixture_config;
     status = ff7rp::pipeline::parse_song_json_string(fixture_json.str(), &fixture_config);
-    if (!status.ok() || !fixture_config.diagnostic_extended_chart_fixture ||
+    if (!status.ok() || fixture_config.diagnostic_extended_chart_fixture ||
         fixture_config.notes.size() != 520u) {
-        return fail("exactly-520 diagnostic fixture did not parse authoritatively");
+        return fail("exactly-520 extended chart did not parse without the legacy flag");
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     ff7rp::pipeline::DiagnosticChartRetention diagnostic;
+    auto native_boundary_config = fixture_config;
+    native_boundary_config.notes.resize(ff7rp::pipeline::kMaxChartRows);
+    status = ff7rp::pipeline::compile_chart(native_boundary_config, &chart, &diagnostic);
+    if (!status.ok() || chart.notes.size() != ff7rp::pipeline::kMaxChartRows || diagnostic.present()) {
+        return fail("exactly-512 authored chart changed under native policy");
+    }
     status = ff7rp::pipeline::compile_chart(fixture_config, &chart, &diagnostic);
-    if (status.ok()) return fail("diagnostic fixture compiled while policy was disabled");
+    if (status.ok()) return fail("extended chart compiled while policy was disabled");
     ff7rp::pipeline::configure_chart_row_limit(true, false);
     status = ff7rp::pipeline::compile_chart(fixture_config, &chart, &diagnostic);
-    if (status.ok()) return fail("diagnostic fixture compiled after helper mismatch");
+    if (status.ok()) return fail("extended chart compiled without playable authority");
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     status = ff7rp::pipeline::compile_chart(fixture_config, &chart, &diagnostic);
     if (!status.ok() || chart.notes.size() != 512u || diagnostic.source_row_count != 520u ||
@@ -646,7 +652,7 @@ int main()
         diagnostic.tail_rows.front().source_row != 512u || diagnostic.tail_rows.back().source_row != 519u ||
         chart.notes.back().beat != fixture_config.notes[511].beat ||
         diagnostic.tail_rows.front().source.beat != fixture_config.notes[512].beat) {
-        return fail("diagnostic compiler did not isolate the exact 512+8 split");
+        return fail("extended compiler did not isolate the exact 512+8 split");
     }
     ff7rp::pipeline::SongConfig reused_256_groups;
     reused_256_groups.schema = "v2";
@@ -712,7 +718,7 @@ int main()
 
     std::ostringstream playable_json;
     playable_json << "{\"schema\":\"ff7rpianosongs.song.v2\",\"title\":\"Playable 513\","
-                  << "\"bpm\":120,\"difficulty\":2,\"diagnostic_extended_chart_fixture\":true,\"notes\":[";
+                  << "\"bpm\":120,\"difficulty\":2,\"notes\":[";
     for (std::size_t row = 0; row < 513u; ++row) {
         if (row) playable_json << ',';
         playable_json << "{\"beat\":" << row * 0.25
@@ -754,7 +760,7 @@ int main()
         || chart.notes.size() != ff7rp::pipeline::kMaxChartRows
         || diagnostic.tail_rows.size() != ff7rp::pipeline::kMaximumExtendedChartTailRows
         || diagnostic.tail_rows.back().source_row + 1u != ff7rp::pipeline::kMaximumExtendedChartRows) {
-        return fail("8192-row diagnostic boundary was not retained exactly");
+        return fail("8192-row extended boundary was not retained exactly");
     }
     ff7rp::pipeline::SongConfig maximum_event_fixture = fixture_config;
     maximum_event_fixture.notes.assign(ff7rp::pipeline::kMaximumNativeChartEvents / 2u,
@@ -811,7 +817,7 @@ int main()
         {static_cast<double>(maximum_fixture.notes.size()), 1.0, "C4", ""});
     if (ff7rp::pipeline::compile_chart(maximum_fixture, &chart, &diagnostic,
             maximum_fixture.notes.size()).ok()) {
-        return fail("8193-row diagnostic boundary did not fail closed");
+        return fail("8193-row extended boundary did not fail closed");
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 
@@ -889,14 +895,14 @@ int main()
         policy_equivalent.identity() != policy_before.identity()) {
         return fail("equivalent chart-policy configuration churned generation");
     }
-    ff7rp::pipeline::configure_chart_row_limit(true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, false);
     const auto policy_changed = ff7rp::pipeline::chart_row_policy_snapshot();
     if (policy_changed.generation == policy_before.generation || !policy_changed.enabled ||
         policy_changed.accepted_input_limit != ff7rp::pipeline::kMaximumExtendedChartRows
         || policy_changed.publication_limit != 512u) {
         return fail("chart-policy snapshot did not publish one coherent configuration");
     }
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     const auto playable_extended = ff7rp::pipeline::chart_row_policy_snapshot();
     if (!playable_extended.playable_extended_available
         || playable_extended.publication_limit != ff7rp::pipeline::kMaximumExtendedChartRows

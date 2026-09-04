@@ -752,10 +752,11 @@ Status load_song_directory(
     advance(SongLoadProgressStage::ValidatingCache);
 
     std::unique_lock<std::mutex> cache_lock(song_cache_mutex(song.directory));
-    const ChartRowPolicySnapshot global_chart_policy = chart_row_policy_snapshot();
-    const ChartRowPolicySnapshot chart_policy = (song.config.diagnostic_extended_chart_fixture
-        || (!song.config.notes_provided && global_chart_policy.playable_extended_available))
-        ? global_chart_policy : ChartRowPolicySnapshot{};
+    ChartRowPolicySnapshot chart_policy = chart_row_policy_snapshot();
+    if (!chart_policy.playable_extended_available) {
+        chart_policy.accepted_input_limit = kMaxChartRows;
+        chart_policy.publication_limit = kMaxChartRows;
+    }
     song.accepted_chart_input_limit = chart_policy.accepted_input_limit;
     song.published_chart_row_limit = chart_policy.publication_limit;
     song.chart_policy_enabled = chart_policy.enabled;
@@ -1048,6 +1049,8 @@ Status load_song_directory(
                 profile.config.notes = parsed_source.authored_profiles[index].notes;
                 profile.config.notes_provided = true;
             }
+            profile.config.diagnostic_extended_chart_fixture =
+                profile.config.notes.size() > kMaxChartRows;
             status = compile_chart(profile.config, &profile.chart, &profile.diagnostic_chart,
                 song.accepted_chart_input_limit);
             if (!status.ok()) {

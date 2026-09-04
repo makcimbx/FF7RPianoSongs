@@ -85,7 +85,7 @@ uint64_t native_mabf_capture_hash(const std::vector<uint8_t>& bytes)
 
 void capture_native_mabf_once(void* music)
 {
-    if (!music || !ff7rp::pipeline::experimental_extended_charts_requested()) return;
+    if (!music || !ff7rp::pipeline::playable_extended_transport_available()) return;
 
     void* sead_header = nullptr;
     uint64_t allocation_tag = 0;

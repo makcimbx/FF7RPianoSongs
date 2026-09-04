@@ -609,8 +609,9 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
         !out.pod(static_cast<std::uint32_t>(song.difficulty_profiles.size()))) return false;
     for (const auto& profile : song.difficulty_profiles) {
         const auto hash = profile_semantic_hash_impl(profile);
-        if (!valid_cached_profile(song.id, song.chart_policy_enabled,
-                song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile) ||
+        const bool playable_extended =
+            song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
+        if (!valid_cached_profile(song.id, playable_extended, playable_extended, profile) ||
             !write_song_config(out, profile.config) || !write_compiled_chart(out, profile.chart) ||
             !write_profile_diagnostics(out, profile.diagnostics) || !write_diagnostic_chart(out, profile.diagnostic_chart) ||
             hash == 0 || !out.pod(hash)) return false;
@@ -665,11 +666,7 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         !std::isfinite(song->loudness_applied_gain_db) || !std::isfinite(song->gain_envelope_max_gain_db) ||
         !std::isfinite(song->gain_envelope_min_gain_db) || !std::isfinite(song->metronome_first_beat_seconds) ||
         !std::isfinite(song->metronome_last_beat_seconds)) return false;
-    const bool legacy_diagnostic_limit =
-        accepted == kLegacyDiagnosticChartInputRows
-        && song->accepted_chart_input_limit == kMaximumExtendedChartRows
-        && identity == kDiagnosticChartRowPolicyIdentity;
-    if (accepted != song->accepted_chart_input_limit && !legacy_diagnostic_limit) return false;
+    if (accepted != song->accepted_chart_input_limit) return false;
     if (!valid_config_and_chart(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
     song->audio.stereo_samples.clear(); song->chart_from_midi = midi != 0;
@@ -692,7 +689,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         if (!read_song_config(in, &profile.config) || !read_compiled_chart(in, &profile.chart) ||
             !read_profile_diagnostics(in, &profile.diagnostics) || !read_diagnostic_chart(in, &profile.diagnostic_chart) ||
             !in.pod(&hash) || hash == 0 || hash != profile_semantic_hash_impl(profile) ||
-            !valid_cached_profile(song->id, song->chart_policy_enabled,
+            !valid_cached_profile(song->id,
+                song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity,
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile)) return false;
         if (!valid_config_and_chart(profile.config, profile.chart)) return false;
     }

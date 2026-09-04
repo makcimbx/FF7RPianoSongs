@@ -67,7 +67,7 @@ Unknown fields are rejected. The root accepts these fields:
 | `gain_envelope` | Optional ordered array described below. |
 | `metronome` | Optional object described below. |
 | `notes` | Optional non-empty explicit chart described below. |
-| `diagnostic_extended_chart_fixture` | Reserved engineering flag for bounded extended-chart evidence. On verified build 1.005 it may activate the restricted 513–8192 path documented in `ChartLimits.md`; it is not general user-song authoring. |
+| `diagnostic_extended_chart_fixture` | Legacy compatibility boolean. It grants no authority and is not required; the pipeline derives internal extended transport state from the complete chart and the proven runtime policy. |
 
 Minimal MIDI-backed example:
 
@@ -117,9 +117,12 @@ Each note permits only `beat`, `duration_beats`, `pitch`, `chord_id`,
 Omitting all three fields preserves the behavior of existing schema-v2 songs.
 Unknown fields and malformed, ambiguous, or unsupported combinations are rejected.
 
-Ordinary user-authored charts are limited to 512 rows. The internal engineering
-flag has a separate fail-closed 8192-row and 8192-native-event contract; it does
-not make extended authoring a public schema feature.
+On a runtime build with proven playable extended capability, an authored chart may
+contain from 513 through 8192 rows while remaining subject to the independent
+8192-native-event ceiling. The pipeline validates the complete chart, retains the
+first 512 descriptor rows plus the complete tail, and never clips. Native-512 or
+unsupported policy rejects a chart above 512 rows. The legacy compatibility flag
+does not change either decision.
 
 ## Explicit Difficulty Profiles
 
@@ -153,8 +156,8 @@ without duplicating its folder or audio. Each profile permits exactly
 - Provide from 1 through 32 profiles.
 - Difficulty labels must be unique, non-negative integers in strictly increasing
   order. Labels may be sparse.
-- Every `notes` array follows the same explicit-note contract and 512-row
-  publishable limit above.
+- Every `notes` array follows the same explicit-note and capability-dependent row
+  limits above.
 - Root `bpm` is required and shared by all profiles. Scoring thresholds, mode
   change combo counts, audio processing, gain, metronome, and MIDI timing policy
   also remain root-owned shared settings; profile objects cannot override them.
@@ -182,7 +185,7 @@ source. Each generated row contains one selected source-backed monotone or one
 inferred chord and always has `group_index = 0`; every row is therefore a required
 action. Difficulty profiles may select different rows and have different physical
 digests. Exact and uniquely verified chord inference remains available, while
-ambiguous harmony is not invented. Under verified 1.005 extended policy a complete
+ambiguous harmony is not invented. Under verified exact-build extended policy a complete
 generated profile may use the existing 8192-row and 8192-event transport; without
 that policy, generation remains bounded to 512 rows and omits rather than clips an
 oversized profile. Explicit authored dual rows and authored groups are unchanged.

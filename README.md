@@ -56,7 +56,6 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.Enabled` | `0` or nonzero | Disables or enables the mod. |
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
-| `Experimental.ExtendedCharts` | `0` or nonzero | Default-off exact-1.005 research path for eligible generalized charts with 513–8192 source rows/events. Noneligible fixtures remain diagnostic or native-prefix-only; this is not general release support. Keep it at `0`. |
 
 To rebuild one song, exit the game and delete only that song's `.cache/` directory. Never distribute or copy `.cache/` data between machines or mod versions.
 
@@ -86,7 +85,7 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 ## Compatibility and Limitations
 
 - Each download supports exactly one cataloged Windows x64 game build. Updating or rolling back the game can require a different download.
-- Playable charts are limited to 512 rows.
+- Ordinary and noneligible charts remain limited to the native 512-row prefix. Reviewed extended transport is attempted automatically only for an exact supported executable build and remains fail-closed unless every build-specific gate and hook succeeds.
 - Replace, remove, or update the ASI only while the game is stopped. Live unload/reload is unsupported.
 - Looped HCA and arbitrary CRI encoder profiles are unsupported.
 - Audio conversion has bounded validation for the supported piano profile, not universal encoder parity.

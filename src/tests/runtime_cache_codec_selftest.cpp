@@ -279,24 +279,11 @@ int main() {
     // built in a private temporary workspace. A test-only wrapper called the
     // parent's internal write_runtime_cache for these exact value constructors, then hashed
     // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
-    if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive") ||
-        !expect_parent_oracle(diagnostic_tail_oracle_song(), 127386u, 0x0fdf7cbfb6f772f2ull, "diagnostic tail")) return 1;
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2760u, 0xd84ffa5ffec85467ull, "comprehensive")) return 1;
     const LoadedSong legacy_diagnostic = diagnostic_tail_oracle_song();
     std::vector<std::uint8_t> legacy_diagnostic_bytes;
-    LoadedSong legacy_diagnostic_destination;
-    legacy_diagnostic_destination.id = legacy_diagnostic.id;
-    legacy_diagnostic_destination.cache_key = legacy_diagnostic.cache_key;
-    legacy_diagnostic_destination.accepted_chart_input_limit = kMaximumExtendedChartRows;
-    legacy_diagnostic_destination.published_chart_row_limit = legacy_diagnostic.published_chart_row_limit;
-    legacy_diagnostic_destination.chart_policy_enabled = legacy_diagnostic.chart_policy_enabled;
-    legacy_diagnostic_destination.chart_policy_generation = legacy_diagnostic.chart_policy_generation;
-    legacy_diagnostic_destination.chart_policy_identity = legacy_diagnostic.chart_policy_identity;
-    legacy_diagnostic_destination.config = legacy_diagnostic.config;
-    if (!expect(encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
-            "legacy diagnostic cache did not encode")
-        || !expect(decode_runtime_cache(
-            legacy_diagnostic_bytes, kMagic, kFormat, &legacy_diagnostic_destination),
-            "legacy diagnostic cache did not survive the bounded-limit compatibility admission")) return 1;
+    if (!expect(!encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
+            "legacy diagnostic-only tail cache retained publication authority")) return 1;
 
     LoadedSong playable_513 = playable_extended_oracle_song(513u);
     std::vector<std::uint8_t> playable_513_bytes;
@@ -347,6 +334,14 @@ int main() {
     if (!expect(!decode_runtime_cache(
             playable_520_bytes, kMagic, kFormat, &old_policy_destination),
             "playable exact-520 cache crossed a diagnostic-only policy identity")) return 1;
+    LoadedSong disabled_policy_destination = playable_520_decoded;
+    disabled_policy_destination.chart_policy_enabled = false;
+    disabled_policy_destination.chart_policy_identity = kDisabledChartRowPolicyIdentity;
+    disabled_policy_destination.accepted_chart_input_limit = kMaxChartRows;
+    disabled_policy_destination.published_chart_row_limit = kMaxChartRows;
+    if (!expect(!decode_runtime_cache(
+            playable_520_bytes, kMagic, kFormat, &disabled_policy_destination),
+            "playable exact-520 cache crossed a native-512 policy identity")) return 1;
     LoadedSong old_exact_policy_destination = playable_520_decoded;
     old_exact_policy_destination.chart_policy_identity =
         "chart_rows=native512+playable513+playable520;extended=verified1005";

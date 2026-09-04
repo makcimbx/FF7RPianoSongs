@@ -862,14 +862,6 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
         config.notes = authored_profiles.front().notes;
         config.notes_provided = true;
     }
-    if (config.diagnostic_extended_chart_fixture &&
-        (!authored_profiles.empty() || !config.notes_provided
-            || config.notes.size() < kMinimumExtendedChartRows
-            || config.notes.size() > kMaximumExtendedChartRows)) {
-        return Status::error(StatusCode::InvalidJson,
-            "diagnostic_extended_chart_fixture requires 513 through 8192 root explicit notes");
-    }
-
     out_source->config = std::move(config);
     out_source->authored_profiles = std::move(authored_profiles);
     return Status::ok_status();

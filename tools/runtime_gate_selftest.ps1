@@ -73,7 +73,7 @@ function New-Fixture([string]$Root) {
     $ini = Join-Path $win64 "FF7RPianoSongs.ini"
     $song = Join-Path $win64 "Music/test-song/song.json"
     $sidecar = Join-Path $win64 "Music/test-song/.cache/song.mabf.bin"
-    Set-Content -LiteralPath $ini -Value "ExtendedCharts=1" -Encoding utf8 -NoNewline
+    Set-Content -LiteralPath $ini -Value "[General]`nEnabled=1" -Encoding utf8 -NoNewline
     Set-Content -LiteralPath $song -Value '{"id":"test-song"}' -Encoding utf8 -NoNewline
     [System.IO.File]::WriteAllBytes($sidecar, [Text.Encoding]::UTF8.GetBytes("sidecar-sentinel"))
     Set-Content -LiteralPath (Join-Path $win64 "FF7RPianoSongs.log") -Value "historical-log" -Encoding utf8 -NoNewline

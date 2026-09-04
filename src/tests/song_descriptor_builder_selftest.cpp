@@ -277,7 +277,7 @@ int main()
         return fail("field-complete descriptor golden mismatch");
     }
 
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     LoadedSong playable = extended_song_fixture(513);
     SongDescriptor playable_descriptor = ff7r::piano::build_song_descriptor(playable, 17);
     if (playable_descriptor.profiles.front().note_count != 513
@@ -380,7 +380,7 @@ int main()
         || rejects_tail_mutation("camera-cued", [](auto& row) {
             row.compiled.camera_switch_timing = 1;
         }) != 0) return 1;
-    ff7rp::pipeline::configure_chart_row_limit(true, true, false);
+    ff7rp::pipeline::configure_chart_row_limit(true, false);
     LoadedSong diagnostic_only = extended_song_fixture(520);
     const auto diagnostic_descriptor = ff7r::piano::build_song_descriptor(diagnostic_only, 17).profiles.front();
     if (diagnostic_descriptor.note_count != 512

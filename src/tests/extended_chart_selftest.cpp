@@ -1,4 +1,5 @@
 #include "game/synthetic_extended_chart_model.h"
+#include "game/extended_chart.h"
 #include "game/extended_chart_runtime_specs.h"
 #include "game/hook_specs.h"
 #include "pipeline/pipeline_limits.h"
@@ -50,24 +51,65 @@ bool test_default_policy()
         || ff7rp::pipeline::chart_input_row_limit() != 512u) {
         return false;
     }
-    ff7rp::pipeline::configure_chart_row_limit(true, false);
-    if (!ff7rp::pipeline::experimental_extended_charts_requested()
-        || ff7rp::pipeline::experimental_extended_charts_enabled()
-        || ff7rp::pipeline::effective_chart_row_limit() != 512u
-        || ff7rp::pipeline::chart_input_row_limit() != 512u) {
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    const std::uint64_t disabled_generation =
+        ff7rp::pipeline::chart_row_policy_generation();
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    if (ff7rp::pipeline::chart_row_policy_generation() != disabled_generation
+        || ff7rp::pipeline::extended_chart_input_enabled()
+        || ff7rp::pipeline::playable_extended_transport_available()) {
         return false;
     }
-    ff7rp::pipeline::configure_chart_row_limit(true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, false);
     const bool enabled = ff7rp::pipeline::effective_chart_row_limit() == 512u
         && ff7rp::pipeline::chart_input_row_limit() == 8192u
         && ff7rp::pipeline::chart_row_policy_identity()
              == "chart_rows=native512+diagnostic1024;extended=verified";
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    if (!ff7rp::pipeline::extended_chart_input_enabled()
+        || ff7rp::pipeline::playable_extended_transport_available()
+        || ff7r::piano::game::extended_chart_capability_ready(false, true)
+        || ff7r::piano::game::extended_chart_capability_ready(true, false)) return false;
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
+    const std::uint64_t playable_generation =
+        ff7rp::pipeline::chart_row_policy_generation();
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (ff7rp::pipeline::effective_chart_row_limit() != 512u
         || ff7rp::pipeline::chart_row_policy_snapshot().publication_limit != 8192u
-        || !ff7rp::pipeline::chart_row_policy_snapshot().playable_extended_available) return false;
+        || !ff7rp::pipeline::chart_row_policy_snapshot().playable_extended_available
+        || ff7rp::pipeline::chart_row_policy_generation() != playable_generation
+        || !ff7r::piano::game::extended_chart_capability_ready(true, true)) return false;
     ff7rp::pipeline::configure_chart_row_limit(false, false);
-    return enabled && !ff7rp::pipeline::experimental_extended_charts_requested();
+    return enabled && !ff7rp::pipeline::extended_chart_input_enabled();
+}
+
+bool test_build_specific_capability_specs()
+{
+    using ff7r::piano::game::find_extended_chart_build_spec;
+    const auto* build_1005 = find_extended_chart_build_spec(
+        "ff7rebirth-steam-win64-6a16ced2");
+    const auto* build_1004 = find_extended_chart_build_spec(
+        "ff7rebirth-steam-win64-68fd6fde");
+    if (!build_1005 || !build_1004
+        || find_extended_chart_build_spec("unknown-build") != nullptr
+        || build_1005 == build_1004) return false;
+    const std::array<std::uint8_t, 5> call_1005{0xe8,0xb1,0xf1,0x01,0x00};
+    const std::array<std::uint8_t, 5> call_1004{0xe8,0xc5,0xe8,0x01,0x00};
+    const std::array<std::uint8_t, 32> fname_1005{
+        0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x56,0xb8,0x40,
+        0x04,0x00,0x00,0xe8,0xa4,0xa3,0x61,0x01,0x48,0x2b,0xe0,0x48,0x8b,0x05,0x1a,0xb0};
+    const std::array<std::uint8_t, 32> fname_1004{
+        0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x56,0xb8,0x40,
+        0x04,0x00,0x00,0xe8,0x80,0xcc,0x82,0x01,0x48,0x2b,0xe0,0x48,0x8b,0x05,0x46,0x75};
+    const std::array<std::uintptr_t, 4> slots_1005{
+        0x02805da4,0x01958660,0x007a5680,0x027fcc44};
+    const std::array<std::uintptr_t, 4> slots_1004{
+        0x020d1d40,0x018d5bd0,0x020b6dc0,0x020b5820};
+    return build_1005->persistent_expand_call == call_1005
+        && build_1004->persistent_expand_call == call_1004
+        && build_1005->fname_signature == fname_1005
+        && build_1004->fname_signature == fname_1004
+        && build_1005->callback_vtable_slots == slots_1005
+        && build_1004->callback_vtable_slots == slots_1004;
 }
 
 bool test_exact_success_and_lifecycle()
@@ -771,8 +813,8 @@ bool test_shipping_specs()
         return false;
     }
     // The remaining canonical specs are research entries. A build that does not catalog one
-    // renders `0x0` and emits no signature line at all, which is what
-    // `configure_extended_chart_experiment` already degrades on. Require that absence to be
+    // renders `0x0` and emits no signature line at all. Capability setup degrades on missing
+    // optional helpers, so require that absence to be
     // consistent on both sides instead of asserting presence unconditionally.
     for (const ExtendedChartCanonicalSpec& canonical : kExtendedChartCanonicalSpecs) {
         const RvaSignatureSpec* spec = find_rva_signature(canonical.signature_id);
@@ -921,6 +963,7 @@ int main()
         bool (*run)();
     } tests[] = {
         {"default_policy", test_default_policy},
+        {"build_specific_capability_specs", test_build_specific_capability_specs},
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
         {"count_driven_capacity_and_bounds", test_count_driven_capacity_and_bounds},
         {"generalized_representative_plan", test_generalized_representative_plan},

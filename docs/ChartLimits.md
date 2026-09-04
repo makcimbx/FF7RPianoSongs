@@ -2,13 +2,13 @@
 
 ## Playable Limit
 
-Ordinary publishable explicit and generated charts contain at most 512 rows. The only exception is the restricted exact-build path below. The pipeline rejects or omits anything else that cannot produce a valid chart within the ordinary boundary.
+On an exact build with the complete validated extended capability, authored and generated charts may contain up to 8192 source rows and 8192 compact native events. Startup attempts that capability automatically; there is no user setting. If any executable, helper, hook, or policy gate is unavailable, the pipeline and runtime remain at the native 512-row boundary and reject or omit larger charts without clipping.
 
-## Diagnostic Input
+## Retained Diagnostic Input
 
-A noneligible exactly-520-row diagnostic fixture remains read-only: it publishes only the native 512-row prefix and retains eight diagnostic rows. An exact-520 fixture receives extended publication authority only when it satisfies the same complete restricted-shape and verified-policy contract as every other count in the 513–8192 range.
+Legacy diagnostic fixtures remain parse-compatible for retained engineering evidence, but their marker grants no input or publication authority. A chart above 512 rows is playable only when it satisfies the same complete shape, event-plan, and verified-policy contract as every other count in the 513–8192 range.
 
-On verified game build 1.005 only, `Experimental.ExtendedCharts=1` may publish one restricted chart with at most 8192 source rows and 8192 compact native events. Rows may contain a monotone, a chord, or both; strength, dot, and camera state remain zero. Automatically generated MIDI rows are ungrouped, while chord IgnoreSound slots and explicitly authored groups use the exact native ownership/linking path described below.
+On exact verified game builds 1.004 and 1.005, startup automatically attempts the reviewed extended transport capability for charts with at most 8192 source rows and 8192 compact native events. Playable authority remains unavailable until every build-specific helper, caller, signature, layout, and callback-vtable check passes and the reserve hook installs successfully. Unknown, mismatched, or partially validated builds remain native-512. Rows may contain a monotone, a chord, or both; strength, dot, and camera state remain zero. Automatically generated MIDI rows are ungrouped, while chord IgnoreSound slots and explicitly authored groups use the exact native ownership/linking path described below.
 
 The runtime derives one canonical immutable plan. `R` is source rows, `P` is compact events from the first 512 rows, `E` is all compact events, and `A` is parentless required actions. Reserve and final native count use `E`; parser return and rollback use `P`; UI and result expectation use `A`. Before reserve mutation it validates `R/P/E/A`, digest, checked ordinals and compact order, and resolves every event and IgnoreSound ID with strict `FNAME_Find`. Raw event bytes through `0x20000` use the recovered `0x1000` allocation quantum; larger requests use `0x10000`. Capacity must exactly match that calculation, cover `E`, and remain at or below 8192; `E=8192` therefore requires capacity 8192 (1,179,648 bytes). After the parser returns with exactly `P`, the runtime reads parser-published FPS and decodes all times before constructing the first tail event.
 
@@ -18,19 +18,19 @@ For an eligible profile, the first 512 source GroupIndex bytes are temporarily s
 
 The pending/active publication token retains only immutable `R/P/E/A`, digest, selection, policy, route, lease, song, lifecycle, activation, and preparation facts. Public note count is `A`, never `E`, and remains on the native fallback until exact playback identity and an immutable successful PlaySetup handoff prove the lifecycle transition. Success and pending may arrive in either order; no live polling or waits are used.
 
-The path is restricted by executable identity, exact helper prologues, per-song policy identity, cache identity, and fail-closed fallback. A playable-extended research-helper mismatch keeps publication at 512; the pre-existing exact diagnostic fixture input may remain accepted when its separate shipping diagnostic helpers verify. Default configuration remains `0`, and build 1.004 omits the required research helpers and fails closed.
+The path is restricted by executable identity, exact helper prologues, per-song policy identity, cache identity, and fail-closed fallback. A playable-helper mismatch keeps both accepted input and publication at 512. Builds 1.004 and 1.005 use separate immutable helper specifications and catalog records; neither may reuse the other's addresses, call bytes, FName signature, or callback-vtable slots.
 
-Existing Development sessions qualify the earlier ungrouped monotone endpoints on build 1.005. They do not qualify the generalized chord, dual-hand, IgnoreSound, or group-link transaction; that shape still requires focused in-game evidence.
+Existing Development sessions provide build-1.005 evidence for the bounded extended transport and generalized transaction. Build 1.004 currently has direct static evidence and offline coverage but still requires a protected human-controlled runtime qualification before a release claim.
 
 ## Authoring Rule
 
-- Keep ordinary explicit `notes` arrays at or below 512 rows.
-- Expect an independently generated MIDI level to be omitted when its valid minimum exceeds 512 rows without verified playable extended policy.
-- Treat only profiles passing the complete restricted 513..8192 eligibility contract as playable extended charts.
-- Do not publish diagnostic-only fixtures as songs.
+- On a supported exact build, keep each explicit root chart or `profiles[].notes` array at or below 8192 rows and its compact native event plan at or below 8192 events.
+- No INI option or diagnostic JSON marker is required to use rows 513..8192.
+- On a build without playable extended authority, expect explicit charts above 512 to be rejected and generated MIDI levels above 512 to be omitted without clipping.
+- Treat only profiles passing the complete 513..8192 eligibility contract as playable extended charts; legacy diagnostic markers do not bypass it.
 
 ## Why The Boundary Remains
 
-Native chart events own subarrays and referenced state, and links point into the stable event allocation. Generalized admission therefore requires the exact 1.005 helper/signature set, canonical compact/link plan, parser GroupIndex suppression, transaction-local ownership journal, and bounded `E<=8192`. Camera/dot/strength state and other builds remain unauthorized.
+Native chart events own subarrays and referenced state, and links point into the stable event allocation. Generalized admission therefore requires the exact build-specific 1.004 or 1.005 helper/signature specification, canonical compact/link plan, parser GroupIndex suppression, transaction-local ownership journal, and bounded `E<=8192`. Camera/dot/strength state and builds without a complete reviewed specification remain unauthorized.
 
 Detailed reverse-engineering, ABI, ownership, synthetic-model, and runtime qualification records are repository-only evidence and are intentionally excluded from the binary package.

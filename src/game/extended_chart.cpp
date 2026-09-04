@@ -31,7 +31,7 @@ namespace {
 
 constexpr std::size_t kEventSize = 0x90;
 constexpr std::size_t kNativeEventCount = ff7rp::pipeline::kMaxChartRows;
-// The experiment never accepts storage beyond the canonical diagnostic-input bound.
+// Extended transport never accepts storage beyond the canonical product bound.
 constexpr int32_t kMaximumEventCapacity =
     static_cast<int32_t>(ff7rp::pipeline::kExperimentalMaxChartRows);
 constexpr std::size_t kHeaderOffset = 0x80;
@@ -178,7 +178,7 @@ thread_local Transaction g_transaction;
 std::atomic_bool g_global_claim{false};
 std::atomic_bool g_admissions{false};
 HMODULE g_module = nullptr;
-bool g_research_valid = false;
+bool g_helper_spec_valid = false;
 RuntimeApi g_api;
 ReserveFn g_original_reserve = nullptr;
 core::RawRvaHook g_reserve_hook;
@@ -676,18 +676,20 @@ bool validate_shipping_helpers(HMODULE exe_module, std::string& mismatch)
 
 bool validate_research_helpers(HMODULE module, std::string& mismatch) {
     const uintptr_t base = reinterpret_cast<uintptr_t>(module);
-    constexpr std::string_view kExactBuild = "ff7rebirth-steam-win64-6a16ced2";
-    constexpr std::array<uint8_t, 5> kExactExpandCall{0xe8, 0xb1, 0xf1, 0x01, 0x00};
-    if (core::generated::kBuildId != kExactBuild
+    const ExtendedChartBuildSpec* build_spec =
+        find_extended_chart_build_spec(core::generated::kBuildId);
+    if (!build_spec
         || !rva::PersistentChartExpandCaller
         || runtime_layouts::PianoScoreWrapper::controller_capture != 0x118
         || runtime_layouts::PianoScoreWrapper::final_group_index != 0xa3
         || runtime_layouts::PianoChartController::chart != 0xf48
         || runtime_layouts::PianoChartController::chart_control_block != 0xf50
         || !core::bytes_equal(reinterpret_cast<const uint8_t*>(
-                base + rva::PersistentChartExpandCaller - kExactExpandCall.size()),
-            std::vector<uint8_t>(kExactExpandCall.begin(), kExactExpandCall.end()))) {
-        mismatch = "persistent_chart_capture_layout_exact_1005";
+                base + rva::PersistentChartExpandCaller
+                    - build_spec->persistent_expand_call.size()),
+            std::vector<uint8_t>(build_spec->persistent_expand_call.begin(),
+                build_spec->persistent_expand_call.end()))) {
+        mismatch = "persistent_chart_capture_layout_exact_build";
         return false;
     }
     constexpr const char* ids[] = {"piano_event_vector_reserve", "piano_event_vector_reserve_call",
@@ -701,20 +703,18 @@ bool validate_research_helpers(HMODULE module, std::string& mismatch) {
             mismatch = id; return false;
         }
     }
-    constexpr uint8_t fname_signature[] = {
-        0x48,0x89,0x5c,0x24,0x10,0x48,0x89,0x6c,0x24,0x18,0x56,0x57,0x41,0x56,0xb8,0x40,
-        0x04,0x00,0x00,0xe8,0xa4,0xa3,0x61,0x01,0x48,0x2b,0xe0,0x48,0x8b,0x05,0x1a,0xb0};
     if (!rva::FNameCtor || !core::bytes_equal(reinterpret_cast<const uint8_t*>(base + rva::FNameCtor),
-        std::vector<uint8_t>(std::begin(fname_signature), std::end(fname_signature)))) {
-        mismatch = "fname_ctor_exact_1005"; return false;
+        std::vector<uint8_t>(build_spec->fname_signature.begin(),
+            build_spec->fname_signature.end()))) {
+        mismatch = "fname_ctor_exact_build"; return false;
     }
     uintptr_t slots[4]{};
     if (!rva::PianoEventCallbackVtable || !core::safe_copy_bytes(
         reinterpret_cast<void*>(base + rva::PianoEventCallbackVtable), slots, sizeof(slots))) {
         mismatch = "piano_event_callback_vtable"; return false;
     }
-    constexpr uintptr_t expected[] = {0x02805da4, 0x01958660, 0x007a5680, 0x027fcc44};
-    for (std::size_t i = 0; i < 4; ++i) if (slots[i] != base + expected[i]) {
+    for (std::size_t i = 0; i < 4; ++i)
+        if (slots[i] != base + build_spec->callback_vtable_slots[i]) {
         mismatch = "piano_event_callback_vtable_slots"; return false;
     }
     return true;
@@ -884,7 +884,7 @@ void extended_chart_activation_terminal(const std::uint64_t activation_generatio
     }
 }
 
-ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, bool requested)
+ExtendedChartCapability configure_extended_chart_capability(HMODULE exe_module)
 {
     invalidate_extended_chart_commit("configuration_change");
     {
@@ -893,25 +893,20 @@ ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, boo
         g_failed_activation_watermark = {};
         g_successful_lifecycle_transition = {};
     }
-    ExtendedChartSupport support;
-    support.requested = requested;
-    if (!requested) {
-        ff7rp::pipeline::configure_chart_row_limit(false, false, false);
-        g_admissions.store(false, std::memory_order_release);
-        core::log(core::LogLevel::Info,
-            "[extended_chart] status=disabled effective_row_limit=512");
-        return support;
-    }
+    ExtendedChartCapability support;
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    g_admissions.store(false, std::memory_order_release);
 
     std::string mismatch;
     support.shipping_helpers_valid = validate_shipping_helpers(exe_module, mismatch);
     std::string research_mismatch;
-    g_research_valid = support.shipping_helpers_valid
+    g_helper_spec_valid = support.shipping_helpers_valid
         && validate_research_helpers(exe_module, research_mismatch);
+    support.helper_spec_valid = g_helper_spec_valid;
     support.diagnostic_input_available = support.shipping_helpers_valid;
-    support.mutation_available = false;
-    ff7rp::pipeline::configure_chart_row_limit(true, support.diagnostic_input_available, false);
-    g_module = g_research_valid ? exe_module : nullptr;
+    support.playable_authority_available = false;
+    ff7rp::pipeline::configure_chart_row_limit(support.diagnostic_input_available, false);
+    g_module = g_helper_spec_valid ? exe_module : nullptr;
     if (g_module) {
         const uintptr_t base = reinterpret_cast<uintptr_t>(g_module);
         g_api = {
@@ -928,14 +923,14 @@ ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, boo
     support.policy_generation = ff7rp::pipeline::chart_row_policy_generation();
 
     std::ostringstream out;
-    out << "[extended_chart] status=diagnostic_only"
+    out << "[extended_chart] capability=validated policy=diagnostic_only"
         << " shipping_helpers_valid=" << support.shipping_helpers_valid
         << " diagnostic_input_available=" << support.diagnostic_input_available
-        << " mutation_available=0 effective_row_limit="
+        << " playable_authority=0 effective_row_limit="
         << ff7rp::pipeline::effective_chart_row_limit()
         << " accepted_input_limit=" << ff7rp::pipeline::chart_input_row_limit()
         << " policy_generation=" << support.policy_generation
-        << " blocker=" << (g_research_valid
+        << " blocker=" << (g_helper_spec_valid
             ? "reserve_hook_not_installed" : "research_helper_or_build_mismatch");
     if (!mismatch.empty()) {
         out << " mismatch=" << mismatch;
@@ -946,7 +941,6 @@ ExtendedChartSupport configure_extended_chart_experiment(HMODULE exe_module, boo
 }
 
 bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error) {
-    if (!ff7rp::pipeline::experimental_extended_charts_requested()) return true;
     if (!g_module || exe_module != g_module) { error = "extended-chart helper verification unavailable"; return true; }
     if (g_original_reserve) { error = "extended-chart reserve hook already retained"; return true; }
     const HookSpec* spec = find_hook_spec("piano_event_vector_reserve");
@@ -956,16 +950,18 @@ bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error)
         // RawRvaHook retains the target/original only when failed-install cleanup could
         // not remove it. Keep forward-only callbacks accounted until shutdown retries.
         if (g_original_reserve) g_reserve_gate.open();
-        ff7rp::pipeline::configure_chart_row_limit(true, true, false);
+        ff7rp::pipeline::configure_chart_row_limit(true, false);
         core::log(core::LogLevel::Error, g_original_reserve
-            ? "[extended_chart] requested=1 verified=1 mutation_available=0 forward_accounting=1 failure=reserve_hook_install_cleanup_retained"
-            : "[extended_chart] requested=1 verified=1 mutation_available=0 forward_accounting=0 failure=reserve_hook_install");
-        return true; // Optional experiment fails closed; base plugin remains functional.
+            ? "[extended_chart] capability=verified playable_authority=0 forward_accounting=1 failure=reserve_hook_install_cleanup_retained"
+            : "[extended_chart] capability=verified playable_authority=0 forward_accounting=0 failure=reserve_hook_install");
+        return true; // Optional capability fails closed; base plugin remains functional.
     }
     g_reserve_gate.open();
     g_admissions.store(true, std::memory_order_release);
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
-    core::log(core::LogLevel::Info, "[extended_chart] requested=1 verified=1 mutation_available=1");
+    ff7rp::pipeline::configure_chart_row_limit(true,
+        extended_chart_capability_ready(g_helper_spec_valid, true));
+    core::log(core::LogLevel::Info,
+        "[extended_chart] capability=verified reserve_hook=installed playable_authority=1");
     return true;
 }
 
@@ -1166,7 +1162,7 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         block_custom_audio_route_for_unresolved_chart_mutation();
         try {
             std::ostringstream out;
-            out << "[extended_chart] mutation_available=1 count_commit=unknown rollback=preserved"
+            out << "[extended_chart] playable_authority=1 count_commit=unknown rollback=preserved"
                 << " custom_route=blocked failure=" << reason
                 << " R=" << tx.source_row_count << " P=" << tx.prefix_event_count
                 << " E=" << tx.native_event_count << " A=" << tx.required_action_count;
@@ -1178,7 +1174,7 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
         const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) {
         try {
             std::ostringstream out;
-            out << "[extended_chart] mutation_available=1 reserve_hit=" << tx.reserve_hit
+            out << "[extended_chart] playable_authority=1 reserve_hit=" << tx.reserve_hit
                 << " substitution=" << (tx.reserve_hit && !tx.reserve_mismatch)
                 << " count_commit=none rollback=none failure=" << reason
                 << " registry_generation=" << tx.registry_generation
@@ -1595,15 +1591,14 @@ void clear_extended_chart_runtime_state() noexcept {
     invalidate_extended_chart_commit("shutdown");
     g_admissions.store(false, std::memory_order_release);
     g_reserve_gate.close();
-    g_original_reserve = nullptr; g_api = {}; g_module = nullptr; g_research_valid = false;
+    g_original_reserve = nullptr; g_api = {}; g_module = nullptr; g_helper_spec_valid = false;
     {
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         g_activation_serial = {};
         g_failed_activation_watermark = {};
         g_successful_lifecycle_transition = {};
     }
-    ff7rp::pipeline::configure_chart_row_limit(
-        ff7rp::pipeline::experimental_extended_charts_requested(), false, false);
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
 }
 
 } // namespace ff7r::piano::game

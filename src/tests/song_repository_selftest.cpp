@@ -52,13 +52,6 @@ int fail(const std::string& message) {
     return 1;
 }
 
-bool has_normalized_native_policy(const ff7rp::pipeline::LoadedSong& song) {
-    return song.accepted_chart_input_limit == ff7rp::pipeline::kMaxChartRows &&
-        song.published_chart_row_limit == ff7rp::pipeline::kMaxChartRows &&
-        !song.chart_policy_enabled && song.chart_policy_generation == 0u &&
-        song.chart_policy_identity == "chart_rows=native512;extended=disabled";
-}
-
 void append_be16(std::vector<unsigned char>* bytes, const std::uint32_t value) {
     bytes->push_back(static_cast<unsigned char>((value >> 8u) & 0xffu));
     bytes->push_back(static_cast<unsigned char>(value & 0xffu));
@@ -290,19 +283,42 @@ bool write_authored_profiles_song_json(const std::filesystem::path& path) {
     return static_cast<bool>(out);
 }
 
-bool write_diagnostic_song_json(const std::filesystem::path& path) {
+bool write_extended_song_json(const std::filesystem::path& path) {
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
     out << "{\n  \"schema\": \"ff7rpianosongs.song.v2\",\n"
-        << "  \"title\": \"Extended Chart Read-Only Diagnostic 520\",\n"
+        << "  \"title\": \"Extended Authored Chart 520\",\n"
         << "  \"bpm\": 120,\n  \"difficulty\": 0,\n"
-        << "  \"loudness_normalization\": false,\n"
-        << "  \"diagnostic_extended_chart_fixture\": true,\n  \"notes\": [\n";
+        << "  \"loudness_normalization\": false,\n  \"notes\": [\n";
     for (std::size_t row = 0; row < 520u; ++row) {
         out << "    { \"beat\": " << row * 0.25
-            << ", \"duration_beats\": 0.125, \"pitch\": \"C4\" }"
+            << ", \"duration_beats\": 0.125";
+        if (row == 513u) {
+            out << ", \"pitch\": \"C4\", \"chord_id\": \"pca_C\"";
+        } else if (row == 514u) {
+            out << ", \"chord_id\": \"pca_C_7\", \"ignore_sound\": [\"As2\"]";
+        } else {
+            out << ", \"pitch\": \"C4\"";
+            if (row >= 510u && row <= 512u) out << ", \"group_index\": 7";
+        }
+        out << " }"
             << (row + 1u == 520u ? "\n" : ",\n");
     }
     out << "  ]\n}\n";
+    return static_cast<bool>(out);
+}
+
+bool write_extended_profiles_song_json(const std::filesystem::path& path) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    out << "{\n  \"schema\": \"ff7rpianosongs.song.v2\",\n"
+        << "  \"title\": \"Extended Authored Profiles\",\n"
+        << "  \"bpm\": 120,\n  \"loudness_normalization\": false,\n"
+        << "  \"profiles\": [{ \"difficulty\": 2, \"notes\": [\n";
+    for (std::size_t row = 0; row < 513u; ++row) {
+        out << "    { \"beat\": " << row * 0.25
+            << ", \"duration_beats\": 0.125, \"pitch\": \"D4\" }"
+            << (row + 1u == 513u ? "\n" : ",\n");
+    }
+    out << "  ] }]\n}\n";
     return static_cast<bool>(out);
 }
 
@@ -1041,12 +1057,11 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
     ff7rp::pipeline::LoadedSong policy_equivalent;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &policy_equivalent);
     ff7rp::pipeline::configure_chart_row_limit(false, false);
-    if (!status.ok() || !policy_equivalent.loaded_from_runtime_cache ||
-        !has_normalized_native_policy(policy_equivalent) ||
-        read_binary(runtime_path) != valid_runtime ||
-        read_binary(generated.cache_sidecar_path) != valid_mabf ||
-        read_text(manifest_path) != full_manifest) {
-        return fail("ordinary native512 cache did not warm-load unchanged under verified ExtendedCharts");
+    if (!status.ok() || policy_equivalent.loaded_from_runtime_cache ||
+        policy_equivalent.chart_policy_identity != ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity ||
+        policy_equivalent.accepted_chart_input_limit != ff7rp::pipeline::kMaximumExtendedChartRows ||
+        policy_equivalent.cache_key == generated.cache_key) {
+        return fail("stale native512 cache was promoted under playable extended policy");
     }
     return 0;
 }
@@ -1055,7 +1070,7 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
     struct PolicyReset {
         ~PolicyReset() { ff7rp::pipeline::configure_chart_row_limit(false, false); }
     } reset;
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
 
     const std::filesystem::path song_directory = root / "PhysicalMidiCacheFixture";
     std::filesystem::create_directories(song_directory);
@@ -1295,8 +1310,8 @@ int test_dense_collision_cache_round_trip(const std::filesystem::path& root) {
 }
 
 int test_normal_chart_cache_policy_normalization(const std::filesystem::path& root) {
-    const auto run_direction = [&](const char* name, const bool generate_extended,
-                                   const bool warm_extended, const bool check_helper_mismatch) {
+    const auto run_direction = [&](const char* name, const bool generate_playable,
+                                   const bool next_playable) {
         const std::filesystem::path song_directory = root / name;
         std::filesystem::create_directories(song_directory);
         if (!write_silent_wav(song_directory / "song.wav", 1.0) ||
@@ -1304,64 +1319,41 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
             return fail(std::string("failed to create normal policy fixture ") + name);
         }
 
-        ff7rp::pipeline::configure_chart_row_limit(generate_extended, generate_extended);
+        ff7rp::pipeline::configure_chart_row_limit(generate_playable, generate_playable);
         ff7rp::pipeline::LoadedSong generated;
         auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &generated);
-        if (!status.ok()) {
+        const std::string generated_identity = generate_playable
+            ? ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity
+            : ff7rp::pipeline::kDisabledChartRowPolicyIdentity;
+        if (!status.ok() || generated.loaded_from_runtime_cache ||
+            generated.chart_policy_identity != generated_identity) {
             ff7rp::pipeline::configure_chart_row_limit(false, false);
-            return fail(std::string("normal policy fixture generation failed: ") + status.message);
+            return fail(std::string("normal policy fixture generation used the wrong global identity: ") + status.message);
         }
-        const std::filesystem::path runtime_path = song_directory / ".cache" / "runtime.bin";
-        const auto runtime = read_binary(runtime_path);
-        const auto mabf = read_binary(generated.cache_sidecar_path);
-        const std::string manifest = read_text(generated.cache_manifest_path);
-        const auto runtime_time = std::filesystem::last_write_time(runtime_path);
-        const auto mabf_time = std::filesystem::last_write_time(generated.cache_sidecar_path);
-        const auto manifest_time = std::filesystem::last_write_time(generated.cache_manifest_path);
-        if (generated.loaded_from_runtime_cache || !has_normalized_native_policy(generated) ||
-            manifest.find("chart_row_policy=chart_rows=native512;extended=disabled") == std::string::npos ||
-            manifest.find("accepted_chart_input_limit=512") == std::string::npos ||
-            manifest.find("chart_policy_enabled=0") == std::string::npos ||
-            manifest.find("chart_policy_generation=0") == std::string::npos) {
+        ff7rp::pipeline::configure_chart_row_limit(next_playable, next_playable);
+        ff7rp::pipeline::LoadedSong rebuilt;
+        status = ff7rp::pipeline::load_song_directory(song_directory.string(), &rebuilt);
+        const std::string rebuilt_identity = next_playable
+            ? ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity
+            : ff7rp::pipeline::kDisabledChartRowPolicyIdentity;
+        if (!status.ok() || rebuilt.loaded_from_runtime_cache ||
+            rebuilt.chart_policy_identity != rebuilt_identity || rebuilt.cache_key == generated.cache_key) {
             ff7rp::pipeline::configure_chart_row_limit(false, false);
-            return fail(std::string("normal policy fixture was not generated with normalized native512 identity: ") + name);
+            return fail(std::string("stale explicit cache crossed a changed global policy identity: ") + name);
         }
-
-        const auto artifacts_unchanged = [&] {
-            return read_binary(runtime_path) == runtime &&
-                read_binary(generated.cache_sidecar_path) == mabf &&
-                read_text(generated.cache_manifest_path) == manifest &&
-                std::filesystem::last_write_time(runtime_path) == runtime_time &&
-                std::filesystem::last_write_time(generated.cache_sidecar_path) == mabf_time &&
-                std::filesystem::last_write_time(generated.cache_manifest_path) == manifest_time;
-        };
-        ff7rp::pipeline::configure_chart_row_limit(warm_extended, warm_extended);
-        ff7rp::pipeline::LoadedSong cached;
-        status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
-        if (!status.ok() || !cached.loaded_from_runtime_cache || !has_normalized_native_policy(cached) ||
-            cached.cache_key != generated.cache_key || !configs_equal(cached.config, generated.config) ||
-            !charts_equal(cached.chart, generated.chart) || !artifacts_unchanged()) {
+        ff7rp::pipeline::LoadedSong warm;
+        status = ff7rp::pipeline::load_song_directory(song_directory.string(), &warm);
+        if (!status.ok() || !warm.loaded_from_runtime_cache || warm.cache_key != rebuilt.cache_key ||
+            !configs_equal(warm.config, rebuilt.config) || !charts_equal(warm.chart, rebuilt.chart)) {
             ff7rp::pipeline::configure_chart_row_limit(false, false);
-            return fail(std::string("normal policy cache changed across equivalent global toggle: ") + name);
-        }
-
-        if (check_helper_mismatch) {
-            ff7rp::pipeline::configure_chart_row_limit(true, false);
-            ff7rp::pipeline::LoadedSong mismatched;
-            status = ff7rp::pipeline::load_song_directory(song_directory.string(), &mismatched);
-            if (!status.ok() || !mismatched.loaded_from_runtime_cache ||
-                !has_normalized_native_policy(mismatched) || mismatched.cache_key != generated.cache_key ||
-                !artifacts_unchanged()) {
-                ff7rp::pipeline::configure_chart_row_limit(false, false);
-                return fail(std::string("normal policy cache changed after helper mismatch: ") + name);
-            }
+            return fail(std::string("rebuilt explicit cache did not warm-load under its global policy: ") + name);
         }
         ff7rp::pipeline::configure_chart_row_limit(false, false);
         return 0;
     };
 
-    if (run_direction("NormalDisabledToExtended", false, true, true) != 0) return 1;
-    return run_direction("NormalExtendedToDisabled", true, false, false);
+    if (run_direction("NormalDisabledToExtended", false, true) != 0) return 1;
+    return run_direction("NormalExtendedToDisabled", true, false);
 }
 
 int test_offline_artifact_goldens(const std::filesystem::path& root) {
@@ -1431,42 +1423,52 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
     const std::filesystem::path song_directory = root / "ExtendedChartDiagnostic520";
     std::filesystem::create_directories(song_directory);
     if (!write_silent_wav(song_directory / "song.wav", 70.0) ||
-        !write_diagnostic_song_json(song_directory / "song.json")) {
-        return fail("failed to create exactly-520 diagnostic fixture");
+        !write_extended_song_json(song_directory / "song.json")) {
+        return fail("failed to create exactly-520 authored extended fixture");
     }
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     ff7rp::pipeline::LoadedSong generated;
     auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &generated);
     if (!status.ok() || generated.loaded_from_runtime_cache || generated.config.notes.size() != 512u ||
         generated.chart.notes.size() != 512u || generated.difficulty_profiles.size() != 1u) {
-        return fail("verified diagnostic generation did not preserve a playable 512-row prefix: " +
+        return fail("playable extended generation did not preserve a 512-row prefix: " +
             status.message + ", cache=" + std::to_string(generated.loaded_from_runtime_cache) +
             ", config=" + std::to_string(generated.config.notes.size()) +
             ", chart=" + std::to_string(generated.chart.notes.size()) +
             ", profiles=" + std::to_string(generated.difficulty_profiles.size()));
     }
     const auto& profile = generated.difficulty_profiles.front();
+    ff7rp::pipeline::ChartEventPlan plan;
     if (profile.config.notes.size() != 512u || profile.chart.notes.size() != 512u ||
+        !profile.config.diagnostic_extended_chart_fixture ||
         profile.diagnostic_chart.source_row_count != 520u ||
         profile.diagnostic_chart.native_prefix_row_count != 512u ||
         profile.diagnostic_chart.tail_rows.size() != 8u ||
         profile.diagnostic_chart.tail_rows.front().source_row != 512u ||
         profile.diagnostic_chart.tail_rows.back().source_row != 519u ||
-        profile.diagnostic_chart.descriptor_hash == 0) {
-        return fail("diagnostic repository profile did not retain an isolated, identified 512+8 split");
+        profile.diagnostic_chart.descriptor_hash == 0 ||
+        !ff7rp::pipeline::derive_profile_event_plan(profile, &plan) ||
+        plan.source_row_count != 520u || plan.native_prefix_event_count != 512u ||
+        plan.native_event_count != 521u || plan.required_action_count != 519u ||
+        plan.physical_digest == 0u || profile.diagnostics.selected_actions != 519u ||
+        profile.diagnostic_chart.tail_rows.front().source.group_index != 7u ||
+        profile.diagnostic_chart.tail_rows[1].source.chord_id != "pca_C" ||
+        profile.diagnostic_chart.tail_rows[2].source.ignore_sound_pitches != std::vector<std::string>{"As2"}) {
+        return fail("authored extended profile did not preserve its complete generalized 512+8 plan");
     }
     const std::string manifest = read_text(generated.cache_manifest_path);
-    if (manifest.find("chart_row_policy=chart_rows=native512+diagnostic1024;extended=verified") == std::string::npos ||
+    if (manifest.find(std::string("chart_row_policy=") +
+            ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity) == std::string::npos ||
         manifest.find("profile_diagnostic_source_rows=520") == std::string::npos ||
         manifest.find("profile_diagnostic_native_prefix_rows=512") == std::string::npos ||
         manifest.find("profile_diagnostic_tail_rows=8") == std::string::npos) {
-        return fail("diagnostic cache manifest omitted row-policy identity");
+        return fail("extended cache manifest omitted playable row-policy identity");
     }
     ff7rp::pipeline::LoadedSong cached;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
     if (!status.ok() || !cached.loaded_from_runtime_cache ||
         cached.difficulty_profiles.front().diagnostic_chart.tail_rows.size() != 8u) {
-        return fail("verified diagnostic cache did not round-trip its isolated tail");
+        return fail("playable extended cache did not round-trip its complete tail");
     }
     const std::filesystem::path runtime_path = song_directory / ".cache" / "runtime.bin";
     const std::vector<std::uint8_t> valid_runtime = read_binary(runtime_path);
@@ -1477,20 +1479,20 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
     const RuntimeSectionOffsets sections = locate_runtime_sections(valid_runtime, metadata_offset + 48u + 119u);
     if (sections.descriptor_hash < 24u || sections.tail_source_beat < 24u ||
         sections.tail_compiled_beat < 24u || sections.profile_semantic_hash < 24u) {
-        return fail("independent diagnostic runtime section locator missed tail fields");
+        return fail("independent extended runtime section locator missed tail fields");
     }
     const auto expect_tail_rebuild = [&](const char* name, auto mutate) {
         auto corrupted = valid_runtime;
         mutate(&corrupted);
         rechecksum_runtime_cache(&corrupted);
-        if (!write_bytes(runtime_path, corrupted)) return fail("failed to write diagnostic corruption");
+        if (!write_bytes(runtime_path, corrupted)) return fail("failed to write extended corruption");
         ff7rp::pipeline::LoadedSong rebuilt;
         const auto rebuilt_status = ff7rp::pipeline::load_song_directory(song_directory.string(), &rebuilt);
         if (!rebuilt_status.ok() || rebuilt.loaded_from_runtime_cache ||
             read_binary(runtime_path) != valid_runtime ||
             read_binary(generated.cache_sidecar_path) != valid_mabf ||
             read_text(generated.cache_manifest_path) != manifest) {
-            return fail(std::string("rechecksummed diagnostic ") + name +
+            return fail(std::string("rechecksummed extended ") + name +
                 " corruption was not rejected and rebuilt");
         }
         return 0;
@@ -1514,24 +1516,24 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
         disabled.chart_policy_identity != "chart_rows=native512;extended=disabled" ||
         read_binary(runtime_path) != valid_runtime || read_binary(generated.cache_sidecar_path) != valid_mabf ||
         read_text(generated.cache_manifest_path) != manifest) {
-        return fail("diagnostic cache loaded or rebuilt while ExtendedCharts was disabled");
+        return fail("playable cache loaded or rebuilt under native-512 policy");
     }
     ff7rp::pipeline::configure_chart_row_limit(true, false);
     ff7rp::pipeline::LoadedSong mismatched;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &mismatched);
     if (status.ok() || mismatched.loaded_from_runtime_cache ||
-        mismatched.accepted_chart_input_limit != 512u || mismatched.chart_policy_enabled ||
-        mismatched.chart_policy_identity != "chart_rows=native512;extended=disabled" ||
+        mismatched.accepted_chart_input_limit != 512u || !mismatched.chart_policy_enabled ||
+        mismatched.chart_policy_identity != ff7rp::pipeline::kDiagnosticChartRowPolicyIdentity ||
         read_binary(runtime_path) != valid_runtime || read_binary(generated.cache_sidecar_path) != valid_mabf ||
         read_text(generated.cache_manifest_path) != manifest) {
-        return fail("diagnostic cache loaded or rebuilt after helper mismatch");
+        return fail("playable cache gained authority from diagnostic-only capability");
     }
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     ff7rp::pipeline::LoadedSong recovered;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &recovered);
     if (!status.ok() || recovered.loaded_from_runtime_cache ||
         recovered.config.notes.size() != 512u || recovered.chart.notes.size() != 512u) {
-        return fail("changed policy generation did not safely rebuild the verified diagnostic cache");
+        return fail("changed policy generation did not safely rebuild the playable extended cache");
     }
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     ff7rp::pipeline::LoadedSong recovered_cached;
@@ -1539,7 +1541,24 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     if (!status.ok() || !recovered_cached.loaded_from_runtime_cache ||
         recovered_cached.config.notes.size() != 512u || recovered_cached.chart.notes.size() != 512u) {
-        return fail("rebuilt diagnostic cache did not warm-load under an equivalent policy");
+        return fail("rebuilt extended cache did not warm-load under an equivalent policy");
+    }
+
+    const std::filesystem::path profiles_directory = root / "ExtendedAuthoredProfiles513";
+    std::filesystem::create_directories(profiles_directory);
+    if (!write_silent_wav(profiles_directory / "song.wav", 1.0) ||
+        !write_extended_profiles_song_json(profiles_directory / "song.json")) {
+        return fail("failed to create authored extended-profiles fixture");
+    }
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
+    ff7rp::pipeline::LoadedSong profiles_song;
+    status = ff7rp::pipeline::load_song_directory(profiles_directory.string(), &profiles_song);
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    if (!status.ok() || profiles_song.difficulty_profiles.size() != 1u ||
+        profiles_song.difficulty_profiles.front().config.notes.size() != 512u ||
+        profiles_song.difficulty_profiles.front().diagnostic_chart.source_row_count != 513u ||
+        profiles_song.difficulty_profiles.front().diagnostic_chart.tail_rows.size() != 1u) {
+        return fail("authored profiles[].notes above 512 did not use complete extended transport");
     }
     return 0;
 }

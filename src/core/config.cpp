@@ -28,8 +28,6 @@ Config load_config(const std::wstring& ini_path)
     Config config;
     config.enabled = GetPrivateProfileIntW(L"General", L"Enabled", 1, ini_path.c_str()) != 0;
     config.rebuild_audio_cache = GetPrivateProfileIntW(L"Advanced", L"RebuildAudioCache", 0, ini_path.c_str()) != 0;
-    config.experimental_extended_charts =
-        GetPrivateProfileIntW(L"Experimental", L"ExtendedCharts", 0, ini_path.c_str()) != 0;
 
     wchar_t level[32]{};
     GetPrivateProfileStringW(L"General", L"LogLevel", L"info", level, static_cast<DWORD>(std::size(level)), ini_path.c_str());

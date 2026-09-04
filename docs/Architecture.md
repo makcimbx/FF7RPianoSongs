@@ -128,6 +128,13 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   explicit dual rows, generated one-event rows, chord/IgnoreSound tails, and
   event-count allocation remains a separate qualification gate; offline authority
   does not authorize mutation on an older runtime.
+- Extended authority is global runtime capability, not an author-controlled mode.
+  On an exact build whose validated helper and reserve hook publish playable
+  capability, authored root charts, authored profiles, and generated MIDI all use
+  the same complete 512-prefix-plus-tail transport through 8192 rows/events.
+  Without that capability, authored charts above 512 reject and generated profiles
+  above 512 omit. The legacy JSON diagnostic flag is accepted only as inert input;
+  actual tail presence determines the internal format-14 transport marker.
 - `ChartEventRow` is the game-neutral compiled-row projection used by the canonical
   `derive_chart_event_plan` engine. The resulting immutable plan contains stable
   monotone-then-chord event entries and ordered root/child links in addition to
@@ -144,7 +151,8 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   consults only that evidence table; it neither reads game memory nor constructs
   native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
-- Diagnostic input acceptance does not imply playable runtime publication.
+- Diagnostic helper availability without playable runtime capability does not
+  authorize extended input, cache reuse, or descriptor publication.
 - Failure never publishes a partial descriptor or partially replaces the active package directory.
 - Release hooks install against an explicit empty custom catalog. Discovery exposes stable non-owning views of each newly contiguous lexical settlement delta only for the synchronous callback lifetime. Startup admits descriptors once and offers every increased fully validated prefix. If the unchanged final prefix follows a recoverable publication rejection, it receives exactly one final publication retry from the retained immutable descriptor/sidecar candidate without source I/O, sidecar reconstruction, or allocation; invalid-only settlement does not republish an already accepted descriptor identity. Each admitted song owns one immutable shared sidecar node linked to the prior prefix, so snapshots are O(1), prior MABF data is never reread or reallocated, and aggregate sidecar preparation is O(N).
 - Progressive composition centralizes the already-enforced piano-list bound of 128 total rows (five vanilla plus at most 123 custom rows). This is an existing runtime safety bound, not a new recovered layout or address claim; exceeding it fails composition while retaining any earlier accepted catalog.

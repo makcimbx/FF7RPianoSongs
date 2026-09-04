@@ -26,13 +26,12 @@ inline constexpr const char* kDiagnosticChartRowPolicyIdentity =
     // though the bounded internal retention ceiling is now 8192 rows.
     "chart_rows=native512+diagnostic1024;extended=verified";
 inline constexpr const char* kPlayableExtendedChartRowPolicyIdentity =
-    "chart_rows=8192;events=8192;groups+dual+chords=verified1005";
+    "chart_rows=8192;events=8192;groups+dual+chords=verified1004+1005";
 inline constexpr const char* kGeneratedMidiGenerationIdentity =
     "midi_generation=independent_ungrouped:v9";
 inline constexpr std::size_t kExperimentalMaxChartRows = kMaximumExtendedChartRows;
 
 struct ChartRowPolicySnapshot {
-    bool requested = false;
     bool enabled = false;
     bool playable_extended_available = false;
     std::size_t accepted_input_limit = kMaxChartRows;
@@ -49,19 +48,18 @@ struct ChartRowPolicySnapshot {
     }
 };
 
-// Bits 0/1 are requested/enabled; the remaining bits are one coherent generation.
+// Bits 0/1 are diagnostic/playable capability; the remaining bits are one coherent generation.
 inline std::atomic_uint64_t g_chart_row_policy_state{0};
 
-inline void configure_chart_row_limit(bool requested, bool diagnostic_input_available,
+inline void configure_chart_row_limit(bool diagnostic_input_available,
     bool playable_extended_available = false)
 {
-    const std::uint64_t flags = (requested ? 1ull : 0ull) |
-        (requested && diagnostic_input_available ? 2ull : 0ull) |
-        (requested && diagnostic_input_available && playable_extended_available ? 4ull : 0ull);
+    const std::uint64_t flags = (diagnostic_input_available ? 1ull : 0ull) |
+        (diagnostic_input_available && playable_extended_available ? 2ull : 0ull);
     std::uint64_t current = g_chart_row_policy_state.load(std::memory_order_acquire);
-    while ((current & 7ull) != flags) {
-        const std::uint64_t generation = (current >> 3u) + 1u;
-        const std::uint64_t desired = (generation << 3u) | flags;
+    while ((current & 3ull) != flags) {
+        const std::uint64_t generation = (current >> 2u) + 1u;
+        const std::uint64_t desired = (generation << 2u) | flags;
         if (g_chart_row_policy_state.compare_exchange_weak(
                 current, desired, std::memory_order_acq_rel, std::memory_order_acquire)) {
             return;
@@ -73,24 +71,23 @@ inline ChartRowPolicySnapshot chart_row_policy_snapshot()
 {
     const std::uint64_t state = g_chart_row_policy_state.load(std::memory_order_acquire);
     ChartRowPolicySnapshot snapshot;
-    snapshot.requested = (state & 1ull) != 0;
-    snapshot.enabled = (state & 2ull) != 0;
-    snapshot.playable_extended_available = (state & 4ull) != 0;
+    snapshot.enabled = (state & 1ull) != 0;
+    snapshot.playable_extended_available = (state & 2ull) != 0;
     snapshot.accepted_input_limit = snapshot.enabled ? kExperimentalMaxChartRows : kMaxChartRows;
     snapshot.publication_limit = snapshot.playable_extended_available
         ? kMaximumExtendedChartRows : kMaxChartRows;
-    snapshot.generation = state >> 3u;
+    snapshot.generation = state >> 2u;
     return snapshot;
 }
 
-inline bool experimental_extended_charts_enabled()
+inline bool extended_chart_input_enabled()
 {
     return chart_row_policy_snapshot().enabled;
 }
 
-inline bool experimental_extended_charts_requested()
+inline bool playable_extended_transport_available()
 {
-    return chart_row_policy_snapshot().requested;
+    return chart_row_policy_snapshot().playable_extended_available;
 }
 
 inline std::size_t effective_chart_row_limit()

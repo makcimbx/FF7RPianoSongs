@@ -770,7 +770,7 @@ int main(int argc, char** argv) {
         return fail("normalized compilation facade diverged from the path facade oracle or mutated normalized input");
     }
 
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
         != "midi_generation=independent_ungrouped:v9") {
         return fail("generated MIDI semantic identity did not invalidate grouped output");
@@ -880,7 +880,7 @@ int main(int argc, char** argv) {
 
     const std::filesystem::path extended_path = write_bytes_fixture("extended-ungrouped.mid",
         verified_chord_runs_midi_bytes(600u, 54));
-    ff7rp::pipeline::configure_chart_row_limit(true, true, true);
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
     const Observation extended = generate(extended_path, no_audio, envelope_config(6));
     const std::filesystem::path pathological_path = write_bytes_fixture("pathological-selector-work.mid",
         verified_chord_runs_midi_bytes(2000u, 54));

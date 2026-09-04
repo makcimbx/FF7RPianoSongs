@@ -116,7 +116,7 @@ DWORD startup_worker_body()
         return 0;
     }
 
-    game::configure_extended_chart_experiment(exe, config.experimental_extended_charts);
+    game::configure_extended_chart_capability(exe);
     game::configure_catalog_readiness_observer(
         {&g_startup_cache_progress, catalog_readiness_changed});
 

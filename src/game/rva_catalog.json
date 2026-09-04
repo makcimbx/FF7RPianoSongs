@@ -2702,7 +2702,10 @@
       "hook_owner": "note_count",
       "consumers": ["src/game/extended_chart.cpp"],
       "hook_spec": { "name": "piano_event_vector_reserve", "order": 38, "required_for_release_startup": false },
-      "builds": { "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x02ad3ef4", "signature": { "bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 20 00 00 00 e8 6d 7c 69 ff 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 reserve helper entry and ABI." }] } }
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x02ad3ef4", "signature": { "bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 20 00 00 00 e8 6d 7c 69 ff 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 reserve helper entry and ABI." }] },
+        "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x02e2af84", "signature": { "bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 20 00 00 00 e8 8d 3f 28 ff", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 reserve helper entry, ABI, and unique signature." }] }
+      }
     },
     {
       "id": "piano_event_vector_reserve_call",
@@ -2716,7 +2719,10 @@
       "hook_owner": null,
       "consumers": ["src/game/extended_chart.cpp"],
       "hook_spec": null,
-      "builds": { "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x039b36b3", "signature": { "bytes": "e8 3c 08 12 ff", "mask": "xxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact parser CALL and return gate for verified 1.005." }] } }
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x039b36b3", "signature": { "bytes": "e8 3c 08 12 ff", "mask": "xxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact parser CALL and return gate for verified 1.005." }] },
+        "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x03c59f0c", "signature": { "bytes": "e8 73 10 1d ff", "mask": "xxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 parser reserve CALL and return gate." }] }
+      }
     },
     {
       "id": "piano_event_callback_build",
@@ -2730,7 +2736,10 @@
       "hook_owner": null,
       "consumers": ["src/game/extended_chart.cpp"],
       "hook_spec": null,
-      "builds": { "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x03982ea0", "signature": { "bytes": "48 c7 01 00 00 00 00 48 8d 05 6a 01 ab 02 48 c7 41 10 00 00 00 00 4c 8d 41 28 48 89 41 20 48 8b", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 inline callback builder entry and ABI." }] } }
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x03982ea0", "signature": { "bytes": "48 c7 01 00 00 00 00 48 8d 05 6a 01 ab 02 48 c7 41 10 00 00 00 00 4c 8d 41 28 48 89 41 20 48 8b", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 inline callback builder entry and ABI." }] },
+        "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x023a4e30", "signature": { "bytes": "33 c0 4c 8d 41 28 48 89 01 48 89 41 10 48 8d 05 6c 29 85 03 48 89 41 20 48 8b 02 49 89 00 48 8d 05 03 30 85 03 48 89 41 20 4d 85 c0 74 0a 48 8d 05 8b 72 00 00 48 89 01 48 8b c1 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 callback builder entry and ABI." }] }
+      }
     },
     {
       "id": "piano_event_result_callback",
@@ -2744,7 +2753,10 @@
       "hook_owner": null,
       "consumers": ["src/game/extended_chart.cpp"],
       "hook_spec": null,
-      "builds": { "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x03991f24", "signature": { "bytes": "b8 28 00 00 00 e8 52 9c 7d fe 48 2b e0 48 8b 12 48 8b 09 48 83 c4 28 e9 2c 6a 01 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 result callback entry." }] } }
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x03991f24", "signature": { "bytes": "b8 28 00 00 00 e8 52 9c 7d fe 48 2b e0 48 8b 12 48 8b 09 48 83 c4 28 e9 2c 6a 01 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 result callback entry." }] },
+        "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x023ac0f0", "signature": { "bytes": "b8 28 00 00 00 e8 36 2e d0 ff 48 2b e0 48 8b 12 48 8b 09 48 83 c4 28 e9 9c 34 8a 01", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 result callback entry." }] }
+      }
     },
     {
       "id": "piano_event_callback_vtable",
@@ -2758,7 +2770,10 @@
       "hook_owner": null,
       "consumers": ["src/game/extended_chart.cpp"],
       "hook_spec": null,
-      "builds": { "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x06433078", "signature": null, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 callback vtable and decoded slot identities; runtime validates all four slots." }] } }
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x06433078", "signature": null, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 callback vtable and decoded slot identities; runtime validates all four slots." }] },
+        "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x05bf7e58", "signature": null, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 callback vtable; runtime validates all four decoded build-specific slots." }] }
+      }
     },
     {
       "id": "piano_score_parser",
@@ -2922,6 +2937,14 @@
             "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
           },
           "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableGeneralizedChartEvidence.md", "detail": "Exact unique 138-byte verified-1.005 helper body and ordered-unique qword insertion ABI." }]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x008e4e48",
+          "signature": {
+            "bytes": "48 89 5c 24 08 48 89 6c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 ce a0 7c 01 48 2b e0 48 8b 01 48 8b f2 48 63 79 08 48 8b d9 48 8d 14 f8 48 3b c2 74 1f 48 8b 0e 48 39 08 74 0b 48 83 c0 08 48 3b c2 75 f2 eb 0c 48 2b 03 48 c1 f8 03 83 f8 ff 75 17 8d 4f 01 89 4b 08 3b 4b 0c 7f 21 48 8b 13 8b c7 48 8b 0e 48 89 0c fa 48 8b 5c 24 30 48 8b 6c 24 38 48 8b 74 24 40 48 83 c4 20 5f c3 8b d7 48 8b cb e8 0c 52 ef ff eb d3",
+            "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          },
+          "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact unique 138-byte verified-1.004 helper body and ordered-unique qword insertion ABI." }]
         }
       }
     },
@@ -2942,6 +2965,11 @@
           "rva": "0x039b3a7f",
           "signature": { "bytes": "e8 20 a0 e4 fc", "mask": "xxxxx" },
           "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableGeneralizedChartEvidence.md", "detail": "Exact parser callsite and return gate for the verified IgnoreSound insertion helper." }]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5a2eb",
+          "signature": { "bytes": "e8 58 ab c8 fc", "mask": "xxxxx" },
+          "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 parser callsite and return gate for IgnoreSound insertion." }]
         }
       }
     },
