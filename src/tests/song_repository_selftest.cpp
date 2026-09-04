@@ -1924,6 +1924,50 @@ int test_adaptive_metronome_modes(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_midi_metronome_offset_source_rule(const std::filesystem::path& root) {
+    const std::filesystem::path directory = root / "MidiMetronomeOffset";
+    std::filesystem::create_directories(directory);
+    MidiTrack events;
+    for (int index = 0; index < 8; ++index) {
+        add_note(&events, 1920 + index * 480, 240, 60 + index, 96);
+    }
+    if (!write_silent_wav(directory / "song.wav", 8.0) ||
+        !write_bytes(directory / "song.mid", build_midi(std::move(events)))) {
+        return fail("failed to write MIDI metronome-offset fixture inputs");
+    }
+    const auto write_config = [&](const bool include_offset) {
+        std::ofstream out(directory / "song.json", std::ios::binary | std::ios::trunc);
+        out << "{\n  \"schema\": \"v2\",\n  \"title\": \"MIDI metronome offset\",\n"
+            << "  \"metronome\": { \"enabled\": false";
+        if (include_offset) out << ", \"beat_zero_offset_seconds\": 0";
+        out << " }\n}\n";
+        return out.good();
+    };
+    if (!write_config(true)) return fail("failed to write explicit-zero MIDI metronome fixture");
+
+    ff7rp::pipeline::SongConfig parsed;
+    auto status = ff7rp::pipeline::load_song_json_file((directory / "song.json").string(), &parsed);
+    if (!status.ok() || parsed.metronome_enabled ||
+        !parsed.metronome_beat_zero_offset_provided || parsed.metronome_beat_zero_offset_seconds != 0.0) {
+        return fail("parser did not preserve explicit zero on a disabled metronome");
+    }
+    ff7rp::pipeline::LoadedSong rejected;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &rejected);
+    if (status.code != ff7rp::pipeline::StatusCode::InvalidJson ||
+        status.message != "metronome.beat_zero_offset_seconds is only valid with explicit JSON notes") {
+        return fail("MIDI source selection did not reject explicit disabled zero offset: " + status.message);
+    }
+
+    if (!write_config(false)) return fail("failed to omit MIDI metronome offset");
+    ff7rp::pipeline::LoadedSong accepted;
+    status = ff7rp::pipeline::load_song_directory(directory.string(), &accepted);
+    if (!status.ok() || !accepted.chart_from_midi || accepted.difficulty_profiles.empty() ||
+        accepted.config.metronome_beat_zero_offset_provided) {
+        return fail("omitting the MIDI beat-zero offset did not restore normal generation: " + status.message);
+    }
+    return 0;
+}
+
 int test_mode_specific_audio_sources(const std::filesystem::path& root) {
     const auto mode_equal = [](const std::vector<std::uint8_t>& mabf,
                                 const std::size_t left, const std::size_t right) {
@@ -2805,6 +2849,7 @@ int main() {
     if (run("normal_policy", [&] { return test_normal_chart_cache_policy_normalization(root.path()); }) != 0) return 1;
     if (run("extended_diagnostic", [&] { return test_extended_chart_diagnostic_cache_isolation(root.path()); }) != 0) return 1;
     if (run("adaptive_metronome", [&] { return test_adaptive_metronome_modes(root.path()); }) != 0) return 1;
+    if (run("midi_metronome_offset", [&] { return test_midi_metronome_offset_source_rule(root.path()); }) != 0) return 1;
     if (run("mode_specific_audio", [&] { return test_mode_specific_audio_sources(root.path()); }) != 0) return 1;
     if (run("gain_envelope_hca", [&] { return test_gain_envelope_cache_and_hca(root.path()); }) != 0) return 1;
     if (run("limiter_manifest", [&] { return test_non_limiting_limiter_manifest_binding(root.path()); }) != 0) return 1;

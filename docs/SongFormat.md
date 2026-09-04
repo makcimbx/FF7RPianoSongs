@@ -24,6 +24,12 @@ the base source. Every supplied override must decode to the same logical frame c
 Each source audio file is limited to 512 MiB; decoded audio must be nonempty, at most 10 minutes,
 and is normalized to 48 kHz stereo. Both `song.mid` and `song.midi` together are rejected.
 
+If `song.json` is absent, loading atomically creates a starter file whose title is the folder name
+and whose metronome is enabled at level `0.12`, then parses that file normally. Creation uses an
+exclusive temporary file and an atomic publish operation, so it never overwrites a file created by
+another writer. An existing `song.json` is authoritative: if it is malformed or unsupported, the
+song rejects and the existing file is not replaced by the starter.
+
 ## Root object
 
 The root is a JSON object with the following complete field set.
@@ -48,8 +54,8 @@ The root is a JSON object with the following complete field set.
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
 | `diagnostic_extended_chart_fixture` | boolean | optional; default `false` | Legacy compatibility input only. It is inert: it neither grants extended authority nor changes validation. |
 
-The parser owns JSON shape, types, local numeric ranges, and closed field sets. Repository/compiler
-validation owns source-mode BPM requirements, metadata ordering, native identities, groups,
+The parser owns JSON shape, types, local numeric ranges, nondecreasing supplied metadata arrays,
+and closed field sets. Repository/compiler validation owns source-mode BPM requirements, native identities, groups,
 IgnoreSound, row/event limits, exact source/compiled plans, and build capability.
 
 For omitted metadata, let `A` be at least 1 and otherwise the profile's required-action count (a
@@ -270,10 +276,10 @@ when row, workload, route, or other validated limits cannot be met. No generated
 | --- | --- | --- | --- |
 | `enabled` | boolean | optional; default `false` | Enables Mode0-only click synthesis. |
 | `level` | number | optional; default `0.12` | Finite `[0,1]`; must be greater than 0 when enabled. |
-| `beat_zero_offset_seconds` | number | optional; default `0` | Finite `[-30,30]`; valid only with explicit JSON notes. Its presence rejects a MIDI-backed song, including an explicit `0`. |
+| `beat_zero_offset_seconds` | number | optional; default `0` | Finite `[-30,30]`; valid only with explicit JSON notes. Its presence rejects a MIDI-backed song, including an explicit `0` and even when `enabled` is `false`. |
 
-MIDI-backed generation rejects any authored `beat_zero_offset_seconds`, including an explicit `0`;
-omit the field so MIDI can use its resolved audio offset and lead-in. Metronome processing is
+MIDI-backed generation rejects any authored `beat_zero_offset_seconds`, including an explicit `0`
+and even when the metronome is disabled; omit the field so MIDI can use its resolved audio offset and lead-in. Metronome processing is
 applied to Mode0 only.
 
 ## Audio, modes, loudness, and gain

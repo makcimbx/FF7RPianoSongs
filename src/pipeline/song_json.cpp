@@ -1,4 +1,5 @@
 #include "song_json.h"
+#include "song_json_fields.h"
 #include "pipeline_limits.h"
 
 #include <algorithm>
@@ -6,10 +7,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
-#include <initializer_list>
 #include <map>
 #include <limits>
 #include <sstream>
+#include <span>
 #include <string_view>
 #include <utility>
 
@@ -361,7 +362,7 @@ const JsonValue* find_member(const JsonValue& object, const char* key) {
 
 Status reject_unknown_members(
     const JsonValue& object,
-    std::initializer_list<std::string_view> allowed,
+    std::span<const std::string_view> allowed,
     std::string_view context);
 
 Status require_string(const JsonValue& object, const char* key, std::string* out) {
@@ -512,9 +513,7 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
         }
 
         Note note;
-        Status status = reject_unknown_members(note_object,
-            {"beat", "duration_beats", "pitch", "chord_id", "group_index", "monotone_variant",
-                "ignore_sound", "monotone_note_value", "chord_note_value"},
+        Status status = reject_unknown_members(note_object, kSongJsonNoteFields,
             "note index " + std::to_string(i));
         if (!status.ok()) return status;
         status = require_number(note_object, "beat", &note.beat);
@@ -592,7 +591,7 @@ Status parse_notes(const JsonValue& root, std::vector<Note>* out, bool* out_prov
 
 Status reject_unknown_members(
     const JsonValue& object,
-    const std::initializer_list<std::string_view> allowed,
+    const std::span<const std::string_view> allowed,
     const std::string_view context) {
     if (object.type != JsonValue::Type::Object) {
         return Status::error(StatusCode::InvalidJson, std::string(context) + " must be an object");
@@ -614,7 +613,7 @@ Status parse_metronome(const JsonValue& root, SongConfig* config) {
         return Status::error(StatusCode::InvalidJson, "field 'metronome' must be an object");
     }
     Status status = reject_unknown_members(
-        *metronome, {"enabled", "level", "beat_zero_offset_seconds"}, "field 'metronome'");
+        *metronome, kSongJsonMetronomeFields, "field 'metronome'");
     if (!status.ok()) return status;
     if (const JsonValue* enabled = find_member(*metronome, "enabled")) {
         if (enabled->type != JsonValue::Type::Bool) {
@@ -665,7 +664,7 @@ Status parse_gain_envelope(const JsonValue& root, SongConfig* config) {
                 "each gain_envelope point must be an object; invalid point index " + std::to_string(index));
         }
         Status status = reject_unknown_members(
-            value, {"time_seconds", "gain_db"}, "gain_envelope point index " + std::to_string(index));
+            value, kSongJsonGainPointFields, "gain_envelope point index " + std::to_string(index));
         if (!status.ok()) return status;
         GainEnvelopePoint point;
         status = require_number(value, "time_seconds", &point.time_seconds);
@@ -687,12 +686,7 @@ Status parse_gain_envelope(const JsonValue& root, SongConfig* config) {
 }
 
 Status validate_schema(const JsonValue& root, SongConfig* out_config) {
-    const Status keys = reject_unknown_members(root,
-        {"schema", "title", "bpm", "difficulty", "score_thresholds", "mode_change_combo_counts",
-            "midi_audio_offset_seconds", "midi_audio_alignment_seconds", "midi_minimum_lead_in_seconds",
-            "loudness_normalization", "loudness_target_lufs", "loudness_peak_ceiling_dbfs",
-            "gain_envelope", "metronome", "notes", "profiles", "diagnostic_extended_chart_fixture"},
-        "song root");
+    const Status keys = reject_unknown_members(root, kSongJsonRootFields, "song root");
     if (!keys.ok()) return keys;
     const JsonValue* schema = find_member(root, "schema");
     if (!schema) {
@@ -705,7 +699,7 @@ Status validate_schema(const JsonValue& root, SongConfig* out_config) {
         out_config->schema = schema->string;
         return Status::ok_status();
     }
-    if (schema->type == JsonValue::Type::Number && std::fabs(schema->number - 2.0) < 0.000001) {
+    if (schema->type == JsonValue::Type::Number && schema->number == 2.0) {
         out_config->schema = "ff7rpianosongs.song.v2";
         return Status::ok_status();
     }
@@ -762,10 +756,16 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
     if (!status.ok()) {
         return status;
     }
+    if (!std::is_sorted(config.score_thresholds.begin(), config.score_thresholds.end())) {
+        return Status::error(StatusCode::InvalidJson, "field 'score_thresholds' must be nondecreasing");
+    }
     config.mode_change_combo_counts_provided = find_member(root, "mode_change_combo_counts") != nullptr;
     status = parse_int_array(root, "mode_change_combo_counts", &config.mode_change_combo_counts);
     if (!status.ok()) {
         return status;
+    }
+    if (!std::is_sorted(config.mode_change_combo_counts.begin(), config.mode_change_combo_counts.end())) {
+        return Status::error(StatusCode::InvalidJson, "field 'mode_change_combo_counts' must be nondecreasing");
     }
     const auto parse_midi_offset = [&root](const char* key, double* out, bool* provided) -> Status {
         if (const JsonValue* value = find_member(root, key)) {
@@ -859,7 +859,7 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
         for (std::size_t index = 0; index < profiles->array.size(); ++index) {
             const JsonValue& profile_object = profiles->array[index];
             status = reject_unknown_members(
-                profile_object, {"difficulty", "notes"}, "profile index " + std::to_string(index));
+                profile_object, kSongJsonProfileFields, "profile index " + std::to_string(index));
             if (!status.ok()) return status;
             AuthoredDifficultyProfile profile;
             status = parse_non_negative_integer(profile_object, "difficulty", &profile.difficulty);

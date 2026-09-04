@@ -47,6 +47,7 @@ std::string expected_monotone(int semitone)
 }
 
 bool replace_once(std::string* text, const std::string& from, const std::string& to);
+bool remove_line_containing(std::string* text, const std::string& marker);
 
 bool test_staged_documentation_failures(std::string* error_message)
 {
@@ -94,7 +95,22 @@ bool test_staged_documentation_failures(std::string* error_message)
         }
         return true;
     };
-    if (!require_semantic_rejection("`midi_audio_alignment_seconds`", "public root field")
+    const auto require_structured_field_rejection = [&](const std::string& field,
+                                                         const char* description) {
+        std::string mutated = song_format;
+        const std::string marker = "| `" + field + "` |";
+        if (!remove_line_containing(&mutated, marker)) {
+            *error_message = std::string("SongFormat negative fixture is missing structured ") + description;
+            return false;
+        }
+        std::string semantic_error;
+        if (ff7rp::tests::verify_song_format_contract_text(mutated, &semantic_error)) {
+            *error_message = std::string("SongFormat semantic audit accepted missing structured ") + description;
+            return false;
+        }
+        return true;
+    };
+    if (!require_structured_field_rejection("midi_audio_alignment_seconds", "public root field row")
         || !require_semantic_rejection("| `dotted_sixteenth` | `(4,1)` |", "note-value enum")
         || !require_semantic_rejection("| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "verified chord row")
         || !require_semantic_rejection("### Mode audio filenames", "required example")) {
@@ -120,7 +136,7 @@ bool test_staged_documentation_failures(std::string* error_message)
     fs::copy_file(source_root / "docs/SongFormat.md", package_root / "docs/SongFormat.md");
 
     std::string incomplete_staged = song_format;
-    if (!replace_once(&incomplete_staged, "| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "")) {
+    if (!remove_line_containing(&incomplete_staged, "| `beat_zero_offset_seconds` |")) {
         *error_message = "staged SongFormat semantic mutation could not be constructed";
         return false;
     }
@@ -144,6 +160,18 @@ bool replace_once(std::string* text, const std::string& from, const std::string&
     const std::size_t position = text->find(from);
     if (position == std::string::npos) return false;
     text->replace(position, from.size(), to);
+    return true;
+}
+
+bool remove_line_containing(std::string* text, const std::string& marker)
+{
+    const std::size_t marker_position = text->find(marker);
+    if (marker_position == std::string::npos) return false;
+    const std::size_t line_break = text->rfind('\n', marker_position);
+    const std::size_t line_begin = line_break == std::string::npos ? 0u : line_break + 1u;
+    const std::size_t line_end_break = text->find('\n', marker_position);
+    const std::size_t line_end = line_end_break == std::string::npos ? text->size() : line_end_break + 1u;
+    text->erase(line_begin, line_end - line_begin);
     return true;
 }
 

@@ -779,6 +779,14 @@ Status load_song_directory(
         }
         song.midi_source_path = path_string(midi_path);
         song.chart_from_midi = true;
+        if (song.config.metronome_beat_zero_offset_provided) {
+            status = Status::error(StatusCode::InvalidJson,
+                "metronome.beat_zero_offset_seconds is only valid with explicit JSON notes");
+            song.status = status;
+            write_last_error(song.directory, status);
+            *out_song = std::move(song);
+            return status;
+        }
     }
 
     std::vector<std::string> cache_files{json_path};

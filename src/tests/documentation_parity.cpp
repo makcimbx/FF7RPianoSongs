@@ -3,6 +3,7 @@
 #include "core/generated/build_identity.generated.h"
 #include "pipeline/native_chord_constituents.h"
 #include "pipeline/note_value.h"
+#include "pipeline/song_json_fields.h"
 
 #include <algorithm>
 #include <array>
@@ -693,23 +694,6 @@ bool validate_ini_documentation(const fs::path& source_root, std::string* error_
 bool verify_song_format_contract_text(
     const std::string_view text, std::string* error_message)
 {
-    constexpr std::array<std::string_view, 19> root_fields{{
-        "schema", "title", "bpm", "difficulty", "score_thresholds",
-        "mode_change_combo_counts", "midi_audio_offset_seconds",
-        "midi_audio_alignment_seconds", "midi_minimum_lead_in_seconds",
-        "loudness_normalization", "loudness_target_lufs",
-        "loudness_peak_ceiling_dbfs", "gain_envelope", "metronome", "notes",
-        "profiles", "diagnostic_extended_chart_fixture", "song.mid", "song.midi",
-    }};
-    constexpr std::array<std::string_view, 9> note_fields{{
-        "beat", "duration_beats", "pitch", "chord_id", "group_index",
-        "monotone_variant", "ignore_sound", "monotone_note_value", "chord_note_value",
-    }};
-    constexpr std::array<std::string_view, 2> profile_fields{{"difficulty", "notes"}};
-    constexpr std::array<std::string_view, 3> metronome_fields{{
-        "enabled", "level", "beat_zero_offset_seconds",
-    }};
-    constexpr std::array<std::string_view, 2> gain_fields{{"time_seconds", "gain_db"}};
     constexpr std::array<std::string_view, 18> required_sections{{
         "# Song Format Reference", "## Folder and source selection", "## Root object",
         "## Explicit notes", "### Pitch spelling", "### Note values",
@@ -719,18 +703,46 @@ bool verify_song_format_contract_text(
         "## Failure behavior", "### Minimal explicit chart", "### Dual row, chord filtering, note values, and grouping",
         "### Explicit difficulty profiles", "### MIDI-backed song",
     }};
-    constexpr std::array<std::string_view, 5> required_example_sections{{
+    constexpr std::array<std::string_view, 8> required_example_sections{{
         "### Metronome and gain envelope", "### Mode audio filenames",
         "unknown fields are rejected", "`song.mode0.*` is rejected",
-        "including an explicit `0`",
+        "including an explicit `0`", "even when the metronome is disabled",
+        "atomically creates a starter file", "existing file is not replaced",
     }};
-    if (!require_documented_tokens(text, root_fields, "root/source field", error_message)
-        || !require_documented_tokens(text, note_fields, "note field", error_message)
-        || !require_documented_tokens(text, profile_fields, "profile field", error_message)
-        || !require_documented_tokens(text, metronome_fields, "metronome field", error_message)
-        || !require_documented_tokens(text, gain_fields, "gain-envelope field", error_message)) {
-        return false;
-    }
+    const auto require_inventory_rows = [&](const std::string_view section_begin,
+                                            const std::string_view section_end,
+                                            const auto& fields,
+                                            const char* object_name) {
+        const std::size_t begin = text.find(section_begin);
+        const std::size_t end = begin == std::string_view::npos ? std::string_view::npos
+            : text.find(section_end, begin + section_begin.size());
+        if (begin == std::string_view::npos || end == std::string_view::npos || end <= begin) {
+            return fail(error_message, "SongFormat cannot locate structured " +
+                std::string(object_name) + " field table");
+        }
+        const std::string_view section = text.substr(begin, end - begin);
+        for (const std::string_view field : fields) {
+            const std::string row = "| `" + std::string(field) + "` |";
+            if (section.find(row) == std::string_view::npos) {
+                return fail(error_message, "SongFormat structured " + std::string(object_name) +
+                    " table is missing field " + std::string(field));
+            }
+        }
+        return true;
+    };
+    if (!require_inventory_rows("## Root object", "## Explicit notes",
+            ff7rp::pipeline::kSongJsonRootFields, "root")
+        || !require_inventory_rows("## Explicit notes", "## Difficulty profiles",
+            ff7rp::pipeline::kSongJsonNoteFields, "note")
+        || !require_inventory_rows("## Difficulty profiles", "## MIDI-backed songs",
+            ff7rp::pipeline::kSongJsonProfileFields, "profile")
+        || !require_inventory_rows("## Metronome", "## Audio, modes, loudness, and gain",
+            ff7rp::pipeline::kSongJsonMetronomeFields, "metronome")
+        || !require_inventory_rows("## Audio, modes, loudness, and gain",
+            "## Extended charts and build policy", ff7rp::pipeline::kSongJsonGainPointFields,
+            "gain-envelope point")) return false;
+    constexpr std::array<std::string_view, 2> source_names{{"song.mid", "song.midi"}};
+    if (!require_documented_tokens(text, source_names, "MIDI source name", error_message)) return false;
     for (const std::string_view section : required_sections) {
         if (text.find(section) == std::string_view::npos) {
             return fail(error_message, "SongFormat is missing required authoring section/example: " +
