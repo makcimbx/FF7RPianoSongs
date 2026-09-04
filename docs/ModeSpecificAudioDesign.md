@@ -50,9 +50,16 @@ the same source audio in all modes.
   emphasizes the shared measured structures near 1–2 kHz, retains approximately
   40 ms central attack/body energy and a bounded decay through the shared
   approximately 160 ms region, and uses slight deterministic stereo decorrelation.
+  A short deterministic cosine release reaches zero at the 180 ms boundary.
   It does not contain captured audio. Downbeats retain the established 1.25 gain
   accent over the same timbre; the references did not establish a separate
   ordinary/downbeat pair.
+- Dense MIDI meters can place beats closer together than the voice duration,
+  including at supported high denominators. Existing 60 Hz scheduling retains
+  every distinct native-frame beat; source beats that land on one native frame
+  coalesce and preserve a downbeat if any coincident beat is a downbeat. Procedural
+  voices may overlap, and the existing downstream loudness or peak limiting stage
+  bounds the completed Mode0 mix.
 - Encode three HCA payloads with equal timing geometry and assemble one MABF.
   Mode payload bytes may differ; equality is not a validity requirement once
   explicit overrides are supported.

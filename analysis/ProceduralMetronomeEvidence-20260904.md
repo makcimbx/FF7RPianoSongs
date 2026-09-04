@@ -29,18 +29,22 @@ family. It does not establish that the files are an ordinary/downbeat pair.
 The deterministic synthesis uses damped analytic resonances at the measured
 shared structures, a short band-limited procedural strike, and a small
 mid/side procedural component. It contains no reference samples. The voice is
-bounded to 180 ms: long enough to retain the measured 99% energy region and
-short enough to leave a gap between beats at the supported 300 BPM maximum.
-The established 1.25 downbeat gain remains; downbeats and ordinary beats use
+bounded to 180 ms with a deterministic 8 ms cosine release that reaches zero
+at the terminal sample. Dense MIDI meters can schedule beats more closely than
+180 ms, so voices may overlap; the existing downstream loudness or peak-limiter
+stage bounds the completed mix. Existing 60 Hz scheduling retains every distinct
+native-frame beat and coalesces only source beats that land on the same native
+frame, preserving a downbeat if any coincident beat is a downbeat. The established
+1.25 downbeat gain remains; downbeats and ordinary beats use
 the same timbre because no separate native pair was established.
 
 Focused 48 kHz output measurements for the retained ordinary voice are:
 
-- spectral centroid approximately 1.601 kHz;
-- 1.75–2.25 kHz sampled power ratio approximately 0.688;
-- below-800-Hz ratio approximately 0.252 and above-4-kHz ratio approximately 0.0073;
-- central 90% mono-energy span approximately 43.4 ms;
-- central 99% mono-energy span approximately 151.5 ms;
+- spectral centroid approximately 1.582 kHz;
+- 1.75–2.25 kHz sampled power ratio approximately 0.679;
+- below-800-Hz ratio approximately 0.261 and above-4-kHz ratio approximately 0.0072;
+- central 90% mono-energy span approximately 44.9 ms;
+- central 99% mono-energy span approximately 149.6 ms;
 - stereo correlation approximately 0.970 and mid-energy ratio approximately 0.985.
 
 These are source-derived guard ranges, not waveform-equivalence claims.

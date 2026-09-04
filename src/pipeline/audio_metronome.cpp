@@ -20,6 +20,7 @@ constexpr std::size_t kMaximumMetronomeBeats = 100000;
 // waveform or sample table.
 constexpr double kClickDurationSeconds = 0.180;
 constexpr double kClickAttackSeconds = 0.00030;
+constexpr double kClickReleaseSeconds = 0.008;
 constexpr double kStereoWidth = 0.12;
 constexpr double kPi = 3.14159265358979323846;
 
@@ -37,7 +38,7 @@ constexpr std::array<Resonance, 7> kWoodblockResonances{{
     {1030.0, 0.17, 0.027, 0.19},
     {500.0, 0.075, 0.050, 0.52},
     {100.0, 0.024, 0.200, 0.83},
-    {50.0, 0.031, 0.450, 1.11},
+    {50.0, 0.033, 0.450, 1.11},
 }};
 
 double deterministic_noise(std::uint32_t* state) {
@@ -253,6 +254,8 @@ Status mix_metronome_clicks(
 
     const std::size_t click_frames = std::max<std::size_t>(1,
         static_cast<std::size_t>(std::ceil(kClickDurationSeconds * audio->sample_rate)));
+    const std::size_t release_frames = std::min(click_frames, std::max<std::size_t>(2,
+        static_cast<std::size_t>(std::ceil(kClickReleaseSeconds * audio->sample_rate))));
     for (const MetronomeBeat& beat : beats) {
         if (beat.frame >= audio->frame_count()) continue;
         const double accent = beat.downbeat ? 1.25 : 1.0;
@@ -289,7 +292,15 @@ Status mix_metronome_clicks(
                 (common_noise_low - common_noise_floor) * std::exp(-seconds / 0.0055);
             stereo_side += richness * 0.24 * (side_noise_low - side_noise_floor) *
                 std::exp(-seconds / 0.0065);
-            const double gain = config.metronome_level * accent * attack;
+            double release = 1.0;
+            const std::size_t release_begin = click_frames - release_frames;
+            if (offset >= release_begin) {
+                const double remaining = release_frames <= 1 ? 0.0 :
+                    static_cast<double>(click_frames - 1 - offset) /
+                        static_cast<double>(release_frames - 1);
+                release = 0.5 - 0.5 * std::cos(kPi * remaining);
+            }
+            const double gain = config.metronome_level * accent * attack * release;
             const double common = gain * (body + common_strike);
             const double side = gain * kStereoWidth * stereo_side;
             const std::size_t sample = (beat.frame + offset) * 2;

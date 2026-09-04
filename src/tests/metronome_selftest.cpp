@@ -45,13 +45,7 @@ void append_variable(std::vector<unsigned char>* bytes, int value) {
     bytes->insert(bytes->end(), encoded.end() - count, encoded.end());
 }
 
-std::vector<unsigned char> build_midi(std::vector<MidiEvent> events) {
-    events.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}}); // 120 BPM
-    events.push_back({0, 1, {0xff, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08}}); // 3/4
-    events.push_back({1440, 0, {0xff, 0x51, 0x03, 0x0f, 0x42, 0x40}}); // 60 BPM
-    events.push_back({1440, 1, {0xff, 0x58, 0x04, 0x02, 0x02, 0x18, 0x08}}); // 2/4
-    events.push_back({2880, 2, {0x90, 60, 100}});
-    events.push_back({3000, 2, {0x80, 60, 0}});
+std::vector<unsigned char> encode_midi(std::vector<MidiEvent> events) {
     std::stable_sort(events.begin(), events.end(), [](const MidiEvent& a, const MidiEvent& b) {
         return a.tick != b.tick ? a.tick < b.tick : a.priority < b.priority;
     });
@@ -72,6 +66,25 @@ std::vector<unsigned char> build_midi(std::vector<MidiEvent> events) {
     append_be32(&file, static_cast<std::uint32_t>(track.size()));
     file.insert(file.end(), track.begin(), track.end());
     return file;
+}
+
+std::vector<unsigned char> build_midi(std::vector<MidiEvent> events) {
+    events.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}}); // 120 BPM
+    events.push_back({0, 1, {0xff, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08}}); // 3/4
+    events.push_back({1440, 0, {0xff, 0x51, 0x03, 0x0f, 0x42, 0x40}}); // 60 BPM
+    events.push_back({1440, 1, {0xff, 0x58, 0x04, 0x02, 0x02, 0x18, 0x08}}); // 2/4
+    events.push_back({2880, 2, {0x90, 60, 100}});
+    events.push_back({3000, 2, {0x80, 60, 0}});
+    return encode_midi(std::move(events));
+}
+
+std::vector<unsigned char> build_dense_meter_midi() {
+    return encode_midi({
+        {0, 0, {0xff, 0x51, 0x03, 0x03, 0x0d, 0x40}}, // 300 quarter-note BPM
+        {0, 1, {0xff, 0x58, 0x04, 0x04, 0x06, 0x18, 0x08}}, // 4/64
+        {0, 2, {0x90, 60, 100}},
+        {960, 2, {0x80, 60, 0}},
+    });
 }
 
 ff7rp::pipeline::WavAudio silent_audio(const std::uint32_t sample_rate, const double seconds) {
@@ -288,6 +301,12 @@ int main() {
             beats[1].frame + voice_frames + first.sample_rate / 100) != 0.0) {
         return fail("procedural guide exceeded its bounded 180 ms voice duration");
     }
+    const std::size_t terminal_frame = beats[1].frame + voice_frames - 1;
+    if (first.stereo_samples[terminal_frame * 2] != 0.0f ||
+        first.stereo_samples[terminal_frame * 2 + 1] != 0.0f ||
+        range_energy(first, terminal_frame - first.sample_rate / 250, terminal_frame) <= 0.0) {
+        return fail("procedural guide did not taper its audible tail smoothly to zero");
+    }
 
     WavAudio weak = silent_audio(48000, 1.0);
     WavAudio clean = weak;
@@ -368,23 +387,51 @@ int main() {
         return fail("sample-rate-independent procedural envelope changed");
     }
 
-    SongConfig high_bpm_config = explicit_config;
-    high_bpm_config.bpm = 300.0;
-    WavAudio high_bpm = silent_audio(48000, 1.0);
-    status = build_metronome_beats({}, false, high_bpm, high_bpm_config, &beats);
-    MetronomeStats high_bpm_stats;
-    status = status.ok() ? mix_metronome_clicks(
-        &high_bpm, high_bpm_config, beats, MetronomeVoice::Strong, &high_bpm_stats) : status;
-    double high_bpm_peak = 0.0;
-    for (const float sample : high_bpm.stereo_samples) {
-        if (!std::isfinite(sample)) return fail("300 BPM synthesis produced a non-finite sample");
-        high_bpm_peak = std::max(high_bpm_peak, std::fabs(static_cast<double>(sample)));
+    const std::filesystem::path dense_midi_path = midi_root.path() / "dense-meter.mid";
+    const std::vector<unsigned char> dense_midi = build_dense_meter_midi();
+    {
+        std::ofstream out(dense_midi_path, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(dense_midi.data()),
+            static_cast<std::streamsize>(dense_midi.size()));
     }
-    if (!status.ok() || high_bpm_stats.beat_count != 5 || high_bpm.frame_count() != 48000 ||
-        high_bpm_peak >= 1.0 || range_energy(high_bpm,
-            static_cast<std::size_t>(0.185 * high_bpm.sample_rate),
-            static_cast<std::size_t>(0.195 * high_bpm.sample_rate)) != 0.0) {
-        return fail("300 BPM procedural voice is not bounded between beats");
+    SongConfig dense_config;
+    dense_config.metronome_enabled = true;
+    dense_config.metronome_level = 1.0;
+    dense_config.midi_audio_offset_provided = true;
+    dense_config.midi_audio_offset_seconds = 0.0;
+    WavAudio dense_first = silent_audio(48000, 0.25);
+    WavAudio dense_second = dense_first;
+    status = build_metronome_beats(dense_midi_path.string(), true, dense_first, dense_config, &beats);
+    if (!status.ok() || beats.size() != 15 || beats[1].frame - beats[0].frame >= voice_frames ||
+        !std::all_of(beats.begin(), beats.end(), [&](const MetronomeBeat& beat) {
+            const std::size_t index = &beat - beats.data();
+            return beat.frame == index * 800 && beat.downbeat == (index % 3 == 0);
+        })) {
+        return fail("300 BPM 4/64 MIDI beat scheduling lost native-frame periodicity or downbeats");
+    }
+    MetronomeStats dense_first_stats;
+    MetronomeStats dense_second_stats;
+    const std::size_t dense_frames = dense_first.frame_count();
+    status = mix_metronome_clicks(
+        &dense_first, dense_config, beats, MetronomeVoice::Strong, &dense_first_stats);
+    status = status.ok() ? mix_metronome_clicks(
+        &dense_second, dense_config, beats, MetronomeVoice::Strong, &dense_second_stats) : status;
+    if (!status.ok() || dense_first.stereo_samples != dense_second.stereo_samples ||
+        dense_first.frame_count() != dense_frames || dense_first_stats.beat_count != beats.size() ||
+        dense_first_stats.downbeat_count != 5) {
+        return fail("dense overlapping MIDI-meter synthesis is not deterministic or frame preserving");
+    }
+    for (const float sample : dense_first.stereo_samples) {
+        if (!std::isfinite(sample)) return fail("dense overlapping MIDI-meter synthesis produced non-finite PCM");
+    }
+    if (measure_sample_peak_dbfs(dense_first) <= 0.0) {
+        return fail("dense overlapping MIDI-meter fixture did not exercise downstream limiting");
+    }
+    bool dense_limiter_engaged = false;
+    status = limit_audio_peak(&dense_first, -1.0, &dense_limiter_engaged);
+    if (!status.ok() || !dense_limiter_engaged || dense_first.frame_count() != dense_frames ||
+        measure_sample_peak_dbfs(dense_first) > -0.999) {
+        return fail("downstream limiting did not bound the dense overlapping MIDI-meter mix");
     }
 
     std::cout << "metronome profile centroid_hz=" << shape.centroid_hz
