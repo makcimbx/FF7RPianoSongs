@@ -280,14 +280,7 @@ when row, workload, route, or other validated limits cannot be met. No generated
 
 MIDI-backed generation rejects any authored `beat_zero_offset_seconds`, including an explicit `0`
 and even when the metronome is disabled; omit the field so MIDI can use its resolved audio offset and lead-in. Metronome processing is
-applied to Mode0 only. The click is a deterministic 180 ms procedural woodblock voice calibrated
-to the shared measured envelope and 1–2 kHz structure of two original reference renders; no
-reference audio is embedded. Ordinary beats and downbeats use the same timbre, with the established
-1.25 gain accent distinguishing downbeats. A slight deterministic stereo width is retained, and a
-short release reaches zero at the 180 ms boundary. Dense MIDI meters may schedule beats less than
-180 ms apart. Existing 60 Hz scheduling retains each distinct native-frame beat; source beats that
-land on one native frame coalesce and preserve a downbeat if any coincident beat is a downbeat.
-Voices may overlap, and downstream loudness or peak limiting bounds the completed Mode0 mix.
+applied to Mode0 only.
 
 ## Audio, modes, loudness, and gain
 

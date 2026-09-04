@@ -45,7 +45,7 @@ Runtime evidence confirmed `resource+0x54` and `resource+0x60` followed `Mode0 -
 
 - The captured Vanilla `bgm_piano_01` container proves all three payloads differ: Mode0 carries the strongest dry woodblock/guide layer, Mode1 carries a weaker guide layer, and Mode2 is clean. Generated songs mirror that three-stage contract with equal logical frame counts.
 - Offline analysis of the decoded, analysis-only payloads found the initial Mode0 impacts at about `0.035`, `0.904`, `1.770`, and `2.639` seconds, with a fitted `0.866717`-second period (`69.227 BPM`). The first Vanilla prompt is `06_56` (`6.933333` seconds), so the guide establishes tempo about eight beats before gameplay begins.
-- Beat-synchronous Mode0-minus-Mode1 excess peaks near `586 Hz`; about `83%` of its energy is below `750 Hz`, `97%` below `4 kHz`, and its 90% temporal-energy span is about `55 ms`. Mode1-minus-Mode2 is much weaker and has the same low resonance. This historical subtraction informed the superseded low-body click. The current procedural voice is instead bounded by `ProceduralMetronomeEvidence-20260904.md`; no captured game audio is copied or packaged.
+- Beat-synchronous Mode0-minus-Mode1 excess peaks near `586 Hz`; about `83%` of its energy is below `750 Hz`, `97%` below `4 kHz`, and its 90% temporal-energy span is about `55 ms`. Mode1-minus-Mode2 is much weaker and has the same low resonance. These measurements inform deterministic low-body/band-limited-noise synthesis; no captured game audio is copied or packaged.
 
 ## Current Generated Contract
 

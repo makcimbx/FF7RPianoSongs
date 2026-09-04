@@ -2,15 +2,11 @@
 
 #include <cstddef>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "song_types.h"
 
 namespace ff7rp::pipeline {
-
-inline constexpr std::string_view kMetronomeSynthesisIdentity =
-    "metronome_synthesis=shared_woodblock_envelope:v3";
 
 struct MetronomeBeat {
     std::size_t frame = 0;

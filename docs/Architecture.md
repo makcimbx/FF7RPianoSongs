@@ -104,10 +104,6 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - Runtime behavior is descriptor-driven; parallel ad-hoc song state is not authoritative.
 - Selected-index detail rendering owns one thread-local descriptor/profile scope around the exact native callback, including explicit profile refresh. Title, duration, note count, and the cataloged menu-detail ScoreInfo caller consume this scope first; playback is consulted only when no menu scope exists. Temporary ScoreInfo rows are retained by the outer scope and released when that callback returns.
 - Cache reuse requires matching source identity, semantic configuration, generated profile data, format metadata, and structural validation.
-- Enabled-metronome cache keys include the procedural synthesis identity
-  `metronome_synthesis=shared_woodblock_envelope:v3`. The identity changes the
-  baked Mode0 artifact boundary without changing JSON, runtime-cache, MABF, or
-  descriptor formats; metronome-disabled cache keys are unaffected.
 - Generic repository discovery retains decoded PCM for callers that request the full
   offline result. Production startup explicitly opts into releasing only the resident
   PCM sample capacity after a song's validated audio artifacts and runtime cache have
