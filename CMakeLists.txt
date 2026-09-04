@@ -207,6 +207,7 @@ set(FF7RP_PIPELINE_SOURCES
     src/pipeline/midi_chart_generator.cpp
     src/pipeline/midi_source_normalizer.cpp
     src/pipeline/native_asset_capabilities.cpp
+    src/pipeline/resolved_song_renderer.cpp
     src/pipeline/runtime_cache_codec.cpp
     src/pipeline/runtime_artifact_validator.cpp
     src/pipeline/song_json.cpp
@@ -480,6 +481,12 @@ ff7rp_apply_cpp_policy(song_repository_selftest)
 target_compile_definitions(song_repository_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_repository_selftest PRIVATE "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(song_repository_selftest PRIVATE ff7rp_pipeline midifile)
+add_executable(resolved_song_renderer_selftest
+    src/tests/resolved_song_renderer_selftest.cpp
+)
+target_include_directories(resolved_song_renderer_selftest PRIVATE "src")
+target_link_libraries(resolved_song_renderer_selftest PRIVATE ff7rp_pipeline)
+ff7rp_apply_cpp_policy(resolved_song_renderer_selftest)
 add_executable(metronome_selftest
     src/tests/metronome_selftest.cpp
 )
@@ -638,6 +645,7 @@ add_test(NAME midi_generator_selftest COMMAND midi_generator_selftest)
 add_test(NAME midi_chart_compilation_selftest COMMAND midi_chart_compilation_selftest)
 add_test(NAME midi_analysis_core_selftest COMMAND midi_analysis_core_selftest)
 add_test(NAME song_repository_selftest COMMAND song_repository_selftest)
+add_test(NAME resolved_song_renderer_selftest COMMAND resolved_song_renderer_selftest)
 
 add_executable(runtime_cache_codec_selftest
     src/tests/runtime_cache_codec_selftest.cpp
@@ -719,6 +727,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     midi_chart_compilation_selftest
     midi_analysis_core_selftest
     song_repository_selftest
+    resolved_song_renderer_selftest
     metronome_selftest
     extended_chart_selftest
     runtime_lifecycle_selftest

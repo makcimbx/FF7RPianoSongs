@@ -141,4 +141,12 @@ ignored sound.
 - Different source MIDI quantization, tempo maps, or note provenance can materially change results.
 - Inspect logs and generated profile diagnostics before changing authoring inputs merely to force a level.
 
+Every successful cold or warm load best-effort refreshes `.cache/resolved-song.json` with the
+visible generated profiles, their actual sparse labels, and every complete row including validated
+extended tails. It is source-compatible convenience output, not cache or gameplay authority. Copy
+its `profiles` into `song.json` to freeze the current generated result as explicit authoring; those
+explicit profiles then take precedence even if `song.mid` remains. Omitted generated labels remain
+absent, and profile-varying derived metadata is recomputed rather than frozen misleadingly at the
+root.
+
 Dated authored-route calibration, fixture metrics, omissions, and performance measurements are repository-only evidence rather than part of this durable contract.

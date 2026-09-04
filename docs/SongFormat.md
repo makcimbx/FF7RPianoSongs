@@ -309,6 +309,28 @@ Build 1.004 has catalog/static/offline compatibility but is **runtime-untested**
 release-facing extended/split-articulation claim. Build 1.005 has bounded evidence described in
 `CurrentStatus.md`; evidence does not transfer between builds or artifacts.
 
+## Resolved song convenience output
+
+After every successful cold or warm load, the pipeline best-effort writes
+`.cache/resolved-song.json`. This deterministic file uses the public
+`ff7rpianosongs.song.v2` schema and contains the final visible rows. A single explicit root chart is
+written as complete root `notes`; authored or MIDI profile sets are written as complete visible
+`profiles`, preserving sparse labels and any rows retained beyond the 512-row descriptor prefix.
+Each present side has an explicit final `monotone_note_value` or `chord_note_value`. Internal IDs,
+diagnostics, source witnesses, camera state, paths, hashes, and cache-policy data are omitted.
+
+The file is convenience output only: it is never discovered as source, never part of a cache key or
+manifest, and never runtime or gameplay authority. Do not hand-edit `.cache` expecting gameplay
+changes. Copy a desired `notes` array or `profiles` array into the real `song.json` instead. Copying
+the complete resolved file is also valid; its explicit notes/profiles then take precedence over a
+remaining `song.mid` or `song.midi`. Generated levels omitted by validation remain absent. Derived
+per-profile score or mode metadata that cannot be represented honestly at the root is omitted and
+is recomputed when the copied explicit profiles load.
+
+Publication is atomic and best-effort. A missing file is recreated on the next successful warm
+load without rebuilding valid authoritative caches. A render or write failure does not reject a
+playable song and cannot replace a prior complete file with partial bytes.
+
 ## Failure behavior
 
 - Invalid JSON, unknown fields, wrong types, out-of-range values, missing source files, ambiguous

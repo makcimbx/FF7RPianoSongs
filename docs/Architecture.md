@@ -104,6 +104,12 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - Runtime behavior is descriptor-driven; parallel ad-hoc song state is not authoritative.
 - Selected-index detail rendering owns one thread-local descriptor/profile scope around the exact native callback, including explicit profile refresh. Title, duration, note count, and the cataloged menu-detail ScoreInfo caller consume this scope first; playback is consulted only when no menu scope exists. Temporary ScoreInfo rows are retained by the outer scope and released when that callback returns.
 - Cache reuse requires matching source identity, semantic configuration, generated profile data, format metadata, and structural validation.
+- After either a successful cold build or accepted warm-cache load, the repository best-effort
+  renders `.cache/resolved-song.json` through a deterministic public-schema projection and publishes
+  it with the atomic artifact writer. This convenience file is excluded from source discovery,
+  cache keys, manifest/runtime-cache validity, descriptors, gameplay publication, and package
+  inventory. Failure is a nonterminal trace event and never invalidates the playable song or
+  replaces a prior complete file with partial bytes.
 - Generic repository discovery retains decoded PCM for callers that request the full
   offline result. Production startup explicitly opts into releasing only the resident
   PCM sample capacity after a song's validated audio artifacts and runtime cache have

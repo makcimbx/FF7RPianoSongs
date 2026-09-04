@@ -113,6 +113,7 @@ bool test_staged_documentation_failures(std::string* error_message)
     if (!require_structured_field_rejection("midi_audio_alignment_seconds", "public root field row")
         || !require_semantic_rejection("| `dotted_sixteenth` | `(4,1)` |", "note-value enum")
         || !require_semantic_rejection("| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "verified chord row")
+        || !require_semantic_rejection("## Resolved song convenience output", "resolved-output contract")
         || !require_semantic_rejection("### Mode audio filenames", "required example")) {
         return false;
     }

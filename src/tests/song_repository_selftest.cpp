@@ -7,6 +7,7 @@
 #include "pipeline/midi_chart_generator.h"
 #include "pipeline/native_asset_capabilities.h"
 #include "pipeline/pipeline_limits.h"
+#include "pipeline/resolved_song_renderer.h"
 #include "pipeline/runtime_cache_codec.h"
 #include "pipeline/song_repository.h"
 #include "pipeline/song_json.h"
@@ -507,6 +508,7 @@ struct RuntimeCursor {
         position += 2u;
         skip_string_vector();
         skip_string_vector();
+        position += 6u;
     }
     void skip_config(RuntimeSectionOffsets* offsets = nullptr) {
         skip_string();
@@ -536,7 +538,7 @@ struct RuntimeCursor {
             skip_string();
             skip_string();
             skip_string();
-            position += 16u;
+            position += 24u;
             skip_string();
             skip_string();
             skip_string();
@@ -575,7 +577,7 @@ struct RuntimeCursor {
             skip_string();
             skip_string();
             skip_string();
-            position += 16u;
+            position += 24u;
             skip_string();
             skip_string();
             skip_string();
@@ -1156,6 +1158,27 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
             })) {
         return fail("generated extended MIDI profile was clipped, grouped, or had inconsistent R/P/E/A");
     }
+    const std::string cold_resolved = read_text(
+        ff7rp::pipeline::resolved_song_json_path(song_directory.string()));
+    ff7rp::pipeline::ParsedSongSource parsed_resolved;
+    if (!ff7rp::pipeline::parse_song_json_string(cold_resolved, &parsed_resolved).ok() ||
+        parsed_resolved.authored_profiles.size() != cold.difficulty_profiles.size()) {
+        return fail("generated MIDI resolved output was absent or not source-compatible");
+    }
+    const auto resolved_extended = std::find_if(parsed_resolved.authored_profiles.begin(),
+        parsed_resolved.authored_profiles.end(), [&](const auto& profile) {
+            return profile.difficulty == extended->config.difficulty;
+        });
+    if (resolved_extended == parsed_resolved.authored_profiles.end() ||
+        resolved_extended->notes.size() != extended_plan.source_row_count ||
+        std::any_of(resolved_extended->notes.begin(), resolved_extended->notes.end(),
+            [](const auto& note) {
+                return note.group_index != 0 ||
+                    (!note.pitch.empty() && !note.monotone_note_value.provided) ||
+                    (!note.chord_id.empty() && !note.chord_note_value.provided);
+            })) {
+        return fail("generated extended MIDI resolved output clipped its tail or introduced groups");
+    }
 
     ff7rp::pipeline::LoadedSong warm;
     std::string warm_trace;
@@ -1166,7 +1189,8 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
         });
     if (!status.ok() || !warm.loaded_from_runtime_cache
         || warm.difficulty_profiles.size() != cold.difficulty_profiles.size()
-        || read_text(warm.cache_manifest_path) != manifest) {
+        || read_text(warm.cache_manifest_path) != manifest
+        || read_text(ff7rp::pipeline::resolved_song_json_path(song_directory.string())) != cold_resolved) {
         return fail("generalized physical MIDI runtime cache did not round-trip: " + warm_trace);
     }
     for (std::size_t index = 0; index < cold.difficulty_profiles.size(); ++index) {
@@ -1576,6 +1600,19 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
         profile.diagnostic_chart.tail_rows[2].source.ignore_sound_pitches != std::vector<std::string>{"As2"}) {
         return fail("authored extended profile did not preserve its complete generalized 512+8 plan");
     }
+    const std::string resolved = read_text(
+        ff7rp::pipeline::resolved_song_json_path(song_directory.string()));
+    ff7rp::pipeline::ParsedSongSource parsed_resolved;
+    if (!ff7rp::pipeline::parse_song_json_string(resolved, &parsed_resolved).ok() ||
+        !parsed_resolved.authored_profiles.empty() || parsed_resolved.config.notes.size() != 520u ||
+        parsed_resolved.config.notes[510].group_index != 7u ||
+        parsed_resolved.config.notes[511].group_index != 7u ||
+        parsed_resolved.config.notes[512].group_index != 7u ||
+        parsed_resolved.config.notes[513].pitch.empty() ||
+        parsed_resolved.config.notes[513].chord_id != "pca_C" ||
+        parsed_resolved.config.notes[514].ignore_sound_pitches != std::vector<std::string>{"As2"}) {
+        return fail("authored extended resolved output clipped or changed generalized row semantics");
+    }
     const std::string manifest = read_text(generated.cache_manifest_path);
     if (manifest.find(std::string("chart_row_policy=") +
             ff7rp::pipeline::kPlayableExtendedChartRowPolicyIdentity) == std::string::npos ||
@@ -1587,7 +1624,8 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
     ff7rp::pipeline::LoadedSong cached;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
     if (!status.ok() || !cached.loaded_from_runtime_cache ||
-        cached.difficulty_profiles.front().diagnostic_chart.tail_rows.size() != 8u) {
+        cached.difficulty_profiles.front().diagnostic_chart.tail_rows.size() != 8u ||
+        read_text(ff7rp::pipeline::resolved_song_json_path(song_directory.string())) != resolved) {
         return fail("playable extended cache did not round-trip its complete tail");
     }
     const std::filesystem::path runtime_path = song_directory / ".cache" / "runtime.bin";
@@ -2304,10 +2342,22 @@ int test_authored_profiles(const std::filesystem::path& root) {
         second.diagnostics.overlap_ratio != 0.75 || second.diagnostics.nested_from_previous) {
         return fail("authored profile metadata or deterministic comparison diagnostics changed");
     }
+    const std::string resolved = read_text(
+        ff7rp::pipeline::resolved_song_json_path(song_directory.string()));
+    ff7rp::pipeline::ParsedSongSource parsed_resolved;
+    if (!ff7rp::pipeline::parse_song_json_string(resolved, &parsed_resolved).ok() ||
+        parsed_resolved.authored_profiles.size() != 2u ||
+        parsed_resolved.authored_profiles[0].difficulty != 0 ||
+        parsed_resolved.authored_profiles[1].difficulty != std::numeric_limits<int>::max() ||
+        parsed_resolved.authored_profiles[0].notes.size() != 4u ||
+        parsed_resolved.authored_profiles[1].notes.size() != 20u) {
+        return fail("authored sparse profile resolved output changed source shape or labels");
+    }
     ff7rp::pipeline::LoadedSong cached;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
     if (!status.ok() || !cached.loaded_from_runtime_cache || cached.difficulty_profiles.size() != 2u ||
-        !configs_equal(cached.config, generated.config) || !charts_equal(cached.chart, generated.chart)) {
+        !configs_equal(cached.config, generated.config) || !charts_equal(cached.chart, generated.chart) ||
+        read_text(ff7rp::pipeline::resolved_song_json_path(song_directory.string())) != resolved) {
         return fail("authored profiles did not survive runtime-cache reuse unchanged");
     }
     for (std::size_t index = 0; index < generated.difficulty_profiles.size(); ++index) {
@@ -2319,6 +2369,88 @@ int test_authored_profiles(const std::filesystem::path& root) {
                 generated.difficulty_profiles[index].diagnostics)) {
             return fail("authored profile cache round trip changed profile semantics");
         }
+    }
+    return 0;
+}
+
+int test_resolved_song_output(const std::filesystem::path& root) {
+    const std::filesystem::path song_directory = root / "ResolvedSongOutput";
+    std::filesystem::create_directories(song_directory);
+    const auto write_source = [&](const std::string& title) {
+        const std::string json =
+            "{\n"
+            "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
+            "  \"title\": \"" + title + "\",\n"
+            "  \"bpm\": 120,\n"
+            "  \"loudness_normalization\": false,\n"
+            "  \"notes\": [\n"
+            "    {\"beat\":0,\"duration_beats\":1,\"pitch\":\"C4\",\"chord_id\":\"pca_C\","
+            "\"group_index\":7,\"monotone_variant\":\"alternate\",\"ignore_sound\":[\"En2\"],"
+            "\"monotone_note_value\":\"whole\",\"chord_note_value\":\"dotted_eighth\"},\n"
+            "    {\"beat\":1,\"duration_beats\":0.5,\"pitch\":\"D4\",\"group_index\":7}\n"
+            "  ]\n"
+            "}\n";
+        return write_bytes(song_directory / "song.json",
+            std::vector<std::uint8_t>(json.begin(), json.end()));
+    };
+    if (!write_silent_wav(song_directory / "song.wav", 3.0) || !write_source("Resolved One")) {
+        return fail("failed to create resolved-song repository fixture");
+    }
+
+    ff7rp::pipeline::LoadedSong cold;
+    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cold);
+    const std::filesystem::path resolved =
+        ff7rp::pipeline::resolved_song_json_path(song_directory.string());
+    const std::string cold_json = read_text(resolved);
+    ff7rp::pipeline::ParsedSongSource parsed;
+    if (!status.ok() || cold.loaded_from_runtime_cache || cold_json.empty() ||
+        !ff7rp::pipeline::parse_song_json_string(cold_json, &parsed).ok() ||
+        !parsed.authored_profiles.empty() || parsed.config.title != "Resolved One" ||
+        parsed.config.notes.size() != 2u || parsed.config.notes[0].group_index != 7u ||
+        parsed.config.notes[0].chord_id != "pca_C" ||
+        parsed.config.notes[0].ignore_sound_pitches != std::vector<std::string>{"En2"} ||
+        parsed.config.notes[0].monotone_note_value !=
+            ff7rp::pipeline::NoteValueOverride{{0, 0}, true} ||
+        parsed.config.notes[0].chord_note_value !=
+            ff7rp::pipeline::NoteValueOverride{{3, 1}, true}) {
+        return fail("cold resolved-song output was absent or not source-compatible");
+    }
+    const std::uint64_t cold_key = cold.cache_key;
+
+    std::filesystem::remove(resolved);
+    ff7rp::pipeline::LoadedSong regenerated;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &regenerated);
+    if (!status.ok() || !regenerated.loaded_from_runtime_cache || regenerated.cache_key != cold_key ||
+        read_text(resolved) != cold_json) {
+        return fail("warm cache did not recreate missing deterministic resolved-song output");
+    }
+
+    const std::filesystem::path obstruction = resolved.string() + ".tmp";
+    std::filesystem::create_directory(obstruction);
+    std::string trace;
+    ff7rp::pipeline::LoadedSong obstructed;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &obstructed,
+        [&](const char* stage) {
+            if (!trace.empty()) trace += ',';
+            trace += stage;
+        });
+    if (!status.ok() || !obstructed.loaded_from_runtime_cache ||
+        trace.find("resolved_song_write_failed") == std::string::npos ||
+        read_text(resolved) != cold_json ||
+        std::filesystem::exists(ff7rp::pipeline::cache_last_error_path(song_directory.string()))) {
+        return fail("resolved-song write obstruction rejected the song or damaged prior output");
+    }
+    std::filesystem::remove_all(obstruction);
+
+    if (!write_source("Resolved Two")) return fail("failed to update resolved-song source fixture");
+    ff7rp::pipeline::LoadedSong changed;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &changed);
+    const std::string changed_json = read_text(resolved);
+    if (!status.ok() || changed.loaded_from_runtime_cache || changed.cache_key == cold_key ||
+        changed_json == cold_json ||
+        !ff7rp::pipeline::parse_song_json_string(changed_json, &parsed).ok() ||
+        parsed.config.title != "Resolved Two") {
+        return fail("source change did not atomically refresh stale resolved-song output");
     }
     return 0;
 }
@@ -2842,6 +2974,7 @@ int main() {
     if (run("bounded_discovery", [&] { return test_bounded_discovery_order_and_cache_race(root.path()); }) != 0) return 1;
     if (run("profile_comparison", test_dual_action_profile_comparison) != 0) return 1;
     if (run("authored_profiles", [&] { return test_authored_profiles(root.path()); }) != 0) return 1;
+    if (run("resolved_song", [&] { return test_resolved_song_output(root.path()); }) != 0) return 1;
     if (run("growth_cache_manifest", [&] { return test_growth_cache_and_manifest(root.path()); }) != 0) return 1;
     if (run("physical_midi_cache", [&] { return test_physical_midi_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("dense_collision_cache", [&] { return test_dense_collision_cache_round_trip(root.path()); }) != 0) return 1;

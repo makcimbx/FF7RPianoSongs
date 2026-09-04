@@ -58,7 +58,10 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
 
-To rebuild one song, exit the game and delete only that song's `.cache/` directory. Never distribute or copy `.cache/` data between machines or mod versions.
+To rebuild one song, exit the game and delete only that song's `.cache/` directory. Never distribute
+or copy `.cache/` data between machines or mod versions. A successful load also writes the
+non-authoritative `.cache/resolved-song.json`; copy its `notes` or `profiles` into the real
+`song.json` if you want to keep that resolved chart, rather than editing `.cache`.
 
 ## Update, Roll Back, or Remove
 

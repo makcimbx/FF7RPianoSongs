@@ -38,6 +38,7 @@
 #include "midi_source_normalizer.h"
 #include "native_asset_capabilities.h"
 #include "pipeline_limits.h"
+#include "resolved_song_renderer.h"
 #include "runtime_cache_codec.h"
 #include "runtime_artifact_validator.h"
 #include "song_json.h"
@@ -84,6 +85,19 @@ bool read_runtime_cache(LoadedSong* song) {
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
     if (!in.read(reinterpret_cast<char*>(bytes.data()), size)) return false;
     return decode_runtime_cache(bytes, kRuntimeCacheMagic, kRuntimeCacheFormat, song);
+}
+
+void publish_resolved_song_best_effort(
+    const LoadedSong& song, const bool source_declared_profiles, const SongLoadTrace& trace) {
+    std::string rendered;
+    const Status render_status = render_resolved_song_json(song, source_declared_profiles, &rendered);
+    if (!render_status.ok()) {
+        if (trace) trace("resolved_song_render_failed");
+        return;
+    }
+    const std::vector<std::uint8_t> bytes(rendered.begin(), rendered.end());
+    const Status write_status = write_binary_file(resolved_song_json_path(song.directory), bytes);
+    if (trace) trace(write_status.ok() ? "resolved_song_write_ready" : "resolved_song_write_failed");
 }
 
 int round_to_hundred(const int value) {
@@ -838,6 +852,8 @@ Status load_song_directory(
     }
     if (runtime_artifacts_valid) {
         cached_song.loaded_from_runtime_cache = true;
+        publish_resolved_song_best_effort(
+            cached_song, !parsed_source.authored_profiles.empty(), trace);
         clear_last_error(cached_song.directory);
         *out_song = std::move(cached_song);
         return Status::ok_status();
@@ -1240,6 +1256,7 @@ Status load_song_directory(
         return out_song->status;
     }
     report("runtime_cache_write_ready");
+    publish_resolved_song_best_effort(song, !parsed_source.authored_profiles.empty(), trace);
     clear_last_error(song.directory);
     *out_song = std::move(song);
     return Status::ok_status();
