@@ -352,6 +352,13 @@ int main()
     if (!config.bpm_provided || !config.score_thresholds_provided || !config.mode_change_combo_counts_provided) {
         return fail("explicit gameplay metadata was not marked as provided");
     }
+    ff7rp::pipeline::SongConfig duplicate_metadata_config;
+    status = ff7rp::pipeline::parse_song_json_string(
+        R"json({"schema":2,"title":"duplicate boundaries","score_thresholds":[0,0,100],"mode_change_combo_counts":[4,4]})json",
+        &duplicate_metadata_config);
+    if (!status.ok()) {
+        return fail("nondecreasing metadata with duplicate values was rejected: " + status.message);
+    }
     const char* profiles_json = R"json({
         "schema": "ff7rpianosongs.song.v2",
         "title": "Authored Profiles",
@@ -408,6 +415,10 @@ int main()
     }
     for (const char* invalid_json : {
             R"json({"schema":"v2","title":"one","title":"two"})json",
+            R"json({"schema":2.0000001,"title":"bad"})json",
+            R"json({"schema":1.9999999,"title":"bad"})json",
+            R"json({"schema":"v2","title":"bad","score_thresholds":[0,200,100]})json",
+            R"json({"schema":"v2","title":"bad","mode_change_combo_counts":[8,4]})json",
             R"json({"schema":"v2","title":"bad","difficulty":2147483648})json",
             R"json({"schema":"v2","title":"bad","bpm":01})json",
             R"json({"schema":"v2","title":"bad","bpm":1.})json",

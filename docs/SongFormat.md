@@ -10,7 +10,7 @@ without clipping or partial publication. Check `FF7RPianoSongs.log` for the reas
 
 ```text
 Music/My Song/
-  song.json                         required
+  song.json                         auto-created when absent; required afterward
   song.wav | song.mp3 | song.flac   exactly one required base/Mode0 source
   song.mode1.wav|mp3|flac           optional Mode1 override
   song.mode2.wav|mp3|flac           optional Mode2 override
