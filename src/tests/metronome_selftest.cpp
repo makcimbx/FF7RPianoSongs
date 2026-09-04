@@ -105,7 +105,8 @@ double range_energy(const ff7rp::pipeline::WavAudio& audio, const std::size_t be
 
 struct SpectralShape {
     double centroid_hz = 0.0;
-    double below_1000_ratio = 0.0;
+    double woodblock_band_ratio = 0.0;
+    double below_800_ratio = 0.0;
     double above_4000_ratio = 0.0;
 };
 
@@ -113,7 +114,8 @@ SpectralShape measure_spectral_shape(const ff7rp::pipeline::WavAudio& audio,
     const std::size_t frame, const std::size_t sample_count) {
     double total = 0.0;
     double weighted = 0.0;
-    double below_1000 = 0.0;
+    double woodblock_band = 0.0;
+    double below_800 = 0.0;
     double above_4000 = 0.0;
     for (double frequency = 50.0; frequency <= 12000.0; frequency += 50.0) {
         double real = 0.0;
@@ -121,23 +123,77 @@ SpectralShape measure_spectral_shape(const ff7rp::pipeline::WavAudio& audio,
         for (std::size_t offset = 0; offset < sample_count; ++offset) {
             const double phase = 2.0 * 3.14159265358979323846 * frequency *
                 static_cast<double>(offset) / static_cast<double>(audio.sample_rate);
-            const double sample = audio.stereo_samples[(frame + offset) * 2];
+            const double sample = 0.5 * (audio.stereo_samples[(frame + offset) * 2] +
+                audio.stereo_samples[(frame + offset) * 2 + 1]);
             real += sample * std::cos(phase);
             imaginary -= sample * std::sin(phase);
         }
         const double power = real * real + imaginary * imaginary;
         total += power;
         weighted += power * frequency;
-        if (frequency < 1000.0) below_1000 += power;
+        if (frequency >= 1750.0 && frequency <= 2250.0) woodblock_band += power;
+        if (frequency < 800.0) below_800 += power;
         if (frequency >= 4000.0) above_4000 += power;
     }
-    return {weighted / total, below_1000 / total, above_4000 / total};
+    return {weighted / total, woodblock_band / total, below_800 / total, above_4000 / total};
+}
+
+double central_mono_energy_span_seconds(const ff7rp::pipeline::WavAudio& audio,
+    const std::size_t frame, const std::size_t sample_count, const double retained_fraction) {
+    std::vector<double> energy(sample_count, 0.0);
+    double total = 0.0;
+    for (std::size_t offset = 0; offset < sample_count; ++offset) {
+        const double mono = 0.5 * (audio.stereo_samples[(frame + offset) * 2] +
+            audio.stereo_samples[(frame + offset) * 2 + 1]);
+        energy[offset] = mono * mono;
+        total += energy[offset];
+    }
+    const double excluded = 0.5 * (1.0 - retained_fraction) * total;
+    double cumulative = 0.0;
+    std::size_t begin = 0;
+    while (begin + 1 < sample_count && cumulative + energy[begin] < excluded) {
+        cumulative += energy[begin++];
+    }
+    cumulative = 0.0;
+    std::size_t end = sample_count - 1;
+    while (end > begin && cumulative + energy[end] < excluded) {
+        cumulative += energy[end--];
+    }
+    return static_cast<double>(end - begin + 1) / static_cast<double>(audio.sample_rate);
+}
+
+struct StereoShape {
+    double correlation = 0.0;
+    double mid_energy_ratio = 0.0;
+};
+
+StereoShape measure_stereo_shape(const ff7rp::pipeline::WavAudio& audio,
+    const std::size_t frame, const std::size_t sample_count) {
+    double left_energy = 0.0;
+    double right_energy = 0.0;
+    double cross = 0.0;
+    double mid_energy = 0.0;
+    for (std::size_t offset = 0; offset < sample_count; ++offset) {
+        const double left = audio.stereo_samples[(frame + offset) * 2];
+        const double right = audio.stereo_samples[(frame + offset) * 2 + 1];
+        left_energy += left * left;
+        right_energy += right * right;
+        cross += left * right;
+        const double mid = 0.5 * (left + right);
+        mid_energy += 2.0 * mid * mid;
+    }
+    return {cross / std::sqrt(left_energy * right_energy),
+        mid_energy / (left_energy + right_energy)};
 }
 
 } // namespace
 
 int main() {
     using namespace ff7rp::pipeline;
+
+    if (kMetronomeSynthesisIdentity != "metronome_synthesis=shared_woodblock_envelope:v2") {
+        return fail("procedural synthesis cache identity changed without focused review");
+    }
 
     SongConfig explicit_config;
     explicit_config.bpm = 120.0;
@@ -191,34 +247,46 @@ int main() {
         first_stats.downbeat_count != 2 || first.frame_count() != original_frames) {
         return fail("click synthesis is not deterministic");
     }
-    for (std::size_t frame = 0; frame < first.frame_count(); ++frame) {
-        if (first.stereo_samples[frame * 2] != first.stereo_samples[frame * 2 + 1]) {
-            return fail("click synthesis is not centered/stereo-safe");
-        }
+    for (const float sample : first.stereo_samples) {
+        if (!std::isfinite(sample)) return fail("click synthesis produced a non-finite sample");
     }
     if (!(window_energy(first, beats[0].frame) > window_energy(first, beats[1].frame))) {
         return fail("downbeat accent is not distinguishable from an ordinary beat");
     }
     const double downbeat_to_beat_energy =
         window_energy(first, beats[0].frame) / window_energy(first, beats[1].frame);
-    const std::size_t voice_frames = static_cast<std::size_t>(std::llround(0.055 * first.sample_rate));
-    const std::size_t strike_frames = static_cast<std::size_t>(std::llround(0.012 * first.sample_rate));
-    const SpectralShape shape = measure_spectral_shape(first, beats[1].frame, strike_frames);
-    if (!(shape.centroid_hz > 650.0 && shape.centroid_hz < 1100.0 &&
-            shape.below_1000_ratio > 0.80 && shape.below_1000_ratio < 0.96 &&
-            shape.above_4000_ratio > 0.01 && shape.above_4000_ratio < 0.05)) {
-        return fail("procedural guide lost its measured dull, low-frequency spectral shape");
+    if (!(downbeat_to_beat_energy > 1.50 && downbeat_to_beat_energy < 1.63)) {
+        return fail("downbeat retained neither the shared timbre nor the established 1.25 gain accent");
     }
-    const double attack_energy = range_energy(first, beats[1].frame,
-        beats[1].frame + static_cast<std::size_t>(0.012 * first.sample_rate));
-    const double body_energy = range_energy(first,
-        beats[1].frame + static_cast<std::size_t>(0.012 * first.sample_rate),
-        beats[1].frame + static_cast<std::size_t>(0.035 * first.sample_rate));
-    const double tail_energy = range_energy(first,
-        beats[1].frame + static_cast<std::size_t>(0.035 * first.sample_rate),
-        beats[1].frame + voice_frames);
-    if (!(attack_energy > body_energy && body_energy > tail_energy && tail_energy > 0.0)) {
-        return fail("wooden impact envelope lost its decaying body or audible tail");
+    const std::size_t voice_frames = static_cast<std::size_t>(std::llround(0.180 * first.sample_rate));
+    const std::size_t spectral_frames = static_cast<std::size_t>(std::llround(0.100 * first.sample_rate));
+    const SpectralShape shape = measure_spectral_shape(first, beats[1].frame, spectral_frames);
+    const StereoShape stereo = measure_stereo_shape(first, beats[1].frame, voice_frames);
+    const double central_90 = central_mono_energy_span_seconds(
+        first, beats[1].frame, voice_frames, 0.90);
+    const double central_99 = central_mono_energy_span_seconds(
+        first, beats[1].frame, voice_frames, 0.99);
+    if (!(shape.centroid_hz > 1400.0 && shape.centroid_hz < 2600.0 &&
+            shape.woodblock_band_ratio > 0.45 && shape.below_800_ratio < 0.28 &&
+            shape.above_4000_ratio < 0.10)) {
+        return fail("procedural guide lost its measured 1-2 kHz woodblock spectral structure: centroid=" +
+            std::to_string(shape.centroid_hz) + " woodblock=" + std::to_string(shape.woodblock_band_ratio) +
+            " below800=" + std::to_string(shape.below_800_ratio) +
+            " above4000=" + std::to_string(shape.above_4000_ratio));
+    }
+    if (!(central_90 >= 0.038 && central_90 <= 0.048 &&
+            central_99 >= 0.145 && central_99 <= 0.170)) {
+        return fail("procedural guide left the shared measured temporal-energy envelope: central90=" +
+            std::to_string(central_90) + " central99=" + std::to_string(central_99));
+    }
+    if (!(stereo.correlation > 0.94 && stereo.correlation < 0.9999 &&
+            stereo.mid_energy_ratio > 0.94)) {
+        return fail("procedural guide lost its bounded slight stereo decorrelation: correlation=" +
+            std::to_string(stereo.correlation) + " mid_ratio=" + std::to_string(stereo.mid_energy_ratio));
+    }
+    if (range_energy(first, beats[1].frame + voice_frames,
+            beats[1].frame + voice_frames + first.sample_rate / 100) != 0.0) {
+        return fail("procedural guide exceeded its bounded 180 ms voice duration");
     }
 
     WavAudio weak = silent_audio(48000, 1.0);
@@ -289,14 +357,44 @@ int main() {
     MetronomeStats alternate_stats;
     status = status.ok() ? mix_metronome_clicks(
         &alternate_rate, explicit_config, beats, MetronomeVoice::Strong, &alternate_stats) : status;
+    const std::size_t alternate_voice_frames = static_cast<std::size_t>(std::llround(0.180 * alternate_rate.sample_rate));
+    const double alternate_90 = central_mono_energy_span_seconds(
+        alternate_rate, beats[1].frame, alternate_voice_frames, 0.90);
     if (!status.ok() || alternate_stats.beat_count != first_stats.beat_count ||
         std::fabs(alternate_stats.last_beat_seconds - first_stats.last_beat_seconds) > 1e-9) {
         return fail("sample-rate-independent timing changed");
     }
+    if (std::fabs(alternate_90 - central_90) > 0.002) {
+        return fail("sample-rate-independent procedural envelope changed");
+    }
+
+    SongConfig high_bpm_config = explicit_config;
+    high_bpm_config.bpm = 300.0;
+    WavAudio high_bpm = silent_audio(48000, 1.0);
+    status = build_metronome_beats({}, false, high_bpm, high_bpm_config, &beats);
+    MetronomeStats high_bpm_stats;
+    status = status.ok() ? mix_metronome_clicks(
+        &high_bpm, high_bpm_config, beats, MetronomeVoice::Strong, &high_bpm_stats) : status;
+    double high_bpm_peak = 0.0;
+    for (const float sample : high_bpm.stereo_samples) {
+        if (!std::isfinite(sample)) return fail("300 BPM synthesis produced a non-finite sample");
+        high_bpm_peak = std::max(high_bpm_peak, std::fabs(static_cast<double>(sample)));
+    }
+    if (!status.ok() || high_bpm_stats.beat_count != 5 || high_bpm.frame_count() != 48000 ||
+        high_bpm_peak >= 1.0 || range_energy(high_bpm,
+            static_cast<std::size_t>(0.185 * high_bpm.sample_rate),
+            static_cast<std::size_t>(0.195 * high_bpm.sample_rate)) != 0.0) {
+        return fail("300 BPM procedural voice is not bounded between beats");
+    }
 
     std::cout << "metronome profile centroid_hz=" << shape.centroid_hz
-              << " below_1000_ratio=" << shape.below_1000_ratio
+              << " woodblock_band_ratio=" << shape.woodblock_band_ratio
+              << " below_800_ratio=" << shape.below_800_ratio
               << " above_4000_ratio=" << shape.above_4000_ratio
+              << " central_90_ms=" << central_90 * 1000.0
+              << " central_99_ms=" << central_99 * 1000.0
+              << " stereo_correlation=" << stereo.correlation
+              << " mid_energy_ratio=" << stereo.mid_energy_ratio
               << " downbeat_to_beat_energy=" << downbeat_to_beat_energy
               << " strong_to_weak_energy=" << strong_to_weak_energy << '\n';
     std::cout << "metronome_selftest ok\n";

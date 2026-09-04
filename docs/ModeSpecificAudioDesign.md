@@ -46,6 +46,13 @@ the same source audio in all modes.
   levels can disable loudness normalization and author those levels directly.
 - When enabled, mix the metronome only into resolved Mode0 after source
   selection and before final HCA encoding. Mode1 and Mode2 never receive it.
+- The current click is a deterministic 180 ms analytic woodblock voice. It
+  emphasizes the shared measured structures near 1–2 kHz, retains approximately
+  40 ms central attack/body energy and a bounded decay through the shared
+  approximately 160 ms region, and uses slight deterministic stereo decorrelation.
+  It does not contain captured audio. Downbeats retain the established 1.25 gain
+  accent over the same timbre; the references did not establish a separate
+  ordinary/downbeat pair.
 - Encode three HCA payloads with equal timing geometry and assemble one MABF.
   Mode payload bytes may differ; equality is not a validity requirement once
   explicit overrides are supported.
@@ -57,6 +64,7 @@ The cache key must include, in fixed mode order:
 - every present source file and its role;
 - explicit direct-fallback markers for absent overrides;
 - the resolved metronome placement and audio-processing policy;
+- the procedural metronome synthesis identity when metronome processing is enabled;
 - the existing chart and semantic configuration identity.
 
 Pipeline cache identity is versioned so older one-source artifacts cannot
@@ -67,6 +75,11 @@ geometry. Aggregate MABF structural and digest validation stays authoritative.
 
 Source-role facts remain offline-only. The runtime-cache binary shape and global
 MABF binary format are unchanged.
+
+The current synthesis identity is
+`metronome_synthesis=shared_woodblock_envelope:v2`. It is included only for an
+enabled metronome, so old synthesized-click artifacts cannot warm-reuse while
+disabled songs retain their prior cache identity.
 
 MABF validation must use the resolved mode policy, not infer payload equality
 from `metronome.enabled`. It must continue to reject malformed slots, unequal

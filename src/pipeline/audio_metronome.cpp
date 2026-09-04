@@ -1,6 +1,7 @@
 #include "audio_metronome.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -14,13 +15,38 @@ namespace {
 
 constexpr double kComparisonEpsilon = 1e-9;
 constexpr std::size_t kMaximumMetronomeBeats = 100000;
-// The original guide residual is a dull wooden impact dominated by 586 Hz,
-// with sub-resonances and a short, band-limited noisy strike.
-constexpr double kPrimaryResonanceHz = 586.0;
-constexpr double kSubResonanceHz = 293.0;
-constexpr double kLowResonanceHz = 152.0;
-constexpr double kClickDurationSeconds = 0.055;
-constexpr double kClickAttackSeconds = 0.00035;
+// This procedural voice models only the shared measured envelope and spectral
+// structure of two user-authorized reference renders. It contains no captured
+// waveform or sample table.
+constexpr double kClickDurationSeconds = 0.180;
+constexpr double kClickAttackSeconds = 0.00030;
+constexpr double kStereoWidth = 0.12;
+constexpr double kPi = 3.14159265358979323846;
+
+struct Resonance {
+    double frequency_hz;
+    double amplitude;
+    double decay_seconds;
+    double phase;
+};
+
+constexpr std::array<Resonance, 7> kWoodblockResonances{{
+    {2090.0, 0.36, 0.0145, 0.00},
+    {2040.0, 0.28, 0.016, 0.31},
+    {1950.0, 0.22, 0.020, 0.67},
+    {1030.0, 0.17, 0.027, 0.19},
+    {500.0, 0.075, 0.050, 0.52},
+    {100.0, 0.024, 0.200, 0.83},
+    {50.0, 0.031, 0.450, 1.11},
+}};
+
+double deterministic_noise(std::uint32_t* state) {
+    *state ^= *state << 13u;
+    *state ^= *state >> 17u;
+    *state ^= *state << 5u;
+    return static_cast<double>(*state & 0x00ffffffu) /
+        static_cast<double>(0x00800000u) - 1.0;
+}
 
 struct TempoChange {
     double tick = 0.0;
@@ -231,39 +257,46 @@ Status mix_metronome_clicks(
         if (beat.frame >= audio->frame_count()) continue;
         const double accent = beat.downbeat ? 1.25 : 1.0;
         const double richness = voice == MetronomeVoice::Strong ? 1.0 : 0.35;
-        std::uint32_t noise_state = beat.downbeat ? 0xa341316cu : 0xc8013ea4u;
-        double noise_low = 0.0;
-        double noise_floor = 0.0;
-        const double noise_alpha = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * 1800.0 /
+        std::uint32_t common_noise_state = 0xc8013ea4u;
+        std::uint32_t side_noise_state = 0x7f4a7c15u;
+        double common_noise_low = 0.0;
+        double common_noise_floor = 0.0;
+        double side_noise_low = 0.0;
+        double side_noise_floor = 0.0;
+        const double noise_alpha = 1.0 - std::exp(-2.0 * kPi * 5200.0 /
             static_cast<double>(audio->sample_rate));
-        const double floor_alpha = 1.0 - std::exp(-2.0 * 3.14159265358979323846 * 180.0 /
+        const double floor_alpha = 1.0 - std::exp(-2.0 * kPi * 700.0 /
             static_cast<double>(audio->sample_rate));
         for (std::size_t offset = 0; offset < click_frames && beat.frame + offset < audio->frame_count(); ++offset) {
             const double seconds = static_cast<double>(offset) / static_cast<double>(audio->sample_rate);
             const double attack = std::min(1.0, seconds / kClickAttackSeconds);
-            noise_state ^= noise_state << 13u;
-            noise_state ^= noise_state >> 17u;
-            noise_state ^= noise_state << 5u;
-            const double white = static_cast<double>(noise_state & 0x00ffffffu) /
-                static_cast<double>(0x00800000u) - 1.0;
-            noise_low += noise_alpha * (white - noise_low);
-            noise_floor += floor_alpha * (noise_low - noise_floor);
-            const double impact_noise = noise_low - noise_floor;
-            const double body =
-                0.62 * std::sin(2.0 * 3.14159265358979323846 * kPrimaryResonanceHz * seconds) *
-                    std::exp(-seconds / 0.018) +
-                0.22 * std::sin(2.0 * 3.14159265358979323846 * kSubResonanceHz * seconds + 0.35) *
-                    std::exp(-seconds / 0.028) +
-                (beat.downbeat ? 0.16 : 0.10) *
-                    std::sin(2.0 * 3.14159265358979323846 * kLowResonanceHz * seconds + 0.7) *
-                    std::exp(-seconds / 0.034);
-            const double strike = richness * 1.50 * impact_noise * std::exp(-seconds / 0.0065);
-            const double click = config.metronome_level * accent * attack * (body + strike);
-            for (std::size_t channel = 0; channel < 2; ++channel) {
-                const std::size_t sample = (beat.frame + offset) * 2 + channel;
-                audio->stereo_samples[sample] = static_cast<float>(
-                    static_cast<double>(audio->stereo_samples[sample]) + click);
+            common_noise_low += noise_alpha *
+                (deterministic_noise(&common_noise_state) - common_noise_low);
+            common_noise_floor += floor_alpha * (common_noise_low - common_noise_floor);
+            side_noise_low += noise_alpha *
+                (deterministic_noise(&side_noise_state) - side_noise_low);
+            side_noise_floor += floor_alpha * (side_noise_low - side_noise_floor);
+
+            double body = 0.0;
+            double stereo_side = 0.0;
+            for (const Resonance& resonance : kWoodblockResonances) {
+                const double decay = std::exp(-seconds / resonance.decay_seconds);
+                const double phase = 2.0 * kPi * resonance.frequency_hz * seconds + resonance.phase;
+                body += resonance.amplitude * std::sin(phase) * decay;
+                stereo_side += resonance.amplitude * std::sin(phase + 0.5 * kPi) * decay;
             }
+            const double common_strike = richness * 0.42 *
+                (common_noise_low - common_noise_floor) * std::exp(-seconds / 0.0055);
+            stereo_side += richness * 0.24 * (side_noise_low - side_noise_floor) *
+                std::exp(-seconds / 0.0065);
+            const double gain = config.metronome_level * accent * attack;
+            const double common = gain * (body + common_strike);
+            const double side = gain * kStereoWidth * stereo_side;
+            const std::size_t sample = (beat.frame + offset) * 2;
+            audio->stereo_samples[sample] = static_cast<float>(
+                static_cast<double>(audio->stereo_samples[sample]) + common + side);
+            audio->stereo_samples[sample + 1] = static_cast<float>(
+                static_cast<double>(audio->stereo_samples[sample + 1]) + common - side);
         }
         ++out_stats->beat_count;
         if (beat.downbeat) ++out_stats->downbeat_count;
