@@ -84,7 +84,7 @@ Source-role facts remain offline-only. The runtime-cache binary shape and global
 MABF binary format are unchanged.
 
 The current synthesis identity is
-`metronome_synthesis=shared_woodblock_envelope:v2`. It is included only for an
+`metronome_synthesis=shared_woodblock_envelope:v3`. It is included only for an
 enabled metronome, so old synthesized-click artifacts cannot warm-reuse while
 disabled songs retain their prior cache identity.
 

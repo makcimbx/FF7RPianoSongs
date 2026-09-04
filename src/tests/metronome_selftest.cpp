@@ -204,7 +204,7 @@ StereoShape measure_stereo_shape(const ff7rp::pipeline::WavAudio& audio,
 int main() {
     using namespace ff7rp::pipeline;
 
-    if (kMetronomeSynthesisIdentity != "metronome_synthesis=shared_woodblock_envelope:v2") {
+    if (kMetronomeSynthesisIdentity != "metronome_synthesis=shared_woodblock_envelope:v3") {
         return fail("procedural synthesis cache identity changed without focused review");
     }
 
