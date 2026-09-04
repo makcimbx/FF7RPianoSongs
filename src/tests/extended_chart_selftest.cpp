@@ -850,6 +850,7 @@ bool test_fixture_tool_contract()
         ++note_count;
     }
     if (json_text.empty() || note_count != 520u
+        || json_text.find("diagnostic_extended_chart_fixture") != std::string::npos
         || fs::file_size(fresh / "song.wav") != 44u + 48000u * 70u * 2u) {
         std::cerr << "fresh fixture validation failed: notes=" << note_count << '\n';
         return false;

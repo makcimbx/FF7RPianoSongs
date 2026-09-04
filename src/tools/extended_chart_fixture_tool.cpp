@@ -132,6 +132,7 @@ void validate_fixture_directory(const fs::path& directory)
         ++note_count;
     }
     if (!json.is_open() || file_count != 2u || note_count != 520u
+        || text.find("diagnostic_extended_chart_fixture") != std::string::npos
         || fs::file_size(directory / "song.wav") != kExpectedWavSize) {
         throw std::runtime_error("fixture validation failed");
     }
@@ -224,11 +225,10 @@ bool ff7rp::tools::create_extended_chart_fixture(
         if (!json) throw std::runtime_error("could not create staged song.json");
         json << "{\n"
              << "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
-             << "  \"title\": \"Extended Chart Read-Only Diagnostic 520\",\n"
+             << "  \"title\": \"Extended Chart Ordinary 520\",\n"
              << "  \"bpm\": 120,\n"
              << "  \"difficulty\": 0,\n"
              << "  \"metronome\": { \"enabled\": false, \"level\": 0.12 },\n"
-             << "  \"diagnostic_extended_chart_fixture\": true,\n"
              << "  \"notes\": [\n";
         for (std::size_t row = 0; row < 520u; ++row) {
             json << "    { \"beat\": " << (row / 4u) << '.' << (row % 4u) * 25u
@@ -322,7 +322,7 @@ int main(int argc, char** argv)
         std::cerr << "failed to create fixture: " << error << '\n';
         return 3;
     }
-    std::cout << "created exactly-520 read-only diagnostic fixture at "
+    std::cout << "created exactly-520 ordinary extended fixture at "
               << fs::absolute(argv[1]).lexically_normal().string() << '\n';
     return 0;
 }
