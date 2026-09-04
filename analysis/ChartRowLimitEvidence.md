@@ -1,6 +1,6 @@
 # Chart Row Limit Evidence
 
-This document preserves the detailed research that supports the durable policy in `../docs/ChartLimits.md`. It is evidence for one executable/catalog state, not a promise that addresses or internals remain stable.
+This document preserves the historical diagnostic-stage research that preceded the durable policy in `../docs/ChartLimits.md`. Its implementation-status, qualification-plan, and policy sections describe the state at the time of that investigation and are superseded by the later transactional evidence and current contract. It is evidence for one executable/catalog state, not current configuration guidance or a promise that addresses or internals remain stable.
 
 ## Verified Build
 
@@ -60,17 +60,17 @@ The least speculative future path would require a fully recovered semantic mappi
 
 Patching only the parser cap, streaming tail events, copying parser temporaries, or appending guessed event bytes were rejected because each crosses an unproved ownership boundary.
 
-## Experimental Implementation Status
+## Historical Experimental Implementation Status
 
-The retained implementation is diagnostic-only and performs no parsed-event or parser-bound writes. `Experimental.ExtendedCharts=1` requests the experiment, validates executable identity and exact helper prologues, then remains fail closed at an effective 512-row runtime limit.
+At that stage, the retained implementation was diagnostic-only and performed no parsed-event or parser-bound writes. `Experimental.ExtendedCharts=1` requested the experiment, validated executable identity and exact helper prologues, then remained fail closed at an effective 512-row runtime limit. The setting and this diagnostic-only authority were later removed.
 
-The verified diagnostic input limit is 1,024, but over-limit compilation is restricted to `diagnostic_extended_chart_fixture=true` and exactly 520 source rows. Compilation publishes rows 0-511 only. Rows 512-519 are retained as eight diagnostic values with explicit source identity. They are never placed in playable chart/profile vectors or selection, title, duration, completion, score, combo, UI, chart-hold, or native-write paths.
+The verified diagnostic input limit was 1,024, and over-limit compilation was restricted to `diagnostic_extended_chart_fixture=true` and exactly 520 source rows. Compilation published rows 0-511 only. Rows 512-519 were retained as eight diagnostic values with explicit source identity. They were never placed in playable chart/profile vectors or selection, title, duration, completion, score, combo, UI, chart-hold, or native-write paths.
 
-Per-song cache identity records the row policy, accepted input limit, diagnostic bit, and policy generation. Ordinary songs normalize to native-512/disabled identity regardless of the global request. A diagnostic cache cannot load when the experiment is disabled or helper validation changes.
+Per-song cache identity recorded the row policy, accepted input limit, diagnostic bit, and policy generation. Ordinary songs normalized to native-512/disabled identity regardless of the global request. A diagnostic cache could not load when the experiment was disabled or helper validation changed.
 
-The offline synthetic model covers boundary sizes, rows around the boundary, pitch/chord identity, camera/group transitions, final onset, ownership isolation, links, display count, default-disabled guards, and injected rollback points. It proves no native ABI, runtime event construction, or playable greater-than-512 behavior.
+The offline synthetic model covered boundary sizes, rows around the boundary, pitch/chord identity, camera/group transitions, final onset, ownership isolation, links, display count, default-disabled guards, and injected rollback points. It proved no native ABI, runtime event construction, or playable greater-than-512 behavior.
 
-## Single Runtime Qualification Plan
+## Historical Single Runtime Qualification Plan
 
 The diagnostic fixture tool creates an exactly-520 `song.json` plus silent audio in a new staging directory. A manually staged diagnostic build may enter that fixture once, allow the native prefix to complete, and leave once.
 
@@ -84,6 +84,6 @@ The ignored session input `FF7RPianoSongs-v38-route-leak-520-20260715.log` conta
 
 The result validates the read-only evidence path, not a bypass. No runtime tail event was constructed and no greater-than-512 claim is supported.
 
-## Current Policy
+## Historical Policy At This Checkpoint
 
-The shipping/playable boundary remains 512. The larger accepted-input constant is diagnostic-only, conditionally enabled, and never a publication limit. Any future change requires new ABI/ownership proof, transactional implementation, full automated coverage, and explicit in-game qualification of every affected consumer.
+At this checkpoint, the shipping/playable boundary remained 512. The larger accepted-input constant was diagnostic-only, conditionally enabled, and never a publication limit. Later ABI/ownership proof, transactional implementation, automated coverage, and focused in-game qualification superseded this policy; the current contract is maintained in `../docs/ChartLimits.md`.

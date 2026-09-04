@@ -238,6 +238,6 @@ Each point permits only `time_seconds` and `gain_db`. Times must be finite, non-
 - Supported source duration is at most 10 minutes after decode at 48 kHz.
 - Each source audio file may be at most 512 MiB.
 - A generated MABF payload may be at most 64 MiB.
-- A playable chart may contain at most 512 rows.
+- Without proven playable extended authority, a chart may contain at most 512 rows. On an exact supported build whose complete runtime capability is active, each authored or generated profile may contain up to 8192 source rows and 8192 compact native events; see [Chart Limits](ChartLimits.md).
 
 Limits are enforced before publication. Rejected inputs do not partially enter the runtime registry.
