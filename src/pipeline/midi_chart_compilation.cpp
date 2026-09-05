@@ -272,7 +272,9 @@ bool attack_less(const Attack& a, const Attack& b) {
 
 bool alternate_monotone_eligible(const int midi_pitch) {
     const int pitch_class = (midi_pitch % 12 + 12) % 12;
-    return pitch_class == 0 || pitch_class == 1;
+    const int octave = midi_pitch / 12 - 1;
+    // Match the stock assignment inventory; do not plan absent boundary IDs.
+    return octave >= 2 && octave <= 6 && (pitch_class == 0 || pitch_class == 1);
 }
 
 std::map<SourceIdentity, bool> plan_alternate_monotones(std::vector<Attack> canonical_right) {

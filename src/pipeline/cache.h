@@ -10,7 +10,7 @@ namespace ff7rp::pipeline {
 
 constexpr std::uint64_t kFnv1a64OffsetBasis = 14695981039346656037ull;
 constexpr std::uint64_t kFnv1a64Prime = 1099511628211ull;
-constexpr const char* kPipelineCacheVersion = "ff7rpianosongs.pipeline.v46";
+constexpr const char* kPipelineCacheVersion = "ff7rpianosongs.pipeline.v47";
 
 std::uint64_t fnv1a64_append(std::uint64_t hash, const void* data, std::size_t size);
 std::uint64_t fnv1a64_string(const std::string& text);

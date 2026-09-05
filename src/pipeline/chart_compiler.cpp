@@ -53,12 +53,11 @@ bool parse_pitch_semitone(const std::string& pitch, int* out_semitone) {
 }
 
 bool alternate_monotone_id(const std::string& base, std::string* out) {
-    if (!out || base.size() < 3u) return false;
-    const bool natural_c = base.rfind("Cn", 0) == 0;
-    const bool supported_c_sharp = base.size() == 3u && base.rfind("Cs", 0) == 0 &&
-        base[2] >= '2' && base[2] <= '6';
-    const bool eligible = natural_c || supported_c_sharp;
-    if (!eligible) return false;
+    // Stock PianoMonotoneAssign has only Cn/Cs alternates in octaves 2-6.
+    // Cn7 already uses the high-C assignment without a second row; no Cb
+    // alternate or Cn1_2/Cn7_2 exists. See PianoMonotoneAssignEvidence-20260905.
+    if (!out || base.size() != 3u || base[2] < '2' || base[2] > '6'
+        || (base.rfind("Cn", 0) != 0 && base.rfind("Cs", 0) != 0)) return false;
     *out = base + "_2";
     return true;
 }
@@ -222,7 +221,7 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
             }
             if (source.alternate_monotone && !alternate_monotone_id(note.monotone_id, &note.monotone_id)) {
                 return Status::error(StatusCode::UnsupportedPitch,
-                    "alternate monotone is supported only for C and C-sharp pitches at note index " +
+                    "alternate monotone requires C2-C6 or exact C#2-C#6 (no C-flat alternate) at note index " +
                     std::to_string(i));
             }
         }

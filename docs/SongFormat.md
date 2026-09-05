@@ -1,94 +1,130 @@
 # Song Format Reference
 
-This is the complete user-facing reference for one custom-song folder. It is bundled as
-`docs/SongFormat.md` in every release archive. JSON object field sets are closed: unknown fields are rejected
-at the root, profile, note, metronome, and gain-point levels. Parsing, compilation,
-or final validation failure rejects the song (or omits an independently generated MIDI profile)
-without clipping or partial publication. Check `FF7RPianoSongs.log` for the reason.
+This guide explains how to create and edit `song.json`. It is included in every release archive;
+you do not need the source code or developer tools. For installing the mod, see the [player guide](../README.md).
+
+## Start here
+
+Choose one way to make a song:
+
+- **Generate from MIDI:** put your audio and matching MIDI in a song folder. Use the
+  [MIDI-backed song example](#midi-backed-song), or let the mod create `song.json` on its first load.
+  The mod chooses notes and difficulty levels; it does not convert audio into MIDI.
+- **Write the gameplay yourself:** use the [minimal explicit chart](#minimal-explicit-chart), then
+  add entries to `notes`. You need audio, but no MIDI. This is also how to port a hand-authored chart
+  from another mod; that mod's original arrays are not accepted directly.
+- **Edit a generated chart:** load it once, exit the game, and copy the generated
+  [resolved song](#resolved-song-convenience-output) into the real `song.json`. You can then add
+  [automatic note groups](#groups-and-dual-rows), [partial chords](#chords-and-ignore_sound), or
+  [alternate C inputs](#pitch-spelling).
+
+Only the fields marked **required** need to be supplied. Leave optional settings out until you
+need them. A **profile** is a playable difficulty version of the same song, not another audio file.
+
+### Editing JSON safely
+
+1. Exit the game and keep a backup of `song.json` before editing. Use a plain-text editor and save
+   as UTF-8 with the exact name `song.json`, not `song.json.txt`.
+2. Use double quotes for names and text, a decimal point for numbers, and unquoted `true`/`false`
+   for switches. Separate entries with commas, but do not put a comma after the last entry.
+   JSON does not allow comments.
+3. Copy a complete example first. Add note settings inside a note's `{ ... }`, not beside `title`.
+   Field names are case-sensitive; unknown fields are rejected, including misspellings.
+4. Restart the game to load changes. If the song is missing, check
+   `End/Binaries/Win64/FF7RPianoSongs.log`. An invalid song is rejected rather than partly loaded.
+
+Quick reference: [files](#folder-and-source-selection) · [song settings](#root-object) ·
+[notes](#explicit-notes) · [profiles](#difficulty-profiles) · [MIDI timing](#midi-backed-songs) ·
+[audio and volume](#audio-modes-loudness-and-gain) · [limits](#extended-charts-and-build-policy).
 
 ## Folder and source selection
 
 ```text
 Music/My Song/
-  song.json                         auto-created when absent; required afterward
-  song.wav | song.mp3 | song.flac   exactly one required base/Mode0 source
-  song.mode1.wav|mp3|flac           optional Mode1 override
-  song.mode2.wav|mp3|flac           optional Mode2 override
+  song.json                        auto-created when absent; required afterward
+  song.wav | song.mp3 | song.flac  choose exactly one audio file
+  song.mode1.wav                  optional; .mp3 or .flac also accepted
+  song.mode2.wav                  optional; .mp3 or .flac also accepted
   song.mid | song.midi              required only when JSON has no explicit notes
 ```
 
-Names are matched case-insensitively, but only the names above are recognized. More than one
-supported file for a role is ambiguous and rejects the folder. `song.mode0.*` is rejected because
-Mode0 always uses the required base source. Missing Mode1 or Mode2 audio falls back directly to
-the base source. Every supplied override must decode to the same logical frame count as the base.
-Each source audio file is limited to 512 MiB; decoded audio must be nonempty, at most 10 minutes,
-and is normalized to 48 kHz stereo. Both `song.mid` and `song.midi` together are rejected.
+The folder belongs under `End/Binaries/Win64/Music/`. The `|` above means “choose one”; it is not
+part of a filename. File names are matched case-insensitively, but only these names are recognized.
+Keeping both `song.wav` and `song.mp3`, or both `song.mid` and `song.midi`, rejects the folder.
+The same one-file rule applies separately to each optional mode. `song.mode0.*` is rejected:
+`song.*` already supplies that mode. See [audio modes](#audio-modes-loudness-and-gain) before adding overrides.
 
-If `song.json` is absent, loading atomically creates a starter file whose title is the folder name
-and whose metronome is enabled at level `0.12`, then parses that file normally. Creation uses an
-exclusive temporary file and an atomic publish operation, so it never overwrites a file created by
-another writer. An existing `song.json` is authoritative: if it is malformed or unsupported, the
-song rejects and the existing file is not replaced by the starter.
+Each audio file must be nonempty, no larger than 512 MiB, and no longer than 10 minutes when decoded.
+The mod converts supported audio to 48 kHz stereo; you do not need to supply HCA or MABF files.
+
+If `song.json` is absent, the mod creates a starter file using the folder name as the title and
+enabling the metronome at level `0.12`. You still need matching MIDI, or must add your own notes.
+An existing file is not replaced, even if it contains errors.
 
 ## Root object
 
-The root is a JSON object with the following complete field set.
+The root is the outermost `{ ... }` object. Most songs need only `schema`, `title`, and either
+MIDI or an authored `bpm` and `notes`/`profiles`. The table lists every accepted field; it is not
+a list of settings you must fill in. All numbers must be finite.
 
 | Field | JSON type | Status and default | Accepted value / interaction |
 | --- | --- | --- | --- |
 | `schema` | string or number | **required** | Exactly `"ff7rpianosongs.song.v2"`, `"v2"`, or numeric `2`. JSON schema remains v2. |
 | `title` | string | **required** | Nonempty display title. |
-| `bpm` | number | optional; no parser default | Finite 30–300. Required by final validation for explicit root `notes` and authored `profiles`; MIDI may derive it. |
-| `difficulty` | integer | optional; default `1` | 0 through `INT_MAX`; forbidden when `profiles` is present. |
-| `score_thresholds` | array of integers | optional; derived when absent | Nonempty; each item 0 through `INT_MAX`. Supplied values must be nondecreasing. The exact derived rule is below. |
-| `mode_change_combo_counts` | array of integers | optional; derived when absent | Nonempty; each item 0 through `INT_MAX`. Supplied values must be nondecreasing. The exact derived rule is below. |
-| `midi_audio_offset_seconds` | number | optional; default `0` | Finite `[-1,1]`; applies only to MIDI alignment. |
-| `midi_audio_alignment_seconds` | number | optional; default `0` | Finite `[-1,1]`; when supplied it is the resolved alignment, otherwise MIDI/audio analysis estimates alignment. |
-| `midi_minimum_lead_in_seconds` | number | optional; default `2` | Finite `[0,30]`; MIDI attacks before the resolved lead-in are rejected. |
-| `loudness_normalization` | boolean | optional; default `true` | Enables or disables supported loudness normalization. |
-| `loudness_target_lufs` | number | optional; default `-13` | Finite `[-30,-5]`. |
-| `loudness_peak_ceiling_dbfs` | number | optional; default `-1` | Finite `[-6,0]`. |
+| `bpm` | number | **required for authored notes/profiles** | 30–300 beats per minute. With MIDI, omit to use its tempo. |
+| `difficulty` | integer | optional; default `1` | Difficulty label, 0–2147483647. Does not simplify authored notes. Forbidden with `profiles`; does not select a generated MIDI level. |
+| `score_thresholds` | array of integers | optional; calculated per chart | Advanced score boundaries, for example `[0, 1000, 2000, 3000]`. Nonempty; values 0–2147483647 in ascending order, with equal values allowed. |
+| `mode_change_combo_counts` | array of integers | optional; calculated per chart | Combo boundaries for changing audio modes, normally two values such as `[5, 10]`. Nonempty; values 0–2147483647 in ascending order, with equal values allowed. |
+| `midi_audio_offset_seconds` | number | optional; automatic when omitted | -1 to 1. Manual total shift of MIDI note timing: positive is later, negative is earlier. Not added to the automatic estimate. |
+| `midi_audio_alignment_seconds` | number | optional; estimated when omitted | -1 to 1. Advanced replacement for the MIDI/audio alignment estimate; normally leave out. See MIDI timing below. |
+| `midi_minimum_lead_in_seconds` | number | optional; default `2` | 0–30. Omits MIDI attacks scheduled before this time; does **not** insert silence or delay the song. |
+| `loudness_normalization` | boolean | optional; default `true` | Adjusts overall audio loudness toward the target below. |
+| `loudness_target_lufs` | number | optional; default `-13` | -30 to -5 LUFS (average loudness). More negative is quieter. |
+| `loudness_peak_ceiling_dbfs` | number | optional; default `-1` | -6 to 0 dBFS (peak limit for normalization). More negative leaves more headroom. |
 | `gain_envelope` | array | optional; absent means unity/no envelope | 1–64 gain-point objects; see below. |
 | `metronome` | object | optional; see defaults below | Closed metronome object; see below. |
-| `notes` | array | optional | Nonempty explicit-note array. Mutually exclusive with `profiles`; when absent, exactly one MIDI source is required. |
+| `notes` | array | optional | Your playable notes. Nonempty; cannot coexist with `profiles`. If neither is present, MIDI is required. |
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
-| `diagnostic_extended_chart_fixture` | boolean | optional; default `false` | Legacy compatibility input only. It is inert: it neither grants extended authority nor changes validation. |
+| `diagnostic_extended_chart_fixture` | boolean | obsolete; omit | Accepted for old files, but has no effect. It does not unlock longer charts. |
 
-The parser owns JSON shape, types, local numeric ranges, nondecreasing supplied metadata arrays,
-and closed field sets. Repository/compiler validation owns source-mode BPM requirements, native identities, groups,
-IgnoreSound, row/event limits, exact source/compiled plans, and build capability.
-
-For omitted metadata, let `A` be at least 1 and otherwise the profile's required-action count (a
-group continuation contributes no action; each parentless monotone/chord side contributes one).
-`score_thresholds` becomes `[0, round100(70*A), round100(85*A), 100*A]`, where
-`round100(x) = ((x + 50) / 100) * 100` using integer division. For
-`mode_change_combo_counts`, let `action = clamp(round(0.05*A),5,15)` and
-`difficulty = clamp(5 + 2*(difficulty_label-1),5,15)`; the first value is the rounded-up mean,
-clamped to `1..max(1,A/2)`, and the second is `min(A,max(first+1,2*first))`.
+Usually omit both threshold arrays. The mod calculates them for each chart from its required
+player actions and difficulty. Automatic group followers do not add required actions; a note and
+chord played together count separately. Supplied root threshold arrays apply to every profile.
 
 ## Explicit notes
 
-`notes` is a nonempty array of closed note objects. Entries must be nondecreasing by `beat`.
+`notes` is a nonempty array. Each `{ ... }` entry is one **row** of your chart. Keep rows in time
+order; equal `beat` values are allowed for simultaneous actions.
+
+- `pitch` is a single right-hand note; `chord_id` is a left-hand chord.
+- `beat` is counted from zero at the beginning of the audio, not from one. At 120 BPM, one beat
+  is 0.5 seconds, so `beat: 4` starts at 2 seconds. Fractions such as `4.25` are allowed.
+- `duration_beats` is the duration in the same units, not an end timestamp. Leave room in your
+  audio for the complete chart. To change the displayed note symbol, use the note-value fields.
 
 | Field | JSON type | Status and default | Accepted value / interaction |
 | --- | --- | --- | --- |
 | `beat` | number | **required** | Finite and at least 0. |
-| `duration_beats` | number | **required** | Finite and greater than 0. Controls timing, envelope, and completion; notation overrides do not alter it. |
+| `duration_beats` | number | **required** | Greater than 0. Duration in beats; changing the note symbol does not change this duration. |
 | `pitch` | string | optional | Exact pitch grammar below. At least one of `pitch` or `chord_id` is required. |
 | `chord_id` | string | optional | Syntactically: `pca_` followed by one or more ASCII letters, digits, or underscores. Exact verified IDs are listed below. |
-| `group_index` | integer | optional; default `0` | 0–255. Nonzero values define authored follower runs. |
-| `monotone_variant` | string | optional; default `"default"` | `default` or `alternate`; requires `pitch`. Availability is identity-specific. |
-| `ignore_sound` | array of strings | optional | 1–3 unique exact constituent names; requires `chord_id`. |
+| `group_index` | integer | optional; default `0` | 0–255. Use the same nonzero value on consecutive rows for an automatic run after the first input. |
+| `monotone_variant` | string | optional; default `"default"` | `default` or `alternate`; requires `pitch`. Selects the alternate high-C input where supported below. |
+| `ignore_sound` | array of strings | optional | 1–3 different chord sounds to leave out; requires `chord_id`. Copy names from the chord table. |
 | `monotone_note_value` | string | optional | Exact note-value token below; requires `pitch`. |
 | `chord_note_value` | string | optional | Exact note-value token below; requires `chord_id`. |
 
-At least one side must be present. Supplying both `pitch` and `chord_id` creates one dual row and
-two native events. Side-specific fields on an absent side reject.
+Supply at least `pitch` or `chord_id`. Supplying both means both hands play at that time and counts
+as two events toward the chart limit. A setting for a missing hand is an error.
 
 ### Pitch spelling
 
-The exact grammar is **`[A-G](#|b)?[0-9]`**, it is case-sensitive, and the resolved semitone must
-be C1 through C7 inclusive. Naturals are authored as `C4`, not `Cn4`. This rule is exhaustive:
+Write an uppercase note letter, optionally `#` for sharp or lowercase `b` for flat, then the
+octave: `C4`, `C#4`, `Db4`. Naturals are authored as `C4`, not `Cn4`. Do not use the musical
+symbols `♯`/`♭` or append `_2` to `pitch`.
+
+The exact grammar is **`[A-G](#|b)?[0-9]`**, it is case-sensitive, and the sounding pitch must
+be C1 through C7 inclusive:
 
 | Written octave | Accepted spellings |
 | --- | --- |
@@ -99,48 +135,59 @@ be C1 through C7 inclusive. Naturals are authored as `C4`, not `Cn4`. This rule 
 | 7 | only `Cb7` (B6) and `C7` |
 | 8–9 | none |
 
-This semitone rule unambiguously covers every enharmonic boundary. Exact black-key pairs
-`C#`/`Db`, `D#`/`Eb`, `F#`/`Gb`, `G#`/`Ab`, and `A#`/`Bb` preserve distinct verified native
-spellings. Other accepted enharmonics resolve to the canonical native spelling for their semitone.
+Pairs such as C-sharp and D-flat sound alike but use different spellings. The game preserves
+`C#`/`Db`, `D#`/`Eb`, `F#`/`Gb`, `G#`/`Ab`, and `A#`/`Bb` as distinct note names. Other accepted
+equivalents use the usual name for that sound; for example, ordinary `Cb4` becomes B3.
 
-`monotone_variant: "alternate"` is separate from spelling and note value. It changes the native
-input assignment while preserving the resolved pitch sound. It is available for values compiling
-to natural C: authored `C1` through `C7` and the accepted enharmonic spellings `B#0` through
-`B#6`. It is also available for exact C-sharp spellings `C#2` through `C#6`. C#1, C#7, every flat,
-and every other resolved pitch reject when `alternate` is requested.
+`monotone_variant: "alternate"` selects the high-C input variant (`_2` in original minigame
+arrays), not a higher sounding octave or a different duration. It is available for **C2–C6 and
+exact C#2–C#6**, including `B#1` through `B#5` as equivalents of natural C2–C6.
+
+- C1 has no alternate. C7 already uses the game's high-C assignment with ordinary `"pitch": "C7"`;
+  leave `monotone_variant` out for it. Requesting alternate for either boundary is an error.
+- There is **no supported C-flat alternate**. `Cb4` can supply ordinary B3's sound, but not a
+  high-C-flat input. The stock game table has no `Cb*_2` entry; ordinary B is not a substitute.
+- C#1, C#7, every flat (including `Db4`), and every other pitch reject when alternate is requested.
+
+These alternate mappings match the 1.005 game files. Their actual controls still need an in-game
+check; compatibility of these mappings with 1.004 has not been independently confirmed.
 
 ### Note values
 
-Overrides select native notation independently for each present side. These are the complete
-accepted values:
+`monotone_note_value` changes the right-hand note symbol; `chord_note_value` changes the left-hand
+symbol. Set either or both independently. They do not move the note or change `duration_beats`.
 
-| JSON value | Native `(NoteType,DotType)` |
+| JSON value | Displayed note |
 | --- | --- |
-| `whole` | `(0,0)` |
-| `dotted_whole` | `(0,1)` |
-| `half` | `(1,0)` |
-| `dotted_half` | `(1,1)` |
-| `quarter` | `(2,0)` |
-| `dotted_quarter` | `(2,1)` |
-| `eighth` | `(3,0)` |
-| `dotted_eighth` | `(3,1)` |
-| `sixteenth` | `(4,0)` |
-| `dotted_sixteenth` | `(4,1)` |
+| `whole` | Whole note |
+| `dotted_whole` | Dotted whole note |
+| `half` | Half note |
+| `dotted_half` | Dotted half note |
+| `quarter` | Quarter note |
+| `dotted_quarter` | Dotted quarter note |
+| `eighth` | Eighth note |
+| `dotted_eighth` | Dotted eighth note |
+| `sixteenth` | Sixteenth note |
+| `dotted_sixteenth` | Dotted sixteenth note |
 
-Native NoteTypes 5 and 6 are intentionally unsupported. Without an override, each present side
-independently keeps the legacy mapping exactly: `duration_beats >= 2` uses `(2,0)`; otherwise it
-uses `(3,0)`. Under the native scale those pairs are quarter and eighth. An absent side stores
-`(0,0)` too, but side presence is determined by its nonempty pitch/chord identity, so a present
-whole `(0,0)` is not ambiguous.
+These are the only supported values. Without an override, durations of at least 2 beats display
+a quarter note; shorter durations display an eighth note. This compatibility default is not a full
+rhythmic transcription, so set an explicit value when the symbol matters.
 
 ### Chords and `ignore_sound`
 
-The following table is the complete compiler-verified chord/constituent inventory. A chord can be
-authored without `ignore_sound` when its `pca_*` syntax is valid. When `ignore_sound` is present,
-every requested value must be an exact, case-sensitive, exact-octave member of that row; aliases,
-wrong case, wrong octave, duplicates, and nonmembers reject. One to three members may be requested.
-Filtering suppresses only those selected constituent sounds when the chord is played; it does not
-remove the authored row, chord event, group identity, or required/scoring action.
+Choose a `chord_id` from the table. For example, `pca_C` is C major and `pca_C_m` is C minor.
+To play only part of a chord, add `ignore_sound` with the sounds you want to **remove**, not the
+ones you want to keep. `pca_C` with `"ignore_sound": ["En2"]` leaves C and G.
+
+The player still triggers the original chord input. Filtering changes the game's chord sounds,
+not the notes already recorded in your audio file, and does not remove the scoring action.
+
+Copy 1–3 different names exactly from the selected row below. These names intentionally use
+the game's spelling (`Cn2`, `En2`), unlike `pitch` (`C2`, `E2`). Names are case-sensitive and
+octave-specific: `E2`, `En3`, and `en2` are not substitutes for `En2`. Omit `ignore_sound` to play
+the full chord; an empty array is not accepted. Filtering all three sounds of a three-note chord
+is allowed but leaves its input silent.
 
 | Chord ID | Exact allowed `ignore_sound` constituents |
 | --- | --- |
@@ -209,20 +256,25 @@ remove the authored row, chord event, group identity, or required/scoring action
 | `pca_B_dim` | `Bn2`, `Dn3`, `Fn3` |
 | `pca_B_sus4` | `Bn2`, `En3`, `Fs3` |
 
-Exact 1.004 and 1.005 catalogs share verified `pca_Db` constituent authority. Unknown builds
-remain fail-closed for its `ignore_sound`; a bare syntactically valid `pca_Db` remains parseable.
+Other `pca_*` names can pass the initial JSON check, but are not guaranteed to exist in the game.
+The table is the supported reference for chord filtering; arbitrary new chords cannot be created
+by inventing an ID.
 
 ### Groups and dual rows
 
-`group_index: 0` means a parentless required action. For each contiguous nonzero authored run, the
-first row is the required root and every later row is an automated follower that retains its own
-scheduled `beat` time. Every run must contain at least two rows. The same ID may be reused only
-after a run ends; separated uses are independent runs. Group topology changes native links and
-required-action count, not physical row/event identity. Grouping exists only in explicit JSON;
-generated MIDI is always ungrouped. Author it deliberately because followers are not independent
-player actions. A dual row emits monotone first and chord second; each side keeps its own notation
-and identity. Explicit groups may cross the 512-row prefix only when the complete extended chart
-passes generalized validation.
+For a fast right-hand run, give two or more consecutive note rows the same `group_index`, from
+1 to 255. The player hits the first note; the remaining notes follow automatically at their own
+`beat` times. See the [automatic run example](#automatic-right-hand-run).
+
+- Omit the field, or use `0`, for an ordinary independent input.
+- A group must contain at least two consecutive rows. A single grouped row is an error.
+- A different number or `0` ends the group. Reusing its number later starts a new independent run.
+- Followers still count toward the chart's size, but do not require separate player actions.
+- Groups can also contain chords or rows with both hands. A first row containing both `pitch`
+  and `chord_id` still requires **both** inputs; grouping does not turn a two-hand root into one input.
+
+Automatic MIDI generation never creates groups. Add them yourself after exporting the generated
+chart if you want this gameplay. Long grouped charts have the additional limits below.
 
 ## Difficulty profiles
 
@@ -230,124 +282,141 @@ passes generalized validation.
 
 | Field | JSON type | Rule |
 | --- | --- | --- |
-| `difficulty` | integer | 0 through `INT_MAX`; labels must be unique and strictly increasing. |
+| `difficulty` | integer | 0–2147483647; put profiles in increasing difficulty order with no duplicate labels. |
 | `notes` | array | Nonempty explicit-note array using all rules above. |
 
-Root `bpm` is required. Root `notes` and root `difficulty` are forbidden. Each profile compiles and
-validates independently; the first is the root/default chart. Sparse labels are allowed. A failed
-profile/song is rejected rather than silently repaired or clipped.
+Keep `bpm` at the root and remove root `notes` and root `difficulty`. Put each difficulty label
+and its notes inside its own profile. The first profile is the default; labels can skip numbers.
+All profiles share the song's audio and BPM. An invalid authored profile rejects the song.
+In the song's detail view, use D-pad left/right or the keyboard arrow keys to select a profile.
 
 ## MIDI-backed songs
 
 When root `notes` and `profiles` are absent, exactly one `song.mid` or `song.midi` is required.
-The generator evaluates difficulty labels 1 through 6; root `difficulty` does not select one of
-those levels. MIDI profiles are independently, deterministically reduced from normalized source events and every
-generated row has `group_index: 0`. Exact/safe verified chord inference and exact IgnoreSound may
-be generated. MIDI note spelling uses key-signature context but never pretends the file stores an
-original sharp/flat spelling. Exact source tick lengths can derive side note values; otherwise the
-same side-specific legacy fallback applies. The generated selector remains source-backed,
-deterministic, route-validated, and fail-closed.
+The generator tries difficulty labels 1 through 6; root `difficulty` does not select one of them.
+Each level chooses a playable selection from the MIDI, not necessarily every original note.
+Levels that cannot be generated within the supported limits are omitted, so some numbers may be missing.
+The generator may choose chords, partial chords, and alternate C/C-sharp inputs, but never automatic
+groups. It uses key signatures for sharp/flat spelling and exact supported MIDI lengths for note
+symbols; other lengths use the default symbols described above.
 
-Root-field precedence is exact:
+### MIDI timing and overrides
 
-- Supplied `bpm` overrides source tempo for chart timing. If absent, chart BPM comes from the MIDI
-  source. The resolved BPM is stored in each visible profile.
-- Supplied `score_thresholds` are preserved for every generated profile. If absent, each profile
-  derives them from its own required-action count using the standard rule above.
-- Supplied `mode_change_combo_counts` are preserved. If absent, a visible profile uses the
-  validated route's authored mode values when that route provides them; otherwise it keeps the
-  standard action/difficulty-derived values above.
-- Supplied `midi_audio_alignment_seconds` wins over alignment estimation. Without it, alignment is
-  estimated from MIDI/audio evidence.
-- Supplied `midi_audio_offset_seconds` wins for scheduling. Without it, offset is the resolved
-  alignment plus the fixed playback compensation. Alignment is still resolved independently even
-  when offset is supplied. The resolved alignment and offset are stored in each visible profile's
-  metadata and in the root metadata from the first visible generated profile.
+- Start with the minimal example and leave both timing offsets out to use automatic alignment.
+- To set a manual total shift, use `midi_audio_offset_seconds`: `0.1` schedules notes 0.1 seconds
+  later than the MIDI timestamps, `-0.1` schedules them earlier. Explicit `0` means no shift;
+  it does **not** mean automatic. Adjusting this value replaces, rather than adds to, the automatic shift.
+- `midi_audio_alignment_seconds` is an advanced override for the alignment estimate. When no
+  total offset is supplied, the mod uses this alignment plus its playback compensation. Normally
+  leave this field out; an explicit total offset takes precedence for note scheduling.
+- `midi_minimum_lead_in_seconds` removes attacks before the chosen start time (default 2 seconds).
+  Lower it if you deliberately want early notes. It does not add an introduction to the recording.
+- Omit `bpm` to use the MIDI tempo. Supplied `bpm` overrides it for chart timing.
+- Supplied score/combo threshold arrays apply unchanged to all generated profiles. Omit them to
+  let the generator select values for each level.
 
 `midi_audio_offset_seconds`, `midi_audio_alignment_seconds`, and
-`midi_minimum_lead_in_seconds` affect MIDI only. Generated labels may be omitted deterministically
-when row, workload, route, or other validated limits cannot be met. No generated grouping is used.
+`midi_minimum_lead_in_seconds` affect MIDI only. Once you supply explicit `notes` or `profiles`,
+they do not shift that chart: edit its `beat` values instead.
 
 ## Metronome
 
-`metronome` is a closed object:
+The metronome adds a beat click to the base audio mode only. Omit it for no click, or use
+`"metronome": { "enabled": true, "level": 0.12 }`. A newly auto-created starter enables it;
+that is different from omitting it in a file you write yourself.
 
 | Field | JSON type | Status/default | Accepted value / interaction |
 | --- | --- | --- | --- |
-| `enabled` | boolean | optional; default `false` | Enables Mode0-only click synthesis. |
+| `enabled` | boolean | optional; default `false` | Adds clicks in Mode0 only. |
 | `level` | number | optional; default `0.12` | Finite `[0,1]`; must be greater than 0 when enabled. |
-| `beat_zero_offset_seconds` | number | optional; default `0` | Finite `[-30,30]`; valid only with explicit JSON notes. Its presence rejects a MIDI-backed song, including an explicit `0` and even when `enabled` is `false`. |
+| `beat_zero_offset_seconds` | number | optional; default `0` | -30 to 30. Moves the click grid's beat zero for explicit notes only; positive is later. Does not move notes or source audio. |
 
-MIDI-backed generation rejects any authored `beat_zero_offset_seconds`, including an explicit `0`
-and even when the metronome is disabled; omit the field so MIDI can use its resolved audio offset and lead-in. Metronome processing is
-applied to Mode0 only.
+Do not put `beat_zero_offset_seconds` in a MIDI-backed song: its presence is an error, including an
+explicit `0`, even when the metronome is disabled. Omit the field so MIDI uses its automatic or
+manually configured timing.
 
 ## Audio, modes, loudness, and gain
 
-Audio role filenames and fallback are defined in “Folder and source selection.” Each authored
-source is decoded and processed independently. Loudness controls use the root defaults/ranges
-above. `gain_envelope` is an array of 1–64 closed objects:
+The minigame switches among three audio modes as the player's performance changes; these are
+not difficulty profiles. Supplying one `song.*` file is enough: all modes use it by default.
+Optionally supply `song.mode1.*` and/or `song.mode2.*` for different arrangements at those tiers.
+If either is missing, that mode uses the base `song.*`, not the other override.
+
+Export all versions with the **same start, end, and sample-accurate duration**. Overrides must
+have exactly the same decoded sample count after conversion to 48 kHz stereo, or the song is
+rejected. Matching the displayed rounded duration in an audio player may not be enough, especially
+with differently encoded MP3s; aligned WAV exports are the simplest choice. The mod does not pad
+or trim mismatched versions. Metronome clicks are added to Mode0 only.
+
+For volume, start with the default normalization settings. `gain_envelope` is optional automation
+for making parts of the recording quieter or louder. It contains 1–64 points:
 
 | Field | JSON type | Status | Accepted value |
 | --- | --- | --- | --- |
-| `time_seconds` | number | **required** | Final validation requires finite, nonnegative, and strictly increasing values. |
-| `gain_db` | number | **required** | Final validation requires finite `[-12,12]`. |
+| `time_seconds` | number | **required** | Seconds from the audio start, at least 0. Points must have strictly increasing times. |
+| `gain_db` | number | **required** | -12 to 12 dB. `0` leaves volume unchanged; negative is quieter, positive is louder. |
 
-Gain is interpolated linearly in amplitude between points. Before the first point and after the
-last point, the nearest endpoint gain is held. Omitted `gain_envelope` means unity gain.
+Volume changes smoothly between points (linearly in amplitude). Before the first point and after
+the last, its endpoint volume is held. The envelope applies to each audio version. Omit it for no
+additional volume automation.
 
 ## Extended charts and build policy
 
-Native-512 or unsupported policy accepts at most 512 source rows. On an exact supported build,
-playable extended capability is automatic only after every build-specific validation/install gate
-succeeds. It then accepts 513–8192 source rows and at most 8192 native events, validates the full
-chart, publishes exactly the first 512 descriptor rows, and retains every remaining row/event in
-the validated tail. It never clips. Authored groups, dual rows, chords, IgnoreSound, and independent
-side note values remain subject to complete-plan validation.
+The ordinary limit is 512 chart rows. On supported game builds, the mod automatically attempts
+longer charts up to **8192 rows and 8192 events per profile**. One pitch or chord is one event;
+a row containing both is two. Group followers still count toward these size limits.
 
-Build 1.004 has catalog/static/offline compatibility but is **runtime-untested** for the current
-release-facing extended/split-articulation claim. Build 1.005 has bounded evidence described in
-`CurrentStatus.md`; evidence does not transfer between builds or artifacts.
+There is no setting to unlock long charts. If the game's compatibility checks fail, the ordinary
+limit remains and oversized charts are rejected, not shortened. For an ordinary chart of at most
+512 rows, groups combined with more than 512 events are unsupported; reduce or split that chart.
+
+Long-chart and independent left/right note-symbol support have limited in-game testing on 1.005
+and are **runtime-untested on 1.004**. Grouped/filtered long-chart combinations and alternate-input
+directions still need focused in-game verification. Test your complete song before sharing it.
 
 ## Resolved song convenience output
 
-After every successful cold or warm load, the pipeline best-effort writes
-`.cache/resolved-song.json`. This deterministic file uses the public
-`ff7rpianosongs.song.v2` schema and contains the final visible rows. A single explicit root chart is
-written as complete root `notes`; authored or MIDI profile sets are written as complete visible
-`profiles`, preserving sparse labels and any rows retained beyond the 512-row descriptor prefix.
-Each present side has an explicit final `monotone_note_value` or `chord_note_value`. Internal IDs,
-diagnostics, source witnesses, camera state, paths, hashes, and cache-policy data are omitted.
-Dynamic strings must be well-formed UTF-8. Valid multibyte text is preserved byte-for-byte except
-for JSON-required escaping; malformed UTF-8 makes only this best-effort render fail.
+After a successful load, look for `.cache/resolved-song.json` inside your song folder. It contains
+the complete playable chart, including generated difficulties, long charts, and final note symbols.
+It is convenience output only: **the mod does not read it as your song configuration**.
 
-The file is convenience output only: it is never discovered as source, never part of a cache key or
-manifest, and never runtime or gameplay authority. Do not hand-edit `.cache` expecting gameplay
-changes. Copy a desired `notes` array or `profiles` array into the real `song.json` instead. Copying
-the complete resolved file is also valid; its explicit notes/profiles then take precedence over a
-remaining `song.mid` or `song.midi`. Generated levels omitted by validation remain absent. Derived
-per-profile score or mode metadata that cannot be represented honestly at the root is omitted and
-is recomputed when the copied explicit profiles load.
+To turn a generated chart into an editable chart:
 
-Publication is atomic and best-effort. A missing file is recreated on the next successful warm
-load without rebuilding valid authoritative caches. A render or write failure does not reject a
-playable song and cannot replace a prior complete file with partial bytes.
+1. Exit the game and back up your original `song.json`.
+2. Copy `.cache/resolved-song.json` over `song.json`. Keep the same audio files.
+3. Edit `notes`, or the notes inside each `profiles` entry, and restart the game.
+
+Alternatively, copy a desired `notes` array or `profiles` array into your existing `song.json`.
+Keep the exported `bpm`; remove the other chart form, and remove root `difficulty` when using
+`profiles`. These explicit notes take precedence over any remaining MIDI file: future MIDI edits
+will not regenerate them. Omitted generated levels stay absent; automatically calculated score
+and combo settings may be recalculated for the edited chart.
+
+Do not edit `.cache` directly or include it when sharing a song. The export is recreated on a
+successful load if possible; inability to write it does not stop an otherwise valid song loading.
 
 ## Failure behavior
 
-- Invalid JSON, unknown fields, wrong types, out-of-range values, missing source files, ambiguous
-  files, invalid groups/native identities/constituents, unsupported alternates/note values, and
-  incompatible audio reject the song fail-closed.
-- Unsupported authored charts above 512 reject; oversized generated profiles omit. Nothing is
-  clipped or partially published.
-- Parser acceptance of syntax (for example a `pca_*` string) is not proof of compiler/native/build
-  eligibility. Final validation is authoritative.
-- Cache identities include pipeline, source, generated-MIDI, row-policy, audio-policy, and exact
-  native-asset capability semantics; stale artifacts rebuild or reject rather than gaining authority.
+| Symptom | What to check |
+| --- | --- |
+| Song is missing | Read `FF7RPianoSongs.log`; check the exact filenames, JSON punctuation, and field names. |
+| A group is rejected | Give at least two consecutive rows the same nonzero `group_index`. |
+| A partial chord is rejected | Copy exact names from that chord's table row; omit the field rather than using an empty array. |
+| An alternate pitch is rejected | Check the supported spelling and octave in “Pitch spelling”; alternate is not available for every note. |
+| Early MIDI notes are missing | Check the lead-in, timing offsets, and audio length. Generation also reduces notes for playability. |
+| MIDI edits no longer change the chart | Remove explicit `notes`/`profiles` to return to MIDI generation, or edit those explicit notes instead. |
+| Mode audio is rejected | Export all versions on the same timeline with exactly matching decoded lengths. |
+
+Source edits normally invalidate the affected cache automatically. If a problem persists, exit
+the game, delete only that song's `.cache/`, and retry. Invalid authored songs are rejected;
+unsupported generated levels are omitted. Nothing is silently shortened to fit a chart limit.
 
 ## Examples
 
 ### Minimal explicit chart
+
+Save this as `song.json` beside your audio. This complete example needs no MIDI. At 120 BPM,
+the first note is at 2 seconds; replace or extend the notes to match your recording.
 
 ```json
 {
@@ -355,12 +424,51 @@ playable song and cannot replace a prior complete file with partial bytes.
   "title": "Minimal",
   "bpm": 120,
   "notes": [
-    { "beat": 0, "duration_beats": 1, "pitch": "C4" }
+    { "beat": 4, "duration_beats": 1, "pitch": "C4" }
+  ]
+}
+```
+
+### Automatic right-hand run
+
+One right-hand input on C4 starts this three-note run. D4 and E4 keep their own scheduled times;
+G4 is a separate input because its group is omitted.
+
+```json
+{
+  "schema": "ff7rpianosongs.song.v2",
+  "title": "Automatic Run",
+  "bpm": 120,
+  "notes": [
+    { "beat": 4, "duration_beats": 0.25, "pitch": "C4", "group_index": 7 },
+    { "beat": 4.25, "duration_beats": 0.25, "pitch": "D4", "group_index": 7 },
+    { "beat": 4.5, "duration_beats": 0.25, "pitch": "E4", "group_index": 7 },
+    { "beat": 6, "duration_beats": 1, "pitch": "G4" }
+  ]
+}
+```
+
+### Partial chord and alternate C input
+
+The first row uses the alternate C4 input. The next row asks for C major but leaves out E,
+so only C and G sound from the game's chord. Your recorded audio is unchanged.
+
+```json
+{
+  "schema": "ff7rpianosongs.song.v2",
+  "title": "Input And Harmony",
+  "bpm": 120,
+  "notes": [
+    { "beat": 4, "duration_beats": 1, "pitch": "C4", "monotone_variant": "alternate" },
+    { "beat": 6, "duration_beats": 1, "chord_id": "pca_C", "ignore_sound": ["En2"] }
   ]
 }
 ```
 
 ### Dual row, chord filtering, note values, and grouping
+
+Advanced combination: the first row requires both hands, with different note symbols. The second
+row is a group follower, not a separate required input.
 
 ```json
 {
@@ -408,15 +516,13 @@ playable song and cannot replace a prior complete file with partial bytes.
 
 ### MIDI-backed song
 
-Place exactly one `song.mid` beside this JSON:
+Place `song.mid` (or `song.midi`) and your required `song.wav`, `song.mp3`, or `song.flac`
+beside this JSON. This minimal example leaves timing alignment automatic and has no metronome:
 
 ```json
 {
   "schema": "ff7rpianosongs.song.v2",
-  "title": "Generated MIDI",
-  "midi_audio_offset_seconds": 0,
-  "midi_audio_alignment_seconds": 0,
-  "midi_minimum_lead_in_seconds": 2
+  "title": "Generated MIDI"
 }
 ```
 

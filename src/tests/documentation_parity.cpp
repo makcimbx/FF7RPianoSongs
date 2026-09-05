@@ -703,13 +703,15 @@ bool verify_song_format_contract_text(
         "## Resolved song convenience output", "## Failure behavior", "### Minimal explicit chart", "### Dual row, chord filtering, note values, and grouping",
         "### Explicit difficulty profiles", "### MIDI-backed song",
     }};
-    constexpr std::array<std::string_view, 13> required_example_sections{{
+    constexpr std::array<std::string_view, 16> required_example_sections{{
         "### Metronome and gain envelope", "### Mode audio filenames",
         "unknown fields are rejected", "`song.mode0.*` is rejected",
-        "including an explicit `0`", "even when the metronome is disabled",
-        "atomically creates a starter file", "existing file is not replaced",
-        "`.cache/resolved-song.json`", "convenience output only", "never part of a cache key",
-        "Copy a desired `notes` array or `profiles` array", "cannot replace a prior complete file with partial bytes",
+        "explicit `0`", "even when the metronome is disabled",
+        "creates a starter file", "existing file is not replaced",
+        "`.cache/resolved-song.json`", "convenience output only",
+        "copy a desired `notes` array or `profiles` array", "future MIDI edits",
+        "## Start here", "### Editing JSON safely", "### Automatic right-hand run",
+        "### Partial chord and alternate C input",
     }};
     const auto require_inventory_rows = [&](const std::string_view section_begin,
                                             const std::string_view section_end,
@@ -758,8 +760,11 @@ bool verify_song_format_contract_text(
         }
     }
     for (const auto& entry : ff7rp::pipeline::kSupportedNamedNoteValues) {
-        const std::string row = "| `" + std::string(entry.name) + "` | `(" +
-            std::to_string(entry.value.note_type) + "," + std::to_string(entry.value.dot_type) + ")` |";
+        // Package prose describes the symbol, not the implementation's byte pair.
+        std::string label(entry.name);
+        std::replace(label.begin(), label.end(), '_', ' ');
+        label.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(label.front())));
+        const std::string row = "| `" + std::string(entry.name) + "` | " + label + " note |";
         if (text.find(row) == std::string_view::npos) {
             return fail(error_message, "SongFormat note-value table is missing or incorrect for " +
                 std::string(entry.name));

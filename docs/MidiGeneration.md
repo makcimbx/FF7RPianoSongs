@@ -89,7 +89,12 @@ guessing is used. Generated rows remain ungrouped. This derivation is covered by
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
-monotone identities by a contour planner. For each event, the immediately
+monotone identities by a contour planner. Eligibility is restricted to octaves
+2–6 for both classes (MIDI C2=36 through C#6=85); no boundary `_2` is invented.
+Ordinary C7 already uses the high-C native assignment. Exact 1.005 file-data
+evidence is retained in [Monotone Assignment Inventory](../analysis/PianoMonotoneAssignEvidence-20260905.md);
+this does not establish exact 1.004 monotone parity or in-game input behavior.
+For each event, the immediately
 preceding and following canonical source pitches contribute one mismatch when
 the normal low-C sector is used beside lower material or the `_2` high-C sector
 is used beside higher material. The planner lexicographically minimizes total

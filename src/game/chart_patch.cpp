@@ -1151,12 +1151,34 @@ bool try_plan_descriptor_chart_patch(
     }
 }
 
+int32_t wrapper_count_bound_after_expand(
+    const std::vector<DescriptorChartRow>& published_rows,
+    const bool has_retained_tail)
+{
+    const int32_t source_rows = static_cast<int32_t>(published_rows.size());
+    // Only ordinary complete charts gain event-count authority here. Retained
+    // tails (including legacy diagnostics) still require the exact synchronous
+    // extended transaction below; a valid prefix alone cannot authorize them.
+    if (has_retained_tail || published_rows.size() > ff7rp::pipeline::kMaxChartRows)
+        return source_rows;
+
+    std::vector<ff7rp::pipeline::ChartEventRow> event_rows;
+    event_rows.reserve(published_rows.size());
+    for (const DescriptorChartRow& row : published_rows)
+        event_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+    const auto plan = ff7rp::pipeline::derive_chart_event_plan(event_rows);
+    // Reuse canonical physical semantics, not stored counts or required actions.
+    // An invalid plan cannot widen the legacy bound. At most 512 dual rows fit
+    // this branch, so the valid native count is representable in int32_t.
+    return plan.valid() ? static_cast<int32_t>(plan.native_event_count) : source_rows;
+}
+
 bool should_cap_wrapper_count_after_expand(
-    const int32_t copied_count, const int32_t published_source_rows,
+    const int32_t copied_count, const int32_t published_event_bound,
     const bool preserve_generalized_parser_count) noexcept
 {
     return !preserve_generalized_parser_count
-        && copied_count > published_source_rows;
+        && copied_count > published_event_bound;
 }
 
 #ifndef FF7RP_CHART_PATCH_SELFTEST
@@ -1798,6 +1820,54 @@ bool chart_patch_ignore_sound_selftest()
         return fail();
     }
 
+    // Ordinary R=5/E=7: monotone-only, chord-only and dual rows. Count even
+    // whole-value (0,0) sides by presence; IgnoreSound is not another event.
+    SongDifficultyProfile mixed = make_event_profile(3u, 2u, false, 4);
+    mixed.chart_notes[1].monotone_id.clear();
+    mixed.chart_notes[1].monotone_note_type = 0;
+    mixed.chart_notes[1].chord_id = "Chord";
+    mixed.chart_notes[3].monotone_note_type = 0;
+    mixed.chart_notes[3].chord_dot_type = 0;
+    mixed.chart_notes[3].ignore_sound_ids = {"A", "", "C"};
+    // Deliberately stale metadata must not become wrapper-count authority.
+    mixed.native_event_count = 999;
+    mixed.required_action_count = 1;
+    mixed.note_count = 1;
+    std::vector<DescriptorChartRow> mixed_rows;
+    if (!build_descriptor_chart_rows(mixed, mixed_rows)
+        || wrapper_count_bound_after_expand(mixed_rows, false) != 7
+        || should_cap_wrapper_count_after_expand(7,
+            wrapper_count_bound_after_expand(mixed_rows, false), false)
+        || !should_cap_wrapper_count_after_expand(8,
+            wrapper_count_bound_after_expand(mixed_rows, false), false)) return fail();
+    for (const int32_t count : {-1, 0, 1, 5, 6, 7}) {
+        if (should_cap_wrapper_count_after_expand(count, 7, false)) return fail();
+    }
+    // Group children remain native events even when they are not actions.
+    mixed_rows[0].group_index = 1;
+    mixed_rows[1].group_index = 1;
+    if (wrapper_count_bound_after_expand(mixed_rows, false) != 7
+        || wrapper_count_bound_after_expand(mixed_rows, true) != 5
+        || !should_cap_wrapper_count_after_expand(7,
+            wrapper_count_bound_after_expand(mixed_rows, true), false)
+        || should_cap_wrapper_count_after_expand(7,
+            wrapper_count_bound_after_expand(mixed_rows, true), true)) return fail();
+    mixed_rows[0].time_str = "invalid";
+    if (wrapper_count_bound_after_expand(mixed_rows, false) != 5) return fail();
+
+    // Ordinary ungrouped native growth above 512 events remains legitimate;
+    // grouped allocation admission is still covered by the planner guard above.
+    std::vector<DescriptorChartRow> count_boundary_rows;
+    if (!build_descriptor_chart_rows(ungrouped_513, count_boundary_rows)
+        || wrapper_count_bound_after_expand(count_boundary_rows, false) != 513
+        || should_cap_wrapper_count_after_expand(513, 513, false)) return fail();
+    const auto dual_512 = make_event_profile(0u, 512u, false, 4);
+    if (!build_descriptor_chart_rows(dual_512, count_boundary_rows)
+        || wrapper_count_bound_after_expand(count_boundary_rows, false) != 1024
+        || should_cap_wrapper_count_after_expand(1024, 1024, false)
+        || !should_cap_wrapper_count_after_expand(1025, 1024, false)
+        || wrapper_count_bound_after_expand(count_boundary_rows, true) != 512) return fail();
+
     PlannedDescriptorChartPatch planned;
     std::string reason;
     const SongDifficultyProfile root_profile = make_profile({"A", "", "C"}, {"", "B", ""});
@@ -2298,7 +2368,8 @@ void finish_active_chart_row_patch_after_expand(
     }
     const SongDescriptor* const song = selection.song;
 
-    const int32_t patched_count = static_cast<int32_t>(rows.size());
+    const int32_t patched_count = wrapper_count_bound_after_expand(
+        rows, !selection.profile->extended_chart_tail_notes.empty());
     int32_t copied_count = -1;
     if (!core::safe_read_field(wrapper,
             runtime_layouts::PianoScoreWrapper::copied_row_count, copied_count)) {

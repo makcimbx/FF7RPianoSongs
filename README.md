@@ -32,19 +32,23 @@ End/Binaries/Win64/
   FF7RPianoSongs.ini
   FF7RPianoSongs.log              (generated)
   Music/<Song Name>/
-    song.json
-    song.wav | song.mp3 | song.flac                 (required Mode0/base)
-    song.mode1.wav | .mp3 | .flac                  (optional Mode1 override)
-    song.mode2.wav | .mp3 | .flac                  (optional Mode2 override)
-    song.mid | song.midi          (optional)
+    song.json                      (settings and optional hand-authored notes)
+    song.wav                       (required audio; .mp3 or .flac also accepted)
+    song.mid                       (or song.midi; needed unless JSON supplies notes)
+    song.mode1.wav                 (optional alternate audio; .mp3/.flac also accepted)
+    song.mode2.wav                 (optional alternate audio; .mp3/.flac also accepted)
 ```
 
-The package contains no music. Every archive includes the complete [Song Format](docs/SongFormat.md)
-authoring reference; use that bundled copy to create or check a song.
+The package contains no music. To make your first song, put matching audio and MIDI in a song
+folder; the mod creates a starter `song.json` if it is missing. Audio alone cannot generate notes.
+For hand-authored charts, automatic note runs, partial chords, and alternate C inputs, start with
+the bundled [Song Format guide](docs/SongFormat.md#start-here). It includes complete JSON examples
+and the full settings/chord reference.
 
 ## Use
 
 - Custom songs appear alongside the default songs.
+- The first load of new or edited songs can take longer while audio and charts are prepared.
 - For a song with several profiles, use D-pad left/right or the keyboard arrow keys in its detail view. Scores are stored separately for each actual profile.
 - If a song is missing, it was rejected safely. Check `End/Binaries/Win64/FF7RPianoSongs.log` for the reason.
 
@@ -58,10 +62,18 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
 
+The dot in the table separates an INI section from its setting; do not type `General.LogLevel`
+as a key. For example, to enable detailed logging, change the existing entry to:
+
+```ini
+[General]
+LogLevel=debug
+```
+
 To rebuild one song, exit the game and delete only that song's `.cache/` directory. Never distribute
-or copy `.cache/` data between machines or mod versions. A successful load also writes the
-non-authoritative `.cache/resolved-song.json`; copy its `notes` or `profiles` into the real
-`song.json` if you want to keep that resolved chart, rather than editing `.cache`.
+or copy `.cache/` data between machines or mod versions. To edit an automatically generated chart,
+follow [Editing a resolved song](docs/SongFormat.md#resolved-song-convenience-output), rather than
+editing cache files directly.
 
 ## Update, Roll Back, or Remove
 
@@ -75,26 +87,31 @@ non-authoritative `.cache/resolved-song.json`; copy its `notes` or `profiles` in
 
 - Confirm Ultimate ASI Loader or another compatible x64 ASI loader is installed. A working layout normally includes a proxy DLL such as `End/Binaries/Win64/xinput1_3.dll`.
 - Confirm `FF7RPianoSongs.asi` is directly in `End/Binaries/Win64/` and `General.Enabled` is nonzero.
-- Check `FF7RPianoSongs.log`. A game build this download was not built for fails closed instead of guessing addresses, and the log reports the executable identity it expected next to the one it found. Install the download that matches your game version, or wait for one to be published.
+- Check `FF7RPianoSongs.log`. If this download does not match your game version, the mod will not run; the log shows the mismatch. Install the matching download, or wait for one to be published.
 
 **A song is missing or changed after an edit**
 
 - Check the fixed names and limits in [Song Format](docs/SongFormat.md).
-- Keep exactly one required `song.*` base source and at most one supported override for each optional `song.mode1.*` and `song.mode2.*` role, plus valid JSON.
-- Delete that song's `.cache/` and retry.
+- Keep one main audio file, not both `song.wav` and `song.mp3`. Supply matching MIDI or explicit
+  JSON notes. Optional mode recordings must have exactly the same decoded duration as the main audio.
+- Exit the game before editing files or deleting that song's `.cache/`, then retry.
 - Temporarily set `General.LogLevel=debug`, reproduce once, then restore `info`.
 
 Logs may contain song names and local paths. Remove private data and copyrighted inputs before sharing them.
 
 ## Compatibility and Limitations
 
-- Each download supports exactly one cataloged Windows x64 game build. Updating or rolling back the game can require a different download.
-- Exact build 1.004 has catalog/static/offline compatibility but remains **runtime-untested** for the current extended-chart and split-articulation claims; 1.005 evidence does not transfer to it.
-- Ordinary and noneligible charts remain limited to the native 512-row prefix. Reviewed extended transport is attempted automatically only for an exact supported executable build and remains fail-closed unless every build-specific gate and hook succeeds.
+- Each download supports exactly one Windows x64 game build. Updating or rolling back the game can require a different download.
+- Longer charts and independent left/right note symbols have limited in-game testing on 1.005
+  and remain **runtime-untested on 1.004**. Not every combination of grouping, chord filtering,
+  and alternate input has been checked in-game.
+- The ordinary chart limit is 512 rows. Compatible builds can automatically accept longer charts,
+  up to 8192 rows/events per profile; see [chart limits](docs/SongFormat.md#extended-charts-and-build-policy)
+  for how two-hand rows and groups count. Unsupported charts are rejected, not shortened.
 - Replace, remove, or update the ASI only while the game is stopped. Live unload/reload is unsupported.
-- Looped HCA and arbitrary CRI encoder profiles are unsupported.
-- Audio conversion has bounded validation for the supported piano profile, not universal encoder parity.
-- Unqualified retry, abort, active-process exit, and unusual teardown paths may require scenario-specific testing.
+- Supply WAV, MP3, or FLAC audio within the [song limits](docs/SongFormat.md#folder-and-source-selection).
+  Pre-encoded HCA/MABF files and audio looping are not supported authoring inputs.
+- Retry, abort, and unusual exit paths are not comprehensively tested. Keep backups of your song files.
 
 ## Reference
 

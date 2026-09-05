@@ -49,6 +49,52 @@ std::string expected_monotone(int semitone)
 bool replace_once(std::string* text, const std::string& from, const std::string& to);
 bool remove_line_containing(std::string* text, const std::string& marker);
 
+bool verify_song_format_examples(const std::string& text, std::string* error_message)
+{
+    std::size_t cursor = 0;
+    std::size_t example_count = 0;
+    while ((cursor = text.find("```json", cursor)) != std::string::npos) {
+        const std::size_t begin = text.find('\n', cursor);
+        const std::size_t end = begin == std::string::npos ? std::string::npos : text.find("```", begin);
+        if (end == std::string::npos) {
+            *error_message = "SongFormat has an unterminated JSON example";
+            return false;
+        }
+        ++example_count;
+        ff7rp::pipeline::ParsedSongSource source;
+        auto status = ff7rp::pipeline::parse_song_json_string(text.substr(begin, end - begin), &source);
+        if (!status.ok()) {
+            *error_message = "SongFormat example " + std::to_string(example_count) +
+                " does not parse: " + status.message;
+            return false;
+        }
+        const auto compile = [&](const ff7rp::pipeline::SongConfig& config) {
+            ff7rp::pipeline::CompiledChart chart;
+            const auto compiled = ff7rp::pipeline::compile_chart(config, &chart);
+            if (!compiled.ok()) {
+                *error_message = "SongFormat example " + std::to_string(example_count) +
+                    " does not compile: " + compiled.message;
+            }
+            return compiled.ok();
+        };
+        if (source.authored_profiles.empty()) {
+            // MIDI examples require real source audio/MIDI at load time. Here we
+            // verify their public JSON; explicit examples additionally compile.
+            if (source.config.notes_provided && !compile(source.config)) return false;
+        } else {
+            for (const auto& profile : source.authored_profiles) {
+                auto config = source.config;
+                config.difficulty = profile.difficulty;
+                config.notes = profile.notes;
+                if (!compile(config)) return false;
+            }
+        }
+        cursor = end + 3u;
+    }
+    if (example_count == 0) *error_message = "SongFormat has no copyable JSON examples";
+    return example_count != 0;
+}
+
 bool test_staged_documentation_failures(std::string* error_message)
 {
     namespace fs = std::filesystem;
@@ -74,6 +120,19 @@ bool test_staged_documentation_failures(std::string* error_message)
     if (song_format.empty()) {
         *error_message = "canonical SongFormat fixture is unreadable";
         return false;
+    }
+    if (!verify_song_format_examples(song_format, error_message)) return false;
+    for (const auto& [from, to] : std::array<std::pair<std::string, std::string>, 2>{{
+             {R"json("title": "Minimal")json", R"json("title": )json"},
+             {R"json("pitch": "C4")json", R"json("pitch": "H4")json"},
+         }}) {
+        std::string mutated = song_format;
+        std::string example_error;
+        if (!replace_once(&mutated, from, to)
+            || verify_song_format_examples(mutated, &example_error)) {
+            *error_message = "SongFormat example audit accepted invalid JSON or note semantics";
+            return false;
+        }
     }
     const auto require_semantic_rejection = [&](const std::string& removed,
                                                 const char* description) {
@@ -111,7 +170,7 @@ bool test_staged_documentation_failures(std::string* error_message)
         return true;
     };
     if (!require_structured_field_rejection("midi_audio_alignment_seconds", "public root field row")
-        || !require_semantic_rejection("| `dotted_sixteenth` | `(4,1)` |", "note-value enum")
+        || !require_semantic_rejection("| `dotted_sixteenth` | Dotted sixteenth note |", "note-value enum")
         || !require_semantic_rejection("| `pca_Db` | `Db2`, `Fn2`, `Ab2` |", "verified chord row")
         || !require_semantic_rejection("## Resolved song convenience output", "resolved-output contract")
         || !require_semantic_rejection("### Mode audio filenames", "required example")) {
@@ -300,8 +359,8 @@ bool test_release_authority_parser(std::string* error_message)
 int main()
 {
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
-        != "ff7rpianosongs.pipeline.v46") {
-        return fail("pipeline cache identity did not invalidate legacy accidental canonicalization");
+        != "ff7rpianosongs.pipeline.v47") {
+        return fail("pipeline cache identity did not invalidate unsupported alternate assignments");
     }
     const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-68fd6fde");
@@ -1163,7 +1222,7 @@ int main()
     if (!status.ok() || monotone != "Bn6") {
         return fail("downward octave-crossing enharmonic failed");
     }
-    const auto compile_alternate = [](const char* pitch) {
+    const auto compile_alternate = [](const char* pitch, std::string* resolved = nullptr) {
         ff7rp::pipeline::SongConfig alternate;
         alternate.schema = "v2";
         alternate.title = "alternate accidental boundary";
@@ -1175,14 +1234,25 @@ int main()
         note.alternate_monotone = true;
         alternate.notes.push_back(std::move(note));
         ff7rp::pipeline::CompiledChart compiled;
-        return ff7rp::pipeline::compile_chart(alternate, &compiled);
+        const auto result = ff7rp::pipeline::compile_chart(alternate, &compiled);
+        if (result.ok() && resolved) *resolved = compiled.notes.front().monotone_id;
+        return result;
     };
-    for (const char* pitch : {"C1", "C7", "B#0", "B#3", "B#6", "C#2", "C#6"}) {
-        if (!compile_alternate(pitch).ok()) {
-            return fail("verified alternate monotone was rejected: " + std::string(pitch));
+    for (int octave = 2; octave <= 6; ++octave) {
+        const std::string suffix = std::to_string(octave);
+        for (const auto& [pitch, expected] : std::array<std::pair<std::string, std::string>, 3>{{
+                 {"C" + suffix, "Cn" + suffix + "_2"},
+                 {"C#" + suffix, "Cs" + suffix + "_2"},
+                 {"B#" + std::to_string(octave - 1), "Cn" + suffix + "_2"},
+             }}) {
+            std::string resolved;
+            if (!compile_alternate(pitch.c_str(), &resolved).ok() || resolved != expected) {
+                return fail("verified alternate monotone mapping failed: " + pitch);
+            }
         }
     }
-    for (const char* pitch : {"C#1", "C#7", "Db1", "Db4", "Db6"}) {
+    for (const char* pitch : {"C1", "C7", "B#0", "B#6", "C#1", "C#7",
+             "Db1", "Db4", "Db6", "Cb2", "Cb4", "Cb7", "B3"}) {
         if (compile_alternate(pitch).ok()) {
             return fail("unsupported accidental alternate was accepted: " + std::string(pitch));
         }

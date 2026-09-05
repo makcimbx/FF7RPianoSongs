@@ -21,6 +21,7 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 
 ## Chart And MIDI
 
+- [PianoMonotoneAssignEvidence-20260905.md](PianoMonotoneAssignEvidence-20260905.md) records exact installed 1.005 stock monotone extraction, full retained-table parity, alternate C/C-sharp octave boundaries, and absence of C-flat alternate rows. It is asset evidence, not input/audio runtime qualification or 1.004 parity.
 - [ChartRowLimitEvidence.md](ChartRowLimitEvidence.md) preserves parser-cap, event ABI, ownership, synthetic-model, and runtime diagnostic findings.
 - [ChartEventAbiGhidra.txt](ChartEventAbiGhidra.txt) is the underlying recovered chart-event ABI report.
 - [Playable513ReserveEvidence.md](Playable513ReserveEvidence.md) preserves the verified-1.005 scoped-reserve, row-513 constructor/callback, native chart/shared-pointer ownership, synchronous controller binding and pre-expansion authority, validation, rollback, hook-lifecycle, and explicit nonclaim evidence for the restricted monotone-only experiment.

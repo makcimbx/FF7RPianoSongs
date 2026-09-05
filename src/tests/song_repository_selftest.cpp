@@ -1505,6 +1505,16 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
         return fail("manifest sidecar path boundary changed");
     }
     manifest.replace(sidecar_begin, sidecar_end - sidecar_begin + 1u, "sidecar=<cache-sidecar>\n");
+    // This process-local generation depends on which cases ran before this one,
+    // not the song. Check its real value before normalizing the golden identity
+    // so both a filtered run and the complete suite exercise the same artifact.
+    const std::string generation_line = "chart_policy_generation=" +
+        std::to_string(generated.chart_policy_generation) + "\n";
+    const auto generation_begin = manifest.find(generation_line);
+    if (generation_begin == std::string::npos) {
+        return fail("manifest chart policy generation does not match the generated song");
+    }
+    manifest.replace(generation_begin, generation_line.size(), "chart_policy_generation=0\n");
     const std::uint64_t normalized_manifest_digest = ff7rp::pipeline::fnv1a64_append(
         ff7rp::pipeline::kFnv1a64OffsetBasis, manifest.data(), manifest.size());
 
@@ -1523,8 +1533,9 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        expected_cache_key = 0x1eb60341e8603007ull;
-        expected_normalized_manifest_digest = 0xf0d9344e9424394dull;
+        // v47 changes cache/manifest identity, not this midrange chart's semantics.
+        expected_cache_key = 0xd2f1736bfa962f40ull;
+        expected_normalized_manifest_digest = 0x7c2037fdb12b239aull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -2255,7 +2266,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v46") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v47") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -2645,7 +2656,21 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
             profile.diagnostics.maximum_half_second_stream_actions != expected_half_actions[index] ||
             std::fabs(profile.diagnostics.maximum_half_second_stream_duration - expected_half_duration[index]) > 0.000001 ||
             (index == 2 && (std::fabs(validation.margin - 1.05) > 0.000001 || validation.ratio > 1.05))) {
-            return fail("synthetic reviewed profile window, stream, or strict-route ceiling changed");
+            std::string windows;
+            for (const auto count : profile.diagnostics.maximum_window_actions) {
+                if (!windows.empty()) windows += ",";
+                windows += std::to_string(count);
+            }
+            return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
+                " window, stream, or strict-route ceiling changed (windows=" + windows +
+                ", quarter_actions=" + std::to_string(profile.diagnostics.maximum_quarter_second_stream_actions) +
+                ", quarter_duration=" + std::to_string(profile.diagnostics.maximum_quarter_second_stream_duration) +
+                ", half_actions=" + std::to_string(profile.diagnostics.maximum_half_second_stream_actions) +
+                ", half_duration=" + std::to_string(profile.diagnostics.maximum_half_second_stream_duration) +
+                ", ratio=" + std::to_string(validation.ratio) +
+                ", margin=" + std::to_string(validation.margin) +
+                ", published_ratio=" + std::to_string(profile.diagnostics.satisfied_route_ratio) +
+                ", published_margin=" + std::to_string(profile.diagnostics.satisfied_route_margin) + ")");
         }
         baseline = std::move(generated);
     }

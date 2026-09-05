@@ -611,6 +611,10 @@ int main(int argc, char** argv) {
         write_melody_fixture("upper-context.mid", {62, 60, 64}, 1920);
     const std::filesystem::path repeated_c_path =
         write_melody_fixture("repeated-c.mid", {60, 60, 60}, 1920);
+    const std::array<std::filesystem::path, 2> boundary_alternate_paths{
+        write_melody_fixture("low-c-sharp-boundary.mid", {24, 25, 24}, 1920),
+        write_melody_fixture("high-c-boundary.mid", {95, 96, 95}, 1920),
+    };
     const auto write_group_fixture = [&](const char* name, const int spacing) {
         const std::filesystem::path path = temporary.path() / name;
         const std::vector<unsigned char> fixture = profile_group_fixture_midi_bytes(spacing);
@@ -698,6 +702,22 @@ int main(int argc, char** argv) {
             return note.pitch != "C4" || note.alternate_monotone;
         })) {
         return fail("contour planner did not resolve repeated eligible-note ties deterministically");
+    }
+    for (const auto& path : boundary_alternate_paths) {
+        const auto observed = generate(path, no_audio, config_for(6));
+        if (!observed.status.ok() || observed.notes.size() != 3u
+            || std::any_of(observed.notes.begin(), observed.notes.end(), [](const Note& note) {
+                return note.alternate_monotone;
+            })) return fail("MIDI contour planned an absent boundary alternate: " + path.filename().string());
+        auto config = config_for(6);
+        config.bpm = 120.0;
+        config.notes_provided = true;
+        config.notes = observed.notes;
+        ff7rp::pipeline::CompiledChart chart;
+        if (!ff7rp::pipeline::compile_chart(config, &chart).ok()
+            || chart.notes.size() != observed.notes.size()) {
+            return fail("boundary MIDI notes did not remain compilable with ordinary identities");
+        }
     }
     const Observation grouped_easy = generate(profile_group_path, no_audio, config_for(1));
     const Observation grouped_easy_repeat = generate(profile_group_path, no_audio, config_for(1));
