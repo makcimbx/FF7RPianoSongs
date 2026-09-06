@@ -107,32 +107,43 @@ bool callback_exact(const ChartAdmissionSnapshot& chart, Frame& frame) noexcept
         && read(reinterpret_cast<void*>(table), 0x20, target) && target == native_callback_entry;
 }
 
+const ResolvedChordVoicing* admitted_event_voicing(const ChartAdmissionSnapshot& chart, void* event)
+{
+    const auto& binding = chart.binding;
+    const auto& admitted = chart.header;
+    const uintptr_t address = reinterpret_cast<uintptr_t>(event);
+    // Membership uses the sealed allocation and immutable planned ID, not
+    // potentially corrupted native header/selector/ID fields.
+    if (binding && admitted.data && address >= admitted.data
+        && (address - admitted.data) % stride == 0) {
+        const size_t index = (address - admitted.data) / stride;
+        if (index < binding->plan.events.size()
+            && binding->plan.events[index].kind == ff7rp::pipeline::ChartEventKind::Chord) {
+            for (const auto& voicing : binding->voicings)
+                if (voicing.chord == binding->event_names[index]) return &voicing;
+        }
+    }
+    return nullptr;
+}
+
 uint8_t invoke_chord_callback(void* owner, float tempo, void* event, bool charted)
 {
     Frame frame;
     FrameScope scope(frame); // Even stock/nested-ineligible calls shadow outer authorization.
     if (charted) {
+        // Observe playback first: withdrawal between the snapshots leaves either
+        // this owning binding (which fails the authority recheck) or the later
+        // failed cleanup snapshot. The reverse order could miss both.
         const auto playback = registry().playback_snapshot();
+        const auto cleanup = registry().cleanup_lease();
+        // An already-entered update can emit again after playback withdrawal.
+        // Retained membership is denial-only: never populate the projection
+        // frame from cleanup, even if native fields now appear valid again.
+        if (cleanup.chart_admission.state == ChartAdmissionState::Failed
+            && admitted_event_voicing(cleanup.chart_admission, event)) return 0;
         frame.binding = playback.chart_admission.binding;
         frame.owner = owner; frame.event = event;
-        const auto& admitted = playback.chart_admission.header;
-        const uintptr_t address = reinterpret_cast<uintptr_t>(event);
-        // Classify only a member of the CURRENT sealed allocation, using its
-        // immutable planned chord ID. Corrupted native IDs/backlinks/header must
-        // not turn a known override event into an unrelated stock callback.
-        if (frame.binding && admitted.data && address >= admitted.data
-            && (address - admitted.data) % stride == 0) {
-            const size_t index = (address - admitted.data) / stride;
-            if (index < frame.binding->plan.events.size()
-                && frame.binding->plan.events[index].kind == ff7rp::pipeline::ChartEventKind::Chord) {
-                for (const auto& voicing : frame.binding->voicings) {
-                    if (voicing.chord == frame.binding->event_names[index]) {
-                        frame.voicing = &voicing;
-                        break;
-                    }
-                }
-            }
-        }
+        frame.voicing = admitted_event_voicing(playback.chart_admission, event);
         if (frame.voicing && !registry().commit_if_current_chart(frame.binding,
                 +[](const ChartAdmissionSnapshot& chart, void* context) noexcept {
                     return callback_exact(chart, *static_cast<Frame*>(context));

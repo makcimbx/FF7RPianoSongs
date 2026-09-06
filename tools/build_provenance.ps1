@@ -38,9 +38,12 @@ function Get-ProductionInputRelativePaths([string]$InputRoot) {
     $relative = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @("CMakeLists.txt", "build.ps1", "release.json",
             "cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch",
-            "cmake/release_identity.generated.h.in", "src/game/rva_catalog.json", "tools/generate_rva_catalog.py")) {
+            "cmake/release_identity.generated.h.in", "src/game/rva_catalog.json", "tools/generate_rva_catalog.py",
+            "src/game/chord_voicing_bridge.asm")) {
         $relative.Add($path)
     }
+    # The production MASM adapter is explicit above: its adjacent _harness.asm
+    # belongs only to the self-test target and is not a DLL production input.
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $InputRoot "src") -Recurse -File) {
         $path = [System.IO.Path]::GetRelativePath($InputRoot, $file.FullName).Replace('\', '/')
         if ($path.StartsWith("src/tests/") -or $path.StartsWith("src/tools/")) {

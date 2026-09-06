@@ -226,7 +226,23 @@ int main()
             "known override invariant failure denies original and retains failed chart");
         if (!ok) return 1;
         event = pristine_event; controller = pristine_controller; wrapper = pristine_wrapper;
+        ok &= check(chord_voicing_callback_selftest(owner.data(), event.data(), true, false)
+            && chord_voicing_callback_selftest(owner.data(), event.data() + 0x90, true, false),
+            "retained root and follower deny subsequent in-flight emissions even with restored fields");
+        ok &= check(chord_voicing_callback_selftest(owner.data(), cached.data(), true, true)
+            && chord_voicing_callback_selftest(owner.data(), event.data() + 1, true, true)
+            && chord_voicing_callback_selftest(owner.data(), event.data(), false, true),
+            "retained denial preserves unrelated non-stride and ineligible stock original once");
+        ok &= check(!reg.commit_if_current_chart(grouped,
+            +[](const ChartAdmissionSnapshot&, void*) noexcept { return true; }, nullptr)
+            && !reg.playback_snapshot() && reg.cleanup_lease().chart_admission.binding == grouped,
+            "retained denial never restores projection authority");
+        if (!ok) return 1;
         reg.retire_cleanup_lease(updated);
+        ok &= check(chord_voicing_callback_selftest(owner.data(), event.data(), true, true)
+            && chord_voicing_callback_selftest(owner.data(), event.data() + 0x90, true, true),
+            "actual retirement removes retained denial identity");
+        if (!ok) return 1;
         if (fault != 4) {
             if (!check(reg.publish_playback(selection, updated)
                 && reg.attach_chart_admission(selection, updated, grouped), "fault fixture readmission")) return 1;

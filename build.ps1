@@ -52,20 +52,10 @@ function Get-TextSha256([string]$Text) {
 }
 
 function Get-ProductionInputPaths {
-    $relative = [System.Collections.Generic.List[string]]::new()
-    foreach ($path in @("CMakeLists.txt", "build.ps1", "release.json",
-            "cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch",
-            "cmake/release_identity.generated.h.in", "src/game/rva_catalog.json", "tools/generate_rva_catalog.py")) {
-        $relative.Add($path)
-    }
-    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $Root "src") -Recurse -File) {
-        $path = [System.IO.Path]::GetRelativePath($Root, $file.FullName).Replace('\', '/')
-        if ($path.StartsWith("src/tests/") -or $path.StartsWith("src/tools/")) { continue }
-        if ($file.Extension -in @(".c", ".cpp", ".h", ".hpp", ".inc")) {
-            $relative.Add($path)
-        }
-    }
-    return @($relative | Sort-Object -Unique)
+    # Use the same inventory as Development/package verification, including the
+    # production MASM adapter. Keep imported helper scope local to this call.
+    . (Join-Path $Root "tools/build_provenance.ps1")
+    return @(Get-ProductionInputRelativePaths $Root)
 }
 
 function Get-CMakeCacheValue([string]$Name) {

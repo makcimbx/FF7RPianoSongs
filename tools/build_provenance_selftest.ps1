@@ -37,6 +37,8 @@ function New-ProvenanceFixture {
         "cmake/midifile-running-status.patch" = "fixture dependency patch`n"
         "cmake/release_identity.generated.h.in" = "fixture template`n"
         "src/game/rva_catalog.json" = "{}`n"
+        "src/game/chord_voicing_bridge.asm" = "; fixture production adapter`n"
+        "src/game/chord_voicing_bridge_harness.asm" = "; excluded test adapter`n"
         "tools/generate_rva_catalog.py" = "# fixture generator input`n"
         "src/pipeline/source.cpp" = "// fixture source input`n"
         "src/pipeline/source.hpp" = "// fixture header input`n"
@@ -51,10 +53,14 @@ function New-ProvenanceFixture {
     }
 
     $inputs = @(Get-ProductionInputRelativePaths $Root)
-    foreach ($required in @("cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch")) {
+    foreach ($required in @("cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch",
+            "src/game/chord_voicing_bridge.asm")) {
         if ($inputs -cnotcontains $required) {
-            throw "Production input inventory omitted dependency patch input: $required"
+            throw "Production input inventory omitted required input: $required"
         }
+    }
+    if ($inputs -ccontains "src/game/chord_voicing_bridge_harness.asm") {
+        throw "Production input inventory included the test-only MASM harness"
     }
     $inputRecords = @($inputs | ForEach-Object {
         [pscustomobject][ordered]@{
@@ -267,6 +273,14 @@ $adverseCases = @(
         Mutate = { param($fixture, $record) [System.IO.File]::AppendAllText((Join-Path $fixture.Root $record.productionInputs[0].path), "drift") }
     },
     [pscustomobject]@{
+        Name = "production ASM-only source drift"
+        ExpectedMessage = "Production input does not match build provenance: src/game/chord_voicing_bridge.asm"
+        Mutate = {
+            param($fixture, $record)
+            [System.IO.File]::AppendAllText((Join-Path $fixture.Root "src/game/chord_voicing_bridge.asm"), "; drift")
+        }
+    },
+    [pscustomobject]@{
         Name = "production input-set identity drift"; ExpectedMessage = "Production input set identity does not match build provenance"
         Mutate = { param($fixture, $record) $record.productionInputSetSha256 = "0" * 64 }
     },
@@ -285,6 +299,9 @@ $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ".ff7rp-build-provenance
 $completed = $false
 try {
     $validFixture = New-ProvenanceFixture -Root (Join-Path $testRoot "valid")
+    Invoke-FixtureValidation -Fixture $validFixture
+    [System.IO.File]::AppendAllText(
+        (Join-Path $validFixture.Root "src/game/chord_voicing_bridge_harness.asm"), "; test-only drift")
     Invoke-FixtureValidation -Fixture $validFixture
 
     for ($index = 0; $index -lt $adverseCases.Count; ++$index) {
