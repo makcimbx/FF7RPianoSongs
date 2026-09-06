@@ -2,10 +2,13 @@
 
 ## Unreleased
 
-- Added song-local chord compositions for explicit charts on game 1.005: keep the original chord
+- Added song-local chord compositions for explicit charts on games 1.004 and 1.005: keep the original chord
   input while replacing its sound list, and apply `ignore_sound` to that replacement. Definitions
   are shared across the song's difficulties; other songs and free-play sounds remain unchanged.
   Replacement lists cannot exceed the stock chord's sound count. In-game qualification is pending.
+- Enabled the same chord-composition mechanism on 1.004 using independently checked native calls
+  and structures. Existing songs with custom compositions rebuild their cache once; other songs
+  are unaffected. Testing on 1.005 does not establish in-game behavior on 1.004.
 - Corrected alternate C input limits in both authored JSON and generated MIDI to match the verified
   1.005 game table: C2–C6 and C#2–C#6. C7 already uses the high-C input without an alternate setting.
   Invalid boundary variants are now rejected or avoided during generation; affected caches rebuild.

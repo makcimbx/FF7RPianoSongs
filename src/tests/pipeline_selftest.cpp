@@ -73,7 +73,7 @@ bool verify_song_format_examples(const std::string& text, std::string* error_mes
             // parses/compiles this example below; other builds must reject its
             // documented capability, not pretend to qualify its chart semantics.
             if (status.ok() || status.message !=
-                "chord_voicings requires verified exact 1.005 authored-voicing capability") {
+                "chord_voicings requires verified exact 1.004 or 1.005 authored-voicing capability") {
                 *error_message = "SongFormat voicing example did not reject its unavailable capability";
                 return false;
             }
@@ -390,18 +390,20 @@ int test_authored_chord_voicings()
         midi_attempt.status.message.find("cannot revoice automatic MIDI inference") == std::string::npos)
         return fail("automatic MIDI compilation silently applied authored voicing");
     CompiledChart chart;
-    if (!current.has_verified_authored_chord_voicing() || older.has_verified_authored_chord_voicing() ||
+    if (!current.has_verified_authored_chord_voicing() || !older.has_verified_authored_chord_voicing() ||
         unknown.has_verified_authored_chord_voicing() ||
         !compile_chart(config, &chart, nullptr, 512, current).ok() ||
         chart.notes.front().ignore_sound_ids != std::array<std::string, 3>{"En3", "", ""} ||
-        compile_chart(config, &chart, nullptr, 512, older).ok() ||
+        !compile_chart(config, &chart, nullptr, 512, older).ok() ||
+        chart.notes.front().ignore_sound_ids != std::array<std::string, 3>{"En3", "", ""} ||
         compile_chart(config, &chart, nullptr, 512, unknown).ok())
         return fail("authored chord voicing exact-build/effective IgnoreSound contract failed");
     for (const auto& ignored : std::vector<std::vector<std::string>>{
             {"En2"}, {"E3"}, {"en3"}, {"En3", "En3"}, {"Cn3", "En3", "Gn3", "Bn3"}}) {
         auto invalid = config;
         invalid.notes.front().ignore_sound_pitches = ignored;
-        if (compile_chart(invalid, &chart, nullptr, 512, current).ok())
+        if (compile_chart(invalid, &chart, nullptr, 512, current).ok() ||
+            compile_chart(invalid, &chart, nullptr, 512, older).ok())
             return fail("authored voicing admitted invalid effective IgnoreSound");
     }
     auto silent = config;
@@ -422,10 +424,12 @@ int test_authored_chord_voicings()
         all_chords.notes.front().chord_id = std::string(entry.chord_id);
         all_chords.notes.front().ignore_sound_pitches.clear();
         all_chords.chord_voicings = {{std::string(entry.chord_id), {"Cn3", "En3", "Gn3"}}};
-        if (!compile_chart(all_chords, &chart, nullptr, 512, current).ok())
+        if (!compile_chart(all_chords, &chart, nullptr, 512, current).ok() ||
+            !compile_chart(all_chords, &chart, nullptr, 512, older).ok())
             return fail("verified chord inventory rejected same-width or shortened voicing");
         all_chords.chord_voicings.front().sound_ids.push_back("Bn3");
-        if (compile_chart(all_chords, &chart, nullptr, 512, current).ok() != (entry.sound_count == 4u))
+        if (compile_chart(all_chords, &chart, nullptr, 512, current).ok() != (entry.sound_count == 4u) ||
+            compile_chart(all_chords, &chart, nullptr, 512, older).ok() != (entry.sound_count == 4u))
             return fail("authored chord voicing extended beyond original velocity-slot width");
     }
     const std::string prefix = R"({"schema":"v2","title":"voicing","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]}],"chord_voicings":)";

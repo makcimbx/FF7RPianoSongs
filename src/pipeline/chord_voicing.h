@@ -23,7 +23,7 @@ inline Status validate_chord_voicings(const SongConfig& config,
     if (!config.notes_provided) return Status::error(StatusCode::InvalidChart,
         "chord_voicings requires explicit notes or profiles; export resolved-song.json then author the chart");
     if (!assets.has_verified_authored_chord_voicing()) return Status::error(StatusCode::InvalidChart,
-        "chord_voicings requires verified exact 1.005 authored-voicing capability");
+        "chord_voicings requires verified exact 1.004 or 1.005 authored-voicing capability");
     if (config.chord_voicings.size() > kVerifiedNativeChordConstituents.size())
         return Status::error(StatusCode::InvalidChart, "chord_voicings exceeds the verified chord inventory");
     std::string_view previous;

@@ -79,7 +79,7 @@ int main(int argc, char** argv)
                 | (static_cast<std::uint32_t>(header[11]) << 24u);
         }
     }
-    if (runtime_magic != "F7RPRT15" || runtime_format != 15u) {
+    if (runtime_magic != "F7RPRT16" || runtime_format != 16u) {
         std::cerr << "generated runtime cache header is missing or invalid\n";
         return 5;
     }

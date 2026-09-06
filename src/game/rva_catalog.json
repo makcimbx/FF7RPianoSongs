@@ -35,6 +35,10 @@
         "rva": "0x039b263c",
         "signature": {"bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8b ec b8 80 00 00 00 e8 22 95 7b fe 48 2b e0 41 80 78 4a 02 4d 8b f8", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Exact 1.005 independently unique entry; RCX owner, XMM1 tempo, R8 event, AL result. Chord voicing exclusively owns the entry detour."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c58e98",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8b ec b8 80 00 00 00 e8 76 60 45 fe 48 2b e0 41 80 78 4a 02 4d 8b f8", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Independently recovered through assignment/cache constructor and vtable+20; unique 45-byte entry. RCX owner, XMM1 tempo, R8 event, AL result."}]
       }}
     },
     {
@@ -48,6 +52,10 @@
         "rva": "0x039893c4",
         "signature": {"bytes": "48 89 5c 24 08 57 b8 30 00 00 00 e8 ac 27 7e fe 48 2b e0 48 8b 02 48 8b da 48 89 01 48 8b f9 48 8b 42 08 48 89 41 08 48 8b 42 10 48 83 c2 18", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Exact 1.005 independently unique entry; original copier executes once unchanged. Only inspected caller permits RSI return handoff; persistent cache stays stock."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c33608",
+        "signature": {"bytes": "48 89 5c 24 08 57 b8 30 00 00 00 e8 18 b9 47 fe 48 2b e0 48 8b 02 48 8b da 48 89 01 48 8b f9 48 8b 42 08 48 89 41 08 48 8b 42 10 48 83 c2 18", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Recovered from charted callback call at 03c58fa6; unique 47-byte entry. Original RCX/RDX copy once, RAX dst; only exact caller permits RSI handoff."}]
       }}
     },
     {
@@ -60,6 +68,10 @@
         "rva": "0x039b2740",
         "signature": {"bytes": "c6 83 88 01 00 00 01 48 8b d6 e8 75 6c fd ff 49 8b 47 2c", "mask": "xxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Independently unique exact caller neighborhood; return is neighborhood+0x0f."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c58f9c",
+        "signature": {"bytes": "c6 83 88 01 00 00 01 48 8b d6 e8 5d a6 fd ff 49 8b 47 2c", "mask": "xxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Unique 19-byte window; CALL 03c58fa6 targets 03c33608, return 03c58fab=window+0x0f. Subsequent loop uses RSI, not copier RAX."}]
       }}
     },
     {
@@ -72,6 +84,10 @@
         "rva": "0x039a682d",
         "signature": {"bytes": "48 8b 0f 48 8b 58 20 e8 bb 92 ff ff 4c 8b c7 48 8b ce c5 f8 28 c8 ff d3 48 8d 4c 24 20", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Exact static instruction read, not independently uniqueness-scanned. Indirect native callback returns at neighborhood+0x18."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c4d451",
+        "signature": {"bytes": "48 8b 0f 48 8b 58 20 e8 0b 96 ff ff 4c 8b c7 48 8b ce c5 f8 28 c8 ff d3 48 8d 4c 24 20", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Independently unique 29-byte terminal window. CALL RBX 03c4d467 returns 03c4d469=window+0x18; retained owner RCX, event R8, tempo XMM1."}]
       }}
     },
     {
@@ -84,6 +100,10 @@
         "rva": "0x039b278d",
         "signature": {"bytes": "48 63 46 30 4c 8b 76 28 c5 78 28 c0 48 8d 0c 40 49 8d 04 8e 4c 3b f0 0f 84 bc 00 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Independently unique span neighborhood; only RSI+0x30/+0x28 consumed before ESI reused. Validation only, no midfunction hook."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c58fe9",
+        "signature": {"bytes": "48 63 46 30 4c 8b 76 28 c5 78 28 c0 48 8d 0c 40 49 8d 04 8e 4c 3b f0 0f 84 bc 00 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Independently unique 29-byte window; all 178 callback instructions inspected. RSI+30/+28 are sole pointer reads after copy, ESI reused, native epilogue restores RSI."}]
       }}
     },
     {
@@ -95,6 +115,9 @@
       "builds": {"ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x05bc28d0", "signature": null,
         "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicingRuntimeEvidence.md", "detail": "Exact chord-mode vtable; runtime validates relocated slot+0x20 equals exact callback entry."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x05d5f500", "signature": null,
+        "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/ChordVoicing1004Evidence.md", "detail": "Owner constructor 143c30890 assigns vtable; relocated slot+20 targets callback RVA 03c58e98. Data reference, not absolute-pointer signature."}]
       }}
     },
     {

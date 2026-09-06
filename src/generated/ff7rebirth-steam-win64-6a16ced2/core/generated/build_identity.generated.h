@@ -13,7 +13,7 @@ inline constexpr uint32_t kSizeOfImage = 0x099d9000;
 inline constexpr uint32_t kPeChecksum = 0x0769ea6e;
 inline constexpr std::size_t kExeFileSize = 124317952;
 inline constexpr std::string_view kExeSha256 = "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc";
-inline constexpr std::string_view kRvaCatalogSha256 = "42d49b1deeccd84097ec4dafcfe5e28364ce474ac438d5e7bea0c2db2c3432ee";
+inline constexpr std::string_view kRvaCatalogSha256 = "c3dc2d61d07e0dcbc328f5e19258e34d599905dd16766378ba1c6768562be6ea";
 inline constexpr std::string_view kRvaGeneratorSha256 = "28f6e1d653f106bdc0751e4a6e1afde365cc946e2865089845f4f5cbe67ebec2";
 
 } // namespace ff7r::piano::core::generated

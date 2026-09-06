@@ -102,8 +102,8 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 ## Compatibility and Limitations
 
 - Each download supports exactly one Windows x64 game build. Updating or rolling back the game can require a different download.
-- [Custom chord compositions](docs/SongFormat.md#custom-chord-sounds) initially require 1.005
-  and explicitly authored charts. Their in-game sound and transition checks remain pending;
+- [Custom chord compositions](docs/SongFormat.md#custom-chord-sounds) support the matching
+  1.004 and 1.005 builds with explicitly authored charts. Their in-game sound and transition checks remain pending;
   free-play and wrong-key sounds are not replaced.
 - Longer charts and independent left/right note symbols have limited in-game testing on 1.005
   and remain **runtime-untested on 1.004**. Not every combination of grouping, chord filtering,

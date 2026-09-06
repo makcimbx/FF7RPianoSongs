@@ -834,7 +834,7 @@ Status load_song_directory(
             : "metronome=disabled"};
     if (song.chart_from_midi) cache_identity.push_back(kGeneratedMidiGenerationIdentity);
     if (!song.config.chord_voicings.empty())
-        cache_identity.push_back("authored_chord_voicing=verified1005:ordered_stock_velocity_slots:v1");
+        cache_identity.push_back("authored_chord_voicing=verified1004+1005:ordered_stock_velocity_slots:v1");
     for (std::size_t role = 0; role < song.audio_sources.authored.size(); ++role) {
         const auto& source = song.audio_sources.authored[role];
         cache_identity.push_back("authored_role=" + std::to_string(role) + ":" +

@@ -85,7 +85,7 @@ a list of settings you must fill in. All numbers must be finite.
 | `metronome` | object | optional; see defaults below | Closed metronome object; see below. |
 | `notes` | array | optional | Your playable notes. Nonempty; cannot coexist with `profiles`. If neither is present, MIDI is required. |
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
-| `chord_voicings` | object | optional; omitted means stock chord sounds | Song-wide replacements for chord sounds; requires explicit `notes` or `profiles` and game 1.005. See “Custom chord sounds”. |
+| `chord_voicings` | object | optional; omitted means stock chord sounds | Song-wide replacements for chord sounds; requires explicit `notes` or `profiles` and the matching mod for game 1.004 or 1.005. See “Custom chord sounds”. |
 | `diagnostic_extended_chart_fixture` | boolean | obsolete; omit | Accepted for old files, but has no effect. It does not unlock longer charts. |
 
 Usually omit both threshold arrays. The mod calculates them for each chart from its required
@@ -292,9 +292,9 @@ list while keeping the original chord input. For example, `pca_C` can sound `Cn3
   of three ignored sounds remains. Filtering the entire replacement list is allowed when it fits
   that limit; the chord input still counts, but produces no chord sounds.
 
-This feature initially requires **game 1.005** and explicit `notes` or `profiles`. A MIDI-only
+This feature supports **games 1.004 and 1.005**, using the matching mod build and explicit `notes` or `profiles`. A MIDI-only
 song cannot use it: first [copy the generated chart into song.json](#resolved-song-convenience-output),
-then add your definitions. Game 1.004 does not support this setting; an unavailable feature is
+then add your definitions. An unsupported build or unavailable feature is
 rejected rather than silently playing the stock composition.
 
 Only chord events in the chart, including automatic group followers, use these definitions.
@@ -447,7 +447,7 @@ successful load if possible; inability to write it does not stop an otherwise va
 | Song is missing | Read `FF7RPianoSongs.log`; check the exact filenames, JSON punctuation, and field names. |
 | A group is rejected | Give at least two consecutive rows the same nonzero `group_index`. |
 | A partial chord is rejected | Copy exact names from that chord's custom list when overridden, otherwise its stock table row; omit the field rather than using an empty array. |
-| A custom chord composition is rejected | Check game 1.005, explicit notes/profiles, the chord ID, exact sound names, and the stock chord's maximum sound count. |
+| A custom chord composition is rejected | Check the matching mod build for game 1.004 or 1.005, explicit notes/profiles, the chord ID, exact sound names, and the stock chord's maximum sound count. |
 | An alternate pitch is rejected | Check the supported spelling and octave in “Pitch spelling”; alternate is not available for every note. |
 | Early MIDI notes are missing | Check the lead-in, timing offsets, and audio length. Generation also reduces notes for playability. |
 | MIDI edits no longer change the chart | Remove explicit `notes`/`profiles` to return to MIDI generation, or edit those explicit notes instead. |
@@ -513,7 +513,7 @@ so only C and G sound from the game's chord. Your recorded audio is unchanged.
 
 ### Custom chord composition and filtering
 
-Game 1.005 only. The first C-major input sounds C/E/G in octave 3. The second uses the same input
+Use the matching mod build for game 1.004 or 1.005. The first C-major input sounds C/E/G in octave 3. The second uses the same input
 but leaves out E. The last still requires the C-major input, but all three chord sounds are muted.
 Your source audio is unchanged throughout. The same definition also applies to any difficulty
 profiles you add at the root instead of `notes`.

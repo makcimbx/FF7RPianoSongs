@@ -1,4 +1,8 @@
 #include "game/chord_voicing.h"
+#include "game/hook_specs.h"
+#include "game/rvas.h"
+#include "core/pe_image.h"
+#include "core/generated/build_identity.generated.h"
 #include <windows.h>
 #include <intrin.h>
 #include <cstring>
@@ -60,11 +64,47 @@ bool check(bool value, const char* label) {
     if (!value) std::cerr << "chord_voicing_selftest: " << label << '\n';
     return value;
 }
+
+bool catalog_binding_selftest() {
+    const std::string_view build = ff7r::piano::core::generated::kBuildId;
+    const bool older = build == "ff7rebirth-steam-win64-68fd6fde";
+    if (!older && build != "ff7rebirth-steam-win64-6a16ced2") return false;
+    const std::array<const char*, 5> ids{"piano_chord_callback", "piano_chord_cached_copy",
+        "piano_chord_copy_caller", "piano_chord_terminal_caller", "piano_chord_span_loads"};
+    const std::array<uintptr_t, 5> expected = older
+        ? std::array<uintptr_t, 5>{0x03c58e98, 0x03c33608, 0x03c58f9c, 0x03c4d451, 0x03c58fe9}
+        : std::array<uintptr_t, 5>{0x039b263c, 0x039893c4, 0x039b2740, 0x039a682d, 0x039b278d};
+    const std::array<size_t, 5> lengths{45, 47, 19, 29, 29};
+    for (size_t i = 0; i < ids.size(); ++i) {
+        const auto* spec = find_rva_signature(ids[i]);
+        if (!spec || spec->rva != expected[i] || spec->expected_prologue.size() != lengths[i]) return false;
+        auto image = spec->expected_prologue;
+        if (!ff7r::piano::core::bytes_equal(image.data(), spec->expected_prologue)) return false;
+        // Runtime checks every byte, including build-specific CALL displacements.
+        for (size_t j = 0; j < image.size(); ++j) {
+            image[j] ^= 1;
+            if (ff7r::piano::core::bytes_equal(image.data(), spec->expected_prologue)) return false;
+            image[j] ^= 1;
+        }
+    }
+    const auto& copy = find_rva_signature(ids[2])->expected_prologue;
+    int32_t displacement = 0;
+    std::memcpy(&displacement, copy.data() + 0x0b, sizeof(displacement));
+    const auto& terminal = find_rva_signature(ids[3])->expected_prologue;
+    return copy[0x0a] == 0xe8
+        && static_cast<int64_t>(expected[2] + 0x0f) + displacement == static_cast<int64_t>(expected[1])
+        && expected[2] + 0x0f == (older ? 0x03c58fab : 0x039b274f)
+        && terminal[0x16] == 0xff && terminal[0x17] == 0xd3
+        && expected[3] + 0x18 == (older ? 0x03c4d469 : 0x039a6845)
+        && rva::PianoChordModeVtable == (older ? 0x05d5f500 : 0x05bc28d0)
+        && rva::PianoChordCallback == expected[0];
+}
 }
 
 int main()
 {
     bool ok = true;
+    if (!check(catalog_binding_selftest(), "exact catalog roles, caller offsets and byte-tamper rejection")) return 1;
     auto& reg = registry();
     SongDescriptor song;
     song.id = "voicing"; song.visible_index = 12; song.profiles.resize(1);
