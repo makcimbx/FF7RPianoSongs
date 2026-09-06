@@ -5,7 +5,7 @@
 #include <iostream>
 
 namespace {
-std::array<int, 11> installed{};
+std::array<int, 12> installed{};
 std::size_t installed_count = 0;
 
 bool record(const int module) noexcept
@@ -31,6 +31,8 @@ bool install_scoreinfo_overlay_hooks(const HookInstallContext&) { return record(
 bool install_title_hooks(const HookInstallContext&) { return record(4); }
 bool install_chart_patch_hooks(const HookInstallContext&) { return record(5); }
 bool install_note_count_hooks(const HookInstallContext&) { return record(6); }
+bool install_chord_voicing_hooks(const HookInstallContext&) { return record(11); }
+core::HookShutdownResult shutdown_chord_voicing() { return shutdown_ok(); }
 bool install_duration_hooks(const HookInstallContext&) { return record(7); }
 bool install_progress_hooks(const HookInstallContext&) { return record(8); }
 bool install_audio_sead_hooks(const HookInstallContext&) { return record(9); }
@@ -49,7 +51,7 @@ bool shutdown_audio_sead() { return true; }
 
 int main()
 {
-    const std::array<int, 11> expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    const std::array<int, 12> expected{0, 1, 2, 3, 4, 5, 6, 11, 7, 8, 9, 10};
     if (!ff7r::piano::game::install_release_hooks(nullptr)
         || installed_count != expected.size() || installed != expected) {
         std::cerr << "release_hook_empty_catalog_selftest: empty-catalog install skipped a required module\n";

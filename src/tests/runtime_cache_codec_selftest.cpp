@@ -1,9 +1,11 @@
 #include "pipeline/cache.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
+#include "pipeline/chord_voicing.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/runtime_cache_codec.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -15,9 +17,9 @@ namespace {
 
 using namespace ff7rp::pipeline;
 
-constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '5'};
+constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
 constexpr char kFormat14Magic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
-constexpr std::uint32_t kFormat = 15;
+constexpr std::uint32_t kFormat = 16;
 
 bool expect(const bool condition, const char* message) {
     if (!condition) std::cerr << message << '\n';
@@ -275,14 +277,89 @@ bool expect_parent_oracle(
         expect(round_trip == bytes, "parent-oracle round-trip bytes changed");
 }
 
+bool test_chord_voicing_cache() {
+    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing()) return true;
+    auto song = representative_song();
+    song.config.notes = {{0, 1, "", "pca_C"}};
+    song.config.notes.front().ignore_sound_pitches = {"En3"};
+    song.config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
+    if (!expect(compile_chart(song.config, &song.chart).ok(), "voicing cache fixture failed compilation")) return false;
+    song.difficulty_profiles.front().config = song.config;
+    song.difficulty_profiles.front().chart = song.chart;
+    auto second = song.difficulty_profiles.front();
+    second.config.difficulty = 4;
+    song.difficulty_profiles.push_back(second);
+    std::vector<std::uint8_t> bytes, round_trip;
+    LoadedSong decoded = song;
+    if (!expect(encode_runtime_cache(song, kMagic, kFormat, &bytes) &&
+            decode_runtime_cache(bytes, kMagic, kFormat, &decoded) &&
+            encode_runtime_cache(decoded, kMagic, kFormat, &round_trip) && round_trip == bytes &&
+            decoded.config.chord_voicings == song.config.chord_voicings &&
+            decoded.difficulty_profiles.back().config.chord_voicings == song.config.chord_voicings,
+            "voicing cache failed deterministic shared-profile round trip")) return false;
+    auto different_source = song;
+    different_source.config.chord_voicings.front().sound_ids[2] = "An3";
+    if (!expect(!decode_runtime_cache(bytes, kMagic, kFormat, &different_source),
+            "voicing cache ignored current authored source mapping")) return false;
+    auto mismatch = song;
+    mismatch.difficulty_profiles.back().config.chord_voicings.front().sound_ids[2] = "An3";
+    if (!expect(!encode_runtime_cache(mismatch, kMagic, kFormat, &round_trip),
+            "profile-local mapping escaped cache writer")) return false;
+    auto invalid = song;
+    invalid.config.chord_voicings.front().sound_ids.push_back("Bn3");
+    for (auto& profile : invalid.difficulty_profiles) profile.config.chord_voicings = invalid.config.chord_voicings;
+    if (!expect(!encode_runtime_cache(invalid, kMagic, kFormat, &round_trip),
+            "over-width voicing escaped cache writer")) return false;
+    invalid = song;
+    invalid.chart_from_midi = true;
+    if (!expect(!encode_runtime_cache(invalid, kMagic, kFormat, &round_trip),
+            "MIDI cache acquired authored-voicing authority")) return false;
+
+    // Repair both outer checksums after tampering: rejection must come from
+    // semantic validation, not an accidental stale envelope checksum.
+    auto corrupt = bytes;
+    const std::string needle = "Cn3";
+    const auto found = std::search(corrupt.begin() + 24, corrupt.end() - 16, needle.begin(), needle.end());
+    if (!expect(found != corrupt.end() - 16, "voicing sound missing in cache bytes")) return false;
+    *(found + 2) = '0';
+    const auto put64 = [](auto& data, const std::size_t offset, const std::uint64_t value) {
+        for (std::size_t i = 0; i < 8u; ++i) data[offset + i] = static_cast<std::uint8_t>(value >> (i * 8u));
+    };
+    put64(corrupt, corrupt.size() - 16u, fnv1a64_append(kFnv1a64OffsetBasis ^ 0x73656d616e746963ull,
+        corrupt.data() + 24u, corrupt.size() - 40u));
+    put64(corrupt, corrupt.size() - 8u, fnv1a64_append(kFnv1a64OffsetBasis, corrupt.data(), corrupt.size() - 8u));
+    decoded.config.title = "sentinel";
+    if (!expect(!decode_runtime_cache(corrupt, kMagic, kFormat, &decoded) && decoded.config.title == "sentinel",
+            "checksummed unverified sound was accepted or partially published")) return false;
+    auto stale = bytes;
+    stale[7] = '5';
+    stale[8] = 15;
+    put64(stale, stale.size() - 8u, fnv1a64_append(kFnv1a64OffsetBasis, stale.data(), stale.size() - 8u));
+    if (!expect(!decode_runtime_cache(stale, kMagic, kFormat, &decoded), "format-15 cache acquired format-16 authority")) return false;
+
+    auto extended = playable_extended_oracle_song();
+    extended.config.chord_voicings = song.config.chord_voicings;
+    extended.difficulty_profiles.front().config.chord_voicings = song.config.chord_voicings;
+    auto extended_decoded = extended;
+    return expect(encode_runtime_cache(extended, kMagic, kFormat, &bytes) &&
+        decode_runtime_cache(bytes, kMagic, kFormat, &extended_decoded) &&
+        extended_decoded.difficulty_profiles.front().config.chord_voicings == song.config.chord_voicings &&
+        diagnostic_charts_equal(extended.difficulty_profiles.front().diagnostic_chart,
+            extended_decoded.difficulty_profiles.front().diagnostic_chart),
+        "prefix/tail cache transport changed song-wide voicing or row contract");
+}
+
 } // namespace
 
 int main() {
-    // Oracle derivation: an archive of parent 24ce7710af2595ca39ad89928381f052f4688c33 was
-    // built in a private temporary workspace. A test-only wrapper called the
-    // parent's internal write_runtime_cache for these exact value constructors, then hashed
-    // runtime.bin with the parent's fnv1a64_append. No extracted-code output supplied these values.
-    if (!expect_parent_oracle(comprehensive_oracle_song(), 2850u, 0x387b4cb8dfef1090ull, "comprehensive")) return 1;
+    if (!test_chord_voicing_cache()) return 1;
+    // Fixture provenance: parent 24ce7710af2595ca39ad89928381f052f4688c33 was
+    // built privately and its internal writer established the original oracle.
+    // Format 16 deliberately appends a uint32 empty-voicing count to each of
+    // this fixture's three configurations (+12 bytes), and changes the envelope
+    // version and dependent hashes. The value constructors remain unchanged;
+    // these observed format-16 bytes are also checked by decode/re-encode below.
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2862u, 0x4236b33b4cb5476eull, "comprehensive")) return 1;
     const LoadedSong legacy_diagnostic = diagnostic_tail_oracle_song();
     std::vector<std::uint8_t> legacy_diagnostic_bytes;
     if (!expect(!encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
@@ -384,8 +461,11 @@ int main() {
         !expect(encode_runtime_cache(source, kMagic, kFormat, &bytes), "encode failed")) return 1;
 
     const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
-    if (!expect(bytes.size() == 1716u, "encoded byte count changed") ||
-        !expect(hash == 0x06e25cf9ca0055efull, "encoded byte fixture changed")) {
+    // Format 16 adds an empty-map uint32 to the root and profile (+8 bytes).
+    // Pin the observed envelope/hash while retaining semantic and corruption
+    // checks below for the unchanged representative chart.
+    if (!expect(bytes.size() == 1724u, "encoded byte count changed") ||
+        !expect(hash == 0xe11f4f2721b90a61ull, "encoded byte fixture changed")) {
         std::cerr << "actual bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
         return 1;
     }

@@ -526,6 +526,11 @@ struct RuntimeCursor {
         position += 10u;
         const std::uint32_t notes = u32();
         for (std::uint32_t index = 0; index < notes; ++index) skip_note();
+        const std::uint32_t voicings = u32();
+        for (std::uint32_t index = 0; index < voicings; ++index) {
+            skip_string();
+            skip_string_vector();
+        }
     }
     void skip_chart(RuntimeSectionOffsets* offsets) {
         const std::uint32_t notes = u32();
@@ -638,6 +643,7 @@ bool charts_equal(const ff7rp::pipeline::CompiledChart& a, const ff7rp::pipeline
 }
 
 bool configs_equal(const ff7rp::pipeline::SongConfig& a, const ff7rp::pipeline::SongConfig& b) {
+    if (a.chord_voicings != b.chord_voicings) return false;
     if (a.schema != b.schema || a.title != b.title || a.bpm != b.bpm || a.difficulty != b.difficulty ||
         a.score_thresholds != b.score_thresholds || a.mode_change_combo_counts != b.mode_change_combo_counts ||
         a.midi_audio_offset_seconds != b.midi_audio_offset_seconds ||
@@ -1533,15 +1539,17 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // v47 changes cache/manifest identity, not this midrange chart's semantics.
-        expected_cache_key = 0xd2f1736bfa962f40ull;
-        expected_normalized_manifest_digest = 0x7c2037fdb12b239aull;
+        // v48 / format 16 change cache identity and append the empty authored
+        // voicing map to serialized configurations. The resulting config hash
+        // changes, but the explicit musical-value assertions below do not.
+        expected_cache_key = 0x06ee9e4faa46abf9ull;
+        expected_normalized_manifest_digest = 0xaaf60bfed21a1c5aull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
     }
     constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
-    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=15e8f64ad017720d";
+    constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=037ea322cb1e9dad";
     if (generated.cache_key != expected_cache_key ||
         normalized_manifest_digest != expected_normalized_manifest_digest ||
         manifest.size() != kExpectedNormalizedManifestBytes ||
@@ -2266,7 +2274,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v47") == std::string::npos ||
+        first_manifest.find("version=ff7rpianosongs.pipeline.v48") == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -2492,6 +2500,56 @@ int test_resolved_song_output(const std::filesystem::path& root) {
         std::filesystem::exists(ff7rp::pipeline::cache_last_error_path(song_directory.string()))) {
         return fail("resolved-song UTF-8 render failure escaped cold best-effort publication");
     }
+    return 0;
+}
+
+int test_authored_chord_voicings(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    const auto directory = root / "AuthoredChordVoicings";
+    std::filesystem::create_directories(directory);
+    const auto write_source = [&](const std::string& slots) {
+        const std::string json = R"({"schema":"v2","title":"Voicing","bpm":120,"loudness_normalization":false,"chord_voicings":{"pca_C":)" + slots +
+            R"(},"profiles":[{"difficulty":1,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]}]},{"difficulty":3,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]},{"beat":1,"duration_beats":1,"pitch":"C4"}]}]})";
+        return write_bytes(directory / "song.json", {json.begin(), json.end()});
+    };
+    if (!write_source(R"(["Cn3","En3","Gn3"])") || !write_silent_wav(directory / "song.wav", 3.0) ||
+        !write_bytes(directory / "song.mid", {0xffu, 0x00u}))
+        return fail("failed to create authored voicing fixture");
+    LoadedSong cold;
+    auto status = load_song_directory(directory.string(), &cold);
+    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing())
+        return !status.ok() && status.message.find("verified exact 1.005") != std::string::npos
+            ? 0 : fail("unsupported catalog accepted authored voicing repository source");
+    const std::vector<ChordVoicing> expected{{"pca_C", {"Cn3", "En3", "Gn3"}}};
+    if (!status.ok() || cold.loaded_from_runtime_cache || cold.chart_from_midi || !cold.midi_source_path.empty() ||
+        cold.config.chord_voicings != expected || cold.difficulty_profiles.size() != 2u)
+        return fail("authored voicing cold load failed: " + status.message);
+    for (const auto& profile : cold.difficulty_profiles)
+        if (profile.config.chord_voicings != expected ||
+            profile.chart.notes.front().ignore_sound_ids != std::array<std::string, 3>{"En3", "", ""})
+            return fail("authored profile lost shared effective voicing/filter");
+    const auto resolved = read_text(resolved_song_json_path(directory.string()));
+    ParsedSongSource parsed;
+    if (!parse_song_json_string(resolved, &parsed).ok() || parsed.config.chord_voicings != expected ||
+        parsed.authored_profiles.size() != 2u) return fail("complete repository export lost authored voicing");
+    LoadedSong warm;
+    status = load_song_directory(directory.string(), &warm);
+    if (!status.ok() || !warm.loaded_from_runtime_cache || warm.config.chord_voicings != expected ||
+        warm.difficulty_profiles.back().config.chord_voicings != expected ||
+        read_text(resolved_song_json_path(directory.string())) != resolved)
+        return fail("voicing cache reuse changed source/profile/export semantics: " + status.message);
+    // Ordered velocity slots are semantic even when the row/event plan is identical.
+    if (!write_source(R"(["En3","Cn3","Gn3"])") ) return fail("failed to reorder authored sound slots");
+    LoadedSong reordered;
+    status = load_song_directory(directory.string(), &reordered);
+    if (!status.ok() || reordered.loaded_from_runtime_cache || reordered.cache_key == cold.cache_key ||
+        reordered.config.chord_voicings.front().sound_ids != std::vector<std::string>{"En3", "Cn3", "Gn3"} ||
+        !charts_equal(reordered.chart, cold.chart))
+        return fail("sound-slot order failed cache invalidation or changed physical chart rows");
+    if (!write_source(R"(["Cn2","En2","Gn2"])") ) return fail("failed to write invalid effective filter fixture");
+    LoadedSong invalid;
+    if (load_song_directory(directory.string(), &invalid).ok())
+        return fail("cached authored voicing bypassed changed effective IgnoreSound validation");
     return 0;
 }
 
@@ -3028,6 +3086,7 @@ int main() {
     if (run("bounded_discovery", [&] { return test_bounded_discovery_order_and_cache_race(root.path()); }) != 0) return 1;
     if (run("profile_comparison", test_dual_action_profile_comparison) != 0) return 1;
     if (run("authored_profiles", [&] { return test_authored_profiles(root.path()); }) != 0) return 1;
+    if (run("chord_voicings", [&] { return test_authored_chord_voicings(root.path()); }) != 0) return 1;
     if (run("resolved_song", [&] { return test_resolved_song_output(root.path()); }) != 0) return 1;
     if (run("growth_cache_manifest", [&] { return test_growth_cache_and_manifest(root.path()); }) != 0) return 1;
     if (run("physical_midi_cache", [&] { return test_physical_midi_cache_round_trip(root.path()); }) != 0) return 1;

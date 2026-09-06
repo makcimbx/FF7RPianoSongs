@@ -102,6 +102,12 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 
 - Invalid folders, schemas, audio, charts, caches, and generated profiles are rejected before registry publication.
 - Runtime behavior is descriptor-driven; parallel ad-hoc song state is not authoritative.
+- Explicit song-level chord definitions replace only the ordered sound slots of
+  verified existing chord inputs. They belong to the immutable song descriptor,
+  shared by all profiles; configuration/cache semantic binding protects the
+  mapping separately from the unchanged physical row/event plan. IgnoreSound
+  resolves exact members of the effective definition. Automatic MIDI generation
+  cannot carry authored replacements or silently change its pitch witnesses.
 - Selected-index detail rendering owns one thread-local descriptor/profile scope around the exact native callback, including explicit profile refresh. Title, duration, note count, and the cataloged menu-detail ScoreInfo caller consume this scope first; playback is consulted only when no menu scope exists. Temporary ScoreInfo rows are retained by the outer scope and released when that callback returns.
 - Cache reuse requires matching source identity, semantic configuration, generated profile data, format metadata, and structural validation.
 - After either a successful cold build or accepted warm-cache load, the repository best-effort
@@ -116,18 +122,22 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   been atomically published. Logical source-frame metadata, chart/profile semantics,
   descriptor inputs, cache identity, and sidecar artifact paths remain available for
   lexical settlement and runtime admission.
-- Pipeline cache identity v46 and runtime-cache format 15 include authored group,
+- Pipeline cache identity v48 and runtime-cache format 16 include authored group,
   monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
-  identity to every MIDI cache key. Version 46 preserves exact authored black-key
+  identity to every MIDI cache key. The source model preserves exact authored black-key
   sharp/flat identity and independent monotone/chord note/dot values; generated
   MIDI's v11 identity additionally covers normalized key-signature orientation and
   exact rational source-length notation. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
   identity selected from the exact generated catalog build ID; descriptive game
-  version strings never grant asset authority. Runtime-cache format 15 serializes
-  both source-side overrides and the separate compiled monotone/chord pairs.
+  version strings never grant asset authority. Runtime-cache format 16 serializes
+  both source-side overrides and the separate compiled monotone/chord pairs, plus
+  canonical song-level chord definitions in each configuration. Ordered sound slots
+  are semantic; dictionary insertion order is not. Root and profile definitions must
+  agree, and cached definitions must match current source configuration. The schema
+  stays v2; older binary caches rebuild rather than acquiring implicit empty fields.
   Source rows, prefix events, native events,
   required actions, physical digest, and any explicitly authored group topology are
   deterministically rederived from the already-counted prefix/tail rows.
@@ -147,12 +157,12 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   the same complete 512-prefix-plus-tail transport through 8192 rows/events.
   Without that capability, authored charts above 512 reject and generated profiles
   above 512 omit. The legacy JSON diagnostic flag is accepted only as inert input;
-  actual tail presence determines the internal format-15 transport marker.
+  actual tail presence determines the internal retained-tail transport marker.
 - `ChartEventRow` is the game-neutral compiled-row projection used by the canonical
   `derive_chart_event_plan` engine. The resulting immutable plan contains stable
   monotone-then-chord event entries and ordered root/child links in addition to
   R/P/E/A. Runtime reconstructs these rows from `chart_notes` plus
-  `extended_chart_tail_notes`; format 15 does not serialize a redundant plan.
+  `extended_chart_tail_notes`; the cache does not serialize a redundant plan.
   `physical_chart_digest` hashes complete compiled/runtime physical semantics
   (`TimeStr`, monotone/chord IDs, each side's note/dot fields, camera fields, and
   IgnoreSound) while
@@ -189,6 +199,20 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - A confirmed selection handoff crosses the shared activation/cancel close only when the menu session, list widget, registry selection, BGM controller, and optional canonical-substrate identities remain exact. Unowned closes revoke, while accepted activation closes preserve a single generation-bound transfer.
 - Persistent chart expansion claims that preserved transfer once using the validated caller, controller-owned wrapper, and immutable selection identity. Duplicate or stale claims reject without revoking the valid owner; every pre-admission failure performs an exact generation-bound thaw.
 - Chart planning, admission, the restoration journal, playback publication, title, and note-count consumers retain owning snapshots from the same registry storage instead of reopening raw registry views mid-transaction.
+- Authored chord voicing uses a preallocated chart-admission binding carried by
+  that same guard/playback/cleanup lifecycle. Native expansion seals its final
+  allocation and event plan before the existing chart-update hook permits
+  judgement; pending input is rejected, not buffered or timing-gated. Reparse
+  invalidates the binding, and failed ownership remains failed-retained rather
+  than silently becoming stock playback. Withdrawal does not itself claim native
+  Stop, resource release, score rollback, or list return.
+- At the verified charted-chord callback, the original cached-row copier runs
+  once with unchanged arguments. Only its exact caller may receive a synchronous
+  sound-span projection through the reviewed register adapter. Native positional
+  velocity, exact-name IgnoreSound, delay/duration, and voice ownership stay in
+  the original emission loop. Persistent caches, chord inputs, scoring events,
+  and free-play remain unchanged. Nested ineligible callbacks shadow outer
+  projection authority; current binding identity is rechecked before projection.
 - The runtime sidecar catalog retains its registry snapshot for the catalog lifetime. Admission proves exact catalog storage, song, profile, and profile index before chart or audio mutation.
 - Production PlaySetup, Set, Play, and Stop forwarding execute through one wiring authority that owns exact argument tuples, exact-once dispatch, callback/TLS restoration, lifecycle leasing, and the recursive operation boundary. Route and borrower decisions remain in the audio coordinator.
 - Audio shutdown is an explicit fail-closed phase transaction. Cleanup readiness is the only failure that reopens admission; disable, drain, aggregate rollback, restore/release, or publication failure retains authority and cannot publish successful state clearing.

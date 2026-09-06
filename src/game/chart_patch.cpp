@@ -1,6 +1,7 @@
 #include "game/module_hooks.h"
 
 #include "game/audio_sead.h"
+#include "game/chord_voicing.h"
 #include "core/logging.h"
 #include "core/pe_image.h"
 #include "game/completion_timing.h"
@@ -2130,6 +2131,19 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
         return ChartExpandPreparationOutcome::NativePristine;
     }
 
+    std::shared_ptr<ChordVoicingBinding> voicing_binding;
+    if (!song->chord_voicings.empty()) {
+        voicing_binding = preflight_chord_voicing(selection, wrapper,
+            +[](const std::string& id, uint64_t& name) {
+                return resolve_monotone_id_fname(g_chart_fname_ctor, id, name);
+            });
+        if (!voicing_binding) {
+            core::log(core::LogLevel::Error,
+                "[chord_voicing] status=activation_rejected reason=preflight original_custom_calls=0");
+            return ChartExpandPreparationOutcome::NativePristine;
+        }
+    }
+
     admission = begin_selection_audio_admission(
         std::move(activation_claim), planned_ok);
     ChartAudioAdmissionCoordinator admission_coordinator;
@@ -2172,6 +2186,15 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
                 g_chart_audio_diagnostic_ordinal, ordinal)) {
             diagnostic->generation = generation;
             diagnostic->preparation_ordinal = ordinal;
+        }
+    }
+    if (voicing_binding) {
+        voicing_binding->lease = captured_authority.token;
+        voicing_binding->preparation_ordinal = diagnostic ? diagnostic->preparation_ordinal : 0;
+        if (!captured_authority.exact || !registry().attach_chart_admission(
+                selection, captured_authority.token, voicing_binding)) {
+            admission = {};
+            return ChartExpandPreparationOutcome::NativePristine;
         }
     }
     const PlannedChartWriteResult write_result
@@ -2358,6 +2381,7 @@ void finish_active_chart_row_patch_after_expand(
 
     SelectionSnapshot selection;
     if (!restore_and_reset_chart_patch_state("expand_after_original", &selection)) {
+        finish_chord_voicing_expansion(wrapper, false);
         block_custom_audio_route_for_unresolved_chart_mutation();
         return;
     }

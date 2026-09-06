@@ -80,6 +80,13 @@ struct GainEnvelopePoint {
     double gain_db = 0.0;
 };
 
+struct ChordVoicing {
+    std::string chord_id;
+    // Ordered native sound slots; runtime inherits stock velocity by index.
+    std::vector<std::string> sound_ids;
+    bool operator==(const ChordVoicing&) const = default;
+};
+
 struct SongConfig {
     std::string schema;
     std::string title;
@@ -106,6 +113,8 @@ struct SongConfig {
     bool notes_provided = false;
     bool diagnostic_extended_chart_fixture = false;
     std::vector<Note> notes;
+    // Canonical ascending chord key order, shared by every authored profile.
+    std::vector<ChordVoicing> chord_voicings;
 };
 
 inline constexpr std::size_t kMaximumDifficultyProfiles = 32u;

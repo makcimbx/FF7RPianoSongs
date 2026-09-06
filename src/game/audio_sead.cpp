@@ -13509,6 +13509,24 @@ void audio_production_outer_callback_exited(const bool entered) noexcept
 
 #include "game/audio_selection_activation.inc" // catalog consumer: "persistent_chart_expand_caller"
 
+void fail_chord_voicing_chart(std::shared_ptr<const ChordVoicingBinding> binding) noexcept
+{
+    try {
+        AudioCallbackScope callback_scope(AudioRouteCallbackKind::SelectionAdmission);
+        std::lock_guard<std::recursive_mutex> operation_lock(g_audio_route_operations.mutex());
+        if (!registry().fail_chart_admission(binding)) return;
+        const auto playback = registry().playback_snapshot();
+        if (playback.chart_admission.binding == binding)
+            (void)revoke_playback_snapshot(playback);
+        // Retained native ownership, not native Stop, fake list return or free.
+        g_audio_route_disabled.store(true, std::memory_order_release);
+        std::lock_guard<std::mutex> lock(g_audio_state_mutex);
+        g_audio_route_state.list_cleanup_pending = true;
+    } catch (...) {
+        g_audio_route_disabled.store(true, std::memory_order_release);
+    }
+}
+
 void block_custom_audio_route_for_unresolved_chart_mutation() noexcept
 {
     g_audio_route_disabled.store(true, std::memory_order_release);

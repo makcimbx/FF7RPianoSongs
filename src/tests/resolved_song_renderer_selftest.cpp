@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "pipeline/chart_compiler.h"
+#include "pipeline/chord_voicing.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/resolved_song_renderer.h"
 #include "pipeline/song_json.h"
@@ -109,6 +110,42 @@ int main() {
         std::string("\xf4\x90\x80\x80", 4),
         std::string("\xe2\x28\xa1", 3),
     }};
+    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+        auto voiced_config = config;
+        voiced_config.notes_provided = true;
+        voiced_config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}, {"pca_G_9", {"Gn2", "Bn2", "Dn3"}}};
+        voiced_config.notes.front().ignore_sound_pitches = {"En3"};
+        LoadedDifficultyProfile voiced_profile;
+        if (!compile_profile(voiced_config, &voiced_profile)) return fail("voiced export fixture compilation failed");
+        LoadedSong voiced_song;
+        voiced_song.config = voiced_profile.config;
+        voiced_song.chart = voiced_profile.chart;
+        voiced_song.difficulty_profiles = {voiced_profile};
+        for (const bool as_profiles : {false, true}) {
+            std::string exported, repeated;
+            ParsedSongSource imported;
+            if (!render_resolved_song_json(voiced_song, as_profiles, &exported).ok() ||
+                !render_resolved_song_json(voiced_song, as_profiles, &repeated).ok() || exported != repeated ||
+                !parse_song_json_string(exported, &imported).ok() ||
+                imported.config.chord_voicings != voiced_config.chord_voicings ||
+                imported.config.notes.front().ignore_sound_pitches != std::vector<std::string>{"En3"})
+                return fail("complete resolved export lost shared voicing/filter contract");
+            CompiledChart imported_chart;
+            if (!compile_chart(imported.config, &imported_chart).ok() ||
+                imported_chart.notes.front().ignore_sound_ids != voiced_song.chart.notes.front().ignore_sound_ids ||
+                imported_chart.notes.front().group_index != voiced_song.chart.notes.front().group_index ||
+                imported_chart.notes.front().monotone_id != voiced_song.chart.notes.front().monotone_id)
+                return fail("resolved voicing copy did not recompile with unchanged row semantics");
+        }
+        auto mismatch = voiced_song;
+        mismatch.difficulty_profiles.front().config.chord_voicings.clear();
+        std::string sentinel = "sentinel";
+        if (render_resolved_song_json(mismatch, true, &sentinel).ok() || sentinel != "sentinel")
+            return fail("resolved export published inconsistent profile voicing");
+        voiced_song.chart_from_midi = true;
+        if (render_resolved_song_json(voiced_song, true, &sentinel).ok())
+            return fail("resolved export silently authorized MIDI voicing");
+    }
     for (const std::string& malformed : malformed_utf8) {
         LoadedSong invalid_utf8 = root_song;
         invalid_utf8.config.title = malformed;
@@ -175,6 +212,16 @@ int main() {
         return fail("extended projection clipped or changed its retained tail");
     }
 
+    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+        extended_song.config.notes_provided = true;
+        extended_song.config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
+        extended_song.difficulty_profiles.front().config = extended_song.config;
+        if (!render_resolved_song_json(extended_song, false, &extended_json).ok() ||
+            !parse_song_json_string(extended_json, &parsed_extended).ok() ||
+            parsed_extended.config.notes.size() != 513u ||
+            parsed_extended.config.chord_voicings != extended_song.config.chord_voicings)
+            return fail("prefix/tail resolved export clipped song-wide voicing");
+    }
     std::cout << "resolved_song_renderer_selftest ok\n";
     return 0;
 }

@@ -10,6 +10,7 @@
 #include "audio_loudness.h"
 #include "cache.h"
 #include "chart_compiler.h"
+#include "chord_voicing.h"
 #include "extended_chart_eligibility.h"
 #include "pipeline_limits.h"
 
@@ -210,6 +211,7 @@ bool read_note(RuntimeCacheReader& in, Note* note) {
 }
 
 bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
+    if (!validate_chord_voicings(config).ok()) return false;
     if (!out.string(config.schema) || !out.string(config.title) || !out.pod(config.bpm) ||
         !out.pod(static_cast<std::int32_t>(config.difficulty)) ||
         !write_int_vector(out, config.score_thresholds) || !write_int_vector(out, config.mode_change_combo_counts) ||
@@ -232,6 +234,12 @@ bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
         !out.pod(static_cast<std::uint32_t>(config.notes.size()))) return false;
     for (const auto& note : config.notes) {
         if (!write_note(out, note)) return false;
+    }
+    if (!out.pod(static_cast<std::uint32_t>(config.chord_voicings.size()))) return false;
+    for (const auto& voicing : config.chord_voicings) {
+        if (!out.string(voicing.chord_id) ||
+            !out.pod(static_cast<std::uint32_t>(voicing.sound_ids.size()))) return false;
+        for (const auto& sound : voicing.sound_ids) if (!out.string(sound)) return false;
     }
     return true;
 }
@@ -265,7 +273,15 @@ bool read_song_config(RuntimeCacheReader& in, SongConfig* config) {
     for (auto& note : config->notes) {
         if (!read_note(in, &note)) return false;
     }
-    return true;
+    if (!in.pod(&count) || count > kVerifiedNativeChordConstituents.size()) return false;
+    config->chord_voicings.assign(count, {});
+    for (auto& voicing : config->chord_voicings) {
+        std::uint32_t sounds = 0;
+        if (!in.string(&voicing.chord_id) || !in.pod(&sounds) || sounds == 0u || sounds > 4u) return false;
+        voicing.sound_ids.resize(sounds);
+        for (auto& sound : voicing.sound_ids) if (!in.string(&sound)) return false;
+    }
+    return validate_chord_voicings(*config).ok();
 }
 
 bool write_compiled_chart(RuntimeCacheWriter& out, const CompiledChart& chart) {
@@ -466,6 +482,7 @@ bool chart_notes_equal(const ChartNote& a, const ChartNote& b) {
         a.ignore_sound_ids == b.ignore_sound_ids;
 }
 bool song_configs_equal_impl(const SongConfig& a, const SongConfig& b) {
+    if (a.chord_voicings != b.chord_voicings) return false;
     if (a.schema != b.schema || a.title != b.title || a.bpm != b.bpm || a.difficulty != b.difficulty ||
         a.score_thresholds != b.score_thresholds || a.mode_change_combo_counts != b.mode_change_combo_counts ||
         a.midi_audio_offset_seconds != b.midi_audio_offset_seconds ||
@@ -598,6 +615,9 @@ std::uint64_t omission_semantic_hash_impl(const DifficultyProfileOmission& omiss
 }
 
 bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
+    if (song.chart_from_midi && !song.config.chord_voicings.empty()) return false;
+    for (const auto& profile : song.difficulty_profiles)
+        if (profile.config.chord_voicings != song.config.chord_voicings) return false;
     const auto accepted = static_cast<std::uint32_t>(song.accepted_chart_input_limit);
     const auto published = static_cast<std::uint32_t>(song.published_chart_row_limit);
     if (song.accepted_chart_input_limit != accepted || song.config.notes.size() > kMaxChartRows ||
@@ -685,6 +705,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         !std::isfinite(song->gain_envelope_min_gain_db) || !std::isfinite(song->metronome_first_beat_seconds) ||
         !std::isfinite(song->metronome_last_beat_seconds)) return false;
     if (accepted != song->accepted_chart_input_limit) return false;
+    if (song->config.chord_voicings != source_config.chord_voicings ||
+        (midi != 0 && !song->config.chord_voicings.empty())) return false;
     if (!valid_config_and_chart(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
     song->audio.stereo_samples.clear(); song->chart_from_midi = midi != 0;
@@ -710,7 +732,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
             !valid_cached_profile(song->id,
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity,
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile)) return false;
-        if (!valid_config_and_chart(profile.config, profile.chart)) return false;
+        if (profile.config.chord_voicings != song->config.chord_voicings ||
+            !valid_config_and_chart(profile.config, profile.chart)) return false;
     }
     if (!song_configs_equal_impl(song->config, song->difficulty_profiles.front().config) ||
         !compiled_charts_equal(song->chart, song->difficulty_profiles.front().chart)) return false;

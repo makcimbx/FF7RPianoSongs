@@ -119,12 +119,30 @@ struct CustomContextToken {
     }
 };
 
+struct ChordVoicingBinding;
+enum class ChartAdmissionState : uint8_t { Pending, Ready, Failed };
+struct NativeChartHeader {
+    uintptr_t data = 0;
+    int32_t count = 0;
+    int32_t capacity = 0;
+    bool operator==(const NativeChartHeader&) const = default;
+};
+struct ChartAdmissionSnapshot {
+    std::shared_ptr<const ChordVoicingBinding> binding;
+    NativeChartHeader header{};
+    ChartAdmissionState state = ChartAdmissionState::Pending;
+    bool rejection_reported = false;
+};
+enum class ChartUpdateAdmission : uint8_t { Stock, Ready, Rejected, RejectedFirst };
+
 struct PlaybackSnapshot : SelectionSnapshot {
     CustomContextToken token{};
+    ChartAdmissionSnapshot chart_admission{};
 };
 
 struct CleanupLease : SelectionSnapshot {
     CustomContextToken token{};
+    ChartAdmissionSnapshot chart_admission{};
 };
 
 using ActiveSongSnapshot = SelectionSnapshot;
@@ -134,6 +152,11 @@ using ActiveSongSnapshot = SelectionSnapshot;
 // length exists only once the live menu widget does. Descriptors leave the
 // offline pipeline carrying this value and catalog adoption resolves it.
 inline constexpr int kUnresolvedVisibleIndex = -1;
+
+struct SongChordVoicing {
+    std::string chord_id;
+    std::vector<std::string> sound_ids;
+};
 
 struct SongDescriptor {
     std::string id;
@@ -153,6 +176,8 @@ struct SongDescriptor {
     std::wstring sidecar_path;
     std::vector<SongDifficultyProfile> profiles;
     int default_profile_index = 0;
+    // Immutable song-wide authored mapping, shared by every difficulty profile.
+    std::vector<SongChordVoicing> chord_voicings;
 };
 
 // Resolves an unresolved catalog onto the rows appended after a live list of
@@ -221,6 +246,16 @@ public:
     bool publish_playback_from_selection_guard(
         const SelectionSnapshot& selection, const CustomContextToken& token);
     bool update_playback_token(const CustomContextToken& expected, const CustomContextToken& replacement);
+    bool attach_chart_admission(const SelectionSnapshot&, const CustomContextToken&,
+        std::shared_ptr<const ChordVoicingBinding>);
+    bool seal_chart_admission(const std::shared_ptr<const ChordVoicingBinding>&,
+        const NativeChartHeader&);
+    void invalidate_chart_admission(void* wrapper);
+    bool fail_chart_admission(const std::shared_ptr<const ChordVoicingBinding>&);
+    ChartAdmissionSnapshot chart_admission_for_wrapper(void* wrapper) const;
+    ChartUpdateAdmission chart_update_admission(void* wrapper);
+    bool commit_if_current_chart(const std::shared_ptr<const ChordVoicingBinding>&,
+        bool (*commit)(const ChartAdmissionSnapshot&, void*) noexcept, void* context);
     bool revoke_playback(const CustomContextToken& token);
     bool retire_cleanup_lease(const CustomContextToken& token);
     bool commit_if_playback_token(
@@ -268,6 +303,7 @@ private:
     CleanupLease cleanup_;
     SelectionSnapshot selection_guard_;
     CustomContextToken selection_guard_token_{};
+    ChartAdmissionSnapshot selection_guard_chart_{};
     std::uint64_t generation_ = 1;
     std::uint64_t catalog_revision_ = 1;
 };

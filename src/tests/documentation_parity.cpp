@@ -694,16 +694,16 @@ bool validate_ini_documentation(const fs::path& source_root, std::string* error_
 bool verify_song_format_contract_text(
     const std::string_view text, std::string* error_message)
 {
-    constexpr std::array<std::string_view, 19> required_sections{{
+    constexpr std::array<std::string_view, 20> required_sections{{
         "# Song Format Reference", "## Folder and source selection", "## Root object",
         "## Explicit notes", "### Pitch spelling", "### Note values",
-        "### Chords and `ignore_sound`", "### Groups and dual rows",
+        "### Chords and `ignore_sound`", "### Custom chord sounds", "### Groups and dual rows",
         "## Difficulty profiles", "## MIDI-backed songs", "## Metronome",
         "## Audio, modes, loudness, and gain", "## Extended charts and build policy",
         "## Resolved song convenience output", "## Failure behavior", "### Minimal explicit chart", "### Dual row, chord filtering, note values, and grouping",
         "### Explicit difficulty profiles", "### MIDI-backed song",
     }};
-    constexpr std::array<std::string_view, 16> required_example_sections{{
+    constexpr std::array<std::string_view, 17> required_example_sections{{
         "### Metronome and gain envelope", "### Mode audio filenames",
         "unknown fields are rejected", "`song.mode0.*` is rejected",
         "explicit `0`", "even when the metronome is disabled",
@@ -711,7 +711,7 @@ bool verify_song_format_contract_text(
         "`.cache/resolved-song.json`", "convenience output only",
         "copy a desired `notes` array or `profiles` array", "future MIDI edits",
         "## Start here", "### Editing JSON safely", "### Automatic right-hand run",
-        "### Partial chord and alternate C input",
+        "### Partial chord and alternate C input", "### Custom chord composition and filtering",
     }};
     const auto require_inventory_rows = [&](const std::string_view section_begin,
                                             const std::string_view section_end,

@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(FF7RPianoSongs LANGUAGES CXX)
+enable_language(ASM_MASM)
 
 set(FF7RP_FIRST_PARTY_CXX_FEATURE cxx_std_23)
 
@@ -109,12 +110,12 @@ function(ff7rp_apply_cpp_policy target)
 
     target_compile_features(${target} PRIVATE ${FF7RP_FIRST_PARTY_CXX_FEATURE})
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /permissive-)
+        target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive->")
         if(NOT POLICY_OMIT_EHSC)
-            target_compile_options(${target} PRIVATE /EHsc)
+            target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
         endif()
         if(NOT POLICY_OMIT_FP_PRECISE)
-            target_compile_options(${target} PRIVATE /fp:precise)
+            target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/fp:precise>)
         endif()
     endif()
 endfunction()
@@ -223,6 +224,7 @@ target_include_directories(ff7rp_pipeline PUBLIC
 target_link_libraries(ff7rp_pipeline PUBLIC midifile)
 ff7rp_use_generated_catalog(ff7rp_pipeline)
 add_library(FF7RPianoSongs SHARED ${FF7RPIANOSONGS_SOURCES})
+target_sources(FF7RPianoSongs PRIVATE src/game/chord_voicing_bridge.asm)
 add_dependencies(FF7RPianoSongs check_rva_catalog)
 set_property(TARGET FF7RPianoSongs APPEND PROPERTY LINK_DEPENDS
     "${FF7RP_RVA_CATALOG}"
@@ -405,6 +407,7 @@ add_executable(song_descriptor_builder_selftest
 ff7rp_apply_cpp_policy(song_descriptor_builder_selftest)
 target_compile_definitions(song_descriptor_builder_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_descriptor_builder_selftest PRIVATE "src")
+target_link_libraries(song_descriptor_builder_selftest PRIVATE ff7rp_pipeline)
 add_executable(music_repository_loader_selftest
     src/tests/music_repository_loader_selftest.cpp
     src/startup/music_repository_loader.cpp
@@ -509,6 +512,24 @@ target_compile_definitions(extended_chart_selftest PRIVATE WIN32_LEAN_AND_MEAN N
     FF7RP_EXTENDED_CHART_FIXTURE_LIBRARY FF7RP_CHART_PATCH_SELFTEST)
 target_include_directories(extended_chart_selftest PRIVATE "src")
 ff7rp_use_generated_catalog(extended_chart_selftest)
+
+add_executable(chord_voicing_selftest
+    src/tests/chord_voicing_selftest.cpp
+    src/game/chord_voicing.cpp
+    src/game/chord_voicing_bridge.asm
+    src/game/chord_voicing_bridge_harness.asm
+    src/game/song_registry.cpp
+    src/game/hook_specs.cpp
+    src/core/hooks.cpp
+    src/core/pe_image.cpp
+    src/core/logging.cpp)
+ff7rp_apply_cpp_policy(chord_voicing_selftest)
+target_compile_definitions(chord_voicing_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
+    FF7RP_CHORD_VOICING_SELFTEST=1)
+target_include_directories(chord_voicing_selftest PRIVATE "src")
+target_link_libraries(chord_voicing_selftest PRIVATE ff7rp_pipeline minhook)
+ff7rp_use_generated_catalog(chord_voicing_selftest)
+add_dependencies(chord_voicing_selftest check_rva_catalog)
 add_executable(runtime_lifecycle_selftest
     src/tests/runtime_lifecycle_selftest.cpp
     src/tests/runtime_lifecycle_foundation_tests.cpp
@@ -673,6 +694,7 @@ ff7rp_apply_cpp_policy(cache_artifact_writer_selftest)
 add_test(NAME cache_artifact_writer_selftest COMMAND cache_artifact_writer_selftest)
 add_test(NAME metronome_selftest COMMAND metronome_selftest)
 add_test(NAME extended_chart_selftest COMMAND extended_chart_selftest)
+add_test(NAME chord_voicing_selftest COMMAND chord_voicing_selftest)
 add_test(NAME runtime_lifecycle_selftest COMMAND runtime_lifecycle_selftest)
 add_test(NAME audio_native_call_policy_selftest COMMAND audio_native_call_policy_selftest)
 add_test(NAME audio_production_wiring_selftest COMMAND audio_production_wiring_selftest)

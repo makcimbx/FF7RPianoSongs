@@ -1,5 +1,6 @@
 #include "song_json.h"
 #include "song_json_fields.h"
+#include "chord_voicing.h"
 #include "pipeline_limits.h"
 
 #include <algorithm>
@@ -888,6 +889,25 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
         config.difficulty = authored_profiles.front().difficulty;
         config.notes = authored_profiles.front().notes;
         config.notes_provided = true;
+    }
+    if (const JsonValue* voicings = find_member(root, "chord_voicings")) {
+        if (voicings->type != JsonValue::Type::Object || voicings->object.empty())
+            return Status::error(StatusCode::InvalidJson, "field 'chord_voicings' must be a nonempty object");
+        // JsonValue::object has already rejected duplicate keys and provides
+        // canonical key order; preserve the author's sound-slot order.
+        for (const auto& [key, value] : voicings->object) {
+            if (value.type != JsonValue::Type::Array)
+                return Status::error(StatusCode::InvalidJson, "each chord_voicings value must be an array of native sound names");
+            ChordVoicing voicing{key, {}};
+            for (const auto& sound : value.array) {
+                if (sound.type != JsonValue::Type::String)
+                    return Status::error(StatusCode::InvalidJson, "each chord_voicings sound must be a string");
+                voicing.sound_ids.push_back(sound.string);
+            }
+            config.chord_voicings.push_back(std::move(voicing));
+        }
+        status = validate_chord_voicings(config);
+        if (!status.ok()) return Status::error(StatusCode::InvalidJson, status.message);
     }
     out_source->config = std::move(config);
     out_source->authored_profiles = std::move(authored_profiles);

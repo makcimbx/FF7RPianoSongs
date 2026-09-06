@@ -3,6 +3,7 @@
 #include "core/hooks.h"
 #include "core/pe_image.h"
 #include "game/audio_sead.h"
+#include "game/chord_voicing.h"
 #include "game/completion_timing.h"
 #include "game/completion_capture.h"
 #include "game/duration.h"
@@ -428,6 +429,7 @@ void __fastcall chart_expand_detour(
     // Any expansion may replace the native chart allocation. Revoke the prior
     // success token before admission and before any possible original call.
     invalidate_extended_chart_commit("chart_expansion_begin");
+    registry().invalidate_chart_admission(wrapper);
     ChartExpandPreparationOutcome preparation
         = ChartExpandPreparationOutcome::NativePristine;
     ChartAudioDiagnosticTransaction chart_audio_transaction;
@@ -470,6 +472,11 @@ void __fastcall chart_expand_detour(
     finish_active_chart_row_patch_after_expand(wrapper, caller_rva);
     const bool extended_committed =
         finish_extended_chart_transaction(wrapper, chart_row, caller_rva);
+    const auto& selected_profile = activation_authority.selection.profile;
+    finish_chord_voicing_expansion(wrapper,
+        preparation == ChartExpandPreparationOutcome::CustomCommitted
+        && selected_profile
+        && (selected_profile->extended_chart_tail_notes.empty() || extended_committed));
     chart_audio_diagnostic_expand_completed(chart_audio_transaction);
     // Keep the exact committed transaction active after expand return. A
     // PlaySetup that is not nested in this call can then correlate solely by
@@ -642,6 +649,7 @@ void __fastcall chart_expand_detour(
             chart_audio_transaction,
             ChartAudioDiagnosticTerminalOutcome::ExpandException);
         if (preparation == ChartExpandPreparationOutcome::CustomCommitted) {
+            finish_chord_voicing_expansion(wrapper, false);
             block_custom_audio_route_for_unresolved_chart_mutation();
         }
         abort_extended_chart_transaction();
@@ -747,6 +755,7 @@ int resolve_menu_or_playback_note_count(
 void __fastcall chart_update_detour(void* wrapper, float delta_seconds, void* arg3, void* arg4)
 {
     auto callback = non_audio_hook_gate().try_enter();
+    if (!chord_voicing_chart_update_allowed(wrapper)) return;
     if (g_original_chart_update) {
         g_original_chart_update(wrapper, delta_seconds, arg3, arg4);
     }

@@ -226,6 +226,8 @@ bool selection_audio_admission_cancellation_complete(
     const SelectionSnapshot& selection,
     const AudioRouteLeaseIdentity& lease) noexcept;
 void block_custom_audio_route_for_unresolved_chart_mutation() noexcept;
+// Withdrawal only: native voices/resources remain owned until real cleanup.
+void fail_chord_voicing_chart(std::shared_ptr<const ChordVoicingBinding>) noexcept;
 AudioRouteCleanupResult release_audio_route_on_piano_list_return(int32_t item_index);
 AudioRouteShutdownResult shutdown_audio_sead_with_result();
 bool clear_frozen_profile_if_audio_unowned();

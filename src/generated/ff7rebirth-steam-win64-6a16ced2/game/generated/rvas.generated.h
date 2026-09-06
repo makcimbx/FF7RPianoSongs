@@ -5,6 +5,12 @@
 
 namespace ff7r::piano::game::rva {
 
+inline constexpr uintptr_t PianoChordCallback = 0x039b263c;
+inline constexpr uintptr_t PianoChordCachedCopy = 0x039893c4;
+inline constexpr uintptr_t PianoChordCopyCaller = 0x039b2740;
+inline constexpr uintptr_t PianoChordTerminalCaller = 0x039a682d;
+inline constexpr uintptr_t PianoChordSpanLoads = 0x039b278d;
+inline constexpr uintptr_t PianoChordModeVtable = 0x05bc28d0;
 inline constexpr uintptr_t PianoMenuListOpen = 0x039b8bf4;
 inline constexpr uintptr_t PianoMenuListCancelClose = 0x039a1af4;
 inline constexpr uintptr_t PianoMenuState5Exit = 0x039a6254;

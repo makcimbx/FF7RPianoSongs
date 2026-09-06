@@ -5,9 +5,11 @@
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
+#include "pipeline/chord_voicing.h"
 
 #include <algorithm>
 #include <utility>
+#include <stdexcept>
 
 namespace ff7r::piano {
 namespace {
@@ -64,6 +66,15 @@ game::SongDescriptor build_song_descriptor(
     const ff7rp::pipeline::LoadedSong& song, int visible_index)
 {
     game::SongDescriptor descriptor;
+    const auto voicing_status = ff7rp::pipeline::validate_chord_voicings(song.config);
+    if (!voicing_status.ok()) throw std::invalid_argument(voicing_status.message);
+    if (song.chart_from_midi && !song.config.chord_voicings.empty())
+        throw std::invalid_argument("MIDI-generated charts cannot carry authored chord_voicings");
+    for (const auto& profile : song.difficulty_profiles)
+        if (profile.config.chord_voicings != song.config.chord_voicings)
+            throw std::invalid_argument("profile chord_voicings differs from song root");
+    for (const auto& voicing : song.config.chord_voicings)
+        descriptor.chord_voicings.push_back({voicing.chord_id, voicing.sound_ids});
     descriptor.id = song.id;
     descriptor.title = core::widen(song.config.title);
     descriptor.visible_index = visible_index;

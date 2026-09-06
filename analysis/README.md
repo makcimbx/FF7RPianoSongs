@@ -33,6 +33,7 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 
 ## Audio
 
+- [ChordVoicingRuntimeEvidence.md](ChordVoicingRuntimeEvidence.md) records the exact-1.005 charted-chord projection seam, positional velocity/filter semantics, and pre-judgement readiness boundary. It is static evidence, not gameplay qualification or 1.004 authority.
 - [AudioLifecycleEvidence-202607.md](AudioLifecycleEvidence-202607.md) is the consolidated lifecycle chronology and bounded disposition.
 - [AdaptiveMabfModeEvidence.md](AdaptiveMabfModeEvidence.md) records adaptive MABF mode work.
 - [NativeHcaParity-20260731.md](NativeHcaParity-20260731.md) records the bounded matching-build native structural/metadata/decode parity closure, independent decoder provenance, integrity and error measurements, and corrected slot/timing defects.

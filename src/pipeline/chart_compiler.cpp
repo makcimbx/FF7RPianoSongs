@@ -2,6 +2,7 @@
 #include "chart_event_plan.h"
 #include "diagnostic_descriptor_hash.h"
 #include "native_chord_constituents.h"
+#include "chord_voicing.h"
 #include "pipeline_limits.h"
 
 #include <array>
@@ -62,24 +63,15 @@ bool alternate_monotone_id(const std::string& base, std::string* out) {
     return true;
 }
 
-bool resolve_verified_ignore_sound(const Note& note, std::array<std::string, 3>* out,
+bool resolve_verified_ignore_sound(const SongConfig& config, const Note& note, std::array<std::string, 3>* out,
     const NativeAssetCapabilities native_assets) {
     if (!out || note.ignore_sound_pitches.empty() || note.ignore_sound_pitches.size() > out->size()) return false;
-    const NativeChordConstituents* chord = find_verified_native_chord(note.chord_id, native_assets);
-    if (!chord) return false;
     std::set<std::string_view> resolved;
     for (std::size_t requested = 0; requested < note.ignore_sound_pitches.size(); ++requested) {
         const std::string_view sound = note.ignore_sound_pitches[requested];
-        std::size_t matches = 0;
-        std::string_view canonical;
-        for (std::size_t constituent = 0; constituent < chord->sound_count; ++constituent) {
-            if (chord->sound_names[constituent] == sound) {
-                ++matches;
-                canonical = chord->sound_names[constituent];
-            }
-        }
-        if (matches != 1u || !resolved.insert(canonical).second) return false;
-        (*out)[requested] = std::string(canonical);
+        if (!effective_chord_contains_sound(config, note.chord_id, sound, native_assets) ||
+            !resolved.insert(sound).second) return false;
+        (*out)[requested] = std::string(sound);
     }
     return true;
 }
@@ -145,6 +137,8 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
     if (!out_chart) {
         return Status::error(StatusCode::InvalidArgument, "out_chart must not be null");
     }
+    const Status voicing_status = validate_chord_voicings(config, native_assets);
+    if (!voicing_status.ok()) return voicing_status;
     if (!std::isfinite(config.bpm) || config.bpm <= 0.0) {
         return Status::error(StatusCode::InvalidChart, "bpm must be positive before chart compilation");
     }
@@ -226,7 +220,7 @@ Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
             }
         }
         if (!source.ignore_sound_pitches.empty() &&
-            !resolve_verified_ignore_sound(source, &note.ignore_sound_ids, native_assets)) {
+            !resolve_verified_ignore_sound(config, source, &note.ignore_sound_ids, native_assets)) {
             return Status::error(StatusCode::InvalidChart,
                 "ignore_sound must name unique exact constituents of the row's verified native chord");
         }

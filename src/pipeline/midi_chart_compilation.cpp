@@ -2301,6 +2301,11 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     const std::vector<Note>* preferred_baseline = request.preferred_baseline;
     const std::size_t maximum_visible_rows = request.maximum_visible_rows;
     MidiChartCompilationResult result;
+    if (!config.chord_voicings.empty()) {
+        result.status = Status::error(StatusCode::InvalidChart,
+            "chord_voicings cannot revoice automatic MIDI inference; export resolved-song.json then author the chart");
+        return result;
+    }
     std::vector<Note>* out_notes = &result.notes;
     MidiChartStats* out_stats = &result.stats;
     const int ticks_per_quarter = normalized_source.ticks_per_quarter;

@@ -3,6 +3,7 @@
 #include "core/logging.h"
 #include "game/hook_specs.h"
 #include "game/module_hooks.h"
+#include "game/chord_voicing.h"
 #include "game/piano_page_selection_guard.h"
 #include "game/uobject_identity.h"
 
@@ -49,6 +50,7 @@ bool install_release_hooks(HMODULE exe_module)
         && install_title_hooks(context)
         && install_chart_patch_hooks(context)
         && install_note_count_hooks(context)
+        && install_chord_voicing_hooks(context)
         && install_duration_hooks(context)
         && install_progress_hooks(context)
         && install_audio_sead_hooks(context)
@@ -79,6 +81,7 @@ bool shutdown_release_hooks()
     collect("duration", duration_result);
     const auto note_count_result = shutdown_note_count();
     collect("note_count", note_count_result);
+    collect("chord_voicing", shutdown_chord_voicing());
     const auto chart_result = shutdown_chart_patch();
     collect("chart_patch", chart_result);
     const auto title_result = shutdown_title();

@@ -2,6 +2,8 @@
 #include "pipeline/diagnostic_descriptor_hash.h"
 #include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
+#include "pipeline/chart_compiler.h"
+#include "pipeline/chord_voicing.h"
 
 #include <array>
 #include <cmath>
@@ -9,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <stdexcept>
 
 namespace {
 
@@ -70,6 +73,10 @@ bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfil
 
 bool descriptor_equal(const SongDescriptor& left, const SongDescriptor& right)
 {
+    if (left.chord_voicings.size() != right.chord_voicings.size()) return false;
+    for (std::size_t i = 0; i < left.chord_voicings.size(); ++i)
+        if (left.chord_voicings[i].chord_id != right.chord_voicings[i].chord_id ||
+            left.chord_voicings[i].sound_ids != right.chord_voicings[i].sound_ids) return false;
     if (left.id != right.id || left.title != right.title ||
         left.visible_index != right.visible_index || left.base_slot != right.base_slot ||
         left.unique_index != right.unique_index || left.difficulty != right.difficulty ||
@@ -452,6 +459,52 @@ int main()
         return fail("single-profile title unexpectedly gained a level suffix");
     }
 
+    if (ff7rp::pipeline::selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+        LoadedSong voiced;
+        voiced.id = "authored-voicing";
+        voiced.config.title = "Voiced";
+        voiced.config.bpm = 120;
+        voiced.config.notes_provided = true;
+        voiced.config.notes = {{0, 1, "", "pca_C"}};
+        voiced.config.notes.front().ignore_sound_pitches = {"En3"};
+        voiced.config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
+        if (!ff7rp::pipeline::compile_chart(voiced.config, &voiced.chart).ok()) return fail("voiced descriptor fixture failed");
+        LoadedDifficultyProfile profile;
+        profile.config = voiced.config;
+        profile.chart = voiced.chart;
+        voiced.difficulty_profiles.push_back(profile);
+        auto descriptor = ff7r::piano::build_song_descriptor(voiced, 0);
+        if (descriptor.chord_voicings.size() != 1u || descriptor.chord_voicings[0].chord_id != "pca_C" ||
+            descriptor.chord_voicings[0].sound_ids != std::vector<std::string>{"Cn3", "En3", "Gn3"} ||
+            descriptor.chart_notes.front().ignore_sound_ids != std::array<std::string, 3>{"En3", "", ""} ||
+            descriptor.profiles.front().native_event_count != 1u || descriptor.profiles.front().required_action_count != 1u)
+            return fail("descriptor lost ordered voicing or altered row/action contract");
+        const auto rejects = [&](const LoadedSong& candidate) {
+            try { (void)ff7r::piano::build_song_descriptor(candidate, 0); }
+            catch (const std::invalid_argument&) { return true; }
+            return false;
+        };
+        auto mismatch = voiced;
+        mismatch.difficulty_profiles.front().config.chord_voicings.clear();
+        if (!rejects(mismatch)) return fail("descriptor accepted profile-local voicing divergence");
+        mismatch = voiced;
+        mismatch.chart_from_midi = true;
+        if (!rejects(mismatch)) return fail("descriptor authorized MIDI voicing");
+        mismatch = voiced;
+        mismatch.config.chord_voicings.front().sound_ids = {"Cn3_2"};
+        mismatch.difficulty_profiles.front().config.chord_voicings = mismatch.config.chord_voicings;
+        if (!rejects(mismatch)) return fail("descriptor accepted unverified sound assignment ID");
+        std::swap(voiced.config.chord_voicings.front().sound_ids[0], voiced.config.chord_voicings.front().sound_ids[1]);
+        voiced.difficulty_profiles.front().config.chord_voicings = voiced.config.chord_voicings;
+        const auto reordered = ff7r::piano::build_song_descriptor(voiced, 0);
+        if (descriptor_equal(descriptor, reordered) ||
+            descriptor.profiles.front().physical_chart_digest != reordered.profiles.front().physical_chart_digest)
+            return fail("slot-order semantic change was lost or changed physical chart shape");
+        voiced.config.chord_voicings.clear();
+        voiced.difficulty_profiles.clear();
+        if (descriptor.chord_voicings[0].sound_ids != std::vector<std::string>{"Cn3", "En3", "Gn3"})
+            return fail("descriptor voicing storage retained source aliases");
+    }
     std::cout << "song_descriptor_builder_selftest ok\n";
     return 0;
 }

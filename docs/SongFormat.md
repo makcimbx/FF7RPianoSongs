@@ -15,8 +15,8 @@ Choose one way to make a song:
   from another mod; that mod's original arrays are not accepted directly.
 - **Edit a generated chart:** load it once, exit the game, and copy the generated
   [resolved song](#resolved-song-convenience-output) into the real `song.json`. You can then add
-  [automatic note groups](#groups-and-dual-rows), [partial chords](#chords-and-ignore_sound), or
-  [alternate C inputs](#pitch-spelling).
+  [automatic note groups](#groups-and-dual-rows), [partial chords](#chords-and-ignore_sound),
+  [custom chord sounds](#custom-chord-sounds), or [alternate C inputs](#pitch-spelling).
 
 Only the fields marked **required** need to be supplied. Leave optional settings out until you
 need them. A **profile** is a playable difficulty version of the same song, not another audio file.
@@ -85,6 +85,7 @@ a list of settings you must fill in. All numbers must be finite.
 | `metronome` | object | optional; see defaults below | Closed metronome object; see below. |
 | `notes` | array | optional | Your playable notes. Nonempty; cannot coexist with `profiles`. If neither is present, MIDI is required. |
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
+| `chord_voicings` | object | optional; omitted means stock chord sounds | Song-wide replacements for chord sounds; requires explicit `notes` or `profiles` and game 1.005. See “Custom chord sounds”. |
 | `diagnostic_extended_chart_fixture` | boolean | obsolete; omit | Accepted for old files, but has no effect. It does not unlock longer charts. |
 
 Usually omit both threshold arrays. The mod calculates them for each chart from its required
@@ -110,7 +111,7 @@ order; equal `beat` values are allowed for simultaneous actions.
 | `chord_id` | string | optional | Syntactically: `pca_` followed by one or more ASCII letters, digits, or underscores. Exact verified IDs are listed below. |
 | `group_index` | integer | optional; default `0` | 0–255. Use the same nonzero value on consecutive rows for an automatic run after the first input. |
 | `monotone_variant` | string | optional; default `"default"` | `default` or `alternate`; requires `pitch`. Selects the alternate high-C input where supported below. |
-| `ignore_sound` | array of strings | optional | 1–3 different chord sounds to leave out; requires `chord_id`. Copy names from the chord table. |
+| `ignore_sound` | array of strings | optional | 1–3 different chord sounds to leave out; requires `chord_id`. Copy names from the selected custom composition, or the stock chord table when not overridden. |
 | `monotone_note_value` | string | optional | Exact note-value token below; requires `pitch`. |
 | `chord_note_value` | string | optional | Exact note-value token below; requires `chord_id`. |
 
@@ -183,13 +184,18 @@ ones you want to keep. `pca_C` with `"ignore_sound": ["En2"]` leaves C and G.
 The player still triggers the original chord input. Filtering changes the game's chord sounds,
 not the notes already recorded in your audio file, and does not remove the scoring action.
 
-Copy 1–3 different names exactly from the selected row below. These names intentionally use
+Copy 1–3 different names exactly from the selected row below, or from that chord's
+`chord_voicings` list when overridden. These names intentionally use
 the game's spelling (`Cn2`, `En2`), unlike `pitch` (`C2`, `E2`). Names are case-sensitive and
 octave-specific: `E2`, `En3`, and `en2` are not substitutes for `En2`. Omit `ignore_sound` to play
 the full chord; an empty array is not accepted. Filtering all three sounds of a three-note chord
 is allowed but leaves its input silent.
 
-| Chord ID | Exact allowed `ignore_sound` constituents |
+Names are matched exactly, not by sounding pitch: `Ab2` does not remove `Gs2`.
+The table below describes **stock** chord sounds. A custom composition replaces the corresponding
+list for this song; it does not add sounds to it.
+
+| Chord ID | Stock sounds / allowed `ignore_sound` without an override |
 | --- | --- |
 | `pca_C` | `Cn2`, `En2`, `Gn2` |
 | `pca_C_m` | `Cn2`, `Ds2`, `Gn2` |
@@ -260,6 +266,41 @@ Other `pca_*` names can pass the initial JSON check, but are not guaranteed to e
 The table is the supported reference for chord filtering; arbitrary new chords cannot be created
 by inventing an ID.
 
+### Custom chord sounds
+
+A **voicing** is the list of notes that sound together. Use root `chord_voicings` to change that
+list while keeping the original chord input. For example, `pca_C` can sound `Cn3`, `En3`, and
+`Gn3` instead of the stock `Cn2`, `En2`, and `Gn2`. See the
+[complete example](#custom-chord-composition-and-filtering).
+
+- Put `chord_voicings` beside `title` and `bpm`, **not inside a note**. Each key is a chord ID
+  from the stock table, and its value is an ordered list of sound names. Define each chord once.
+- The definitions apply to this song and all its difficulty profiles. Other songs are unchanged.
+  Chords not listed keep their stock sounds. Omit the object when not needed; an empty object is invalid.
+- Supply at least one sound, but no more than the stock chord's number of sounds in the table:
+  at most three for a three-note chord, or four for a four-note chord. Repeated sound names are invalid.
+  You may change pitches/octaves or shorten the list, but cannot add extra sound slots.
+- Use exact game sound names, not `pitch` spelling. Supported prefixes are `Cn`, `Cs`, `Db`,
+  `Dn`, `Ds`, `Eb`, `En`, `Fn`, `Fs`, `Gb`, `Gn`, `Gs`, `Ab`, `An`, `As`, `Bb`, and `Bn`,
+  each followed by an octave from `1` through `6`; `Cn7` is also supported. For example, use
+  `Cn3`, not `C3`. Alternate input names such as `Cn3_2` are **not** sound names.
+- Sound order matters: each position keeps the stock position's playing strength. Removing a
+  sound with `ignore_sound` does not shift the remaining sounds into different strength positions.
+  This setting does not edit your audio recording or change the required input, note symbols, or score.
+- `ignore_sound` must now name members of the **replacement** list. If C uses `Cn3/En3/Gn3`,
+  ignore `En3` to remove its middle note; `En2` is no longer a valid member. The existing limit
+  of three ignored sounds remains. Filtering the entire replacement list is allowed when it fits
+  that limit; the chord input still counts, but produces no chord sounds.
+
+This feature initially requires **game 1.005** and explicit `notes` or `profiles`. A MIDI-only
+song cannot use it: first [copy the generated chart into song.json](#resolved-song-convenience-output),
+then add your definitions. Game 1.004 does not support this setting; an unavailable feature is
+rejected rather than silently playing the stock composition.
+
+Only chord events in the chart, including automatic group followers, use these definitions.
+Free play and wrong-key sounds remain stock. Actual sound and transition behavior still require
+focused in-game verification; do not treat successful file loading as that verification.
+
 ### Groups and dual rows
 
 For a fast right-hand run, give two or more consecutive note rows the same `group_index`, from
@@ -287,7 +328,8 @@ chart if you want this gameplay. Long grouped charts have the additional limits 
 
 Keep `bpm` at the root and remove root `notes` and root `difficulty`. Put each difficulty label
 and its notes inside its own profile. The first profile is the default; labels can skip numbers.
-All profiles share the song's audio and BPM. An invalid authored profile rejects the song.
+All profiles share the song's audio, BPM, and root `chord_voicings`, if supplied.
+An invalid authored profile rejects the song.
 In the song's detail view, use D-pad left/right or the keyboard arrow keys to select a profile.
 
 ## MIDI-backed songs
@@ -296,9 +338,10 @@ When root `notes` and `profiles` are absent, exactly one `song.mid` or `song.mid
 The generator tries difficulty labels 1 through 6; root `difficulty` does not select one of them.
 Each level chooses a playable selection from the MIDI, not necessarily every original note.
 Levels that cannot be generated within the supported limits are omitted, so some numbers may be missing.
-The generator may choose chords, partial chords, and alternate C/C-sharp inputs, but never automatic
+The generator may choose stock chords, partial chords, and alternate C/C-sharp inputs, but never automatic
 groups. It uses key signatures for sharp/flat spelling and exact supported MIDI lengths for note
-symbols; other lengths use the default symbols described above.
+symbols; other lengths use the default symbols described above. `chord_voicings` is for explicit
+charts only; export and edit the generated chart before adding custom chord compositions.
 
 ### MIDI timing and overrides
 
@@ -377,7 +420,8 @@ directions still need focused in-game verification. Test your complete song befo
 ## Resolved song convenience output
 
 After a successful load, look for `.cache/resolved-song.json` inside your song folder. It contains
-the complete playable chart, including generated difficulties, long charts, and final note symbols.
+the complete playable chart, including generated difficulties, long charts, final note symbols,
+and any root `chord_voicings`.
 It is convenience output only: **the mod does not read it as your song configuration**.
 
 To turn a generated chart into an editable chart:
@@ -387,8 +431,9 @@ To turn a generated chart into an editable chart:
 3. Edit `notes`, or the notes inside each `profiles` entry, and restart the game.
 
 Alternatively, copy a desired `notes` array or `profiles` array into your existing `song.json`.
-Keep the exported `bpm`; remove the other chart form, and remove root `difficulty` when using
-`profiles`. These explicit notes take precedence over any remaining MIDI file: future MIDI edits
+Keep the exported `bpm` and `chord_voicings`, if present; remove the other chart form, and remove
+root `difficulty` when using `profiles`. Copying only notes from a song with custom chord sounds
+does not preserve those sounds. These explicit notes take precedence over any remaining MIDI file: future MIDI edits
 will not regenerate them. Omitted generated levels stay absent; automatically calculated score
 and combo settings may be recalculated for the edited chart.
 
@@ -401,7 +446,8 @@ successful load if possible; inability to write it does not stop an otherwise va
 | --- | --- |
 | Song is missing | Read `FF7RPianoSongs.log`; check the exact filenames, JSON punctuation, and field names. |
 | A group is rejected | Give at least two consecutive rows the same nonzero `group_index`. |
-| A partial chord is rejected | Copy exact names from that chord's table row; omit the field rather than using an empty array. |
+| A partial chord is rejected | Copy exact names from that chord's custom list when overridden, otherwise its stock table row; omit the field rather than using an empty array. |
+| A custom chord composition is rejected | Check game 1.005, explicit notes/profiles, the chord ID, exact sound names, and the stock chord's maximum sound count. |
 | An alternate pitch is rejected | Check the supported spelling and octave in “Pitch spelling”; alternate is not available for every note. |
 | Early MIDI notes are missing | Check the lead-in, timing offsets, and audio length. Generation also reduces notes for playability. |
 | MIDI edits no longer change the chart | Remove explicit `notes`/`profiles` to return to MIDI generation, or edit those explicit notes instead. |
@@ -461,6 +507,29 @@ so only C and G sound from the game's chord. Your recorded audio is unchanged.
   "notes": [
     { "beat": 4, "duration_beats": 1, "pitch": "C4", "monotone_variant": "alternate" },
     { "beat": 6, "duration_beats": 1, "chord_id": "pca_C", "ignore_sound": ["En2"] }
+  ]
+}
+```
+
+### Custom chord composition and filtering
+
+Game 1.005 only. The first C-major input sounds C/E/G in octave 3. The second uses the same input
+but leaves out E. The last still requires the C-major input, but all three chord sounds are muted.
+Your source audio is unchanged throughout. The same definition also applies to any difficulty
+profiles you add at the root instead of `notes`.
+
+```json
+{
+  "schema": "ff7rpianosongs.song.v2",
+  "title": "Custom Chord Sounds",
+  "bpm": 120,
+  "chord_voicings": {
+    "pca_C": ["Cn3", "En3", "Gn3"]
+  },
+  "notes": [
+    { "beat": 4, "duration_beats": 1, "chord_id": "pca_C" },
+    { "beat": 6, "duration_beats": 1, "chord_id": "pca_C", "ignore_sound": ["En3"] },
+    { "beat": 8, "duration_beats": 1, "chord_id": "pca_C", "ignore_sound": ["Cn3", "En3", "Gn3"] }
   ]
 }
 ```

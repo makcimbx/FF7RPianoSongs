@@ -3,6 +3,9 @@
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/native_chord_constituents.h"
+#include "pipeline/chord_voicing.h"
+#include "pipeline/midi_chart_compilation.h"
+#include "pipeline/runtime_cache_codec.h"
 #include "pipeline/cache.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/song_json.h"
@@ -62,7 +65,21 @@ bool verify_song_format_examples(const std::string& text, std::string* error_mes
         }
         ++example_count;
         ff7rp::pipeline::ParsedSongSource source;
-        auto status = ff7rp::pipeline::parse_song_json_string(text.substr(begin, end - begin), &source);
+        const auto json = text.substr(begin, end - begin);
+        auto status = ff7rp::pipeline::parse_song_json_string(json, &source);
+        if (!ff7rp::pipeline::selected_native_asset_capabilities().has_verified_authored_chord_voicing() &&
+            json.find("\"chord_voicings\"") != std::string::npos) {
+            // The same guide is bundled for both builds. The supported build
+            // parses/compiles this example below; other builds must reject its
+            // documented capability, not pretend to qualify its chart semantics.
+            if (status.ok() || status.message !=
+                "chord_voicings requires verified exact 1.005 authored-voicing capability") {
+                *error_message = "SongFormat voicing example did not reject its unavailable capability";
+                return false;
+            }
+            cursor = end + 3u;
+            continue;
+        }
         if (!status.ok()) {
             *error_message = "SongFormat example " + std::to_string(example_count) +
                 " does not parse: " + status.message;
@@ -354,14 +371,123 @@ bool test_release_authority_parser(std::string* error_message)
     return true;
 }
 
+int test_authored_chord_voicings()
+{
+    using namespace ff7rp::pipeline;
+    const auto current = native_asset_capabilities_for_catalog("ff7rebirth-steam-win64-6a16ced2");
+    const auto older = native_asset_capabilities_for_catalog("ff7rebirth-steam-win64-68fd6fde");
+    const auto unknown = native_asset_capabilities_for_catalog("unknown");
+    SongConfig config;
+    config.bpm = 120;
+    config.notes_provided = true;
+    config.notes = {{0, 1, "", "pca_C"}};
+    config.notes.front().ignore_sound_pitches = {"En3"};
+    config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
+    const NormalizedMidiSource unused_source;
+    const WavAudio unused_audio;
+    const auto midi_attempt = compile_normalized_midi_chart({unused_source, unused_audio, config});
+    if (midi_attempt.status.ok() || !midi_attempt.notes.empty() ||
+        midi_attempt.status.message.find("cannot revoice automatic MIDI inference") == std::string::npos)
+        return fail("automatic MIDI compilation silently applied authored voicing");
+    CompiledChart chart;
+    if (!current.has_verified_authored_chord_voicing() || older.has_verified_authored_chord_voicing() ||
+        unknown.has_verified_authored_chord_voicing() ||
+        !compile_chart(config, &chart, nullptr, 512, current).ok() ||
+        chart.notes.front().ignore_sound_ids != std::array<std::string, 3>{"En3", "", ""} ||
+        compile_chart(config, &chart, nullptr, 512, older).ok() ||
+        compile_chart(config, &chart, nullptr, 512, unknown).ok())
+        return fail("authored chord voicing exact-build/effective IgnoreSound contract failed");
+    for (const auto& ignored : std::vector<std::vector<std::string>>{
+            {"En2"}, {"E3"}, {"en3"}, {"En3", "En3"}, {"Cn3", "En3", "Gn3", "Bn3"}}) {
+        auto invalid = config;
+        invalid.notes.front().ignore_sound_pitches = ignored;
+        if (compile_chart(invalid, &chart, nullptr, 512, current).ok())
+            return fail("authored voicing admitted invalid effective IgnoreSound");
+    }
+    auto silent = config;
+    silent.notes.front().ignore_sound_pitches = {"Cn3", "En3", "Gn3"};
+    if (!compile_chart(silent, &chart, nullptr, 512, current).ok() || chart.notes.size() != 1u)
+        return fail("silent-after-filter chord lost its original row/action");
+    auto stock = config;
+    stock.chord_voicings.clear();
+    if (compile_chart(stock, &chart, nullptr, 512, current).ok())
+        return fail("unoverridden stock chord accepted an octave-shifted filter");
+    stock.notes.front().ignore_sound_pitches = {"En2"};
+    if (!compile_chart(stock, &chart, nullptr, 512, older).ok())
+        return fail("ordinary stock chord behavior changed");
+
+    // Exercise the entire bounded chord inventory without song-specific rules.
+    for (const auto& entry : kVerifiedNativeChordConstituents) {
+        auto all_chords = config;
+        all_chords.notes.front().chord_id = std::string(entry.chord_id);
+        all_chords.notes.front().ignore_sound_pitches.clear();
+        all_chords.chord_voicings = {{std::string(entry.chord_id), {"Cn3", "En3", "Gn3"}}};
+        if (!compile_chart(all_chords, &chart, nullptr, 512, current).ok())
+            return fail("verified chord inventory rejected same-width or shortened voicing");
+        all_chords.chord_voicings.front().sound_ids.push_back("Bn3");
+        if (compile_chart(all_chords, &chart, nullptr, 512, current).ok() != (entry.sound_count == 4u))
+            return fail("authored chord voicing extended beyond original velocity-slot width");
+    }
+    const std::string prefix = R"({"schema":"v2","title":"voicing","bpm":120,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]}],"chord_voicings":)";
+    const std::string mapping = R"({"pca_C":["Cn3","En3","Gn3"]})";
+    SongConfig parsed;
+    const auto parsed_status = parse_song_json_string(prefix + mapping + "}", &parsed);
+    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+        if (parsed_status.ok()) return fail("unsupported selected catalog accepted authored voicing JSON");
+        return 0;
+    }
+    if (!parsed_status.ok() || parsed.chord_voicings != config.chord_voicings)
+        return fail("authored chord voicing JSON failed to preserve ordered slots");
+    for (const auto* invalid : {"null", "[]", "{}", "true",
+            R"({"pca_C":"Cn3"})", R"({"pca_C":[]})", R"({"pca_C":[3]})",
+            R"({"pca_C":["Cn3","Cn3"]})", R"({"pca_C":["Cn3","En3","Gn3","Bn3"]})",
+            R"({"pca_C":["Cn3"],"pca_C":["En3"]})", R"({"pca_unknown":["Cn3"]})",
+            R"({"pca_C":["C3"]})", R"({"pca_C":["Cn3_2"]})", R"({"pca_C":["Cb3"]})",
+            R"({"pca_C":["Cs7"]})", R"({"pca_C":["Cn0"]})", R"({"pca_C":["en3"]})"}) {
+        if (parse_song_json_string(prefix + invalid + "}", &parsed).ok())
+            return fail("malformed chord_voicings JSON accepted: " + std::string(invalid));
+    }
+    for (const auto* sound : {"Cn1", "Db1", "Eb3", "Gb4", "Ab5", "Bb6", "Bn6", "Cn7"}) {
+        if (!parse_song_json_string(prefix + "{\"pca_C\":[\"" + sound + "\"]}}", &parsed).ok())
+            return fail("verified exact sound spelling was rejected");
+    }
+    const auto midi_only = parse_song_json_string(
+        R"({"schema":"v2","title":"midi","chord_voicings":)" + mapping + "}", &parsed);
+    if (midi_only.ok() || midi_only.message.find("export resolved-song.json then author") == std::string::npos)
+        return fail("MIDI-only authored voicing rejection was not actionable");
+    const std::string profiles = R"({"schema":"v2","title":"profiles","bpm":120,"profiles":[{"difficulty":1,"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C","ignore_sound":["En3"]}]},{"difficulty":3,"notes":[{"beat":1,"duration_beats":1,"chord_id":"pca_C"}]}],"chord_voicings":)";
+    ParsedSongSource source;
+    if (!parse_song_json_string(profiles + mapping + "}", &source).ok() || !source.config.notes_provided)
+        return fail("shared authored-profile mapping did not parse");
+    for (const auto& profile : source.authored_profiles) {
+        auto shared = source.config;
+        shared.notes = profile.notes;
+        if (!compile_chart(shared, &chart).ok()) return fail("authored profile did not inherit root voicing");
+    }
+    if (parse_song_json_string(R"({"schema":"v2","title":"bad","bpm":120,"profiles":[{"difficulty":1,"chord_voicings":{"pca_C":["Cn3"]},"notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_C"}]}]})", &source).ok())
+        return fail("profile-local chord_voicings escaped closed schema");
+
+    SongConfig a, b;
+    if (!parse_song_json_string(prefix + R"({"pca_D":["Dn3"],"pca_C":["Cn3","En3","Gn3"]}})", &a).ok() ||
+        !parse_song_json_string(prefix + R"({"pca_C":["Cn3","En3","Gn3"],"pca_D":["Dn3"]}})", &b).ok() ||
+        !song_configs_equal(a, b) || !compile_chart(a, &chart).ok() ||
+        config_chart_semantic_hash(a, chart) != config_chart_semantic_hash(b, chart))
+        return fail("chord key order changed canonical configuration identity");
+    std::swap(b.chord_voicings.front().sound_ids[0], b.chord_voicings.front().sound_ids[1]);
+    if (song_configs_equal(a, b) || config_chart_semantic_hash(a, chart) == config_chart_semantic_hash(b, chart))
+        return fail("sound-slot order lost semantic identity");
+    return 0;
+}
+
 } // namespace
 
 int main()
 {
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
-        != "ff7rpianosongs.pipeline.v47") {
-        return fail("pipeline cache identity did not invalidate unsupported alternate assignments");
+        != "ff7rpianosongs.pipeline.v48") {
+        return fail("pipeline cache identity did not invalidate pre-voicing serialized configurations");
     }
+    if (test_authored_chord_voicings() != 0) return 1;
     const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-68fd6fde");
     const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(

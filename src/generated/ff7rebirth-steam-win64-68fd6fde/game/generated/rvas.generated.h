@@ -5,6 +5,12 @@
 
 namespace ff7r::piano::game::rva {
 
+inline constexpr uintptr_t PianoChordCallback = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PianoChordCachedCopy = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PianoChordCopyCaller = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PianoChordTerminalCaller = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PianoChordSpanLoads = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PianoChordModeVtable = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
 inline constexpr uintptr_t PianoMenuListOpen = 0x03c5f5c8;
 inline constexpr uintptr_t PianoMenuListCancelClose = 0x03c48a68;
 inline constexpr uintptr_t PianoMenuState5Exit = 0x03c4ce78;

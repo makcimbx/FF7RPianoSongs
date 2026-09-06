@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "chart_event_plan.h"
+#include "chord_voicing.h"
 #include "note_value.h"
 
 namespace ff7rp::pipeline {
@@ -205,6 +206,8 @@ Status append_complete_notes(std::string* out, const LoadedDifficultyProfile& pr
 
 Status append_root_settings(std::string* out, const LoadedSong& song, const bool emit_profiles) {
     const SongConfig& config = song.config;
+    const Status voicing_status = validate_chord_voicings(config);
+    if (!voicing_status.ok()) return invalid_projection(voicing_status.message);
     if (!std::isfinite(config.bpm) || !std::isfinite(config.midi_audio_offset_seconds) ||
         !std::isfinite(config.midi_audio_alignment_seconds) ||
         !std::isfinite(config.midi_minimum_lead_in_seconds) ||
@@ -259,6 +262,21 @@ Status append_root_settings(std::string* out, const LoadedSong& song, const bool
         }
         out->append("  ]");
     }
+    if (!config.chord_voicings.empty()) {
+        out->append(",\n  \"chord_voicings\": {\n");
+        for (std::size_t index = 0; index < config.chord_voicings.size(); ++index) {
+            const auto& voicing = config.chord_voicings[index];
+            out->append("    ");
+            if (!append_escaped_json_string(out, voicing.chord_id)) return invalid_projection("chord ID is not renderable");
+            out->append(": [");
+            for (std::size_t slot = 0; slot < voicing.sound_ids.size(); ++slot) {
+                if (slot != 0u) out->append(", ");
+                if (!append_escaped_json_string(out, voicing.sound_ids[slot])) return invalid_projection("sound ID is not renderable");
+            }
+            out->append(index + 1u == config.chord_voicings.size() ? "]\n" : "],\n");
+        }
+        out->append("  }");
+    }
     out->append(",\n  \"metronome\": { \"enabled\": ");
     out->append(config.metronome_enabled ? "true" : "false");
     out->append(", \"level\": ");
@@ -282,6 +300,11 @@ Status render_resolved_song_json(
     if (!out_json) return Status::error(StatusCode::InvalidArgument, "out_json must not be null");
     const bool emit_profiles = song.chart_from_midi || source_declared_profiles;
     if (song.difficulty_profiles.empty()) return invalid_projection("song has no visible profile");
+    if (song.chart_from_midi && !song.config.chord_voicings.empty())
+        return invalid_projection("MIDI-generated charts cannot carry authored chord_voicings");
+    for (const auto& profile : song.difficulty_profiles)
+        if (profile.config.chord_voicings != song.config.chord_voicings)
+            return invalid_projection("profile chord_voicings differs from song root");
     std::string rendered;
     Status status = append_root_settings(&rendered, song, emit_profiles);
     if (!status.ok()) return status;
