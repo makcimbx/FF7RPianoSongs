@@ -1,5 +1,6 @@
 #include "pipeline/song_repository.h"
 #include "pipeline/cache.h"
+#include "pipeline/pipeline_limits.h"
 #include "tools/song_cache_tool_args.h"
 
 #include "MidiFile.h"
@@ -14,12 +15,16 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 int main(int argc, char** argv)
 {
+    const bool playable_extended = argc > 1 &&
+        std::string_view(argv[argc - 1]) == "--playable-extended";
+    if (playable_extended) --argc;
     if (argc != 2 && argc != 3) {
-        std::cerr << "usage: song_cache_tool <song-directory> [dump-difficulty]\n";
+        std::cerr << "usage: song_cache_tool <song-directory> [dump-difficulty] [--playable-extended]\n";
         return 2;
     }
     std::optional<int> dump_difficulty;
@@ -33,10 +38,17 @@ int main(int argc, char** argv)
         dump_difficulty = parsed;
     }
 
+    // Offline chart-policy selection, not installation or native-hook authority.
+    ff7rp::pipeline::configure_chart_row_limit(playable_extended, playable_extended);
     ff7rp::pipeline::LoadedSong song;
-    const ff7rp::pipeline::Status status = ff7rp::pipeline::load_song_directory(argv[1], &song);
+    const ff7rp::pipeline::Status status = ff7rp::pipeline::load_song_directory(argv[1], &song,
+        [&](const char* stage) {
+            if (std::string_view(stage).starts_with("midi_source_warning:")) {
+                std::cerr << "warning song_directory=" << argv[1] << " " << stage << '\n';
+            }
+        });
     if (!status.ok()) {
-        std::cerr << status.message << '\n';
+        std::cerr << "error song_directory=" << argv[1] << " " << status.message << '\n';
         return 1;
     }
     if (song.difficulty_profiles.empty()) {

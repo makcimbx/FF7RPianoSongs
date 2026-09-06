@@ -553,7 +553,8 @@ bool install_difficulty_window_hook()
     HWND window = nullptr;
     EnumWindows(find_game_window, reinterpret_cast<LPARAM>(&window));
     if (!window) {
-        core::log(core::LogLevel::Error, "[title] difficulty_profile ui_refresh=window_not_found");
+        core::log(core::LogLevel::Debug,
+            "[title] difficulty_profile ui_refresh=window_not_found status=pending");
         return false;
     }
     SetLastError(ERROR_SUCCESS);

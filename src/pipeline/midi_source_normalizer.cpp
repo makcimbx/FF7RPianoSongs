@@ -167,6 +167,8 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
     std::vector<NormalizedMidiNoteEvent> source;
     std::size_t source_ordinal = 0;
     std::size_t unsupported_pitch_events = 0;
+    int unsupported_pitch_min = 128;
+    int unsupported_pitch_max = -1;
     for (int track = 0; track < midi.getTrackCount(); ++track) {
         for (int event_index = 0; event_index < midi.getEventCount(track); ++event_index) {
             const smf::MidiEvent& event = midi[track][event_index];
@@ -182,6 +184,8 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
             }
             if (pitch < 24 || pitch > 96) {
                 ++unsupported_pitch_events;
+                unsupported_pitch_min = std::min(unsupported_pitch_min, pitch);
+                unsupported_pitch_max = std::max(unsupported_pitch_max, pitch);
                 continue;
             }
             NormalizedMidiNoteEvent note;
@@ -193,20 +197,37 @@ Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_
             source.push_back(std::move(note));
         }
     }
+    NormalizedMidiSource normalized;
+    normalized.unsupported_pitch_events = unsupported_pitch_events;
+    normalized.unsupported_pitch_min = unsupported_pitch_min;
+    normalized.unsupported_pitch_max = unsupported_pitch_max;
     if (source.empty()) {
         return Status::error(StatusCode::InvalidMidi,
-            "MIDI contains no supported pitched notes in C1-C7");
+            "MIDI contains no supported pitched notes in C1-C7" +
+                (unsupported_pitch_events == 0 ? std::string{} :
+                    "; " + midi_pitch_exclusion_warning(normalized)));
     }
     assign_stream_priors(&source);
 
-    out_source->ticks_per_quarter = ticks_per_quarter;
-    out_source->source_bpm = source_bpm;
-    out_source->tempos = std::move(tempos);
-    out_source->meters = std::move(meters);
-    out_source->key_signatures = std::move(key_signatures);
-    out_source->notes = std::move(source);
-    out_source->unsupported_pitch_events = unsupported_pitch_events;
+    normalized.ticks_per_quarter = ticks_per_quarter;
+    normalized.source_bpm = source_bpm;
+    normalized.tempos = std::move(tempos);
+    normalized.meters = std::move(meters);
+    normalized.key_signatures = std::move(key_signatures);
+    normalized.notes = std::move(source);
+    *out_source = std::move(normalized);
     return Status::ok_status();
+}
+
+std::string midi_pitch_exclusion_warning(const NormalizedMidiSource& source) {
+    if (source.unsupported_pitch_events == 0) return {};
+    return "excluded=" + std::to_string(source.unsupported_pitch_events) +
+        " total_linked_pitched_attacks=" +
+        std::to_string(source.notes.size() + source.unsupported_pitch_events) +
+        " excluded_midi_range=" + std::to_string(source.unsupported_pitch_min) + ".." +
+        std::to_string(source.unsupported_pitch_max) +
+        " supported_midi_range=24..96 (C1-C7); unsupported attacks excluded without transposition; "
+        "edit the source MIDI to retain those attacks; remaining profiles still require validation";
 }
 
 } // namespace ff7rp::pipeline

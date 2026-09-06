@@ -419,6 +419,13 @@ void log_bgm_playback_aggregate(
             << " release_authorized_epoch=" << record.release_authorized_epoch
             << " release_committed_epoch=" << record.release_committed_epoch
             << " borrowers=" << borrowers
+            // Do not infer whole-aggregate closure from a custom release. These
+            // captured facts allow exact canonical-retention correlation without new native reads.
+            << " canonical_substrate_relinquished=" << record.canonical_substrate_relinquished
+            << " canonical_substrate_state="
+            << static_cast<unsigned>(record.canonical_substrate_relinquishment_state)
+            << " canonical_substrate_transaction_generation="
+            << record.canonical_substrate_transaction_generation
             << " owner=0x" << std::hex << reinterpret_cast<uintptr_t>(record.owner)
             << " controller=0x" << reinterpret_cast<uintptr_t>(record.controller)
             << " slot=0x" << reinterpret_cast<uintptr_t>(record.slot)

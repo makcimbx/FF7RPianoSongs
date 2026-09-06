@@ -24,6 +24,13 @@ The generated header embeds only the non-HCA scaffold: the 0x460-byte MABF heade
 
 Loads one song directory through the production repository pipeline and prints the current pipeline/runtime magic and format, chart policy, cache source, profile/tail diagnostics, loudness/gain envelope, metronome, and MABF metadata. This is a mutating developer tool: running it creates or refreshes that song's local `.cache` files and may atomically create a missing `song.json` before cache generation. It never mutates source audio or MIDI. An optional difficulty argument must be an exact integer from 1 through 6 with no sign, whitespace, or trailing characters; missing or omitted sparse labels fail explicitly.
 
+Use `song_cache_tool <song-directory> [dump-difficulty] [--playable-extended]`.
+The trailing flag selects the offline playable-extended row/event policy; without it,
+the tool uses ordinary 512-row policy. It does not install hooks or prove runtime
+capability. Use isolated source copies for comparisons: changing policy changes the
+local cache identity. Pitch-exclusion warnings are printed with song-directory context
+on source analysis, not repeated on accepted warm-cache hits.
+
 ## extended_chart_fixture_tool
 
 Creates an ordinary exactly-520-row compatibility fixture in a new or empty destination. The generated JSON contains no legacy diagnostic authority field: a proven playable exact-build runtime publishes the complete 512-prefix-plus-eight-tail chart, while native-512 or unsupported policy rejects it. Generation is staged in a unique sibling directory and validates the exact two-file protocol (`song.json` plus a 70-second, 48 kHz mono PCM16 `song.wav`). An existing empty destination is first renamed to a unique sibling backup; staging is then published by same-parent rename and validated again before that backup is retired. Publish or post-publish failures remove the generated fixture and restore the original empty directory. Existing nonempty data is never overwritten. If generated-output cleanup or empty-directory restoration fails, the error reports the exact `.ff7rp-previous-*` backup, failed or obstructing output, and staging paths needed for recovery.

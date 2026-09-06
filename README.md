@@ -97,6 +97,14 @@ editing cache files directly.
 - Exit the game before editing files or deleting that song's `.cache/`, then retry.
 - Temporarily set `General.LogLevel=debug`, reproduce once, then restore `info`.
 
+**Some MIDI notes have no playable input**
+
+- A generated difficulty selects only part of the MIDI. Notes outside C1–C7 are also excluded;
+  the diagnostics report them. This leaves the audio recording unchanged and does not move
+  notes into another octave. See [MIDI range handling](docs/SongFormat.md#midi-notes-outside-the-supported-range).
+- A song needs supported notes and at least one playable generated difficulty. Custom chord
+  compositions do not extend the available pitch range or automatically revoice MIDI.
+
 Logs may contain song names and local paths. Remove private data and copyrighted inputs before sharing them.
 
 ## Compatibility and Limitations

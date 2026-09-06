@@ -56,6 +56,14 @@ inline constexpr bool extended_chart_capability_ready(
     return helper_spec_valid && reserve_hook_installed;
 }
 ExtendedChartCapability configure_extended_chart_capability(HMODULE exe_module);
+// Diagnostic applicability only: never grants admission or bypasses a native guard.
+inline constexpr bool extended_chart_begin_rejection_relevant(
+    bool native_transaction_active, bool activation_present,
+    bool profile_present, bool extended_rows_present) noexcept
+{
+    return native_transaction_active || extended_rows_present
+        || (activation_present && !profile_present);
+}
 bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error);
 void begin_extended_chart_transaction(
     const ChartAudioExpandTlsSnapshot& transaction,

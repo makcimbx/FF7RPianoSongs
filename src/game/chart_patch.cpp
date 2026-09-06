@@ -2318,15 +2318,17 @@ void log_chart_prepare_outcome_best_effort(
         std::ostringstream out;
         out << "[chart_patch] row_prepare status="
             << (outcome == ChartExpandPreparationOutcome::CustomCommitted
-                    ? "applied" : "skipped")
+                    ? "applied" : outcome == ChartExpandPreparationOutcome::NativePristine
+                        ? "skipped" : "failed")
             << " reason="
             << (outcome == ChartExpandPreparationOutcome::CustomCommitted
-                    ? "audio_committed" : "transaction_cancelled")
+                    ? "audio_committed" : outcome == ChartExpandPreparationOutcome::NativePristine
+                        ? "native_pristine" : "mutation_unresolved")
             << " wrapper=0x" << std::hex << reinterpret_cast<uintptr_t>(wrapper)
             << " chart_row=0x" << reinterpret_cast<uintptr_t>(chart_row)
             << std::dec;
-        core::log(outcome == ChartExpandPreparationOutcome::CustomCommitted
-                ? core::LogLevel::Debug : core::LogLevel::Error,
+        core::log(outcome == ChartExpandPreparationOutcome::MutationUnresolved
+                ? core::LogLevel::Error : core::LogLevel::Debug,
             out.str());
     } catch (...) {
     }

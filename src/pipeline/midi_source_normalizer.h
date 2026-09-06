@@ -71,8 +71,12 @@ struct NormalizedMidiSource {
     std::vector<MidiKeySignatureChange> key_signatures;
     std::vector<NormalizedMidiNoteEvent> notes;
     std::size_t unsupported_pitch_events = 0;
+    int unsupported_pitch_min = 128;
+    int unsupported_pitch_max = -1;
 };
 
 Status normalize_midi_source(const std::string& path, NormalizedMidiSource* out_source);
+// Nonterminal source diagnostic, not a promise that difficulty selection will succeed.
+std::string midi_pitch_exclusion_warning(const NormalizedMidiSource& source);
 
 } // namespace ff7rp::pipeline

@@ -547,7 +547,8 @@ void __fastcall chart_expand_detour(
             ? owner_address + kPersistentChartOwnerOffset : 0;
         std::ostringstream identity;
         identity << "[extended_chart_identity] capture_id=" << capture_id
-            << " status=" << (identity_valid && diagnostic_profile ? "proven" : "rejected")
+            << " status=" << (!identity_valid ? "rejected"
+                : diagnostic_profile ? "proven" : "not_applicable")
             << " capability_input=" << ff7rp::pipeline::extended_chart_input_enabled()
             << " playable_authority=" << ff7rp::pipeline::playable_extended_transport_available()
             << " accepted_input_limit=" << ff7rp::pipeline::chart_input_row_limit()
@@ -555,8 +556,9 @@ void __fastcall chart_expand_detour(
             << " descriptor_policy_generation=" << profile->diagnostic_policy_generation
             << " registry_generation=" << snapshot.generation
             << " registry_identity_stable=" << registry_identity_stable
-            << " authority_source=" << (synchronous_extended_identity
-                ? "selection_admission+synchronous_native" : "retained_completion_owner")
+            << " authority_source=" << (!diagnostic_profile ? "not_applicable"
+                : synchronous_extended_identity
+                    ? "selection_admission+synchronous_native" : "retained_completion_owner")
             << " owner_generation=" << owner.generation
             << " owner_registry_generation=" << owner.registry_generation
             << " cache_source=" << (profile->diagnostic_loaded_from_runtime_cache ? "runtime" : "generated")
@@ -580,7 +582,8 @@ void __fastcall chart_expand_detour(
             << " parser_events=" << profile->native_prefix_event_count
             << " native_event_count=" << note_count
             << " required_actions=" << profile->required_action_count;
-        core::log(identity_valid && diagnostic_profile ? core::LogLevel::Info : core::LogLevel::Error,
+        core::log(!identity_valid ? core::LogLevel::Error
+                : diagnostic_profile ? core::LogLevel::Info : core::LogLevel::Debug,
             identity.str());
     }
     if (!identity_valid || !log_chart_event_plan(wrapper, note_count, profile, capture_id)) {

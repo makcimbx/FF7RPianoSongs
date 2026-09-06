@@ -1539,11 +1539,12 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // v48 / format 16 change cache identity and append the empty authored
-        // voicing map to serialized configurations. The resulting config hash
-        // changes, but the explicit musical-value assertions below do not.
-        expected_cache_key = 0x06ee9e4faa46abf9ull;
-        expected_normalized_manifest_digest = 0xaaf60bfed21a1c5aull;
+        // Lead-observed MIDI identity v12 invalidates the former pitch-rejection
+        // policy. Pipeline v48 / format 16, manifest length, and config/chart
+        // semantic hash remain unchanged; musical-value assertions below bind
+        // this identity-only refresh to the same chart.
+        expected_cache_key = 0xe3d4f245c22bbc6cull;
+        expected_normalized_manifest_digest = 0x8554ce98b015e1f2ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -2594,7 +2595,68 @@ int test_non_limiting_limiter_manifest_binding(const std::filesystem::path& root
     return 0;
 }
 
-int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
+int test_midi_pitch_exclusions(const std::filesystem::path& root) {
+    for (const bool extended : {false, true}) {
+        ff7rp::pipeline::configure_chart_row_limit(extended, extended);
+        const auto directory = root / (extended ? "PitchExclusionExtended" : "PitchExclusionOrdinary");
+        std::filesystem::create_directories(directory);
+        MidiTrack clean;
+        for (int index = 0; index < 16; ++index) {
+            add_note(&clean, 1920 + index * 960, 180, 60 + index % 5, 100);
+        }
+        MidiTrack mixed = clean;
+        for (int index = 0; index < 16; ++index) {
+            add_note(&mixed, 1920 + index * 960 + 240, 120, 23, 100);
+            add_note(&mixed, 1920 + index * 960 + 480, 120, 97, 100);
+        }
+        if (!write_bytes(directory / "song.mid", build_midi(mixed)) ||
+            !write_tone_wav(directory / "song.wav", 20.0, 2048.0) ||
+            !write_synthetic_profile_song_json(directory / "song.json")) {
+            return fail("could not write bounded pitch-exclusion repository fixture");
+        }
+        std::vector<std::string> warnings;
+        const auto trace = [&](const char* stage) {
+            if (std::string_view(stage).starts_with("midi_source_warning:")) warnings.emplace_back(stage);
+        };
+        ff7rp::pipeline::LoadedSong cold;
+        auto status = ff7rp::pipeline::load_song_directory(directory.string(), &cold, trace);
+        if (!status.ok() || cold.difficulty_profiles.empty() || cold.loaded_from_runtime_cache ||
+            warnings.size() != 1 || warnings.front().find(
+                "excluded=32 total_linked_pitched_attacks=48 excluded_midi_range=23..97") == std::string::npos ||
+            warnings.front().find("remaining profiles still require validation") == std::string::npos) {
+            return fail("usable mixed source failed or lost truthful exclusion warning: " + status.message);
+        }
+        ff7rp::pipeline::LoadedSong warm;
+        warnings.clear();
+        status = ff7rp::pipeline::load_song_directory(directory.string(), &warm, trace);
+        if (!status.ok() || !warm.loaded_from_runtime_cache || !warnings.empty() ||
+            warm.difficulty_profiles.size() != cold.difficulty_profiles.size()) {
+            return fail("pitch-exclusion cache failed or pretended to reanalyze the source on a cache hit");
+        }
+        // Removing only the excluded attacks changes input identity, not any
+        // permitted chart row, slot, source witness, or visible difficulty.
+        if (!write_bytes(directory / "song.mid", build_midi(clean))) return fail("could not write clean range source");
+        ff7rp::pipeline::LoadedSong supported;
+        status = ff7rp::pipeline::load_song_directory(directory.string(), &supported, trace);
+        if (!status.ok() || supported.loaded_from_runtime_cache || supported.cache_key == cold.cache_key ||
+            !warnings.empty() || supported.difficulty_profiles.size() != cold.difficulty_profiles.size()) {
+            return fail("supported-source rewrite reused stale identity or changed visible profile count");
+        }
+        for (std::size_t index = 0; index < cold.difficulty_profiles.size(); ++index) {
+            if (!configs_equal(cold.difficulty_profiles[index].config, warm.difficulty_profiles[index].config) ||
+                !charts_equal(cold.difficulty_profiles[index].chart, warm.difficulty_profiles[index].chart) ||
+                !configs_equal(cold.difficulty_profiles[index].config, supported.difficulty_profiles[index].config) ||
+                !charts_equal(cold.difficulty_profiles[index].chart, supported.difficulty_profiles[index].chart)) {
+                return fail("excluded attacks changed permitted profile semantics or warm-cache representation");
+            }
+        }
+    }
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    return 0;
+}
+
+int test_synthetic_reviewed_profiles_for_policy(const std::filesystem::path& root, bool extended) {
+    ff7rp::pipeline::configure_chart_row_limit(extended, extended);
     const std::filesystem::path song_directory = root / "SyntheticReviewedProfiles";
     std::filesystem::create_directories(song_directory);
     MidiTrack source_track;
@@ -2612,25 +2674,67 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
     if (!status.ok() || song.loaded_from_runtime_cache) {
         return fail("synthetic reviewed-profile cold generation failed: " + status.message);
     }
-    // These values are derived from the deterministic 480-onset, 120 BPM
-    // synthetic source above and intentionally pin the profile semantics.
+    // The original positional {1,2,4} and stream snapshots date to 2d9f265.
+    // 5fcf529 deliberately changed selection to independent ungrouped profiles
+    // and restored authoritative source timing, without updating this fixture.
+    // Keep the reviewed labels/routes, but do not require Lv.3 to be omitted:
+    // its presence also changes Lv.4's preceding-profile growth cap.
     constexpr std::array<int, 3> reviewed_difficulties{1, 2, 4};
-    constexpr std::array<std::size_t, 3> reviewed_rows{157, 174, 231};
-    constexpr std::array<std::size_t, 3> reviewed_target_rows{157, 181, 234};
-    constexpr std::array<std::size_t, 3> reviewed_minimum_rows{147, 170, 226};
-    constexpr std::array<std::size_t, 3> reviewed_maximum_rows{167, 192, 234};
     constexpr std::array<const char*, 3> reviewed_routes{"Journey", "Tifa", "Difficult"};
-    if (song.difficulty_profiles.size() < reviewed_rows.size()) {
-        return fail("synthetic reviewed-profile fixture lost an easy profile");
+    for (const int difficulty : reviewed_difficulties) {
+        if (std::none_of(song.difficulty_profiles.begin(), song.difficulty_profiles.end(),
+                [&](const auto& profile) { return profile.config.difficulty == difficulty; })) {
+            return fail("synthetic fixture lost reviewed Lv." + std::to_string(difficulty));
+        }
     }
 
+    struct FrameActivity {
+        std::array<std::size_t, 5> windows{};
+        std::array<std::size_t, 2> stream_actions{};
+        std::array<long long, 2> stream_frames{};
+    };
+    // Independent integer-frame oracle: half-open windows; inclusive adjacent
+    // stream gaps. Count and duration maxima need not describe the same run.
+    const auto measure_frames = [](const std::vector<long long>& frames) {
+        FrameActivity measured;
+        constexpr std::array<long long, 5> widths{30, 60, 120, 300, 600};
+        for (std::size_t begin = 0; begin < frames.size(); ++begin) {
+            for (std::size_t window = 0; window < widths.size(); ++window) {
+                const auto count = static_cast<std::size_t>(std::count_if(
+                    frames.begin() + begin, frames.end(), [&](const long long frame) {
+                        return frame - frames[begin] < widths[window];
+                    }));
+                measured.windows[window] = std::max(measured.windows[window], count);
+            }
+            for (std::size_t stream = 0; stream < 2; ++stream) {
+                std::size_t end = begin;
+                while (end + 1 < frames.size() &&
+                    frames[end + 1] - frames[end] <= (stream == 0 ? 15 : 30)) ++end;
+                measured.stream_actions[stream] = std::max(measured.stream_actions[stream], end - begin + 1);
+                measured.stream_frames[stream] = std::max(measured.stream_frames[stream], frames[end] - frames[begin]);
+            }
+        }
+        return measured;
+    };
+    const auto boundary = measure_frames({0, 15, 45, 76});
+    if (boundary.windows != std::array<std::size_t, 5>{2, 3, 4, 4, 4} ||
+        boundary.stream_actions != std::array<std::size_t, 2>{2, 3} ||
+        boundary.stream_frames != std::array<long long, 2>{15, 45}) {
+        return fail("independent frame oracle lost half-open windows or inclusive stream gaps");
+    }
+    ff7rp::pipeline::WavAudio source_audio;
+    if (!ff7rp::pipeline::read_audio_file((song_directory / "song.wav").string(), &source_audio).ok()) {
+        return fail("could not independently decode synthetic source for deterministic regeneration");
+    }
     std::vector<ff7rp::pipeline::Note> baseline;
-    for (std::size_t index = 0; index < reviewed_rows.size(); ++index) {
+    int previous_difficulty = 0;
+    for (std::size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
         const auto& profile = song.difficulty_profiles[index];
-        const int difficulty = reviewed_difficulties[index];
-        if (profile.config.difficulty != difficulty || profile.chart.notes.size() != reviewed_rows[index] ||
-            profile.diagnostics.selected_actions != reviewed_rows[index] ||
-            profile.diagnostics.scheduled_rows != reviewed_rows[index]) {
+        const int difficulty = profile.config.difficulty;
+        if (difficulty <= previous_difficulty || difficulty > 6 ||
+            profile.diagnostics.selected_actions != profile.chart.notes.size() ||
+            profile.diagnostics.scheduled_rows != profile.chart.notes.size() ||
+            (difficulty == 1 && profile.chart.notes.size() != 157)) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
                 " label or row count changed (difficulty=" +
                 std::to_string(profile.config.difficulty) + ", chart=" +
@@ -2642,11 +2746,21 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
                 std::to_string(profile.diagnostics.target_maximum_rows) + ", route=" +
                 profile.diagnostics.satisfied_route_name + ")");
         }
-        if (profile.diagnostics.target_rows != reviewed_target_rows[index] ||
-            profile.diagnostics.target_minimum_rows != reviewed_minimum_rows[index] ||
-            profile.diagnostics.target_maximum_rows != reviewed_maximum_rows[index] ||
-            reviewed_rows[index] < profile.diagnostics.target_minimum_rows ||
-            reviewed_rows[index] > profile.diagnostics.target_maximum_rows) {
+        // The old Lv.2 count 174 was not established by the baseline audit,
+        // which stopped at Lv.1 and separately inspected only stream metrics.
+        // Bind selection to calibration/source semantics, not that snapshot.
+        // 480 quarter-second attacks span exactly 119.75 seconds. Pin the
+        // calibrated APM/tolerance and derive the band before its visible cap.
+        constexpr std::array<int, 6> apm{78, 90, 104, 120, 138, 158};
+        const auto raw_target = static_cast<std::size_t>(std::llround(119.75 * apm[difficulty - 1] / 60.0)) + 1;
+        const auto minimum = static_cast<std::size_t>(std::floor(raw_target * 0.94));
+        const auto maximum = static_cast<std::size_t>(std::ceil(raw_target * 1.06));
+        const std::size_t visible_cap = baseline.empty() ? 480 :
+            ff7rp::pipeline::maximum_midi_visible_profile_actions(baseline.size());
+        if (profile.diagnostics.target_rows != std::min(raw_target, visible_cap) ||
+            profile.diagnostics.target_minimum_rows != minimum ||
+            profile.diagnostics.target_maximum_rows != std::min(maximum, visible_cap) ||
+            profile.chart.notes.size() < minimum || profile.chart.notes.size() > std::min(maximum, visible_cap)) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
                 " escaped its meaningful target band");
         }
@@ -2656,7 +2770,7 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
         const std::size_t maximum_visible_rows = baseline.empty() ? 0 :
             ff7rp::pipeline::maximum_midi_visible_profile_actions(baseline.size());
         const auto generated_status = ff7rp::pipeline::generate_notes_from_midi(
-            song.midi_source_path, song.audio, profile.config, &generated, &stats,
+            song.midi_source_path, source_audio, profile.config, &generated, &stats,
             baseline.empty() ? nullptr : &baseline, maximum_visible_rows);
         if (!generated_status.ok() || stats.source_pitch_witness_failures != 0 ||
             stats.scheduled_conflicts != 0) {
@@ -2667,17 +2781,27 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
                 ", conflicts=" + std::to_string(stats.scheduled_conflicts) + ")");
         }
 
-        std::vector<ff7rp::pipeline::Note> reviewed_notes;
-        reviewed_notes.reserve(profile.chart.notes.size());
-        for (const auto& note : profile.chart.notes) {
-            reviewed_notes.push_back({note.beat, note.duration_beats, note.pitch, note.chord_id});
+        auto regenerated_config = profile.config;
+        regenerated_config.notes = generated;
+        ff7rp::pipeline::CompiledChart regenerated_chart;
+        if (!configs_equal(regenerated_config, profile.config) ||
+            !ff7rp::pipeline::compile_chart(regenerated_config, &regenerated_chart).ok() ||
+            !charts_equal(regenerated_chart, profile.chart)) {
+            return fail("synthetic profile changed complete source/compiled semantics on regeneration");
         }
+        // Do not reconstruct Note from ChartNote: that drops alternate,
+        // filtering, voicing, and independent notation metadata.
+        const auto& reviewed_notes = profile.config.notes;
         const auto validation = ff7rp::pipeline::validate_midi_difficulty_route(
             reviewed_notes, stats.source_bpm, difficulty);
-        if (!validation.feasible || validation.route_index != 0 ||
+        const auto reviewed = std::find(reviewed_difficulties.begin(), reviewed_difficulties.end(), difficulty);
+        if (!validation.feasible ||
             validation.ratio > validation.margin + 0.000001 ||
-            profile.diagnostics.satisfied_route != 0 ||
-            profile.diagnostics.satisfied_route_name != reviewed_routes[index]) {
+            profile.diagnostics.satisfied_route != validation.route_index ||
+            profile.diagnostics.satisfied_route_name != validation.metrics.satisfied_route_name ||
+            (reviewed != reviewed_difficulties.end() &&
+                (validation.route_index != 0 || profile.diagnostics.satisfied_route_name !=
+                    reviewed_routes[reviewed - reviewed_difficulties.begin()]))) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
                 " no longer satisfies its reviewed strict route");
         }
@@ -2685,9 +2809,9 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
         std::vector<long long> frames;
         frames.reserve(reviewed_notes.size());
         for (const auto& note : reviewed_notes) {
-            if (note.pitch.empty() == note.chord_id.empty()) {
+            if (note.pitch.empty() || !note.chord_id.empty() || note.group_index != 0) {
                 return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
-                    " gained an empty or dual action");
+                    " lost its ungrouped source-backed right-hand action");
             }
             const double frame = note.beat * 60.0 / stats.source_bpm * 60.0;
             if (std::fabs(frame - std::round(frame)) > 0.000001) {
@@ -2695,25 +2819,28 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
                     " retimed a native-frame action");
             }
             frames.push_back(std::llround(frame));
+            const long long ordinal = (frames.back() - 120) / 15;
+            constexpr std::array<const char*, 12> names{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            const int pitch = 60 + static_cast<int>((ordinal * 5) % 17);
+            if (ordinal < 0 || ordinal >= 480 || frames.back() != 120 + ordinal * 15 ||
+                note.pitch != std::string(names[pitch % 12]) + std::to_string(pitch / 12 - 1) ||
+                note.duration_beats != 0.25) {
+                return fail("synthetic profile invented a pitch, retimed a source attack, or changed generated duration");
+            }
         }
-        if (std::adjacent_find(frames.begin(), frames.end()) != frames.end() ||
+        if (!std::is_sorted(frames.begin(), frames.end()) ||
+            std::adjacent_find(frames.begin(), frames.end()) != frames.end() ||
             frames.empty() || frames.back() != 7305) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
                 " changed its unique actions or exact final onset");
         }
-        constexpr std::array<std::array<std::size_t, 5>, 3> expected_windows{{
-            {{2, 2, 4, 9, 17}}, {{2, 3, 5, 11, 18}}, {{2, 4, 7, 15, 24}}
-        }};
-        constexpr std::array<std::size_t, 3> expected_quarter_actions{{2, 3, 7}};
-        constexpr std::array<double, 3> expected_quarter_duration{{0.25, 0.5, 1.5}};
-        constexpr std::array<std::size_t, 3> expected_half_actions{{3, 4, 12}};
-        constexpr std::array<double, 3> expected_half_duration{{1.0, 1.0, 3.25}};
-        if (profile.diagnostics.maximum_window_actions != expected_windows[index] ||
-            profile.diagnostics.maximum_quarter_second_stream_actions != expected_quarter_actions[index] ||
-            std::fabs(profile.diagnostics.maximum_quarter_second_stream_duration - expected_quarter_duration[index]) > 0.000001 ||
-            profile.diagnostics.maximum_half_second_stream_actions != expected_half_actions[index] ||
-            std::fabs(profile.diagnostics.maximum_half_second_stream_duration - expected_half_duration[index]) > 0.000001 ||
-            (index == 2 && (std::fabs(validation.margin - 1.05) > 0.000001 || validation.ratio > 1.05))) {
+        const auto measured = measure_frames(frames);
+        if (profile.diagnostics.maximum_window_actions != measured.windows ||
+            profile.diagnostics.maximum_quarter_second_stream_actions != measured.stream_actions[0] ||
+            std::fabs(profile.diagnostics.maximum_quarter_second_stream_duration - measured.stream_frames[0] / 60.0) > 0.000001 ||
+            profile.diagnostics.maximum_half_second_stream_actions != measured.stream_actions[1] ||
+            std::fabs(profile.diagnostics.maximum_half_second_stream_duration - measured.stream_frames[1] / 60.0) > 0.000001 ||
+            (difficulty == 4 && (std::fabs(validation.margin - 1.05) > 0.000001 || validation.ratio > 1.05))) {
             std::string windows;
             for (const auto count : profile.diagnostics.maximum_window_actions) {
                 if (!windows.empty()) windows += ",";
@@ -2731,6 +2858,7 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
                 ", published_margin=" + std::to_string(profile.diagnostics.satisfied_route_margin) + ")");
         }
         baseline = std::move(generated);
+        previous_difficulty = difficulty;
     }
     const std::string manifest = read_text(song.cache_manifest_path);
     ff7rp::pipeline::LoadedSong warm;
@@ -2740,6 +2868,24 @@ int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
         manifest.find("profile_semantic_hashes=") == std::string::npos ||
         manifest.find("config_chart_semantic_hash=") == std::string::npos) {
         return fail("synthetic reviewed profiles lost warm-cache or manifest semantic binding");
+    }
+    for (std::size_t index = 0; index < song.difficulty_profiles.size(); ++index) {
+        if (!configs_equal(song.difficulty_profiles[index].config, warm.difficulty_profiles[index].config) ||
+            !charts_equal(song.difficulty_profiles[index].chart, warm.difficulty_profiles[index].chart) ||
+            !diagnostics_equal(song.difficulty_profiles[index].diagnostics, warm.difficulty_profiles[index].diagnostics)) {
+            return fail("synthetic warm cache changed exact profile semantics or diagnostic witnesses");
+        }
+    }
+    return 0;
+}
+
+int test_synthetic_reviewed_profiles(const std::filesystem::path& root) {
+    struct PolicyReset {
+        ~PolicyReset() { ff7rp::pipeline::configure_chart_row_limit(false, false); }
+    } reset;
+    for (const bool extended : {false, true}) {
+        const auto policy_root = root / (extended ? "SyntheticExtended" : "SyntheticOrdinary");
+        if (test_synthetic_reviewed_profiles_for_policy(policy_root, extended) != 0) return 1;
     }
     return 0;
 }
@@ -3101,6 +3247,7 @@ int main() {
     if (run("limiter_manifest", [&] { return test_non_limiting_limiter_manifest_binding(root.path()); }) != 0) return 1;
     if (run("row_limit", [&] { return test_row_limit_omission(root.path()); }) != 0) return 1;
     if (run("synthetic_envelope", [&] { return test_synthetic_gain_envelope_integration(root.path()); }) != 0) return 1;
+    if (run("midi_pitch_exclusions", [&] { return test_midi_pitch_exclusions(root.path()); }) != 0) return 1;
     if (run("synthetic_profiles", [&] { return test_synthetic_reviewed_profiles(root.path()); }) != 0) return 1;
     std::cout << "song_repository_selftest ok\n";
     return 0;

@@ -22,9 +22,11 @@ such as metronome-beat extraction, may parse the source separately.
   positive signatures, or conflicting active track evidence retain the legacy
   sharp spelling. Changes apply at their exact source tick. Titles, filenames,
   track names, and speculative chord function do not participate.
-- Drum-channel events are ignored. Generated profiles reject a linked pitched
-  event outside C1-C7 when verified extended policy is active; unsupported
-  policy retains the established safe fallback behavior.
+- Drum-channel events are ignored. Valid linked pitched events outside C1-C7
+  (MIDI note numbers 24–96 inclusive are supported) are excluded before selection,
+  with diagnostics identifying the exclusions. The same rule applies to ordinary
+  and extended chart policies: an unsupported pitch does not by itself reject all
+  otherwise usable profiles. A source with no supported pitched notes still fails.
 - No pitch is invented or transposed.
 - Actions before the established audio lead-in or after known source-audio duration are excluded.
 - Explicit JSON notes remain authoritative and bypass MIDI reduction.
@@ -85,7 +87,7 @@ are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. Generated rows remain ungrouped. This derivation is covered by
-`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values:v11`.
+`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches:v12`.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`

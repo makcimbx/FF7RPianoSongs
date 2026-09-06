@@ -2257,6 +2257,9 @@ bool reclaim_selection_audio_activation_for_controller(
                 && identity_exact && revoke_selection_audio_activation_locked_exact())
                 decision = SelectionActivationTerminalDecision::Revoked;
         }
+        const bool not_applicable = !confirmed
+            && (state == SelectionActivationReservationState::Empty
+                || state == SelectionActivationReservationState::Revoked);
         std::ostringstream out;
         out << "[audio_sead] activation_terminal reason="
             << selection_activation_terminal_reason_name(reason)
@@ -2266,9 +2269,12 @@ bool reclaim_selection_audio_activation_for_controller(
             << " confirmed=" << confirmed
             << " identity_exact=" << identity_exact
             << " decision="
-            << selection_activation_terminal_decision_name(decision);
-        core::log(decision == SelectionActivationTerminalDecision::Rejected
-                ? core::LogLevel::Error : core::LogLevel::Info,
+            << selection_activation_terminal_decision_name(decision)
+            << " status=" << (not_applicable ? "not_applicable"
+                : decision == SelectionActivationTerminalDecision::Revoked ? "revoked" : "rejected");
+        core::log(not_applicable ? core::LogLevel::Debug
+                : decision == SelectionActivationTerminalDecision::Rejected
+                    ? core::LogLevel::Error : core::LogLevel::Info,
             out.str());
         return decision == SelectionActivationTerminalDecision::Revoked;
     } catch (...) { return false; }

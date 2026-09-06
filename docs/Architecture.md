@@ -128,8 +128,11 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
   identity to every MIDI cache key. The source model preserves exact authored black-key
   sharp/flat identity and independent monotone/chord note/dot values; generated
-  MIDI's v11 identity additionally covers normalized key-signature orientation and
-  exact rational source-length notation. Every authored-JSON and
+  MIDI's v12 identity additionally covers normalized key-signature orientation,
+  exact rational source-length notation, and policy-independent exclusion of
+  out-of-range source attacks. Cold normalization emits count/range warnings through
+  existing song-scoped trace stages; valid warm caches do not reparse MIDI merely
+  to repeat those warnings. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
   identity selected from the exact generated catalog build ID; descriptive game
   version strings never grant asset authority. Runtime-cache format 16 serializes

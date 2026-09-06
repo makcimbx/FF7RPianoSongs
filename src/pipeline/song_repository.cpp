@@ -925,6 +925,11 @@ Status load_song_directory(
         };
         NormalizedMidiSource normalized_midi;
         status = normalize_midi_source(song.midi_source_path, &normalized_midi);
+        const std::string pitch_warning = midi_pitch_exclusion_warning(normalized_midi);
+        if (!pitch_warning.empty()) {
+            const std::string stage = "midi_source_warning:" + pitch_warning;
+            report(stage.c_str());
+        }
         if (!status.ok()) {
             song.status = status;
             write_last_error(song.directory, status);

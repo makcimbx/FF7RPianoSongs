@@ -343,6 +343,22 @@ groups. It uses key signatures for sharp/flat spelling and exact supported MIDI 
 symbols; other lengths use the default symbols described above. `chord_voicings` is for explicit
 charts only; export and edit the generated chart before adding custom chord compositions.
 
+### MIDI notes outside the supported range
+
+The generator uses pitched notes from C1 through C7, inclusive (MIDI numbers 24–96).
+Lower and higher notes are excluded, not silently moved to another octave. Drum-channel
+notes are ignored separately. An out-of-range note does not reject an otherwise usable
+song just because long charts are supported; generation continues from the remaining notes.
+The diagnostics report excluded pitches. If no supported pitched notes remain, or no
+playable difficulty can be produced, the song still cannot be loaded.
+
+Exclusion changes the playable chart, **not the audio recording**. A missing low bass note
+can therefore remain audible in the recording without receiving an input in the minigame.
+If that part matters to your chart, edit a copy of the MIDI to place it in the supported
+range, and check the resulting harmony and timing. The mod does not automatically transpose it.
+Custom `chord_voicings` only chooses combinations of available native sounds for an explicit
+chart; it does not extend this range or remap an automatically generated MIDI chart.
+
 ### MIDI timing and overrides
 
 - Start with the minimal example and leave both timing offsets out to use automatic alignment.

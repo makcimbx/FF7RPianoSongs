@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed MIDI generation rejecting otherwise usable songs because some notes fall outside C1–C7
+  when long charts are available. Unsupported pitches are excluded with diagnostics; remaining
+  notes still need to form a playable chart. No automatic octave changes or audio edits are made.
+- Clarified runtime logging: waiting for the game window, inapplicable long-chart checks and
+  successful cleanup transitions no longer look like failed operations. Genuine ownership,
+  identity and release failures remain visible; a deferred cleanup is not reported as completed.
 - Added song-local chord compositions for explicit charts on games 1.004 and 1.005: keep the original chord
   input while replacing its sound list, and apply `ignore_sound` to that replacement. Definitions
   are shared across the song's difficulties; other songs and free-play sounds remain unchanged.

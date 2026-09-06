@@ -568,10 +568,105 @@ int fail(const std::string& message) {
     return 1;
 }
 
+int test_pitch_exclusion(const std::filesystem::path& root) {
+    const auto fixture = [&](const char* name, const bool supported, const bool outside,
+                             const bool drums) {
+        std::vector<MidiEvent> track;
+        track.push_back({0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}});
+        if (outside) track.push_back({0, 2, {0x90, 22, 100}}); // Unlinked: not a relevant attack.
+        for (int index = 0; index < 8; ++index) {
+            const int tick = 1920 + index * 1920;
+            // Include both permitted endpoints, not merely midrange pitches.
+            if (supported) add_note(&track, tick, 480, index % 2 == 0 ? 24 : 96, 100);
+            if (outside) {
+                add_note(&track, tick + 240, 120, 23, 100);
+                add_note(&track, tick + 480, 120, 97, 100);
+            }
+            if (drums) {
+                add_note(&track, tick + 720, 120, 0, 100, 9);
+                add_note(&track, tick + 960, 120, 127, 100, 9);
+            }
+        }
+        std::vector<unsigned char> bytes{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&bytes, 0); append_u16(&bytes, 1); append_u16(&bytes, 480);
+        append_midi_track(&bytes, std::move(track));
+        const auto path = root / name;
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        return path;
+    };
+    const auto clean = fixture("range-clean.mid", true, false, false);
+    const auto mixed = fixture("range-mixed.mid", true, true, true);
+    const auto all_outside = fixture("range-all-outside.mid", false, true, false);
+    const auto drum_only = fixture("range-drums.mid", false, false, true);
+    ff7rp::pipeline::NormalizedMidiSource normalized;
+    auto status = ff7rp::pipeline::normalize_midi_source(mixed.string(), &normalized);
+    const auto warning = ff7rp::pipeline::midi_pitch_exclusion_warning(normalized);
+    if (!status.ok() || normalized.notes.size() != 8 || normalized.unsupported_pitch_events != 16 ||
+        normalized.unsupported_pitch_min != 23 || normalized.unsupported_pitch_max != 97 ||
+        warning.find("excluded=16 total_linked_pitched_attacks=24 excluded_midi_range=23..97") == std::string::npos ||
+        warning.find("without transposition") == std::string::npos) {
+        return fail("mixed range normalization lost exact boundary/count/drum exclusion diagnostics");
+    }
+    for (std::size_t index = 0; index < normalized.notes.size(); ++index) {
+        const auto& note = normalized.notes[index];
+        if (note.source.pitch != (index % 2 == 0 ? 24 : 96) ||
+            note.source.tick != 1920 + static_cast<int>(index) * 1920 ||
+            note.source.end_tick != note.source.tick + 480 || note.source.channel != 0) {
+            return fail("range exclusion changed a permitted source pitch, tick, duration, or channel");
+        }
+    }
+    std::vector<std::uint8_t> ordinary_bytes;
+    for (const bool extended : {false, true}) {
+        ff7rp::pipeline::configure_chart_row_limit(extended, extended);
+        const auto expected = generate(clean, WavAudio{}, config_for(6));
+        const auto actual = generate(mixed, WavAudio{}, config_for(6));
+        if (!expected.status.ok() || !actual.status.ok() || actual.notes.empty() ||
+            actual.stats.source_pitch_witness_failures != 0 ||
+            canonical_note_bytes(actual.notes) != canonical_note_bytes(expected.notes) ||
+            std::any_of(actual.notes.begin(), actual.notes.end(), [](const Note& note) {
+                return (note.pitch != "C1" && note.pitch != "C7") || !note.chord_id.empty();
+            })) {
+            return fail("unsupported attacks invalidated or changed the permitted source-backed chart: " +
+                actual.status.message);
+        }
+        if (!extended) ordinary_bytes = canonical_note_bytes(actual.notes);
+        else if (ordinary_bytes != canonical_note_bytes(actual.notes)) {
+            return fail("row policy changed permitted pitch handling in a bounded mixed source");
+        }
+        for (const auto& path : {all_outside, drum_only}) {
+            const auto rejected = generate(path, WavAudio{}, config_for(6));
+            if (rejected.status.code != ff7rp::pipeline::StatusCode::InvalidMidi ||
+                !rejected.notes.empty() ||
+                rejected.status.message.find("no supported pitched notes in C1-C7") == std::string::npos ||
+                (path == all_outside && rejected.status.message.find("excluded=16") == std::string::npos)) {
+                return fail("empty supported source was published or lost its actionable rejection");
+            }
+        }
+    }
+    ff7rp::pipeline::configure_chart_row_limit(false, false);
+    // Failed normalization must not publish partial state into a reused output.
+    const auto previous_notes = normalized.notes;
+    status = ff7rp::pipeline::normalize_midi_source(all_outside.string(), &normalized);
+    if (status.ok() || normalized.notes.size() != previous_notes.size() ||
+        normalized.notes.front().source != previous_notes.front().source ||
+        status.message.find("total_linked_pitched_attacks=16") == std::string::npos) {
+        return fail("empty-source failure published partial output or counted stale prior notes");
+    }
+    status = ff7rp::pipeline::normalize_midi_source(clean.string(), &normalized);
+    if (!status.ok() || normalized.unsupported_pitch_events != 0 ||
+        !ff7rp::pipeline::midi_pitch_exclusion_warning(normalized).empty()) {
+        return fail("fully supported source retained a stale pitch warning");
+    }
+    return 0;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
     ff7rp::tests::TemporaryDirectory temporary("ff7rp-midi-compilation-oracle");
+    if (test_pitch_exclusion(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--pitch-exclusion-only") return 0;
     const std::filesystem::path midi_path = temporary.path() / "oracle.mid";
     const std::vector<unsigned char> bytes = oracle_midi_bytes();
     std::ofstream output(midi_path, std::ios::binary | std::ios::trunc);
@@ -942,6 +1037,8 @@ int main(int argc, char** argv) {
         normalized.key_signatures.size() != original.key_signatures.size() ||
         normalized.notes.size() != original.notes.size() ||
         normalized.unsupported_pitch_events != original.unsupported_pitch_events ||
+        normalized.unsupported_pitch_min != original.unsupported_pitch_min ||
+        normalized.unsupported_pitch_max != original.unsupported_pitch_max ||
         !tempos_unchanged || !meters_unchanged || !key_signatures_unchanged || !notes_unchanged) {
         return fail("normalized compilation facade diverged from the path facade oracle or mutated normalized input");
     }
@@ -1100,8 +1197,8 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values:v11") {
-        return fail("generated MIDI semantic identity did not invalidate legacy accidental spelling");
+        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches:v12") {
+        return fail("generated MIDI semantic identity did not invalidate legacy pitch rejection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
     const Observation physical_ambiguous = generate(ambiguous_path, no_audio, config_for(6));
@@ -1113,15 +1210,17 @@ int main(int argc, char** argv) {
         unsupported_pitch_path.string(), &unsupported_pitch_source);
     const Observation unsupported_pitch = generate(unsupported_pitch_path, no_audio, config_for(6));
     ff7rp::pipeline::configure_chart_row_limit(false, false);
+    const Observation ordinary_unsupported_pitch = generate(unsupported_pitch_path, no_audio, config_for(6));
     if (!physical_ambiguous_easy.status.ok() || !physical_ambiguous.status.ok()
         || !physical_exact.status.ok() || !physical_duplicate.status.ok()
         || canonical_note_bytes(physical_ambiguous.notes) != canonical_note_bytes(physical_ambiguous_repeat.notes)) {
         return fail("generalized physical MIDI generation failed or was nondeterministic");
     }
     if (!unsupported_pitch_normalization.ok() || unsupported_pitch_source.unsupported_pitch_events == 0
-        || unsupported_pitch.status.ok() || !unsupported_pitch.notes.empty()
-        || unsupported_pitch.status.message.find("outside C1-C7") == std::string::npos) {
-        return fail("generalized out-of-range source pitches did not fail closed before publication");
+        || !unsupported_pitch.status.ok() || unsupported_pitch.notes.empty()
+        || !ordinary_unsupported_pitch.status.ok()
+        || canonical_note_bytes(unsupported_pitch.notes) != canonical_note_bytes(ordinary_unsupported_pitch.notes)) {
+        return fail("out-of-range exclusions changed usable chart semantics between row policies");
     }
     const auto generated_rows_are_ungrouped = [](const Observation& observation) {
         return std::all_of(observation.notes.begin(), observation.notes.end(), [](const Note& note) {

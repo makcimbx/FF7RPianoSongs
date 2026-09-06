@@ -2368,12 +2368,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     Profile profile = profile_for_difficulty(config.difficulty);
     const std::map<SourceIdentity, bool> alternate_monotone_plan = plan_alternate_monotones(voice);
     const ChartRowPolicySnapshot physical_policy = chart_row_policy_snapshot();
-    if (physical_policy.playable_extended_available && normalized_source.unsupported_pitch_events != 0) {
-        result.status = Status::error(StatusCode::InvalidMidi,
-            "generalized MIDI contains " + std::to_string(normalized_source.unsupported_pitch_events)
-                + " pitched note event(s) outside C1-C7");
-        return result;
-    }
+    // Normalization excludes unsupported attacks for every row policy. Their
+    // presence does not invalidate the remaining source-backed candidates.
     std::vector<Attack> fallback = build_fallback_candidates(
         clusters, voice, melody_sources, primary, profile);
     std::vector<Attack> chords = build_chord_candidates(

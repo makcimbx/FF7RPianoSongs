@@ -2220,6 +2220,10 @@ void log_bgm_aggregate_exit_stage(const char* status, const char* reason,
     if (g_bgm_aggregate_exit_logs.fetch_add(
             1, std::memory_order_relaxed) >= 64) return;
     try {
+        // This reason is emitted only after the closure evaluator excluded
+        // identity/lineage/failure conflicts. Presence defers release; it is not a failed release.
+        const bool canonical_pending = std::string_view(status) == "exit_release_blocked"
+            && std::string_view(reason) == "canonical_request_present";
         std::ostringstream out;
         out << "[audio_sead] aggregate_exit status=" << status
             << " reason=" << reason
@@ -2229,8 +2233,9 @@ void log_bgm_aggregate_exit_stage(const char* status, const char* reason,
             << " old_absent=" << (old_absent ? 1 : 0)
             << " new_absent=" << (new_absent ? 1 : 0)
             << " current_active=" << (current_active ? 1 : 0)
-            << " mutation_authorized=0";
-        core::log(std::string_view(status) == "exit_pending_published"
+            << " mutation_authorized=0"
+            << (canonical_pending ? " outcome=deferred" : "");
+        core::log(std::string_view(status) == "exit_pending_published" || canonical_pending
                 ? core::LogLevel::Info : core::LogLevel::Error,
             out.str());
     } catch (...) {
@@ -4185,6 +4190,9 @@ void log_bgm_aggregate_mutation(
                 || status_view == "canonical_restored"
                 || status_view == "custom_play_confirmed"
                 || status_view == "release_inflight"
+                || status_view == "release_committed"
+                || status_view == "release_retained"
+                || status_view == "aggregate_awaiting"
                 || status_view == "exit_release_claimed"
                 || status_view == "exit_cleanup_complete"
             ? core::LogLevel::Info : core::LogLevel::Error, out.str());
@@ -10537,8 +10545,10 @@ void __fastcall bgm_slot_set_detour(void* controller, void* sound)
                 : (clear_verified
                     ? "[audio_sead] slot_set status=deferred_native_set_pending_retry"
                     : (native_set_forwarded
-                        ? "[audio_sead] slot_set status=deferred_native_clear_failed native_set_forwarded=1 cleanup_retained=1"
-                        : "[audio_sead] slot_set status=deferred_native_clear_failed retained=1")));
+                         ? (intent_captured
+                             ? "[audio_sead] slot_set status=deferred_native_clear_failed native_set_forwarded=1 cleanup_retained=1 reason=clear_not_proven"
+                             : "[audio_sead] slot_set status=deferred_native_handoff_retained native_set_forwarded=1 cleanup_retained=1 reason=intent_not_captured clear_attempted=0")
+                         : "[audio_sead] slot_set status=deferred_native_clear_failed retained=1 reason=clear_not_proven")));
     }
     if (invalidated_route && !transfer_stop_authorization
         && prior_route.custom_resource_owned && !sound) {
@@ -11148,8 +11158,10 @@ void __fastcall bgm_slot_play_detour(void* controller)
                 : (set_replayed
                     ? "deferred_native_set_replayed_play_not_ready"
                     : "deferred_native_handoff_retained")));
-        core::log(postcondition_verified ? core::LogLevel::Info : core::LogLevel::Error,
-            std::string("[audio_sead] slot_play status=") + status);
+        core::log(postcondition_verified || recovery_play_forwarded
+                ? core::LogLevel::Info : core::LogLevel::Error,
+            std::string("[audio_sead] slot_play status=") + status
+                + (recovery_play_forwarded ? " cleanup=retained cleanup_committed=0" : ""));
         return;
     }
     bool unsequenced_owned_route = false;

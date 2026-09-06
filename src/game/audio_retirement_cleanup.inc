@@ -1782,8 +1782,10 @@ bool commit_audio_cleanup_after_retirement(
             first_audio_retirement_cleanup_failure(failure_facts),
             retirement, route.generation, route.frozen_sound_patch.route_generation,
             retired_backing_evidence);
-        core::log(core::LogLevel::Error,
-            "[audio_sead] cleanup_after_retirement status=validation_failed cleanup=retained");
+        // The bounded first-predicate failure above remains authoritative/error-level.
+        // This summary records an uncommitted attempt, not terminal cleanup failure.
+        core::log(core::LogLevel::Debug,
+            "[audio_sead] cleanup_after_retirement status=deferred cleanup=retained validation=failed committed=0");
         return false;
     }
 

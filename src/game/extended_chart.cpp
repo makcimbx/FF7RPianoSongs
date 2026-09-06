@@ -970,8 +970,19 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     const SelectionAudioAdmissionAuthority& authority,
     void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
     int32_t diagnostic_target_count = 0;
+    const auto* diagnostic_profile = authority.selection.profile;
+    const bool report_rejection = extended_chart_begin_rejection_relevant(
+        g_transaction.active, transaction.active || authority.exact,
+        diagnostic_profile != nullptr,
+        diagnostic_profile && (diagnostic_profile->source_row_count > ff7rp::pipeline::kMaxChartRows
+            || diagnostic_profile->diagnostic_source_rows > ff7rp::pipeline::kMaxChartRows
+            || !diagnostic_profile->extended_chart_tail_notes.empty()
+            || diagnostic_profile->diagnostic_tail_rows != 0));
     const auto reject = [&](const char* reason,
         const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) noexcept {
+        // Menu/count/ordinary expansions still take every original guard/return,
+        // but are not failed extended transactions and must not consume error logs.
+        if (!report_rejection) return;
         try {
             std::ostringstream out;
             out << "[extended_chart] transaction=rejected phase=begin reason=" << reason

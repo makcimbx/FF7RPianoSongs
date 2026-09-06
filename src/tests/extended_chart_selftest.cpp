@@ -44,6 +44,19 @@ BuildRequest extended_request(const std::vector<SourceRow>& rows, FailurePoint f
     return request;
 }
 
+bool test_begin_diagnostic_applicability()
+{
+    using ff7r::piano::game::extended_chart_begin_rejection_relevant;
+    // Production diagnostic classification, independent of admission/guard outcomes.
+    if (extended_chart_begin_rejection_relevant(false, false, false, false)
+        || extended_chart_begin_rejection_relevant(false, true, true, false)
+        || !extended_chart_begin_rejection_relevant(false, true, true, true)
+        || !extended_chart_begin_rejection_relevant(false, false, true, true)
+        || !extended_chart_begin_rejection_relevant(false, true, false, false)
+        || !extended_chart_begin_rejection_relevant(true, false, false, false)) return false;
+    return true;
+}
+
 bool test_default_policy()
 {
     ff7rp::pipeline::configure_chart_row_limit(false, false);
@@ -1050,6 +1063,7 @@ int main()
         const char* name;
         bool (*run)();
     } tests[] = {
+        {"begin_diagnostic_applicability", test_begin_diagnostic_applicability},
         {"default_policy", test_default_policy},
         {"build_specific_capability_specs", test_build_specific_capability_specs},
         {"exact_success_and_lifecycle", test_exact_success_and_lifecycle},
