@@ -536,31 +536,26 @@ struct Expected {
     const char* status_message;
 };
 
-constexpr std::array<Expected, 18> expected{{
+constexpr std::array<Expected, 15> expected{{
     {"manual-lv1", 6773119318625811841ull, 0, ""},
     {"manual-lv2", 13917796721266263578ull, 0, ""},
     {"manual-lv3", 3422253880615500361ull, 0, ""},
     {"manual-lv4", 8893295841173198285ull, 0, ""},
     {"manual-lv5", 14940100557045089030ull, 0, ""},
     {"manual-lv6", 2786189282108214522ull, 0, ""},
-    {"baseline-lv1", 18382197050995942130ull, 0, ""},
-    {"baseline-lv2", 14470395282069359180ull, 0, ""},
-    {"baseline-lv3", 8443132770364117ull, 0, ""},
-    {"baseline-lv4", 9589817132494063679ull, 0, ""},
-    {"baseline-lv5", 4163578994208223256ull, 0, ""},
-    {"baseline-lv6", 5932381222701315157ull, 0, ""},
+    // Preference cases are checked semantically below: the former hashes
+    // included statistics from the removed hard retention-pruning policy.
+    {"baseline-lv1", 0, 0, ""},
+    {"baseline-lv2", 0, 0, ""},
+    {"baseline-lv3", 0, 0, ""},
+    {"baseline-lv4", 0, 0, ""},
+    {"baseline-lv5", 0, 0, ""},
+    {"baseline-lv6", 0, 0, ""},
     {"automatic-alignment", 17191488344814720703ull, 0, ""},
     {"timing-domain-empty", 12345897120421995243ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
         "preferred lower-profile action has no source candidate at its native frame"},
-    {"visible-growth-bound", 3998143965459286508ull, 8,
-        "difficulty target band exceeds the maximum adjacent visible-profile growth"},
-    {"selection-failure-witness", 17716276405075993264ull, 8,
-        "no target-band state satisfies a coherent local-skill route"},
-    {"near-feasible-witness", 16306373482813534199ull, 8,
-        "near-feasible witness: rows=294 preferred=192 required_rows=297 required_preferred=192 "
-        "route=OneWingedAngel ratio=3.000000 margin=1.150000 dominant_skill=5 interval=global"},
 }};
 
 int fail(const std::string& message) {
@@ -665,6 +660,58 @@ int test_pitch_exclusion(const std::filesystem::path& root) {
 
 int main(int argc, char** argv) {
     ff7rp::tests::TemporaryDirectory temporary("ff7rp-midi-compilation-oracle");
+    if (argc == 2 && std::string_view(argv[1]) == "--soft-goals-only") {
+        const auto path = temporary.path() / "soft-goals.mid";
+        const auto bytes = verified_chord_runs_midi_bytes(2000u, 54);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        stream.close();
+        if (!stream) return fail("could not write bounded-search fixture");
+        SongConfig config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        ff7rp::pipeline::configure_chart_row_limit(true, true);
+        const auto selected = generate(path, WavAudio{}, config);
+        const auto repeated = generate(path, WavAudio{}, config);
+        ff7rp::pipeline::configure_chart_row_limit(false, false);
+        const auto ordinary = generate(path, WavAudio{}, config);
+        const auto growth = generate(path, WavAudio{}, config, nullptr, 1);
+        for (const auto* value : {&selected, &repeated, &ordinary, &growth}) {
+            if (!value->status.ok() || value->notes.empty() ||
+                !ff7rp::pipeline::validate_midi_difficulty_route(value->notes, value->stats.source_bpm, 6).feasible ||
+                value->stats.source_pitch_witness_failures != 0 || value->stats.scheduled_conflicts != 0 ||
+                // The final source onset is already protected in the initial state;
+                // every other source frame must be traversed by the selector.
+                value->stats.selector_processed_frames + 1 != value->stats.candidate_frames ||
+                value->notes.front().beat * 30.0 > 120.0 + 480.0 ||
+                value->notes.back().beat * 30.0 != 120.0 + 1999.0 * 54.0) {
+                return fail("soft goals lost a complete, source-backed, fully validated result: " + value->status.message +
+                    " rows=" + std::to_string(value->notes.size()) +
+                    " processed_frames=" + std::to_string(value->stats.selector_processed_frames) +
+                    " candidate_frames=" + std::to_string(value->stats.candidate_frames));
+            }
+            for (const auto& note : value->notes) {
+                const double ordinal = (note.beat * 30.0 - 120.0) / 54.0;
+                if (std::fabs(ordinal - std::round(ordinal)) > 1e-7 || ordinal < 0.0 || ordinal > 1999.0 ||
+                    note.group_index != 0 || (!note.pitch.empty() && !note.chord_id.empty())) {
+                    return fail("bounded selection invented or retimed a source action");
+                }
+            }
+        }
+        if (selected.stats.selector_beam_width >= 384 || selected.stats.selector_beam_width == 0 ||
+            selected.stats.selector_skill_row_visits == 0 ||
+            selected.stats.selector_skill_row_visits != repeated.stats.selector_skill_row_visits ||
+            canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes) ||
+            ordinary.notes.size() > ff7rp::pipeline::kMaxChartRows ||
+            growth.stats.target_rows != 1 || growth.notes.size() <= 1) {
+            return fail("bounded search, repeatability, native capacity, or soft growth goal changed");
+        }
+        std::cout << "soft-goals passed beam=" << selected.stats.selector_beam_width
+                  << " frames=" << selected.stats.selector_processed_frames
+                  << " skill_row_visits=" << selected.stats.selector_skill_row_visits
+                  << " extended_rows=" << selected.notes.size()
+                  << " ordinary_rows=" << ordinary.notes.size() << " growth_rows=" << growth.notes.size() << '\n';
+        return 0;
+    }
     if (test_pitch_exclusion(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--pitch-exclusion-only") return 0;
     const std::filesystem::path midi_path = temporary.path() / "oracle.mid";
@@ -964,21 +1011,49 @@ int main(int argc, char** argv) {
             ff7rp::pipeline::maximum_midi_visible_profile_actions(witness_baseline.size());
         witness = generate(witness_path, no_audio, witness_config,
             witness_baseline.empty() ? nullptr : &witness_baseline, maximum);
-        if (witness.status.ok() && (witness_baseline.empty() ||
-            ff7rp::pipeline::has_meaningful_midi_profile_growth(witness_baseline.size(), witness.notes.size()))) {
+        if (witness.status.ok()) {
             witness_baseline = witness.notes;
         }
     }
     observations.emplace_back("near-feasible-witness", std::move(witness));
 
     const bool dump = argc == 2 && std::string_view(argv[1]) == "--dump";
-    if (observations.size() != expected.size()) return fail("oracle case count drifted");
+    if (observations.size() != expected.size() + 3) return fail("oracle case count drifted");
     for (std::size_t index = 0; index < observations.size(); ++index) {
         const auto& [name, observed] = observations[index];
         const std::uint64_t digest = fingerprint(observed);
         if (dump) {
             std::cout << name << ' ' << digest << ' ' << static_cast<int>(observed.status.code)
                       << ' ' << observed.notes.size() << " [" << observed.status.message << "]\n";
+            continue;
+        }
+        if (index >= 6 && index < 12) {
+            const auto repeated = generate(midi_path, no_audio, config_for(static_cast<int>(index) - 5),
+                &observations[index - 6].second.notes);
+            if (!observed.status.ok() || observed.notes.empty() ||
+                observed.stats.source_pitch_witness_failures != 0 ||
+                !ff7rp::pipeline::validate_midi_difficulty_route(observed.notes, observed.stats.source_bpm,
+                    static_cast<int>(index) - 5).feasible ||
+                digest != fingerprint(repeated) ||
+                observed.notes.back().beat != observations[index - 6].second.notes.back().beat) {
+                return fail(name + " lost deterministic complete feasible source preference");
+            }
+            continue;
+        }
+        if (index >= expected.size()) {
+            // These old rejection snapshots encoded hard density/growth and
+            // retained-preference vetoes. Require real feasible output instead.
+            const int difficulty = index == expected.size() + 1 ? 1 : 6;
+            if (!observed.status.ok() || observed.notes.empty() ||
+                !ff7rp::pipeline::validate_midi_difficulty_route(observed.notes,
+                    observed.stats.source_bpm, difficulty).feasible ||
+                observed.stats.source_pitch_witness_failures != 0 || observed.stats.row_limit_exceeded) {
+                return fail(name + " lost a feasible source-backed chart: " + observed.status.message);
+            }
+            if (name == "near-feasible-witness" &&
+                observed.stats.selected_actions >= observed.stats.target_minimum_rows) {
+                return fail("under-preferred-density fixture no longer exercises soft acceptance");
+            }
             continue;
         }
         const Expected& oracle = expected[index];
@@ -1197,7 +1272,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches:v12") {
+        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam:v13") {
         return fail("generated MIDI semantic identity did not invalidate legacy pitch rejection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
@@ -1263,11 +1338,12 @@ int main(int argc, char** argv) {
         || hard_plan.source_row_count != grouped_hard.notes.size()) {
         return fail("independent generated profiles did not preserve distinct source-backed plans");
     }
-    const auto selected_inside_band = [](const Observation& observation) {
-        return observation.stats.selected_actions >= observation.stats.target_minimum_rows
-            && observation.stats.selected_actions <= observation.stats.target_maximum_rows;
+    const auto coherent_soft_band = [](const Observation& observation) {
+        return observation.stats.selected_actions > 0
+            && observation.stats.target_minimum_rows <= observation.stats.target_rows
+            && observation.stats.target_rows <= observation.stats.target_maximum_rows;
     };
-    if (!selected_inside_band(grouped_easy) || !selected_inside_band(grouped_hard)
+    if (!coherent_soft_band(grouped_easy) || !coherent_soft_band(grouped_hard)
         || easy_plan.required_action_count != grouped_easy.stats.selected_actions
         || hard_plan.required_action_count != grouped_hard.stats.selected_actions
         || easy_plan.source_row_count != easy_plan.native_event_count
@@ -1316,26 +1392,27 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     const Observation ordinary = generate(extended_path, no_audio, envelope_config(6));
-    constexpr std::string_view work_budget_diagnostic =
-        "incremental MIDI selector projected analysis work exceeds deterministic budget";
     if (!extended.status.ok() || extended.notes.size() <= ff7rp::pipeline::kMaxChartRows
         || extended.notes.size() > ff7rp::pipeline::kMaximumExtendedChartRows
         || extended.stats.selected_actions != extended.notes.size()
         || std::any_of(extended.notes.begin(), extended.notes.end(), [](const Note& note) {
             return note.group_index != 0;
-        }) || ordinary.status.code != ff7rp::pipeline::StatusCode::ChartRowLimitExceeded
-        || !ordinary.notes.empty() || ordinary.stats.selected_actions != 0u) {
+        }) || !ordinary.status.ok() || ordinary.notes.empty()
+        || ordinary.notes.size() > ff7rp::pipeline::kMaxChartRows
+        || !ff7rp::pipeline::validate_midi_difficulty_route(ordinary.notes, ordinary.stats.source_bpm, 6).feasible
+        || ordinary.notes.back().beat != extended.notes.back().beat) {
         return fail("verified extended or ordinary MIDI row policy violated ungrouped publication bounds: extended="
             + std::to_string(extended.notes.size()) + "/" + std::to_string(extended.stats.selected_actions)
             + " [" + extended.status.message + "] ordinary=" + std::to_string(ordinary.notes.size())
             + "/" + std::to_string(ordinary.stats.selected_actions) + " [" + ordinary.status.message + "]");
     }
-    if (pathological.status.code != ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded
-        || pathological.status.message != work_budget_diagnostic || !pathological.notes.empty()
-        || pathological_repeat.status.code != pathological.status.code
-        || pathological_repeat.status.message != pathological.status.message
-        || !pathological_repeat.notes.empty()) {
-        return fail("pathological incremental MIDI selection did not fail fast and deterministically: "
+    if (!pathological.status.ok() || !pathological_repeat.status.ok() || pathological.notes.empty()
+        || pathological.stats.selector_beam_width >= 384
+        || pathological.stats.selector_processed_frames + 1 != pathological.stats.candidate_frames
+        || !ff7rp::pipeline::validate_midi_difficulty_route(pathological.notes, pathological.stats.source_bpm, 6).feasible
+        || canonical_note_bytes(pathological.notes) != canonical_note_bytes(pathological_repeat.notes)
+        || pathological.stats.selector_skill_row_visits != pathological_repeat.stats.selector_skill_row_visits) {
+        return fail("bounded complete-source selection was infeasible or nondeterministic: "
             + pathological.status.message);
     }
 

@@ -1267,10 +1267,11 @@ int test_runtime_row_ceiling_omits_instead_of_truncating() {
     std::vector<ff7rp::pipeline::Note> notes;
     ff7rp::pipeline::MidiChartStats stats;
     const auto status = generate(midi.path(), fixture_config(6), &notes, &stats);
-    if (status.code != ff7rp::pipeline::StatusCode::ChartRowLimitExceeded || !notes.empty() ||
-        !stats.row_limit_exceeded || stats.target_minimum_rows <= ff7rp::pipeline::kMaxChartRows ||
-        stats.source_pitch_witness_failures != 0) {
-        return fail("minimum target above 512 was truncated instead of omitted: status=" +
+    if (!status.ok() || notes.empty() || notes.size() > ff7rp::pipeline::kMaxChartRows ||
+        stats.row_limit_exceeded || stats.source_pitch_witness_failures != 0 ||
+        !ff7rp::pipeline::validate_midi_difficulty_route(notes, stats.source_bpm, 6).feasible ||
+        (notes.back().beat - notes.front().beat) * 60.0 / stats.source_bpm < 215.0) {
+        return fail("soft-density 512-row capacity lost complete feasible coverage: status=" +
             std::to_string(static_cast<int>(status.code)) + " notes=" + std::to_string(notes.size()) +
             " target_minimum=" + std::to_string(stats.target_minimum_rows) + " right=" +
             std::to_string(stats.right_events) + " row_limit=" +
@@ -1363,11 +1364,9 @@ int test_imported_profile_bands() {
                 result.failures += fixture + ": " + status.message + "; ";
                 break;
             }
-            if (!visible_baseline.empty() && (stats.protected_baseline_actions != visible_baseline.size() ||
-                    stats.retained_actions < static_cast<std::size_t>(std::ceil(visible_baseline.size() * 0.80)) ||
-                    notes.size() > maximum_visible_rows)) {
+            if (!visible_baseline.empty() && stats.protected_baseline_actions != visible_baseline.size()) {
                 result.failures += fixture + " Lv." + std::to_string(difficulty) +
-                    " violated recognizability or maximum visible-step growth; ";
+                    " lost previous source-preference diagnostics; ";
             }
             const double seconds_per_beat = 60.0 / stats.source_bpm;
             const NoteMetrics metrics = note_metrics(notes, seconds_per_beat);
@@ -1379,10 +1378,11 @@ int test_imported_profile_bands() {
                 std::to_string(stats.retention_rejections) + ",a" +
                 std::to_string(stats.action_rate_rejections) + ",apm" +
                 std::to_string(static_cast<int>(std::lround(stats.actions_per_minute))) + "]; ";
-            if (notes.size() < stats.target_minimum_rows || notes.size() > stats.target_maximum_rows ||
+            if (notes.empty() || notes.size() > ff7rp::pipeline::effective_chart_row_limit() ||
+                stats.target_minimum_rows > stats.target_rows || stats.target_rows > stats.target_maximum_rows ||
                 stats.local_skills.satisfied_route < 0) {
                 result.failures += fixture + " Lv." + std::to_string(difficulty) +
-                    " escaped its target band or every coherent local-skill route; ";
+                    " lost coherent soft goals, physical capacity, or every real route; ";
             }
             const auto validation = ff7rp::pipeline::validate_midi_difficulty_route(
                 notes, stats.source_bpm, difficulty);
@@ -1410,20 +1410,13 @@ int test_imported_profile_bands() {
                 notes.back().beat * seconds_per_beat - notes.front().beat * seconds_per_beat < 115.0) {
                 result.failures += fixture + " integration fixture no longer covers at least 115 seconds; ";
             }
-            const bool visible = visible_baseline.empty() ||
-                ff7rp::pipeline::has_meaningful_midi_profile_growth(
-                    visible_baseline.size(), notes.size());
-            if (visible) {
-                if (difficulty <= previous_visible_difficulty || notes.size() < visible_baseline.size() ||
-                    (!visible_baseline.empty() && notes.size() >
-                        ff7rp::pipeline::maximum_midi_visible_profile_actions(visible_baseline.size()))) {
-                    result.failures += fixture + " exposed non-monotonic labels or counts; ";
-                }
-                visible_baseline = notes;
-                previous_visible_difficulty = difficulty;
-                ++complete_profiles;
-                visible_difficulties.insert(difficulty);
+            if (difficulty <= previous_visible_difficulty) {
+                result.failures += fixture + " exposed non-monotonic difficulty labels; ";
             }
+            visible_baseline = notes;
+            previous_visible_difficulty = difficulty;
+            ++complete_profiles;
+            visible_difficulties.insert(difficulty);
             if (perf_diagnostics_enabled()) {
                 const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - profile_started);

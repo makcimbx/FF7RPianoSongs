@@ -45,6 +45,8 @@ int main(int argc, char** argv)
         [&](const char* stage) {
             if (std::string_view(stage).starts_with("midi_source_warning:")) {
                 std::cerr << "warning song_directory=" << argv[1] << " " << stage << '\n';
+            } else if (std::string_view(stage).starts_with("midi_selection:")) {
+                std::cout << stage << '\n';
             }
         });
     if (!status.ok()) {

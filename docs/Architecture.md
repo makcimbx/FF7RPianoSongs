@@ -128,9 +128,10 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
   identity to every MIDI cache key. The source model preserves exact authored black-key
   sharp/flat identity and independent monotone/chord note/dot values; generated
-  MIDI's v12 identity additionally covers normalized key-signature orientation,
-  exact rational source-length notation, and policy-independent exclusion of
-  out-of-range source attacks. Cold normalization emits count/range warnings through
+  MIDI's v13 identity additionally covers normalized key-signature orientation,
+  exact rational source-length notation, policy-independent exclusion of
+  out-of-range source attacks, soft density/growth goals and bounded feasible-beam
+  selection. Cold normalization emits count/range warnings through
   existing song-scoped trace stages; valid warm caches do not reparse MIDI merely
   to repeat those warnings. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
@@ -144,6 +145,14 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   Source rows, prefix events, native events,
   required actions, physical digest, and any explicitly authored group topology are
   deterministically rederived from the already-counted prefix/tail rows.
+- MIDI profile publication requires a complete feasible chart, not compliance with
+  a preferred density, retained-percentage or adjacent-growth quota. The independent
+  full-route validator and source/timing/physical limits remain authoritative. Search
+  breadth adapts deterministically to projected additional analysis cost while the
+  complete source timeline is traversed; the allowance is not an absolute total-work
+  or wall-clock cap. Cold selection telemetry is observational and is not serialized
+  as cache authority. Generated-MIDI identity invalidates former policy results;
+  authored-chart identities and the binary layout do not change.
 - A profile descriptor keeps the first 512 source rows in `chart_notes` and owns
   the remainder in `extended_chart_tail_notes`. `source_row_count`,
   `native_prefix_event_count`, `native_event_count`, and `required_action_count`

@@ -162,6 +162,10 @@ struct MidiChartStats {
     double audio_alignment_seconds = 0.0;
     double audio_offset_seconds = 0.0;
     double alignment_confidence = 0.0;
+    // Cold optimization telemetry only; not serialized chart/cache authority.
+    std::size_t selector_beam_width = 0;
+    std::size_t selector_processed_frames = 0;
+    std::size_t selector_skill_row_visits = 0;
 };
 
 // Returns an observed native pca_* ID only for one unambiguous, complete chord.

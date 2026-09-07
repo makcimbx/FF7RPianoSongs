@@ -338,6 +338,11 @@ When root `notes` and `profiles` are absent, exactly one `song.mid` or `song.mid
 The generator tries difficulty labels 1 through 6; root `difficulty` does not select one of them.
 Each level chooses a playable selection from the MIDI, not necessarily every original note.
 Levels that cannot be generated within the supported limits are omitted, so some numbers may be missing.
+The desired number of inputs is a guide, not a quota: an otherwise playable level
+is not discarded just because it has fewer notes than the target. A higher level
+can have a similar number of notes but more demanding timing or input patterns.
+The generator still checks the actual playing load and chart limits; it does not
+promise that every MIDI can supply six distinct difficulties.
 The generator may choose stock chords, partial chords, and alternate C/C-sharp inputs, but never automatic
 groups. It uses key signatures for sharp/flat spelling and exact supported MIDI lengths for note
 symbols; other lengths use the default symbols described above. `chord_voicings` is for explicit

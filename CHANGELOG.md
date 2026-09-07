@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Made generated difficulty density and growth targets preferences rather than rejection quotas.
+  Bounded selection seeks a valid full-song chart without requiring the preferred number of inputs;
+  actual difficulty-load, source-note and chart-size checks remain in force.
 - Fixed MIDI generation rejecting otherwise usable songs because some notes fall outside C1–C7
   when long charts are available. Unsupported pitches are excluded with diagnostics; remaining
   notes still need to form a playable chart. No automatic octave changes or audio edits are made.

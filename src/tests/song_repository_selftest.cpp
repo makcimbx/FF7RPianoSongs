@@ -803,18 +803,16 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
     ff7rp::pipeline::LoadedSong generated;
     auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &generated);
     if (!status.ok()) return fail("growth fixture generation failed: " + status.message);
-    if (generated.loaded_from_runtime_cache || generated.difficulty_profiles.size() != 1 ||
-        generated.difficulty_profile_omissions.size() != 5) {
-        return fail("production repository did not preserve individual no-growth omissions");
+    if (generated.loaded_from_runtime_cache || generated.difficulty_profiles.size() != 6 ||
+        !generated.difficulty_profile_omissions.empty()) {
+        return fail("independently feasible sparse profiles were rejected solely for no growth");
     }
     for (int difficulty = 2; difficulty <= 6; ++difficulty) {
-        const auto omission = std::find_if(generated.difficulty_profile_omissions.begin(),
-            generated.difficulty_profile_omissions.end(), [&](const auto& value) {
-                return value.difficulty == difficulty &&
-                    value.reason == "insufficient_meaningful_growth";
-            });
-        if (omission == generated.difficulty_profile_omissions.end()) {
-            return fail("repository stopped instead of evaluating each higher no-growth level");
+        const auto& profile = generated.difficulty_profiles[difficulty - 1];
+        if (profile.config.difficulty != difficulty ||
+            !ff7rp::pipeline::validate_midi_difficulty_route(profile.config.notes,
+                profile.config.bpm, difficulty).feasible) {
+            return fail("repository did not independently validate each sparse difficulty");
         }
     }
     const auto& generated_profile = generated.difficulty_profiles.front();
@@ -1002,10 +1000,7 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
         sections.first_chart_pitch >= valid_runtime.size() || sections.overlap_ratio < 24u ||
         sections.target_rows < 24u || sections.rejection_count < 24u || sections.strain_value < 24u ||
         sections.exposure_decision < 24u || sections.diagnostic_flags < 24u ||
-        sections.profile_semantic_hash < 24u ||
-        sections.omission_desired_rows < 24u ||
-        sections.omission_desired_rows + 8u > valid_runtime.size() ||
-        sections.omission_candidate_actions < 24u || sections.omission_candidate_actions >= valid_runtime.size()) {
+        sections.profile_semantic_hash < 24u) {
         return fail("independent runtime section locator did not match serialized profile diagnostics");
     }
     const auto expect_semantic_mutation_rebuild = [&](const char* name, auto mutate) {
@@ -1065,14 +1060,44 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
         }) != 0 ||
         expect_semantic_mutation_rebuild("compiled chart action identity", [&](auto* bytes) {
             (*bytes)[sections.first_chart_pitch] ^= 1u;
-        }) != 0 ||
-        expect_semantic_mutation_rebuild("omission desired rows", [&](auto* bytes) {
-            write_u64_le(bytes, sections.omission_desired_rows, 1u);
-        }) != 0 ||
-        expect_semantic_mutation_rebuild("omission candidate count", [&](auto* bytes) {
-            (*bytes)[sections.omission_candidate_actions] ^= 1u;
         }) != 0) {
         return 1;
+    }
+    // This sparse song now legitimately publishes all six labels. Keep the
+    // omission-tamper checks on an explicit codec fixture, not a requirement
+    // that the generator manufacture an omission to exercise serialization.
+    auto omission_fixture = generated;
+    ff7rp::pipeline::DifficultyProfileOmission omission;
+    omission.difficulty = omission_fixture.difficulty_profiles.back().config.difficulty;
+    omission.desired_rows = 77;
+    omission.reason = "explicit omission serialization fixture";
+    omission.diagnostics = omission_fixture.difficulty_profiles.back().diagnostics;
+    omission_fixture.difficulty_profiles.pop_back();
+    omission_fixture.difficulty_profile_omissions.push_back(omission);
+    constexpr std::array<char, 8> magic{'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
+    std::vector<std::uint8_t> omission_bytes;
+    auto decoded_omission = omission_fixture;
+    ff7rp::pipeline::SongConfig authored_source_config;
+    if (!ff7rp::pipeline::load_song_json_file((song_directory / "song.json").string(),
+            &authored_source_config).ok()) return fail("could not reread omission fixture source context");
+    decoded_omission.config = authored_source_config;
+    if (!ff7rp::pipeline::encode_runtime_cache(omission_fixture, magic, 16, &omission_bytes) ||
+        !ff7rp::pipeline::decode_runtime_cache(omission_bytes, magic, 16, &decoded_omission)) {
+        return fail("explicit omission codec fixture did not round-trip");
+    }
+    const auto omission_sections = locate_runtime_sections(omission_bytes, diagnostics_offset + 119u);
+    for (const auto offset : {omission_sections.omission_desired_rows,
+                             omission_sections.omission_candidate_actions}) {
+        if (offset < 24u || offset + 8u > omission_bytes.size()) {
+            return fail("explicit omission section locator failed");
+        }
+        auto corrupted = omission_bytes;
+        corrupted[offset] ^= 1u;
+        rechecksum_runtime_cache(&corrupted);
+        decoded_omission.config = authored_source_config;
+        if (ff7rp::pipeline::decode_runtime_cache(corrupted, magic, 16, &decoded_omission)) {
+            return fail("rechecksummed omission semantic corruption was accepted");
+        }
     }
     const std::size_t slot_size = (valid_mabf.size() - ff7rp::pipeline::kMabfHeaderSize) / 3u;
     for (std::size_t mode = 0; mode < 3u; ++mode) {
@@ -1236,14 +1261,11 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
             })) {
         return fail("unsupported generated MIDI policy clipped or published an extended profile");
     }
-    const auto oversized_omission = std::find_if(
-        unsupported.difficulty_profile_omissions.begin(), unsupported.difficulty_profile_omissions.end(),
-        [](const auto& omission) {
-            return omission.reason == "minimum_target_exceeds_row_limit"
-                && omission.desired_rows > ff7rp::pipeline::kMaxChartRows;
-        });
-    if (oversized_omission == unsupported.difficulty_profile_omissions.end()) {
-        return fail("unsupported generated MIDI policy did not omit the complete profile above 512 rows");
+    for (const auto& profile : unsupported.difficulty_profiles) {
+        if (!profile.diagnostics.complete || !ff7rp::pipeline::validate_midi_difficulty_route(
+                profile.config.notes, profile.config.bpm, profile.config.difficulty).feasible) {
+            return fail("ordinary policy published an incomplete or load-unsafe reduced chart");
+        }
     }
     return 0;
 }
@@ -1539,17 +1561,17 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Lead-observed MIDI identity v12 invalidates the former pitch-rejection
-        // policy. Pipeline v48 / format 16, manifest length, and config/chart
-        // semantic hash remain unchanged; musical-value assertions below bind
-        // this identity-only refresh to the same chart.
-        expected_cache_key = 0xe3d4f245c22bbc6cull;
-        expected_normalized_manifest_digest = 0x8554ce98b015e1f2ull;
+        // Observed v13 soft-goal candidate: unchanged root musical semantics,
+        // but all six independently feasible one-note labels are now published
+        // instead of five growth-only omissions. The manifest records that
+        // policy change; pipeline v48 and binary format 16 are unchanged.
+        expected_cache_key = 0x62de8ad46754b413ull;
+        expected_normalized_manifest_digest = 0xb1611a21de367444ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
     }
-    constexpr std::size_t kExpectedNormalizedManifestBytes = 5202u;
+    constexpr std::size_t kExpectedNormalizedManifestBytes = 5373u;
     constexpr const char* kExpectedSemanticHash = "config_chart_semantic_hash=037ea322cb1e9dad";
     if (generated.cache_key != expected_cache_key ||
         normalized_manifest_digest != expected_normalized_manifest_digest ||
@@ -1563,6 +1585,18 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     if (!generated.chart_from_midi || generated.config.notes.size() != 1u ||
         generated.chart.notes.size() != 1u) {
         return fail("offline MIDI/chart golden row count changed");
+    }
+    if (generated.difficulty_profiles.size() != 6u || !generated.difficulty_profile_omissions.empty()) {
+        return fail("single-source golden lost independently feasible difficulty labels");
+    }
+    for (std::size_t i = 0; i < generated.difficulty_profiles.size(); ++i) {
+        const auto& profile = generated.difficulty_profiles[i];
+        if (profile.config.difficulty != static_cast<int>(i + 1) ||
+            !charts_equal(profile.chart, generated.chart) ||
+            !ff7rp::pipeline::validate_midi_difficulty_route(profile.config.notes,
+                profile.config.bpm, profile.config.difficulty).feasible) {
+            return fail("single-source golden changed musical semantics or real route safety");
+        }
     }
     const auto& source = generated.config.notes.front();
     const auto& compiled = generated.chart.notes.front();
@@ -1786,17 +1820,9 @@ int test_row_limit_omission(const std::filesystem::path& root) {
         }
         if (i > 0) {
             const auto& previous = song.difficulty_profiles[i - 1];
-            if (!ff7rp::pipeline::has_meaningful_midi_profile_growth(
-                    previous.diagnostics.scheduled_rows, profile.diagnostics.scheduled_rows)) {
-                return fail("repository exposed a profile outside the production growth policy");
-            }
-            if (profile.chart.notes.size() >
-                    ff7rp::pipeline::maximum_midi_visible_profile_actions(previous.chart.notes.size()) ||
-                profile.diagnostics.protected_baseline_actions != previous.chart.notes.size() ||
-                profile.diagnostics.retained_actions <
-                    static_cast<std::size_t>(std::ceil(previous.chart.notes.size() * 0.80)) ||
-                profile.diagnostics.overlap_ratio < 0.80) {
-                return fail("repository exposed a profile outside bounded growth/recognizability policy");
+            if (profile.config.difficulty <= previous.config.difficulty ||
+                profile.diagnostics.protected_baseline_actions != previous.chart.notes.size()) {
+                return fail("repository lost independent labels or previous source-preference diagnostics");
             }
             observed_bounded_repair = observed_bounded_repair || !profile.diagnostics.nested_from_previous;
         }
@@ -1808,27 +1834,13 @@ int test_row_limit_omission(const std::filesystem::path& root) {
         ff7rp::pipeline::maximum_midi_visible_profile_actions(256) > 346) {
         return fail("maximum adjacent visible-step policy permits the proven 221/256-row jumps");
     }
-    const auto omission = std::find_if(song.difficulty_profile_omissions.begin(),
-        song.difficulty_profile_omissions.end(), [](const auto& value) {
-            return value.reason == "minimum_target_exceeds_row_limit";
-        });
-    if (omission == song.difficulty_profile_omissions.end() ||
-        omission->desired_rows <= ff7rp::pipeline::kMaxChartRows) {
-        std::ostringstream details;
-        details << "complete candidate above 512 rows was not omitted; visible=";
-        for (const auto& profile : song.difficulty_profiles) {
-            details << profile.config.difficulty << ':' << profile.chart.notes.size() << ',';
+    for (const auto& profile : song.difficulty_profiles) {
+        const double span = (profile.config.notes.back().beat - profile.config.notes.front().beat) *
+            60.0 / profile.config.bpm;
+        if (span < 190.0 || !ff7rp::pipeline::validate_midi_difficulty_route(
+                profile.config.notes, profile.config.bpm, profile.config.difficulty).feasible) {
+            return fail("soft-density row-limited chart lost complete source coverage or real route safety");
         }
-        details << " omissions=";
-        for (const auto& value : song.difficulty_profile_omissions) {
-            details << value.difficulty << ':' << value.desired_rows << ':' << value.reason << ',';
-        }
-        return fail(details.str());
-    }
-    const auto exposed = std::find_if(song.difficulty_profiles.begin(), song.difficulty_profiles.end(),
-        [&](const auto& profile) { return profile.config.difficulty == omission->difficulty; });
-    if (exposed != song.difficulty_profiles.end()) {
-        return fail("row-limit candidate was truncated and exposed instead of omitted");
     }
 
     ff7rp::pipeline::LoadedSong cached;
@@ -2758,11 +2770,11 @@ int test_synthetic_reviewed_profiles_for_policy(const std::filesystem::path& roo
         const std::size_t visible_cap = baseline.empty() ? 480 :
             ff7rp::pipeline::maximum_midi_visible_profile_actions(baseline.size());
         if (profile.diagnostics.target_rows != std::min(raw_target, visible_cap) ||
-            profile.diagnostics.target_minimum_rows != minimum ||
-            profile.diagnostics.target_maximum_rows != std::min(maximum, visible_cap) ||
-            profile.chart.notes.size() < minimum || profile.chart.notes.size() > std::min(maximum, visible_cap)) {
+            profile.diagnostics.target_minimum_rows != std::min(minimum, std::min(raw_target, visible_cap)) ||
+            profile.diagnostics.target_maximum_rows != maximum ||
+            profile.chart.notes.empty() || profile.chart.notes.size() > 480) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
-                " escaped its meaningful target band");
+                " lost its calibrated soft target or physical source bounds");
         }
 
         std::vector<ff7rp::pipeline::Note> generated;

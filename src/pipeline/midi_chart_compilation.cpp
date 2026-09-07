@@ -1536,6 +1536,9 @@ struct IncrementalState {
 };
 
 struct IncrementalSelection {
+    std::size_t beam_width = 0;
+    std::size_t processed_frames = 0;
+    std::size_t skill_row_visits = 0;
     Status status = Status::ok_status();
     std::map<long long, OutputRow> rows;
     MidiJointStrainMetrics strain;
@@ -1715,7 +1718,8 @@ double largest_internal_gap(const IncrementalState& state) {
 bool has_only_source_rest_gaps(
     const IncrementalRows& rows,
     const std::vector<IncrementalCandidate>& candidates) {
-    if (rows.size() < 2) return true;
+    if (rows.empty()) return false;
+    if (!candidates.empty() && rows.front().first - candidates.front().frame > 480) return false;
     for (std::size_t index = 1; index < rows.size(); ++index) {
         const IncrementalRow& previous = rows[index - 1];
         const IncrementalRow& next = rows[index];
@@ -1821,13 +1825,12 @@ IncrementalSelection select_incremental_rows(
         return a_source < b_source;
     });
 
-    constexpr std::size_t beam_width = 384;
+    constexpr std::size_t maximum_beam_width = 384;
     constexpr std::size_t states_per_route_and_row_count = 10;
     const std::size_t maximum_search_rows = std::max(baseline_actions, target_maximum_rows);
-    // Each frame group can retain one state and analyze each source-backed candidate for
-    // every beam state. Candidate work performs both full-chart and finalized-prefix
-    // local-skill passes, each bounded by the largest permitted selected chart. Bound
-    // that deterministic row-visit projection before entering the parallel beam loop.
+    // Bound optimization breadth, never the source timeline. Reserve one complete
+    // traversal per route, then spend at most this many additional projected row
+    // visits on competing states. No candidate frame is truncated at this bound.
     constexpr std::size_t maximum_projected_analysis_row_visits = 1'500'000'000u;
     std::size_t candidate_frame_count = 0;
     for (std::size_t begin = 0; begin < candidates.size();) {
@@ -1836,29 +1839,11 @@ IncrementalSelection select_incremental_rows(
         ++candidate_frame_count;
         begin = end;
     }
-    const auto multiplication_exceeds = [](const std::size_t value, const std::size_t factor,
-                                            const std::size_t limit) {
-        return factor != 0 && value > limit / factor;
-    };
-    std::size_t projected_analysis_row_visits = candidate_frame_count;
-    bool projected_work_exceeds_budget = candidates.size() >
-        std::numeric_limits<std::size_t>::max() - projected_analysis_row_visits;
-    if (!projected_work_exceeds_budget) projected_analysis_row_visits += candidates.size();
-    for (const std::size_t factor : std::array<std::size_t, 3>{
-             beam_width, std::max<std::size_t>(1, maximum_search_rows), 2u}) {
-        if (projected_work_exceeds_budget || multiplication_exceeds(
-                projected_analysis_row_visits, factor, maximum_projected_analysis_row_visits)) {
-            projected_work_exceeds_budget = true;
-            break;
-        }
-        projected_analysis_row_visits *= factor;
-    }
-    if (projected_work_exceeds_budget ||
-        projected_analysis_row_visits > maximum_projected_analysis_row_visits) {
-        result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
-            "incremental MIDI selector projected analysis work exceeds deterministic budget");
-        return result;
-    }
+    const std::size_t extra_states = maximum_projected_analysis_row_visits /
+        std::max<std::size_t>(1, candidate_frame_count + candidates.size()) /
+        std::max<std::size_t>(1, maximum_search_rows) / 2u;
+    const std::size_t beam_width = std::min(maximum_beam_width, profile.route_count + extra_states);
+    result.beam_width = beam_width;
     std::vector<IncrementalState> beam;
     beam.reserve(profile.route_count);
     for (std::size_t route = 0; route < profile.route_count; ++route) {
@@ -1871,20 +1856,6 @@ IncrementalSelection select_incremental_rows(
         focused.full_route_load = local_skill_violation(
             focused.local_skills, profile.routes[route]);
         beam.push_back(std::move(focused));
-    }
-    const std::size_t minimum_retained = preferred_baseline_actions == 0 ? 0 :
-        static_cast<std::size_t>(std::ceil(preferred_baseline_actions * 0.80));
-    std::size_t remaining_preferred_frames = 0;
-    for (std::size_t begin = 0; begin < candidates.size();) {
-        std::size_t end = begin + 1;
-        while (end < candidates.size() && candidates[end].frame == candidates[begin].frame) ++end;
-        if (!contains_frame(*beam.front().rows, candidates[begin].frame) &&
-            std::any_of(candidates.begin() + static_cast<std::ptrdiff_t>(begin),
-                candidates.begin() + static_cast<std::ptrdiff_t>(end),
-                [](const IncrementalCandidate& value) { return value.preferred; })) {
-            ++remaining_preferred_frames;
-        }
-        begin = end;
     }
     long long first_group_frame = candidates.empty() ? 0 : candidates.front().frame;
     long long previous_group_frame = first_group_frame;
@@ -1905,12 +1876,8 @@ IncrementalSelection select_incremental_rows(
         if (begin != 0) elapsed_supported_frames += std::min<long long>(480,
             candidates[begin].frame - previous_group_frame);
         previous_group_frame = candidates[begin].frame;
-        const bool preferred_frame = !contains_frame(*beam.front().rows, candidates[begin].frame) &&
-            std::any_of(candidates.begin() + static_cast<std::ptrdiff_t>(begin),
-                candidates.begin() + static_cast<std::ptrdiff_t>(end),
-                [](const IncrementalCandidate& value) { return value.preferred; });
-        if (preferred_frame && remaining_preferred_frames > 0) --remaining_preferred_frames;
         struct AnalysisWork {
+            std::size_t skill_row_visits = 0;
             std::shared_ptr<const IncrementalRows> parent_rows;
             const IncrementalCandidate* candidate = nullptr;
             std::vector<AnalysisNote> notes;
@@ -1967,8 +1934,28 @@ IncrementalSelection select_incremental_rows(
             return index;
         };
         std::vector<bool> spacing_eligible(end - begin, false);
+        // Traversal never revisits an earlier frame. Do not let the density goal
+        // discard the last opportunity to bridge an already supported source
+        // interval. This is the incremental form of the final coverage check,
+        // not a density minimum or an invented action.
+        const auto can_skip_frame = [&](const IncrementalRows& rows) {
+            const long long frame = candidates[begin].frame;
+            const auto next_row = std::upper_bound(rows.begin(), rows.end(), frame,
+                [](const long long time, const IncrementalRow& row) { return time < row.first; });
+            long long next_frame = end < candidates.size() ? candidates[end].frame :
+                std::numeric_limits<long long>::max();
+            if (next_row != rows.end()) next_frame = std::min(next_frame, next_row->first);
+            if (next_row == rows.begin()) return next_frame <= first_group_frame + 480;
+            const long long last_frame = std::prev(next_row)->first;
+            const auto first_after = std::upper_bound(candidates.begin(), candidates.end(), last_frame,
+                [](const long long time, const IncrementalCandidate& candidate) { return time < candidate.frame; });
+            return first_after == candidates.end() || first_after->frame > last_frame + 480 ||
+                next_frame <= last_frame + 480;
+        };
         for (const IncrementalState& state : beam) {
-            pending.push_back(PendingState{state, nullptr, work_index_for(state, nullptr)});
+            if (can_skip_frame(*state.rows)) {
+                pending.push_back(PendingState{state, nullptr, work_index_for(state, nullptr)});
+            }
             if (state.rows->size() >= maximum_physical_rows ||
                 contains_frame(*state.rows, candidates[begin].frame)) continue;
             for (std::size_t index = begin; index < end; ++index) {
@@ -2004,6 +1991,7 @@ IncrementalSelection select_incremental_rows(
                     value.notes = analysis_notes_from_rows_with_candidate(
                         *value.parent_rows, value.candidate, profile);
                     value.local_skills = calculate_local_skills_analysis(value.notes, bpm, true);
+                    value.skill_row_visits += value.notes.size();
                 }
             }
             const auto finalized_end = std::upper_bound(
@@ -2023,8 +2011,11 @@ IncrementalSelection select_incremental_rows(
                     *value.parent_rows, value.candidate, profile, candidates[begin].frame);
                 value.finalized_prefix_skills = calculate_local_skills_analysis(
                     prefix_notes, bpm, true, true);
+                value.skill_row_visits += prefix_notes.size();
             }
         });
+        for (const auto& value : work) result.skill_row_visits += value.skill_row_visits;
+        ++result.processed_frames;
         std::for_each(std::execution::par, pending.begin(), pending.end(), [&](PendingState& value) {
             const AnalysisWork& analysis = work[value.work_index];
             IncrementalState& state = value.state;
@@ -2055,7 +2046,6 @@ IncrementalSelection select_incremental_rows(
                 result.local_skill_rejections += value.candidate != nullptr ? 1u : 0u;
                 continue;
             }
-            if (state.preferred_actions + remaining_preferred_frames < minimum_retained) continue;
             state.admissible_routes = std::uint32_t{1} << state.route_focus;
             next.push_back(std::move(state));
         }
@@ -2096,7 +2086,25 @@ IncrementalSelection select_incremental_rows(
         beam.clear();
         beam.reserve(std::min(beam_width, next.size()));
         std::vector<std::array<std::size_t, 2>> route_row_counts(maximum_search_rows + 1);
-        for (IncrementalState& state : next) {
+        // Density-first ranking must not discard every fully feasible alternative
+        // in favor of states whose recoverable/global load never recovers. Keep
+        // the best ranked full-route-feasible state for each route before filling
+        // the ordinary beam. It still traverses every remaining source frame.
+        std::vector<bool> reserved(next.size(), false);
+        for (std::size_t route = 0; route < profile.route_count; ++route) {
+            for (std::size_t index = 0; index < next.size(); ++index) {
+                auto& state = next[index];
+                if (state.route_focus != route ||
+                    state.full_route_load > profile.routes[route].evidence_margin + kComparisonEpsilon) continue;
+                reserved[index] = true;
+                ++route_row_counts[state.row_count][state.route_focus];
+                beam.push_back(std::move(state));
+                break;
+            }
+        }
+        for (std::size_t index = 0; index < next.size() && beam.size() < beam_width; ++index) {
+            if (reserved[index]) continue;
+            IncrementalState& state = next[index];
             if (route_row_counts[state.row_count][state.route_focus] >=
                 states_per_route_and_row_count) continue;
             ++route_row_counts[state.row_count][state.route_focus];
@@ -2131,8 +2139,7 @@ IncrementalSelection select_incremental_rows(
 
     const IncrementalState* best = nullptr;
     for (const IncrementalState& state : beam) {
-        if (state.row_count < target_minimum_rows || state.row_count > target_maximum_rows ||
-            state.preferred_actions < minimum_retained ||
+        if (state.row_count == 0 || state.rows->size() > maximum_physical_rows ||
             best_route_violation(state.local_skills, profile) > 1.0 + kComparisonEpsilon ||
             !has_only_source_rest_gaps(*state.rows, candidates)) continue;
         const auto state_error = std::llabs(
@@ -2171,10 +2178,8 @@ IncrementalSelection select_incremental_rows(
             const std::size_t row_distance = value.row_count < target_minimum_rows ?
                 target_minimum_rows - value.row_count : value.row_count > target_maximum_rows ?
                 value.row_count - target_maximum_rows : 0;
-                const std::size_t retention_distance = value.preferred_actions < minimum_retained ?
-                    minimum_retained - value.preferred_actions : 0;
-                return std::tuple<std::size_t, std::size_t, double, double, double>{
-                    row_distance, retention_distance,
+                return std::tuple<std::size_t, double, double, double>{
+                    row_distance,
                     best_route_violation(value.local_skills, profile),
                     largest_internal_gap(value), -value.salience};
             };
@@ -2193,8 +2198,9 @@ IncrementalSelection select_incremental_rows(
         result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
             "near-feasible witness: rows=" + std::to_string(witness->rows->size()) +
             " preferred=" + std::to_string(witness->preferred_actions) +
-            " required_rows=" + std::to_string(target_minimum_rows) +
-            " required_preferred=" + std::to_string(minimum_retained) +
+            " preferred_rows=" + std::to_string(target_minimum_rows) +
+            ".." + std::to_string(target_maximum_rows) +
+            " coverage=" + (has_only_source_rest_gaps(*witness->rows, candidates) ? "complete" : "missing_source_bridge") +
             " route=" + result.local_skills.satisfied_route_name +
             " ratio=" + std::to_string(result.local_skills.satisfied_route_ratio) +
             " margin=" + std::to_string(result.local_skills.satisfied_route_margin) +
@@ -2606,36 +2612,22 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     const std::size_t chart_row_limit = physical_policy.playable_extended_available
         ? std::min(kMaximumExtendedChartRows, kMaximumNativeChartEvents)
         : effective_chart_row_limit();
-    if (target_minimum_rows > chart_row_limit) {
-        if (out_stats) {
-            out_stats->target_rows = target_rows;
-            out_stats->target_minimum_rows = target_minimum_rows;
-            out_stats->target_maximum_rows = target_maximum_rows;
-            out_stats->row_limit_exceeded = true;
-        }
-        result.status = Status::error(StatusCode::ChartRowLimitExceeded,
-            "minimum complete target band exceeds the accepted chart input limit");
-        return result;
-    }
+    // Density and adjacent growth shape the optimization goal, not feasibility.
+    // Keep a coherent preferred band even when native capacity is the tighter goal.
     if (maximum_visible_rows != 0) {
-        if (maximum_visible_rows < target_minimum_rows) {
-            if (out_stats) {
-                out_stats->target_rows = target_rows;
-                out_stats->target_minimum_rows = target_minimum_rows;
-                out_stats->target_maximum_rows = target_maximum_rows;
-            }
-            result.status = Status::error(StatusCode::ChartStrainLimitExceeded,
-                "difficulty target band exceeds the maximum adjacent visible-profile growth");
-            return result;
-        }
         target_rows = std::min(target_rows, maximum_visible_rows);
-        target_maximum_rows = std::min(target_maximum_rows, maximum_visible_rows);
     }
     target_rows = std::min(target_rows, chart_row_limit);
+    target_minimum_rows = std::min(target_minimum_rows, target_rows);
     target_maximum_rows = std::min(target_maximum_rows, chart_row_limit);
     IncrementalSelection selection = select_incremental_rows(profile, chart_bpm, baseline_rows,
         incremental_candidates, target_rows, target_minimum_rows, target_maximum_rows,
         preferred_baseline ? preferred_baseline->size() : 0, chart_row_limit);
+    if (out_stats) {
+        out_stats->selector_beam_width = selection.beam_width;
+        out_stats->selector_processed_frames = selection.processed_frames;
+        out_stats->selector_skill_row_visits = selection.skill_row_visits;
+    }
     if (!selection.status.ok()) {
         *out_notes = notes_from_rows(selection.rows, profile);
         if (out_stats) {

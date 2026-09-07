@@ -44,10 +44,18 @@ All automatically generated rows serialize with `group_index = 0`. Every generat
 monotone or chord event is therefore a parentless required action and participates
 in spacing, route, strain, score-growth, and recognizability analysis. The selector
 does not create automated followers or run topology. Difficulty-specific spacing,
-salience, source preference, calibrated target bands, and route limits may select
+salience, source preference, calibrated density goals, and route limits may select
 different source events and produce different physical digests. A previously visible
 profile is only source-backed preference evidence for the next label; it is not a
 shared physical chart or a required nested root set.
+
+Density targets guide selection; they are not a minimum number of inputs required
+to publish a difficulty. A nonempty, source-backed chart that satisfies the actual
+route and physical constraints can remain below its preferred density. Likewise,
+growth from the preceding visible profile is a preference, not a reason to discard
+an otherwise valid later label after an intermediate label was omitted. Higher
+labels need not have strictly more rows: timing and input patterns also determine
+their load. These preferences do not authorize relaxing the route's load ceiling.
 
 Retained melody selection uses humanized onset context, then restores authoritative
 source-event timing before timing-domain filtering, prominence measurement, and
@@ -62,13 +70,21 @@ only offline selection and generated cache identity; runtime chart representatio
 and explicit JSON grouping support are unchanged.
 
 The 8192 representation limit is not an authorization for unbounded selector work.
-Before incremental beam expansion, generation computes an overflow-safe upper bound
-on full-chart and finalized-prefix local-skill row visits from candidate frames,
-candidate actions, beam width, and the profile's maximum selected rows. A projection
-above the fixed offline analysis budget fails closed with `ChartStrainLimitExceeded`;
-it does not use elapsed time, reduce the target band, clip rows, or publish a partial
-profile. Sparse extended charts and ordinary protected-corpus-sized reductions remain
-inside this separate computational contract.
+Selection remains deterministic and bounded independently of elapsed time. The
+work bound limits optimization, rather than establishing that the source cannot
+produce a playable chart. A result still needs full-chart route, source, timing,
+and physical validation: reaching a search bound is not permission to publish an
+unchecked candidate or truncate the song at the last processed source event.
+If no valid nonempty result is available, the profile remains omitted with a reason.
+
+The beam keeps a route-feasible alternative where available, rather than allowing
+density-first ranking to discard every feasible state. Its breadth adapts to the
+projected analysis cost; at least the route traversals remain, and all candidate
+frames are considered. The projection allowance applies to additional optimization
+breadth, not to total CPU instructions or elapsed time. It is therefore not a
+promise of instant generation or a strict total-operation ceiling. Cold diagnostics
+report the selected beam width, traversed frames, measured full/prefix skill-analysis
+row visits, and outcome. Warm-cache reuse does not repeat that optimization.
 
 Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Authored calibration routes overlap, and incomplete recovered evidence is treated as unknown rather than as rests or easy material.
 
@@ -87,7 +103,7 @@ are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. Generated rows remain ungrouped. This derivation is covered by
-`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches:v12`.
+`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam:v13`.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
@@ -140,8 +156,9 @@ ignored sound.
 ## Author Expectations
 
 - Sparse levels are expected and their actual labels are displayed.
-- A generated profile can be omitted when no source-backed reduction in its
-  calibrated band satisfies a supported route.
+- A generated profile can be omitted when selection cannot produce a valid
+  nonempty source-backed chart within the route and physical constraints. Missing
+  a preferred density or growth target alone is not a rejection reason.
 - Unsupported-policy levels remain subject to the 512-row reduction boundary.
 - Verified extended levels are never clipped: complete selected material must fit
   both 8192 bounds and the restricted publication contract, or the profile fails closed.
