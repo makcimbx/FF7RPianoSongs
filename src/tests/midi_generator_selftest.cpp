@@ -775,7 +775,13 @@ int test_joint_cooldown_and_collision_policy() {
     if (stats.fallback_candidates < 2 || stats.cooldown_rejections == 0) {
         return fail("primary and fallback candidates did not share one cooldown");
     }
-    if (stats.fallback_events != 1 || stats.right_events != 2 || notes.size() != 3) {
+    // The salient tracked C6 now wins the same-frame competition with the
+    // accompaniment chord. The isolated C2 fills the source gap, but its nearby
+    // weaker D2 still loses at actual selection rather than preliminary vicinity.
+    if (stats.fallback_events != 1 || stats.right_events != 3 || notes.size() != 3 ||
+        notes[0].pitch != "C6" || notes[0].beat != 0.0 ||
+        notes[1].pitch != "C2" || notes[1].beat != 4.0 ||
+        notes[2].pitch != "C6" || notes[2].beat != 8.0) {
         std::string emitted;
         for (const auto& note : notes) emitted += " " + note.pitch + "@" + std::to_string(note.beat);
         return fail("cooldown retained the weaker near-primary fallback: fallback=" +
@@ -792,8 +798,11 @@ int test_joint_cooldown_and_collision_policy() {
             return fail("cross-hand scheduler emitted a dual-action or empty row");
         }
     }
-    if (stats.right_collisions != 0 || stats.left_collisions != 0) {
-        return fail("humanization left an avoidable same-hand native-frame collision");
+    // These counters describe candidate competition, not emitted collisions.
+    // The same-frame alternate is now retained until selection; the exact rows
+    // above and scheduled_conflicts still prove collision-free publication.
+    if (stats.right_collisions != 1 || stats.left_collisions != 0) {
+        return fail("same-frame source alternate did not reach actual selection");
     }
     return 0;
 }
@@ -1127,10 +1136,12 @@ int test_global_native_frame_conflict_policy() {
     if (!status.ok() || !notes_equal(notes, repeated)) {
         return fail("native-frame conflict resolution was not deterministic");
     }
+    // Each frame now offers the melody, one bounded alternate, and the chord.
+    // Exactly one wins; neither discarded action is retimed into another frame.
     if (stats.right_events + stats.left_events != onset_count ||
         stats.merged_events != 0 || stats.cross_hand_conflicts != onset_count ||
-        stats.scheduled_conflicts != 0 || stats.dropped_conflicts != onset_count ||
-        stats.selected_actions != onset_count || stats.candidate_actions != onset_count * 2 ||
+        stats.scheduled_conflicts != 0 || stats.dropped_conflicts != onset_count * 2 ||
+        stats.selected_actions != onset_count || stats.candidate_actions != onset_count * 3 ||
         stats.candidate_frames != onset_count ||
         stats.source_pitch_witness_failures != 0) {
         return fail("cross-hand conflicts were not deterministically reduced to exact-frame winners");
@@ -1164,10 +1175,10 @@ int test_globally_unschedulable_conflict_drop() {
     ff7rp::pipeline::MidiChartStats stats;
     const auto status = generate(midi.path(), fixture_config(6), &notes, &stats);
     if (!status.ok() || notes.size() != 1 || notes.front().pitch != "C5" ||
-        stats.selected_actions != 1 || stats.candidate_actions != 2 || stats.cross_hand_conflicts != 1 ||
-        stats.scheduled_conflicts != 0 || stats.dropped_conflicts != 1 ||
+        stats.selected_actions != 1 || stats.candidate_actions != 3 || stats.cross_hand_conflicts != 1 ||
+        stats.scheduled_conflicts != 0 || stats.dropped_conflicts != 2 ||
         stats.desired_rows != 1) {
-        return fail("globally full one-frame timing domain did not report its dropped chord action");
+        return fail("globally full one-frame timing domain did not report its dropped alternate and chord actions");
     }
     return 0;
 }

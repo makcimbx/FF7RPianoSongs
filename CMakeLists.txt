@@ -798,6 +798,13 @@ set_tests_properties(midi_generator_selftest PROPERTIES
     PROCESSORS 16
     RESOURCE_LOCK midi_fixture_generation
 )
+# Includes repeated complete 2000-onset searches under both physical row policies.
+set_tests_properties(midi_chart_compilation_selftest PROPERTIES
+    TIMEOUT 360
+    RUN_SERIAL TRUE
+    PROCESSORS 16
+    RESOURCE_LOCK midi_fixture_generation
+)
 set_tests_properties(song_repository_selftest PROPERTIES
     TIMEOUT 240
     PROCESSORS 4

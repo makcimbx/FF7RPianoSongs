@@ -28,7 +28,7 @@ inline constexpr const char* kDiagnosticChartRowPolicyIdentity =
 inline constexpr const char* kPlayableExtendedChartRowPolicyIdentity =
     "chart_rows=8192;events=8192;groups+dual+chords=verified1004+1005";
 inline constexpr const char* kGeneratedMidiGenerationIdentity =
-    "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam:v13";
+    "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates:v14";
 inline constexpr std::size_t kExperimentalMaxChartRows = kMaximumExtendedChartRows;
 
 struct ChartRowPolicySnapshot {

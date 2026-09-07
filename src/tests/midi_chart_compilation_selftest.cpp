@@ -196,11 +196,13 @@ std::vector<unsigned char> db_chord_context_midi_bytes(const DbChordContext cont
             melody.push_back({tick - 12, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
             melody.push_back({tick + 3, 0, {0xff, 0x59, 0x02, 0x00, 0x00}});
         }
-        add_note(&melody, tick, 360, 84 + event % 3, 108);
-        add_note(&harmony, tick, 720, 49, 82);
+        // Exercise chord identity/notation with salient harmony, rather than
+        // relying on lower-load preference to displace a louder melody.
+        add_note(&melody, tick, 360, 84 + event % 3, 90);
+        add_note(&harmony, tick, 720, 49, 127);
         const int upper_tick = context == DbChordContext::Straddling ? tick + 6 : tick;
-        add_note(&harmony, upper_tick, 720, 53, 81);
-        add_note(&harmony, upper_tick, 720, 56, 80);
+        add_note(&harmony, upper_tick, 720, 53, 127);
+        add_note(&harmony, upper_tick, 720, 56, 127);
     }
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
     append_u16(&file, 1);
@@ -293,6 +295,7 @@ struct PhysicalFrame {
     std::vector<int> pitches;
     int velocity = 100;
     int duration_ticks = 8;
+    int tick_offset = 0;
 };
 
 std::vector<unsigned char> physical_frame_midi_bytes(
@@ -312,7 +315,7 @@ std::vector<unsigned char> physical_frame_midi_bytes(
     }
     for (const PhysicalFrame& frame : frames) {
         for (const int pitch : frame.pitches) {
-            add_note(&melody, base_tick + frame.frame * ticks_per_frame, frame.duration_ticks,
+            add_note(&melody, base_tick + frame.frame * ticks_per_frame + frame.tick_offset, frame.duration_ticks,
                 pitch, frame.velocity);
         }
     }
@@ -537,12 +540,12 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 15> expected{{
-    {"manual-lv1", 6773119318625811841ull, 0, ""},
-    {"manual-lv2", 13917796721266263578ull, 0, ""},
-    {"manual-lv3", 3422253880615500361ull, 0, ""},
-    {"manual-lv4", 8893295841173198285ull, 0, ""},
-    {"manual-lv5", 14940100557045089030ull, 0, ""},
-    {"manual-lv6", 2786189282108214522ull, 0, ""},
+    {"manual-lv1", 12665978319995869156ull, 0, ""},
+    {"manual-lv2", 16910628195291395619ull, 0, ""},
+    {"manual-lv3", 18132972371069659791ull, 0, ""},
+    {"manual-lv4", 1901749588887380908ull, 0, ""},
+    {"manual-lv5", 9041594378335335571ull, 0, ""},
+    {"manual-lv6", 11760437677581941825ull, 0, ""},
     // Preference cases are checked semantically below: the former hashes
     // included statistics from the removed hard retention-pruning policy.
     {"baseline-lv1", 0, 0, ""},
@@ -551,8 +554,8 @@ constexpr std::array<Expected, 15> expected{{
     {"baseline-lv4", 0, 0, ""},
     {"baseline-lv5", 0, 0, ""},
     {"baseline-lv6", 0, 0, ""},
-    {"automatic-alignment", 17191488344814720703ull, 0, ""},
-    {"timing-domain-empty", 12345897120421995243ull, 7,
+    {"automatic-alignment", 9905158162428429845ull, 0, ""},
+    {"timing-domain-empty", 3095648943021463551ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
         "preferred lower-profile action has no source candidate at its native frame"},
@@ -561,6 +564,74 @@ constexpr std::array<Expected, 15> expected{{
 int fail(const std::string& message) {
     std::cerr << "midi_chart_compilation_selftest: " << message << '\n';
     return 1;
+}
+
+int test_salient_reduction(const std::filesystem::path& root) {
+    const auto run = [&](const char* name, const std::vector<PhysicalFrame>& frames,
+                         const double lead_in, const std::string_view pitch, const int source_frame) {
+        const auto path = root / name;
+        const auto bytes = physical_frame_midi_bytes(frames);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        stream.close();
+        SongConfig config = config_for(1);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        config.midi_minimum_lead_in_seconds = lead_in;
+        const auto selected = generate(path, WavAudio{}, config, nullptr, 2);
+        const auto repeated = generate(path, WavAudio{}, config, nullptr, 2);
+        if (!selected.status.ok() || selected.notes.size() != 2 ||
+            !ff7rp::pipeline::validate_midi_difficulty_route(selected.notes, 120.0, 1).feasible ||
+            canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes) ||
+            selected.stats.source_pitch_witness_failures != 0 || selected.stats.scheduled_conflicts != 0 ||
+            selected.stats.selector_processed_frames + 1 != selected.stats.candidate_frames) {
+            return fail(std::string(name) + " lost deterministic complete feasible reduction: " + selected.status.message);
+        }
+        const auto anchor = std::find_if(selected.notes.begin(), selected.notes.end(), [&](const Note& note) {
+            return note.pitch == pitch && std::llround(note.beat * 30.0) == 120 + source_frame;
+        });
+        if (anchor == selected.notes.end()) {
+            std::string actual;
+            for (const auto& note : selected.notes) actual += note.pitch + "@" +
+                std::to_string(std::llround(note.beat * 30.0)) + " ";
+            return fail(std::string(name) + " lost exact accented/alternate anchor; selected " + actual);
+        }
+        for (const auto& note : selected.notes) {
+            const long long frame = std::llround(note.beat * 30.0);
+            if (note.group_index != 0 || !note.chord_id.empty() ||
+                std::fabs(note.beat * 30.0 - frame) > 1e-7 ||
+                std::none_of(frames.begin(), frames.end(), [&](const PhysicalFrame& source) {
+                    return frame == 120 + source.frame && std::any_of(source.pitches.begin(), source.pitches.end(),
+                        [&](const int pitch) {
+                            constexpr std::array<const char*, 12> names{
+                                "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                            return note.pitch == std::string(names[pitch % 12]) + std::to_string(pitch / 12 - 1);
+                        });
+                })) return fail(std::string(name) + " invented or retimed a source action");
+        }
+        config.bpm = 120.0;
+        config.notes = selected.notes;
+        config.notes_provided = true;
+        ff7rp::pipeline::CompiledChart chart;
+        if (!ff7rp::pipeline::compile_chart(config, &chart).ok() || chart.notes.size() != 2) {
+            return fail(std::string(name) + " failed physical compilation");
+        }
+        return 0;
+    };
+    // Equal-count feasible choices: the quiet C5 at 2s leaves more recovery time
+    // than the accented G#5 at 2.5s before the protected C5 at 3s.
+    int failures = 0;
+    for (const bool dense : {false, true}) {
+        std::vector<PhysicalFrame> frames{{0, {72}, 100, 8}, {30, {80}, 127, 480}, {60, {72}, 100, 8}};
+        if (dense) {
+            for (const int frame : {0, 30, 60}) frames.push_back({frame, {48, 49, 50, 51, 52, 53}, 45, 8});
+        }
+        failures += run(dense ? "salience-dense.mid" : "salience.mid", frames, 0.0, "G#5", 30);
+    }
+    // Humanized neighbors straddle the lead-in: the tracked high primary is
+    // filtered out, but its useful alternate must retain its own 121st frame.
+    failures += run("alternate-lead-in.mid", {{0, {84}, 110, 480}, {1, {79}, 100, 480, -2},
+            {120, {84}, 110, 480}}, 2.01, "G5", 1);
+    return failures == 0 ? 0 : 1;
 }
 
 int test_pitch_exclusion(const std::filesystem::path& root) {
@@ -660,6 +731,8 @@ int test_pitch_exclusion(const std::filesystem::path& root) {
 
 int main(int argc, char** argv) {
     ff7rp::tests::TemporaryDirectory temporary("ff7rp-midi-compilation-oracle");
+    if (test_salient_reduction(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--salience-only") return 0;
     if (argc == 2 && std::string_view(argv[1]) == "--soft-goals-only") {
         const auto path = temporary.path() / "soft-goals.mid";
         const auto bytes = verified_chord_runs_midi_bytes(2000u, 54);
@@ -1272,8 +1345,8 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam:v13") {
-        return fail("generated MIDI semantic identity did not invalidate legacy pitch rejection");
+        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates:v14") {
+        return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
     const Observation physical_ambiguous = generate(ambiguous_path, no_audio, config_for(6));

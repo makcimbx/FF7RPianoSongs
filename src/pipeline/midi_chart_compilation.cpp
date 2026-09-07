@@ -79,7 +79,6 @@ struct Profile {
     double evidence = 0.3;
     double target_actions_per_minute = 120.0;
     double target_tolerance = 0.06;
-    double fallback_silence_seconds = 0.5;
     double maximum_joint_strain_p95 = 0.0;
     double maximum_joint_strain_peak = 0.0;
     struct SkillRoute {
@@ -190,17 +189,17 @@ Profile profile_for_difficulty(const int difficulty) {
     const Route owa{{5, 10, 19, 39, 73}, 17, 4.25, 58, 13.0, 8, 8,
         12.0, 36.0, 5, 6, 0.12, 13.5, 13.5, 0.99, 6.0, 9.0, "OneWingedAngel", 1.15};
     switch (difficulty) {
-    case 1: return {0.11, 1.00, 3.00, 4.50, 0.38, 78.0, 0.06, 0.80,
+    case 1: return {0.11, 1.00, 3.00, 4.50, 0.38, 78.0, 0.06,
         2.80, 3.35, {journey, {}}, 1};
-    case 2: return {0.11, 0.90, 2.00, 3.00, 0.36, 90.0, 0.06, 0.60,
+    case 2: return {0.11, 0.90, 2.00, 3.00, 0.36, 90.0, 0.06,
         3.00, 3.55, {tifa, {}}, 1};
-    case 3: return {0.09, 0.72, 1.50, 2.25, 0.30, 104.0, 0.06, 0.40,
+    case 3: return {0.09, 0.72, 1.50, 2.25, 0.30, 104.0, 0.06,
         4.25, 5.30, {barret, synco}, 2};
-    case 4: return {0.08, 0.58, 1.25, 1.75, 0.24, 120.0, 0.06, 0.30,
+    case 4: return {0.08, 0.58, 1.25, 1.75, 0.24, 120.0, 0.06,
         5.05, 5.75, {difficult, aerith}, 2};
-    case 5: return {0.08, 0.45, 1.10, 1.50, 0.18, 138.0, 0.06, 0.25,
+    case 5: return {0.08, 0.45, 1.10, 1.50, 0.18, 138.0, 0.06,
         5.20, 6.00, {fighters, {}}, 1};
-    case 6: return {0.08, 0.35, 0.90, 1.00, 0.12, 158.0, 0.06, 0.20,
+    case 6: return {0.08, 0.35, 0.90, 1.00, 0.12, 158.0, 0.06,
         5.40, 6.25, {owa, {}}, 1};
     default: return {};
     }
@@ -800,25 +799,10 @@ std::vector<Attack> build_chord_candidates(
     return result;
 }
 
-double nearest_primary_distance(
-    const Attack& candidate,
-    const std::vector<Attack>& primary,
-    const bool beats) {
-    double distance = std::numeric_limits<double>::infinity();
-    for (const Attack& attack : primary) {
-        const double value = beats ? std::fabs(candidate.beat - attack.beat) :
-            std::fabs(candidate.start - attack.start);
-        distance = std::min(distance, value);
-    }
-    return distance;
-}
-
 std::vector<Attack> build_fallback_candidates(
     const std::vector<OnsetCluster>& clusters,
     const std::vector<Attack>& voice,
-    const std::set<SourceIdentity>& melody_sources,
-    const std::vector<Attack>& primary,
-    const Profile& profile) {
+    const std::set<SourceIdentity>& melody_sources) {
     std::vector<Attack> candidates;
     for (const Attack& attack : voice) {
         if (attack.melody_evidence < kPrimaryVoiceEvidence) {
@@ -850,9 +834,9 @@ std::vector<Attack> build_fallback_candidates(
         if (!best) continue;
         Attack fallback;
         fallback.event = *best;
-        fallback.start = cluster.start;
-        fallback.end = std::max(best->end, cluster.start);
-        fallback.beat = cluster.beat;
+        fallback.start = best->start;
+        fallback.end = best->end;
+        fallback.beat = best->beat;
         fallback.metric_accent = cluster.metric_accent;
         fallback.melody_evidence = midi_melody_scoring_detail::melody_evidence(
             best->source.pitch,
@@ -867,10 +851,10 @@ std::vector<Attack> build_fallback_candidates(
     candidates.erase(std::unique(candidates.begin(), candidates.end(), [](const Attack& a, const Attack& b) {
         return a.event.source == b.event.source;
     }), candidates.end());
-    candidates.erase(std::remove_if(candidates.begin(), candidates.end(), [&](const Attack& attack) {
-        return nearest_primary_distance(attack, primary, false) + kComparisonEpsilon <
-            profile.fallback_silence_seconds;
-    }), candidates.end());
+    // Preliminary melody attacks may disappear at timing/reduction gates. Keep
+    // one source-backed alternate per cluster until actual selection; the existing
+    // fallback evidence/score penalties prefer the tracked melody, not arbitrary
+    // accompaniment filling. Frame collisions and spacing resolve competition.
     return candidates;
 }
 
@@ -2062,6 +2046,17 @@ IncrementalSelection select_incremental_rows(
             const auto b_error = static_cast<std::size_t>(std::llabs(
                 static_cast<long long>(b.row_count) - static_cast<long long>(expected_rows)));
             if (a_error != b_error) return a_error < b_error;
+            const bool a_feasible = a.full_route_load <=
+                profile.routes[a.route_focus].evidence_margin + kComparisonEpsilon;
+            const bool b_feasible = b.full_route_load <=
+                profile.routes[b.route_focus].evidence_margin + kComparisonEpsilon;
+            if (a_feasible != b_feasible) return a_feasible;
+            // Spend feasible headroom on musical utility, not on minimizing load.
+            // Still guide not-yet-feasible states toward recovery, and retain the
+            // per-route feasible reservation below regardless of density error.
+            if (a_feasible && std::fabs(a.salience - b.salience) > kComparisonEpsilon) {
+                return a.salience > b.salience;
+            }
             const double a_load = a.finalized_route_load;
             const double b_load = b.finalized_route_load;
             if (std::fabs(a_load - b_load) > kComparisonEpsilon) return a_load < b_load;
@@ -2148,26 +2143,21 @@ IncrementalSelection select_incremental_rows(
             static_cast<long long>(best->row_count) - static_cast<long long>(target_rows)) : 0;
         const double state_load = best_route_violation(state.local_skills, profile);
         const double best_load = best ? best_route_violation(best->local_skills, profile) : 0.0;
-        if (!best || state_error < best_error ||
-            (state_error == best_error && state_load + kComparisonEpsilon < best_load) ||
-            (state_error == best_error && std::fabs(state_load - best_load) <= kComparisonEpsilon &&
-                state.maximum_target_timing_error + kComparisonEpsilon < best->maximum_target_timing_error) ||
-            (state_error == best_error && std::fabs(state_load - best_load) <= kComparisonEpsilon &&
-                std::fabs(state.maximum_target_timing_error - best->maximum_target_timing_error) <= kComparisonEpsilon &&
-                state.preferred_actions > best->preferred_actions) ||
-            (state_error == best_error && std::fabs(state_load - best_load) <= kComparisonEpsilon &&
-                std::fabs(state.maximum_target_timing_error - best->maximum_target_timing_error) <= kComparisonEpsilon &&
-                state.preferred_actions == best->preferred_actions &&
-                state.rows->size() > best->rows->size()) ||
-            (state_error == best_error && std::fabs(state_load - best_load) <= kComparisonEpsilon &&
-                std::fabs(state.maximum_target_timing_error - best->maximum_target_timing_error) <= kComparisonEpsilon &&
-                state.preferred_actions == best->preferred_actions && state.rows->size() == best->rows->size() &&
-                largest_internal_gap(state) + kComparisonEpsilon < largest_internal_gap(*best)) ||
-            (state_error == best_error && std::fabs(state_load - best_load) <= kComparisonEpsilon &&
-                std::fabs(state.maximum_target_timing_error - best->maximum_target_timing_error) <= kComparisonEpsilon &&
-                state.preferred_actions == best->preferred_actions && state.rows->size() == best->rows->size() &&
-                std::fabs(largest_internal_gap(state) - largest_internal_gap(*best)) <= kComparisonEpsilon &&
-                state.salience > best->salience + kComparisonEpsilon)) {
+        const auto better = [&] {
+            if (!best) return true;
+            if (state_error != best_error) return state_error < best_error;
+            if (std::fabs(state.salience - best->salience) > kComparisonEpsilon) {
+                return state.salience > best->salience;
+            }
+            if (std::fabs(state_load - best_load) > kComparisonEpsilon) return state_load < best_load;
+            if (std::fabs(state.maximum_target_timing_error - best->maximum_target_timing_error) > kComparisonEpsilon) {
+                return state.maximum_target_timing_error < best->maximum_target_timing_error;
+            }
+            if (state.preferred_actions != best->preferred_actions) return state.preferred_actions > best->preferred_actions;
+            if (state.rows->size() != best->rows->size()) return state.rows->size() > best->rows->size();
+            return largest_internal_gap(state) + kComparisonEpsilon < largest_internal_gap(*best);
+        };
+        if (better()) {
             best = &state;
         }
     }
@@ -2377,7 +2367,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     // Normalization excludes unsupported attacks for every row policy. Their
     // presence does not invalidate the remaining source-backed candidates.
     std::vector<Attack> fallback = build_fallback_candidates(
-        clusters, voice, melody_sources, primary, profile);
+        clusters, voice, melody_sources);
     std::vector<Attack> chords = build_chord_candidates(
         clusters, melody_sources, accidental_orientation, request.native_assets);
     std::set<SourceIdentity> lead_in_rejection_sources;

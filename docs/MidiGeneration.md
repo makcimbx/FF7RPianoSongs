@@ -57,7 +57,24 @@ an otherwise valid later label after an intermediate label was omitted. Higher
 labels need not have strictly more rows: timing and input patterns also determine
 their load. These preferences do not authorize relaxing the route's load ceiling.
 
-Retained melody selection uses humanized onset context, then restores authoritative
+At equal density-goal error, fully feasible selections prefer summed musical
+salience before lower route load, even target timing, and previous-profile
+preference. Salience uses the existing velocity, duration, audio prominence,
+metric accent, melody evidence, and rhythmic-quality score; it is not phrase or
+motif recognition. Intermediate ranking first distinguishes full-route-feasible
+states at equal density error, then spends feasible headroom on salience. States
+still needing recovery retain load/penalty guidance, and the separate per-route
+feasible-state reservation remains in force. Final publication still requires one
+coherent route and every source, spacing, coverage, and physical boundary.
+
+Fallback generation keeps at most one non-tracked source alternate per onset
+cluster, plus weak tracked attacks. Proximity to a preliminary primary is not a
+veto: that primary may later fail timing or reduction. Alternatives instead
+compete at actual frame/spacing selection with the existing fallback evidence and
+salience penalties favoring the tracked melody. This is bounded source-backed
+competition, not arbitrary accompaniment filling or a new melody tracker.
+
+Retained melody and fallback selection use humanized onset context, then restore authoritative
 source-event timing before timing-domain filtering, prominence measurement, and
 materialization. Inferred chords retain their established cluster timing. Failed
 labels are omitted without renumbering, and later labels are still evaluated.
@@ -103,7 +120,7 @@ are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. Generated rows remain ungrouped. This derivation is covered by
-`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam:v13`.
+`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates:v14`.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
