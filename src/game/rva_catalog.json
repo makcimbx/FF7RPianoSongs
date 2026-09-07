@@ -3961,21 +3961,46 @@
       "subsystem": "menu_session",
       "requirement": "release",
       "validation": { "policy": "signature" },
-      "install_policy": "callable",
+      "install_policy": "required_hook",
+      "status": "production",
+      "hook_owner": "menu_session",
+      "consumers": ["src/game/menu_session_authority.cpp"],
+      "hook_spec": { "name": "piano_list_restore_selection", "order": 41, "required_for_release_startup": true },
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b0ff0",
+          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 84 ab 7b fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3 entry proof and corrected single-Open-call section: unique 24-byte entry, void(widget*). Intercept Open CALL 1439b8cc1 and invoke trampoline once; NEVER call again after Open (non-deduplicated native focus-history registration). Scoped +478 restoration; intentional +480 selection."}]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5784c",
+          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 d8 76 45 fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3 entry proof and corrected single-Open-call section: independently unique 24-byte entry, void(widget*), Open CALL 143c5f695. Intercept its single invocation, not a post-Open second call; scoped +478 restoration. Independent build recovery, not translated RVAs."}]
+        }
+      }
+    },
+    {
+      "id": "piano_list_restore_selection_caller",
+      "cpp_symbol": "PianoListRestoreSelectionCaller",
+      "kind": "call_site",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": { "policy": "signature" },
+      "install_policy": "signature_only",
       "status": "production",
       "hook_owner": null,
       "consumers": ["src/game/menu_session_authority.cpp"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
-          "rva": "0x039b0ff0",
-          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 84 ab 7b fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
-          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3: independently unique 24-byte complete-instruction entry in explicitly selected 1.005 image. Open CALL 1439b8cc1 targets this void(widget*) helper; +478 zero skips duplicate-FName scan, +480 selects the internal list control. Scoped saved-FName restoration required."}]
+          "rva": "0x039b8cae",
+          "signature": { "bytes": "48 8b c8 e8 de 82 ff ff 48 8b cf e8 3e bd e7 fc 48 8b c8 e8 2a 83 ff ff", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Corrected single-Open-call section: independently unique 24-byte/six-instruction window in explicitly selected 1.005 program; rows published then weak widget resolved; CALL window+13 targets 039b0ff0, return window+18=039b8cc6. One direct call in all 56 Open instructions."}]
         },
         "ff7rebirth-steam-win64-68fd6fde": {
-          "rva": "0x03c5784c",
-          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 d8 76 45 fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
-          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3: independently unique 24-byte complete-instruction entry in explicitly selected 1.004 image. Open CALL 143c5f695 targets void(widget*); same saved-FName and selected-index semantics independently recovered, not translated RVAs."}]
+          "rva": "0x03c5f682",
+          "signature": { "bytes": "48 8b c8 e8 66 81 ff ff 48 8b cf e8 06 63 ca fd 48 8b c8 e8 b2 81 ff ff", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Corrected single-Open-call section: independently unique 24-byte/six-instruction window in explicitly selected 1.004 program; rows published then weak widget resolved; CALL window+13 targets 03c5784c, return window+18=03c5f69a. One direct call in all 56 Open instructions; no translated addresses."}]
         }
       }
     },

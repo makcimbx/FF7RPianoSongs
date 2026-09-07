@@ -7,6 +7,10 @@
 - Restored the last played custom song and difficulty when reopening the list, using song and
   difficulty identities rather than old row indices. These UI changes still need in-game verification;
   the separately reported S-rank result glyph is not fixed by this batch.
+- Corrected the return-focus implementation calling the game's focus-registration routine twice.
+  The failed UI test could start vanilla music and charts after the first custom song; restoration
+  now uses the single normal call during menu opening. Repeat custom-song playback still needs
+  a new in-game check; the previous working build remains installed meanwhile.
 - Made generated difficulty density and growth targets preferences rather than rejection quotas.
   Bounded selection seeks a valid full-song chart without requiring the preferred number of inputs;
   actual difficulty-load, source-note and chart-size checks remain in force.

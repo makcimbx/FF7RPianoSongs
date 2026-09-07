@@ -130,11 +130,15 @@ void MenuSessionAuthority::shutdown() noexcept {
 
 MenuSessionAuthority& menu_session_authority() noexcept { return g_authority; }
 MenuSessionSnapshot capture_ready_menu_session() noexcept { return g_authority.capture(false); }
+#ifndef FF7RP_LIST_CATALOG_SELFTEST
+// The list harness supplies its synthetic widget/session ingress, while using
+// the real authority methods above for Open/Close and generation transitions.
 MenuSessionSnapshot capture_menu_callback_session() noexcept { return g_authority.capture(true); }
 bool menu_session_matches(uint64_t generation, void* widget,
     const UObjectLiveHandle& identity, bool ready) noexcept {
     return g_authority.matches(generation, widget, identity, ready);
 }
+#endif
 bool menu_session_generation_exact(uint64_t generation, bool ready) noexcept {
     return generation != 0 && (ready ? g_ready_generation : g_active_generation)
         .load(std::memory_order_acquire) == generation;

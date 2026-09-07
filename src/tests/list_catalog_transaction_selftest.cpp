@@ -5,6 +5,8 @@
 #include "game/audio_sead.h"
 #include "game/progress.h"
 #include "game/title.h"
+#include "game/menu_focus_restore.h"
+#include "game/selection_audio_policy.h"
 
 #include <algorithm>
 #include <array>
@@ -30,6 +32,13 @@ int preference_reads = 0;
 int preferred_profile_index = 0;
 std::array<uint8_t, 8> trace{};
 size_t trace_count = 0;
+game::MenuSessionAuthority focus_sessions;
+void* focus_list = nullptr;
+std::vector<std::byte>* focus_widget = nullptr;
+std::vector<int> focus_history;
+int focused_row = -1;
+int focus_original_calls = 0;
+game::SelectionActivationReservationMachine focus_reservation;
 
 bool identity(void* object, const game::UObjectLiveHandle&) noexcept
 {
@@ -65,6 +74,100 @@ template<class T> T field(const std::vector<std::byte>& object, uintptr_t offset
     std::memcpy(&value, object.data() + offset, sizeof(value));
     return value;
 }
+
+void native_focus_restore(void* widget)
+{
+    if (!focus_widget || widget != focus_widget->data()) throw 1;
+    ++focus_original_calls;
+    // Native model: register even for the same index; no source deduplication.
+    focus_history.push_back(focused_row);
+    if (field<uint64_t>(*focus_widget, 0x478) != 0)
+        field(*focus_widget, 0x480, int32_t{0});
+    focused_row = field<int32_t>(*focus_widget, 0x480);
+}
+
+bool focus_open_close_regression(std::vector<std::byte>& widget)
+{
+    using namespace game;
+    std::vector<std::byte> list(0x800);
+    focus_list = list.data(); focus_widget = &widget;
+    for (int run = 0; run != 3; ++run) {
+        const auto opening = focus_sessions.begin_open(list.data(), list.data(), widget.data(),
+            {4, 40}, 0, MenuListOwnership::Managed);
+        if (!opening) return false;
+        MenuOpenFocusContext context{};
+        context.opening = opening;
+        const int before_calls = focus_original_calls;
+        // Actual Open orchestration: publication precedes its sole restore call.
+        {
+            MenuOpenFocusScope scope(&context);
+            field(list, 0x7d8, uint16_t{1});
+            field(widget, 0x478, uint64_t{123});
+            // Second run is same-index, third is different-index restoration.
+            field(widget, 0x480, int32_t{run == 1 ? 15 : 0});
+            intercept_menu_open_focus(widget.data(), true,
+                [&] { native_focus_restore(widget.data()); },
+                [&](MenuOpenFocusContext& frame) {
+                    return project_last_played_menu_focus(frame, &native_focus_restore);
+                });
+        }
+        if (focus_original_calls != before_calls + 1 || focus_history.size() != 1
+            || !context.original_entered || field<uint64_t>(widget, 0x478) != 123
+            || context.result != (run ? MenuFocusRestoreResult::Applied : MenuFocusRestoreResult::NotApplied)
+            || !finish_last_played_menu_focus(context)
+            || !focus_sessions.publish_ready(opening, 1, widget.data(), {4, 40})) return false;
+        // A deliberate subsequent custom choice must survive native Close.
+        registry().set_active_selection(run == 1 ? 16 : 15, 0);
+        const auto selected = registry().selection_snapshot();
+        if (!selected || !focus_reservation.reserve()) return false;
+        const auto closing = focus_sessions.begin_close(list.data());
+        while (!focus_history.empty()) {
+            focused_row = focus_history.back(); focus_history.pop_back();
+            // A duplicate source registration would restore an intermediate
+            // in-list target here. Model a conflicting notification, without
+            // claiming this exact revoke branch was traced in the failed run.
+            if (focused_row >= 0) {
+                focus_reservation.revoke(); registry().clear_active_selection();
+            }
+        }
+        SelectionActivationTerminalFacts terminal{};
+        terminal.reason = SelectionActivationTerminalReason::ListClose;
+        terminal.state = focus_reservation.state();
+        terminal.transfer_state = SelectionActivationTransferState::Pending;
+        terminal.handoff_confirmed = true;
+        terminal.active_session_exact = focus_sessions.matches(closing.generation,
+            widget.data(), {4, 40}, false);
+        terminal.widget_uobject_exact = terminal.reservation_generation_exact = true;
+        terminal.reservation_session_exact = terminal.reservation_context_exact = true;
+        terminal.reservation_bgm_controller_exact = terminal.reservation_bgm_identity_exact = true;
+        terminal.reservation_substrate_exact = true;
+        terminal.registry_selection_exact = registry().selection_matches(selected);
+        terminal.reservation_selection_exact = terminal.registry_selection_exact;
+        if (selection_activation_terminal_decision(terminal) != SelectionActivationTerminalDecision::Preserved
+            || !focus_sessions.finish_close(closing, 0x0100)) return false;
+        SelectionActivationClaimFacts claim{};
+        claim.reservation_state = focus_reservation.state();
+        claim.transfer_state = SelectionActivationTransferState::Preserved;
+        claim.handoff_confirmed = true;
+        claim.no_active_menu_session = !focus_sessions.capture(true);
+        claim.reservation_generation_nonzero = focus_reservation.generation() != 0;
+        claim.reservation_generation_not_wrapped = claim.menu_session_generation_nonzero = true;
+        claim.menu_session_generation_not_wrapped = claim.selection_generation_nonzero = true;
+        claim.selection_generation_not_wrapped = true;
+        claim.registry_selection_exact = registry().selection_matches(selected);
+        claim.bgm_controller_exact = claim.bgm_identity_exact = claim.caller_exact = true;
+        claim.wrapper_safe_read = claim.wrapper_exact = claim.substrate_exact_if_active = true;
+        if (selection_activation_claim_first_failure(claim) != SelectionActivationClaimFailure::None
+            || !focus_reservation.consume(focus_reservation.generation())) return false;
+        CustomContextToken token{selected.generation, 1, static_cast<uint64_t>(run + 1), 99};
+        if (!registry().publish_playback(selected, token) || !registry().revoke_playback(token)
+            || !registry().retire_cleanup_lease(token)
+            || !focus_reservation.retire_consumed(focus_reservation.generation())) return false;
+    }
+    registry().clear_last_played_focus(); registry().clear_active_selection();
+    focus_list = nullptr; focus_widget = nullptr;
+    return true;
+}
 } // namespace
 
 namespace ff7r::piano::game {
@@ -79,9 +182,18 @@ bool menu_session_generation_matches(uint64_t) noexcept { return false; }
 ProfileListCoordinator& profile_list_coordinator() { static ProfileListCoordinator value; return value; }
 bool ProfileListCoordinator::run_list_return(ListReturnCallbacks&, ProfileListCallbacks&) { return false; }
 bool ProfileListCoordinator::reconcile_open_focus(uint64_t, const SelectionSnapshot&) noexcept { return true; }
-bool synchronize_restored_menu_selection(void*, int, uint64_t) { return false; }
-bool menu_session_matches(uint64_t, void*, const UObjectLiveHandle&, bool) noexcept { return false; }
-bool resolve_piano_menu_widget_binding(void*, void*&, UObjectLiveHandle&) noexcept { return false; }
+bool synchronize_restored_menu_selection(void* widget, int index, uint64_t) {
+    if (!focus_widget || widget != focus_widget->data()) return false;
+    registry().set_active_selection(index, 0);
+    return registry().selection_snapshot().visible_index == index;
+}
+bool menu_session_matches(uint64_t generation, void* widget, const UObjectLiveHandle& live, bool ready) noexcept {
+    return focus_list && focus_sessions.matches(generation, widget, live, ready);
+}
+bool resolve_piano_menu_widget_binding(void* list, void*& widget, UObjectLiveHandle& live) noexcept {
+    if (!focus_list || list != focus_list) return false;
+    widget = expected_widget; live = {4, 40}; return true;
+}
 bool custom_audio_route_idle_for_menu_input() noexcept { return true; }
 bool validate_live_uobject_handle(void* object, const UObjectLiveHandle& identity) {
     return ::identity(object, identity);
@@ -316,6 +428,9 @@ int main()
     registry_commit.reset();
     ok &= require(game::list_catalog_selftest_matches_registry(widget.data()),
         "setup coherence rejected committed owner and registry identity");
+
+    if (!require(focus_open_close_regression(widget),
+            "single native Open registration did not preserve subsequent custom Close/claim")) return 1;
 
     std::vector<std::byte> item_widget(0x500);
     expected_item_widget = item_widget.data();

@@ -16,7 +16,7 @@ int fail(const char* message) { std::cerr << message << '\n'; return 1; }
 }
 
 int main() {
-    for (int fault = 0; fault != 6; ++fault) {
+    for (int fault = 0; fault != 8; ++fault) {
         uint64_t saved_name = 123;
         int32_t selected = 7;
         int calls = 0;
@@ -26,26 +26,66 @@ int main() {
             return true;
         };
         auto write = [&](ptrdiff_t offset, auto value) noexcept {
+            if (fault == 6 && offset == 0x478 && value == 0) return false;
+            if (fault == 7 && offset == 0x480) return false;
             if (offset == 0x478) {
                 if (fault == 4 && value == 123) return false;
                 saved_name = static_cast<uint64_t>(value);
             } else selected = static_cast<int32_t>(value);
             return true;
         };
-        const auto result = restore_menu_focus_fields(7, [&]() noexcept { return identity; }, read, write, [&] {
+        MenuOpenFocusContext context{};
+        context.opening.generation = 1;
+        context.opening.widget = &selected;
+        const auto original = [&] {
             ++calls;
-            if (saved_name || selected != 7) throw 1;
+            if (fault != 1 && (saved_name || selected != 7)) throw 1;
             if (fault == 2) throw 2;
             if (fault == 3) identity = false;
             if (fault == 5) saved_name = 999; // don't overwrite a new native owner
-        });
+        };
+        {
+            MenuOpenFocusScope scope(&context);
+            intercept_menu_open_focus(&selected, true, original, [&](MenuOpenFocusContext& frame) {
+                return restore_menu_focus_fields(7, [&]() noexcept { return identity; }, read, write,
+                    [&] { enter_menu_focus_original(frame, original); });
+            });
+        }
+        const auto result = context.result;
         if (fault == 0 && (result != MenuFocusRestoreResult::Applied || calls != 1 || saved_name != 123 || selected != 7))
             return fail("same-index focus restore failed");
-        if (fault == 1 && (result != MenuFocusRestoreResult::NotApplied || calls || saved_name != 123))
+        if (fault == 1 && (result != MenuFocusRestoreResult::NotApplied || calls != 1 || saved_name != 123))
             return fail("stale focus identity mutated native fields");
         if (fault >= 2 && result != MenuFocusRestoreResult::Failed) return fail("focus mutation failure accepted");
         if (fault == 2 && saved_name != 123) return fail("focus exception did not restore temporary name");
         if (fault == 5 && saved_name != 999) return fail("focus restore overwrote drifted native name");
+        if (fault >= 6 && (calls || context.original_entered)) return fail("preoriginal mutation failure forwarded unchecked native call");
+        if (fault < 6 && calls != 1) return fail("interceptor skipped or repeated original");
+    }
+    {
+        MenuOpenFocusContext outer{};
+        int widget = 0, other_widget = 0, calls = 0, projections = 0;
+        outer.opening.generation = 1; outer.opening.widget = &widget;
+        const auto original = [&] { ++calls; };
+        const auto project = [&](MenuOpenFocusContext&) { ++projections; return MenuFocusRestoreResult::NotApplied; };
+        intercept_menu_open_focus(&widget, true, original, project); // no TLS
+        {
+            MenuOpenFocusScope scope(&outer);
+            intercept_menu_open_focus(&widget, false, original, project); // wrong caller
+            intercept_menu_open_focus(&other_widget, true, original, project);
+            {
+                MenuOpenFocusScope nested(nullptr); // ineligible nested Open
+                intercept_menu_open_focus(&widget, true, original, project);
+            }
+            if (outer.consumed || current_menu_open_focus != &outer) return fail("nested stock Open consumed outer authority");
+            intercept_menu_open_focus(&widget, true, original, project); // no bookmark
+            intercept_menu_open_focus(&widget, true, original, project); // consumed scope is stock
+        }
+        if (calls != 6 || projections != 1 || current_menu_open_focus)
+            return fail("stock/nested/consumed forwarding contract");
+        MenuOpenFocusContext skipped{};
+        { MenuOpenFocusScope scope(&skipped); } // native Open guard skips restore
+        if (skipped.consumed || skipped.original_entered) return fail("skipped Open synthesized focus registration");
     }
     if (should_restore_list_after_cancel_close(false, true, true, 0x0100,
             MenuListOwnership::Managed)
@@ -134,16 +174,20 @@ int main() {
         if (originals != 6 || active_custom_rows != 0 || !pending)
             return fail("blocked initial-empty catalog did not forward vanilla/empty state");
     }
-    {
+    for (int failed = 0; failed != 5; ++failed) {
         std::string order;
         std::vector<MandatoryHookOperation> operations;
-        for (int i = 0; i < 4; ++i) operations.push_back({
-            [&, i] { order += "i" + std::to_string(i); return i != 2; },
+        for (int i = 0; i < 5; ++i) operations.push_back({
+            [&, i] { order += "i" + std::to_string(i); return i != failed; },
             [&, i] { order += "d" + std::to_string(i); return true; },
             [&, i] { order += "r" + std::to_string(i); return true; }});
+        std::string expected;
+        for (int i = 0; i <= failed; ++i) expected += "i" + std::to_string(i);
+        for (int i = failed; i >= 0; --i) expected += "d" + std::to_string(i);
+        for (int i = failed; i >= 0; --i) expected += "r" + std::to_string(i);
         if (install_mandatory_hook_transaction(operations)
                 != MandatoryHookTransactionResult::RolledBack
-            || order != "i0i1i2d2d1d0r2r1r0")
+            || order != expected)
             return fail("partial hook transaction rollback order failed");
     }
     {

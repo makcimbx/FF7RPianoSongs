@@ -119,6 +119,12 @@ justified. No RESULT hook or new rank-helper ABI is recommended yet.
 
 ## 3. Last-played focus: native first-FName match loses custom identity
 
+> **Correction after failed candidate `57ed12e`: the post-original helper-call
+> recommendation in historical steps 4–5 below is SUPERSEDED.** The helper also
+> registers native focus history; calling it again after native Open duplicates
+> that transaction. Use the single-call interception boundary in the final
+> section of this document. Do not implement the old “no extra detour” proposal.
+
 Native open calls row publication and then selection restoration:
 
 | Build | Open | Publish rows | Restore selection |
@@ -150,7 +156,7 @@ Fresh unique full-instruction entry windows (one match in each image):
 40 53 B8 30 00 00 00 E8 D8 76 45 FE 48 2B E0 8B 81 80 04 00 00 48 8B D9
 ```
 
-### Existing ownership and proposed integration boundary
+### Historical ownership proposal — steps 4–5 superseded
 
 These are design consequences of the recovered branches, not tested changes:
 
@@ -481,3 +487,206 @@ truncation. This is not the consuming RESULT `SetStringText` contract.
 call-site, ownership, and exact-signature level.** It is ready for the existing
 runtime worker's integration, not a claim that the presentation has been built
 or visually qualified. RESULT-star research is unchanged.
+
+## Focus regression correction: intercept the ONE native Open restore call
+
+### Scope, provenance, and confidence
+
+This read-only follow-up corrects the earlier post-Open proposal, not the
+accepted-playback bookmark or stable song/profile identity contract. Source
+references below describe failed candidate
+`57ed12e95abe3e787d1078399345d97ccc4d56ec`, compared with accepted base
+`0ce16f2208d86971201640643e033fc95dbf481f`. Only this evidence file was changed;
+no native hook was installed, no catalog/generated/production code changed,
+and no build, test, game run, or commit was performed.
+
+All new static calls explicitly selected the program; no address-delta mapping:
+
+| Build | Program / project | Fresh PE check (base `140000000`) |
+|---|---|---|
+| 1.005 | `ff7rebirth_.exe-9457d4` / `/ff7rebirth_.exe-1.005` | PE at +210: timestamp `6a16ced2`, image `099d9000`, checksum `0769ea6e` |
+| 1.004 | `ff7rebirth_.exe` / `/ff7rebirth_.exe-1.004` | PE at +220: timestamp `68fd6fde`, image `09bad000`, checksum `07877c99` |
+
+The exact executable SHA identities are those recorded at the start of this
+document/catalog; the complete imported executable hashes were not freshly
+computed. Complete function-scoped MOV/CALL searches each covered all 56 Open
+instructions without truncation. Caller bytes were read directly, then each
+full pattern was searched image-wide and had exactly one match.
+
+Failed session `20260907T085725Z-ef9b9fc8976c` has log SHA256
+`8a9cb4910b8961b9f0f249f1518da41c26d61280e8a719bf212bafb7b23ab365`.
+First custom admission/handoff succeeded (979–989), playback published
+(1019–1020), completed, and cleanup resolved (1587–1597). After bookmarked reopen,
+Multi Difficulty Manual Test reserved and confirmed (1627–1628), but Close
+already saw an erased reservation (1629), and persistent admission failed
+(1634), followed by enabled native fallback (1641 onward). Nexus and ZZ Check 01
+repeat this pattern. The lead finalized Rollback; this research changes no
+installed artifact or session disposition.
+
+The independently recovered 1.005 native defect is **duplicate focus-history
+registration**, not merely a redundant index write:
+`Open -> 1439B0FF0 -> 140FE3BBC/140FE3D44 -> 1414A481C -> 14083C3FC`.
+The last helper appends a source-widget/previous-focus record (stride28, native
+header40/count48/capacity4C), without same-source deduplication. Native Close
+uses `1439A1AF4 -> 1416995C8 -> 14083BF7C` to remove matching records and restore
+intermediate previous focus. Candidate `menu_session_authority.cpp:171,179`
+executed original Open and then `list_patch.cpp:848–853` called restore again.
+Restoring only widget+478 did not undo that second native focus transaction.
+
+This explains the new side effect and its first-play/bookmarked-reopen boundary.
+**The exact last reflected notification/getter/revoke call inside failing Close
+was not recorded.** Do not promote that unobserved last hop into a captured
+trace. The expanded focus-manager chain was recovered on 1.005; this pass proves
+the corresponding single native Open call boundary on both builds without
+claiming a second focus-manager audit or corrected gameplay.
+
+### Exact catalog candidates and ABI
+
+Keep existing `piano_list_restore_selection` / `PianoListRestoreSelection`
+addresses and complete 24-byte entry signatures from section 3. Change its
+integration from an additional callable invocation to ONE entry hook owned by
+the existing menu-session module. No mid-function patch, register bridge, or
+global focus-manager hook is needed. Native ABI remains `void(widget*)`, RCX
+the music-list widget; call its trampoline with that same widget.
+
+Suggested new signature-only authority ID:
+`piano_list_restore_selection_caller` / `PianoListRestoreSelectionCaller`.
+It identifies a caller WINDOW, not the helper entry and not a patch site:
+
+| Build | Window RVA | Restore CALL RVA | Helper RVA | Exact return RVA |
+|---|---|---|---|---|
+| 1.005 | `039b8cae` | `039b8cc1` | `039b0ff0` | **`039b8cc6`** |
+| 1.004 | `03c5f682` | `03c5f695` | `03c5784c` | **`03c5f69a`** |
+
+Both windows are 24 bytes / six complete instructions, all bytes exact
+(mask `xxxxxxxxxxxxxxxxxxxxxxxx`). Restore CALL is window+13 hex;
+**return is window+18 hex**, including the five-byte CALL:
+
+```text
+1.005 @1439B8CAE (one image-wide match)
+48 8B C8 E8 DE 82 FF FF 48 8B CF E8 3E BD E7 FC 48 8B C8 E8 2A 83 FF FF
+
+1.004 @143C5F682 (one image-wide match)
+48 8B C8 E8 66 81 FF FF 48 8B CF E8 06 63 CA FD 48 8B C8 E8 B2 81 FF FF
+```
+
+Decoded sequence on each build:
+
+```text
+MOV RCX,RAX
+CALL publish_rows            ; 1439B0F94 / 143C577F0
+MOV RCX,RDI                  ; RDI = &list_member.weak_widget (+7A0)
+CALL resolve_weak_widget     ; 1408349FC / 141905998
+MOV RCX,RAX                  ; exact native widget argument
+CALL restore_selection      ; the ONLY direct restore call in this Open
+```
+
+There is no loop or second restore call in either Open. Its guard can skip the
+whole body when the list is invalid/already active; **do not synthesize a missing
+restore call after return**. An unexpected nested call must not consume the
+outer frame's projection; it retains ordinary native forwarding and is not
+evidence that another custom restore should be attempted.
+
+### Publication, active state, and native remainder
+
+Before the signature window, Open writes list-member+7D8 = `0001`
+(1.005 `1439B8C4F`; 1.004 `143C5F623`), resolves list-member+7A0, and writes its
+original incoming packed FName into widget+478 (`1439B8CA2` / `143C5F676`).
+`publish_rows` has returned before the intercepted CALL. It validates the child
+weak handle widget+3C8, publishes widget+420 as native row count, and invokes
+native row refresh:
+
+| Build | Count setter | Row refresh |
+|---|---|---|
+| 1.005 | `1409703C4` | `1409703F0` |
+| 1.004 | `1410EA154` | `1410E5A10` |
+
+This proves ordering, **not that every virtualized item exists** or that a void
+publisher cannot skip an invalid child. The current managed array must already
+be published and owned at interception: validate the existing `Opening` session,
+live widget identity, catalog storage/revision, and exact +418/+420/+424 managed
+array tuple with the existing list owner (`list_patch.cpp:816–846`). Do not treat
+the call address alone as publication success or patch a raw stock/unowned array.
+Target row must resolve by current song ID/difficulty and lie in that exact
+managed custom range. No pre-Open index seeding assumption is required.
+
+After the restore return, neither Open directly writes widget+478/+480 nor
+publishes rows/calls restore again. The remaining calls are:
+
+- 1.005 `1408A5B8C -> 1427C60F8 -> 140FE2E80`, and
+  `141176618 -> 141167124 -> 141167208`.
+- 1.004 `140806940 -> 142B3E818 -> 141550C38`, and
+  `140DC7F60 -> 140DCA0BC -> 140DCA260`.
+
+The first branch sets manager mask bit1 at+50 and, on changed enabled state,
+updates input state through `140FE32E4` / `141550D40` (pressed-key state and
+input mode). The second builds and forwards a named native request with unit
+float parameters. Neither inspected branch performs another list restore or
+directly writes this list's selection. They are not a second focus transaction.
+This is not a guarantee against arbitrary callbacks/input/object destruction:
+**revalidate final widget/session/array/selected index after full original Open
+returns, before Ready**. If it drifted, do not repair it by calling restore again.
+
+### Corrected existing-owner orchestration
+
+1. Existing Open owner adopts the catalog, establishes `Opening`, and begins the
+   existing profile-list session. Push a nested-call-safe RAII TLS frame around
+   **original Open only**. It carries owning session/catalog/target context and
+   a local invocation/outcome flag, not a new registry, lifecycle epoch or queue.
+   A nested/ineligible Open must shadow, not accidentally inherit, outer authority.
+2. At restore ENTRY, capture `_ReturnAddress()` there (not in a downstream C++
+   helper). Require exact build-specific return above, the current non-consumed
+   Open frame, RCX == its exact live widget, and the established Opening/list/
+   managed-array/target checks. Claim that frame before calling native code.
+   Ordinary unrelated calls, no bookmark, removed target, or failed pre-mutation
+   eligibility forward their original helper exactly once without projection.
+3. Reuse `restore_last_played_menu_focus`'s managed-list/identity checks and
+   `restore_menu_focus_fields` journal **as interceptor action**: save +478,
+   temporarily set it to zero, set +480 to the resolved target, and invoke the
+   **helper trampoline once**, not its hooked public address. Native selection,
+   synchronous delegates, and the sole focus-history registration run in their
+   original position inside Open. Restore only temporary +478 while exact
+   ownership still holds; +480 is the intentional native selection.
+4. The current bool return from `restore_last_played_menu_focus` is not an
+   original-call contract: several `true`/NotApplied paths never invoke its
+   supplied callback. The adapter must explicitly distinguish “not applied,
+   original not entered” from “original entered/applied/failed”, or track entry
+   in the supplied closure. Do not skip the sole stock call on an early true
+   return, and do not call it a second time after an applied/failed invocation.
+   Post-mutation ownership/restoration failure uses the existing terminal menu
+   path, not speculative native retry or a claim of successful restoration.
+5. Reuse existing selected-index/detail synchronization and coordinator intent
+   reconciliation, including same-index/no-delegate handling. No native call
+   while registry/menu/list locks are held. Keep descriptor storage pinned only
+   for the scoped operation; retain no native widget ownership beyond the
+   existing session. Restore temporary fields before leaving the interceptor.
+6. After original Open returns, perform final identity/selection/outcome checks,
+   publish Ready, then drain the existing deferred direction. The post-Open
+   phase **must not call the restore helper**. A skipped native Open or failed
+   projection is not repaired with a synthetic extra focus registration.
+
+The existing `RawRvaHook` entry/trampoline mechanism suffices; install/disable/
+rollback/drain remain owned by the existing menu-session hook transaction.
+Catalog changes are the existing helper's hook ownership/install policy plus
+the two signature-only caller windows above; generated data is regenerated,
+not hand-edited. Unknown/signature-mismatched builds do not acquire custom
+projection authority. No selection-admission guard weakening, global focus
+stack edits, forced reservation replay, or audio-lifecycle changes are justified.
+
+### Required production-used regression and nonclaims
+
+Exercise the actual Open/interceptor orchestration, not only the field-journal
+template: first no-bookmark Open; accepted playback; bookmarked same-index and
+different-index reopen; one native history registration; selection of a DIFFERENT
+custom song; Close; preserved reservation; subsequent custom persistent claim.
+Also cover unrelated caller/no-TLS, nested frames, native-Open skipped body,
+pre-mutation fallback, post-mutation failure without a second native call,
+catalog/profile reorder/removal, and immediate input before Ready. Assert total
+helper/trampoline calls across original Open plus interceptor, not a mock's
+local callback count in isolation.
+
+**Disposition: single-call boundary is implementation-ready on both exact
+builds at static ABI/caller/order level.** The failed candidate's observed last
+revoke branch remains untraced, and this correction has not been built or
+gameplay-qualified. A future authorized run must demonstrate the second custom
+admission/audio publication after reopening; loader Passed is insufficient.

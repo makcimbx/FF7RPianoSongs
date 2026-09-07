@@ -83,8 +83,11 @@ void finalize_prepared_piano_list_catalog(
     PreparedPianoListCatalog& prepared) noexcept;
 bool piano_list_catalog_terminal_failure() noexcept;
 // False after any focus mutation failure: the caller must not publish Ready.
-bool restore_last_played_menu_focus(const MenuSessionSnapshot& opening,
+struct MenuOpenFocusContext;
+enum class MenuFocusRestoreResult;
+MenuFocusRestoreResult project_last_played_menu_focus(MenuOpenFocusContext& context,
     void (*restore_selection)(void*)) noexcept;
+bool finish_last_played_menu_focus(const MenuOpenFocusContext& context) noexcept;
 PianoListRepublishState piano_list_catalog_republish_state() noexcept;
 PianoListOwnerState piano_list_catalog_owner_state(
     void* widget, const UObjectLiveHandle& widget_identity) noexcept;

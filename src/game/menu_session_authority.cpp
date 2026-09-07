@@ -1,6 +1,7 @@
 #include "game/menu_session_authority.h"
 #include "game/catalog_adoption.h"
 #include "game/mandatory_hook_transaction.h"
+#include "game/menu_focus_restore.h"
 
 #include "core/logging.h"
 #include "core/pe_image.h"
@@ -39,6 +40,7 @@ core::RawRvaHook g_open_hook;
 core::RawRvaHook g_close_hook;
 core::RawRvaHook g_exit_hook;
 core::RawRvaHook g_destructor_hook;
+core::RawRvaHook g_restore_hook;
 
 bool resolve_list_identity(void* list, void*& widget, UObjectLiveHandle& identity) noexcept {
     widget = nullptr;
@@ -90,8 +92,9 @@ void log_list_close(const char* classification, const bool before_read,
 bool signature_matches(HMODULE module, const char* id) noexcept {
     const auto* spec = find_rva_signature(id);
     if (!module || !spec || spec->expected_prologue.empty()) return false;
-    return std::memcmp(reinterpret_cast<const uint8_t*>(module) + spec->rva,
-        spec->expected_prologue.data(), spec->expected_prologue.size()) == 0;
+    const auto image = core::image_range(module);
+    return spec->rva < image.size && spec->expected_prologue.size() <= image.size - spec->rva
+        && core::bytes_equal(image.base + spec->rva, spec->expected_prologue);
 }
 
 bool install_one(const HookInstallContext& context, const char* id, void* detour,
@@ -106,7 +109,22 @@ bool install_one(const HookInstallContext& context, const char* id, void* detour
     return false;
 }
 
+void __fastcall restore_selection_detour(void* widget) noexcept {
+    const uintptr_t ret = reinterpret_cast<uintptr_t>(_ReturnAddress());
+    auto original = g_restore_selection;
+    if (!original) return;
+    auto lease = non_audio_hook_gate().try_enter();
+    const bool exact = lease && g_module && ret == reinterpret_cast<uintptr_t>(g_module)
+        + rva::PianoListRestoreSelectionCaller + 0x18;
+    intercept_menu_open_focus(widget, exact, [&] { original(widget); },
+        [&](MenuOpenFocusContext& context) {
+            return project_last_played_menu_focus(context, original);
+        });
+}
+
 void __fastcall open_detour(void* list, uint64_t selected) noexcept {
+    // Every entry shadows outer authority, including unrelated/declined Opens.
+    MenuOpenFocusScope ineligible_scope(nullptr);
     auto original = g_original_open;
     if (!original) return;
     const uintptr_t ret = reinterpret_cast<uintptr_t>(_ReturnAddress());
@@ -168,7 +186,16 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
         }
         if (opening) profile_list_coordinator().begin_session(opening.generation);
     } catch (...) {}
-    try { original(list, selected); } catch (...) {
+    MenuOpenFocusContext focus{};
+    focus.opening = opening;
+    try {
+        MenuOpenFocusScope scope(&focus);
+        original(list, selected);
+    } catch (...) {
+        if (focus.result != MenuFocusRestoreResult::NotApplied) {
+            focus.result = MenuFocusRestoreResult::Failed;
+            (void)finish_last_played_menu_focus(focus);
+        }
         if (opening) { profile_list_coordinator().retire_session(opening.generation); menu_session_authority().retire(opening.generation); }
         return;
     }
@@ -176,10 +203,21 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
     bool ready = false;
     try {
         uint16_t word = 0; void* widget = nullptr; UObjectLiveHandle identity{};
-        ready = restore_last_played_menu_focus(opening, g_restore_selection)
+        ready = finish_last_played_menu_focus(focus)
             && read_active_word(list, word) && resolve_piano_menu_widget_binding(list, widget, identity)
             && menu_session_authority().publish_ready(opening, word, widget, identity);
     } catch (...) {}
+    if (focus.consumed) {
+        try {
+            std::ostringstream out;
+            out << "[menu_session] focus_interception generation=" << opening.generation
+                << " status=" << (focus.result == MenuFocusRestoreResult::Applied ? "applied"
+                    : focus.result == MenuFocusRestoreResult::NotApplied ? "native" : "failed")
+                << " original_calls=" << (focus.original_entered ? 1 : 0)
+                << " ready=" << ready;
+            core::log(ready ? core::LogLevel::Info : core::LogLevel::Error, out.str());
+        } catch (...) {}
+    }
     if (!ready) {
         profile_list_coordinator().retire_session(opening.generation);
         (void)menu_session_authority().retire(opening.generation);
@@ -290,10 +328,9 @@ bool install_menu_session_hooks(const HookInstallContext& context) {
     g_module = context.exe_module;
     if (!signature_matches(context.exe_module, "piano_menu_list_open_call")
         || !signature_matches(context.exe_module, "piano_menu_list_cancel_close_call")
-        || !signature_matches(context.exe_module, "piano_list_restore_selection")) return false;
-    g_restore_selection = reinterpret_cast<ControllerFn>(
-        reinterpret_cast<uintptr_t>(context.exe_module) + rva::PianoListRestoreSelection);
-    std::array<MandatoryHookOperation, 4> operations{{
+        || !signature_matches(context.exe_module, "piano_list_restore_selection_caller")) return false;
+    std::array<MandatoryHookOperation, 5> operations{{
+        {[&] { return install_one(context, "piano_list_restore_selection", reinterpret_cast<void*>(&restore_selection_detour), reinterpret_cast<void**>(&g_restore_selection), g_restore_hook); }, [&] { return g_restore_hook.disable(); }, [&] { return g_restore_hook.remove(); }},
         {[&] { return install_one(context, "piano_menu_list_open", reinterpret_cast<void*>(&open_detour), reinterpret_cast<void**>(&g_original_open), g_open_hook); }, [&] { return g_open_hook.disable(); }, [&] { return g_open_hook.remove(); }},
         {[&] { return install_one(context, "piano_menu_list_cancel_close", reinterpret_cast<void*>(&close_detour), reinterpret_cast<void**>(&g_original_close), g_close_hook); }, [&] { return g_close_hook.disable(); }, [&] { return g_close_hook.remove(); }},
         {[&] { return install_one(context, "piano_menu_state5_exit", reinterpret_cast<void*>(&exit_detour), reinterpret_cast<void**>(&g_original_exit), g_exit_hook); }, [&] { return g_exit_hook.disable(); }, [&] { return g_exit_hook.remove(); }},
@@ -315,6 +352,7 @@ core::HookShutdownResult shutdown_menu_session() {
     return core::shutdown_gated_hooks(non_audio_hook_gate(), {
         core::teardown_operation(g_destructor_hook), core::teardown_operation(g_exit_hook),
         core::teardown_operation(g_close_hook), core::teardown_operation(g_open_hook),
+        core::teardown_operation(g_restore_hook),
     }, [] { return true; }, [] {
         menu_session_authority().shutdown(); g_restore_selection = nullptr;
         g_original_destructor = nullptr; g_original_exit = nullptr;

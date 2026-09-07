@@ -97,6 +97,7 @@ inline constexpr uintptr_t PianoPageNoSelectionContinuation = 0x039b050b;
 inline constexpr uintptr_t WeakObjectResolver = 0x008349fc;
 inline constexpr uintptr_t WidgetVisibilitySetter = 0x00889f6c;
 inline constexpr uintptr_t PianoListRestoreSelection = 0x039b0ff0;
+inline constexpr uintptr_t PianoListRestoreSelectionCaller = 0x039b8cae;
 inline constexpr uintptr_t ScoreInfoListItemCall = 0x039a8ceb;
 
 } // namespace ff7r::piano::game::rva

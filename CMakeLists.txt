@@ -353,6 +353,7 @@ ff7rp_use_generated_catalog(piano_page_selection_guard_selftest)
 add_executable(list_catalog_transaction_selftest
     src/tests/list_catalog_transaction_selftest.cpp
     src/game/list_patch.cpp
+    src/game/menu_session_state.cpp
     src/game/song_registry.cpp
     src/game/native_array_publication.cpp
     src/core/hooks.cpp

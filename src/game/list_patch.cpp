@@ -806,53 +806,84 @@ bool piano_list_catalog_terminal_failure() noexcept
     return g_catalog_terminal_failure.load(std::memory_order_acquire);
 }
 
-bool restore_last_played_menu_focus(const MenuSessionSnapshot& opening,
+namespace {
+bool menu_focus_identity_exact(const MenuOpenFocusContext& context) noexcept
+{
+    const auto& opening = context.opening;
+    RegistrySnapshot current;
+    PianoListArrayView live{};
+    uint16_t word = 0;
+    uint64_t row_name = 0;
+    void* widget = nullptr;
+    UObjectLiveHandle identity{};
+    return context.target
+        && menu_session_matches(opening.generation, opening.widget, opening.widget_identity, false)
+        && validate_list_identity(opening.widget, opening.widget_identity)
+        && core::safe_read_field(opening.list, 0x7d8, word) && word == 1
+        && resolve_piano_menu_widget_binding(opening.list, widget, identity)
+        && widget == opening.widget && same_list_identity(identity, opening.widget_identity)
+        && registry().try_registry_snapshot(current)
+        && current.storage == context.catalog.storage
+        && current.catalog_revision == context.catalog.catalog_revision
+        && read_music_list_array(opening.widget, live)
+        && live.data == context.array_data && live.count == context.array_count
+        && live.capacity == context.array_capacity
+        && core::safe_read_field(live.data,
+            static_cast<ptrdiff_t>(context.target.visible_index) * sizeof(PianoListEntry), row_name)
+        && row_name == context.target_name;
+}
+}
+
+MenuFocusRestoreResult project_last_played_menu_focus(MenuOpenFocusContext& context,
     void (*restore_selection)(void*)) noexcept
 {
     try {
+        const auto& opening = context.opening;
         if (!restore_selection || opening.phase != MenuSessionPhase::Opening
             || !menu_session_matches(opening.generation, opening.widget,
-                opening.widget_identity, false)) return true;
+                opening.widget_identity, false)) return MenuFocusRestoreResult::NotApplied;
         const auto catalog = registry().registry_snapshot();
         if (piano_list_catalog_owner_state(opening.widget, opening.widget_identity)
-            != PianoListOwnerState::Managed) return !piano_list_catalog_terminal_failure();
+            != PianoListOwnerState::Managed) return piano_list_catalog_terminal_failure()
+                ? MenuFocusRestoreResult::Failed : MenuFocusRestoreResult::NotApplied;
         PianoListArrayView array{};
-        if (!read_music_list_array(opening.widget, array)) return true;
+        if (!read_music_list_array(opening.widget, array)) return MenuFocusRestoreResult::NotApplied;
         const auto target = registry().prepare_last_played_focus();
-        if (!target) return true;
+        if (!target) return MenuFocusRestoreResult::NotApplied;
         int32_t first_custom = 0;
         if (!piano_list_first_custom_row(opening.widget, opening.widget_identity, first_custom)
             || target.storage != catalog.storage || target.visible_index < first_custom
-            || target.visible_index >= array.count) return true;
+            || target.visible_index >= array.count) return MenuFocusRestoreResult::NotApplied;
         uint64_t target_name = 0;
         const ptrdiff_t row_offset = static_cast<ptrdiff_t>(target.visible_index) * sizeof(PianoListEntry);
-        if (!core::safe_read_field(array.data, row_offset, target_name)) return true;
-        const auto exact = [&]() noexcept {
-            RegistrySnapshot current;
-            PianoListArrayView live{};
-            uint16_t word = 0;
-            uint64_t row_name = 0;
-            void* widget = nullptr;
-            UObjectLiveHandle identity{};
-            return menu_session_matches(opening.generation, opening.widget, opening.widget_identity, false)
-                && validate_list_identity(opening.widget, opening.widget_identity)
-                && core::safe_read_field(opening.list, 0x7d8, word) && word == 1
-                && resolve_piano_menu_widget_binding(opening.list, widget, identity)
-                && widget == opening.widget && same_list_identity(identity, opening.widget_identity)
-                && registry().try_registry_snapshot(current)
-                && current.storage == catalog.storage && current.catalog_revision == catalog.catalog_revision
-                && read_music_list_array(opening.widget, live)
-                && live.data == array.data && live.count == array.count && live.capacity == array.capacity
-                && core::safe_read_field(live.data, row_offset, row_name) && row_name == target_name;
-        };
-        const auto result = restore_menu_focus_fields(target.visible_index, exact,
+        if (!core::safe_read_field(array.data, row_offset, target_name)) return MenuFocusRestoreResult::NotApplied;
+        context.catalog = catalog;
+        context.target = target;
+        context.array_data = array.data;
+        context.array_count = array.count;
+        context.array_capacity = array.capacity;
+        context.target_name = target_name;
+        return restore_menu_focus_fields(target.visible_index,
+            [&]() noexcept { return menu_focus_identity_exact(context); },
             [&](ptrdiff_t offset, auto& value) noexcept {
                 return core::safe_read_field(opening.widget, offset, value);
             }, [&](ptrdiff_t offset, auto value) noexcept {
                 return core::safe_write_field(opening.widget, offset, value);
-            }, [&] { restore_selection(opening.widget); });
-        if (result == MenuFocusRestoreResult::NotApplied) return true;
-        bool synchronized = result == MenuFocusRestoreResult::Applied && exact();
+            }, [&] { enter_menu_focus_original(context, [&] { restore_selection(opening.widget); }); });
+    } catch (...) { return MenuFocusRestoreResult::Failed; }
+}
+
+bool finish_last_played_menu_focus(const MenuOpenFocusContext& context) noexcept
+{
+    try {
+        if (context.result == MenuFocusRestoreResult::NotApplied) return true;
+        const auto& opening = context.opening;
+        const auto& target = context.target;
+        int32_t selected = -1;
+        bool synchronized = context.result == MenuFocusRestoreResult::Applied
+            && context.original_entered && menu_focus_identity_exact(context)
+            && core::safe_read_field(opening.widget, 0x480, selected)
+            && selected == target.visible_index;
         if (synchronized) {
             synchronized = synchronize_restored_menu_selection(opening.widget,
                 target.visible_index, target.generation);
@@ -871,7 +902,7 @@ bool restore_last_played_menu_focus(const MenuSessionSnapshot& opening,
             // Its normal setup callback consumes the restored profile when it
             // is realized; absence alone is not a native mutation failure.
         }
-        if (!synchronized || !exact()) {
+        if (!synchronized || !menu_focus_identity_exact(context)) {
             g_catalog_terminal_failure.store(true, std::memory_order_release);
             core::log(core::LogLevel::Error,
                 "[menu_session] focus_restore status=failed ownership=retained ready=blocked");
