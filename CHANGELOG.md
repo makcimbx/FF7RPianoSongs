@@ -2,15 +2,34 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-07
+
+- Improved MIDI reduction to favor musically prominent source notes over extra ease among
+  equally close density targets that fit the difficulty limits. Bounded alternative notes
+  now compete during final selection instead of being discarded near a preliminary melody.
+  Their original onset timing is preserved; difficulty and chart-size limits are not raised.
+- Enabled automatic long-chart support on compatible 1.004 and 1.005 builds, up to 8192
+  rows/events per profile after exact-build validation. Unsupported charts are rejected without
+  truncation; long-chart input and feature combinations still have limited in-game coverage.
+- Made failed required long-chart expansion withdraw the custom performance rather than leave
+  a shortened chart playable. A rejected preflight restores and cancels preparation before any
+  stock expansion; unresolved mutation remains blocked until owned cleanup.
+- Fixed warm-cache reuse for a valid automatic-note group beginning at the last row of the
+  512-row transport prefix, including additional authored profiles. Group topology is validated
+  on the complete chart instead of treating the prefix as a standalone chart.
+- Fixed authored extended-chart caches incorrectly applying the MIDI-only minimum lead-in
+  to retained rows. Explicit chart timing remains unchanged.
+- Added independent left/right note-value symbols, exact supported MIDI note values and
+  key-signature-aware spelling, plus a complete resolved-chart export for manual authoring.
 - Corrected the song list's full selected-profile input count for long charts and its difficulty
   symbols: one per level, capped at six, with the exact number still in the title.
 - Restored the last played custom song and difficulty when reopening the list, using song and
-  difficulty identities rather than old row indices. These UI changes still need in-game verification;
-  the separately reported S-rank result glyph is not fixed by this batch.
+  difficulty identities rather than old row indices. The separately reported S-rank result glyph
+  is not fixed by this release.
 - Corrected the return-focus implementation calling the game's focus-registration routine twice.
   The failed UI test could start vanilla music and charts after the first custom song; restoration
-  now uses the single normal call during menu opening. Repeat custom-song playback still needs
-  a new in-game check; the previous working build remains installed meanwhile.
+  now uses the single normal call during menu opening. The user reported successful repeat
+  custom-song playback on the subsequent 1.005 development builds, not the packaged artifacts.
 - Made generated difficulty density and growth targets preferences rather than rejection quotas.
   Bounded selection seeks a valid full-song chart without requiring the preferred number of inputs;
   actual difficulty-load, source-note and chart-size checks remain in force.
@@ -23,7 +42,8 @@
 - Added song-local chord compositions for explicit charts on games 1.004 and 1.005: keep the original chord
   input while replacing its sound list, and apply `ignore_sound` to that replacement. Definitions
   are shared across the song's difficulties; other songs and free-play sounds remain unchanged.
-  Replacement lists cannot exceed the stock chord's sound count. In-game qualification is pending.
+  Replacement lists cannot exceed the stock chord's sound count. A limited 1.005 development
+  auditory/count/completion check passed; full input and transition qualification remains incomplete.
 - Enabled the same chord-composition mechanism on 1.004 using independently checked native calls
   and structures. Existing songs with custom compositions rebuild their cache once; other songs
   are unaffected. Testing on 1.005 does not establish in-game behavior on 1.004.
@@ -32,10 +52,14 @@
   Invalid boundary variants are now rejected or avoided during generation; affected caches rebuild.
   C-flat alternate inputs remain unsupported; no matching entry exists in that table.
 - Fixed ordinary charts containing simultaneous right-hand notes and left-hand chords being
-  limited by the number of JSON rows instead of the number of playable events. Focused in-game
-  verification of the fix is still pending.
+  limited by the number of JSON rows instead of the number of playable events. A focused 1.005
+  development fixture retained and scored all seven events from five rows.
 - Reworked the bundled song guide with a beginner path, complete gameplay examples, clearer MIDI
   timing controls, and instructions for editing generated charts. Kept the full field and chord reference.
+- Affected song caches rebuild automatically after updating; manual cache deletion is not required.
+- Release limitations: exact packaged-artifact gameplay is not newly qualified on either game build;
+  1.004 and broader sound/input/lifecycle scenarios remain incompletely tested. The product owner
+  explicitly accepted those limits for 0.2.0; successful automated checks do not replace them.
 
 ## 0.1.3 - 2026-09-01
 

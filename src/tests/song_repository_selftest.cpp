@@ -1617,6 +1617,79 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_boundary_group_warm_cache(const std::filesystem::path& root) {
+    for (const bool non_root_profile : {false, true}) {
+        const auto directory = root / (non_root_profile ? "BoundaryGroupNonRoot" : "BoundaryGroupRoot");
+        std::filesystem::create_directories(directory);
+        if (!write_silent_wav(directory / "song.wav", 1.0)) return fail("boundary group audio setup failed");
+        {
+            std::ofstream out(directory / "song.json", std::ios::binary | std::ios::trunc);
+            out << R"({"schema":"v2","title":"Boundary Group","bpm":120,"loudness_normalization":false,)";
+            if (non_root_profile) {
+                out << R"("profiles":[{"difficulty":0,"notes":[{"beat":0,"duration_beats":0.125,"pitch":"D4"}]},{"difficulty":3,)";
+            }
+            out << R"("notes":[)";
+            out.precision(std::numeric_limits<double>::max_digits10);
+            for (std::size_t row = 0; row < 513u; ++row) {
+                if (row != 0) out << ',';
+                // Distinct exact binary fractions avoid duplicate-source rejection
+                // while keeping the complete boundary fixture within one second.
+                out << R"({"beat":)" << (row / 512.0)
+                    << R"(,"duration_beats":0.125,"pitch":"C4")";
+                if (row >= 511u) out << R"(,"group_index":7)";
+                out << '}';
+            }
+            out << (non_root_profile ? "]}]}" : "]}");
+            if (!out) return fail("boundary group JSON setup failed");
+        }
+        ff7rp::pipeline::LoadedSong cold;
+        auto status = ff7rp::pipeline::load_song_directory(directory.string(), &cold);
+        const std::size_t index = non_root_profile ? 1u : 0u;
+        if (!status.ok() || cold.loaded_from_runtime_cache || cold.difficulty_profiles.size() != index + 1u) {
+            return fail("boundary group cold preparation failed: " + status.message);
+        }
+        const auto runtime_path = directory / ".cache" / "runtime.bin";
+        const auto runtime_bytes = read_binary(runtime_path);
+        const auto sidecar_bytes = read_binary(cold.cache_sidecar_path);
+        const auto manifest = read_text(cold.cache_manifest_path);
+        const auto resolved_path = ff7rp::pipeline::resolved_song_json_path(directory.string());
+        const auto resolved = read_text(resolved_path);
+        ff7rp::pipeline::LoadedSong warm;
+        std::string warm_trace;
+        status = ff7rp::pipeline::load_song_directory(directory.string(), &warm,
+            [&](const char* stage) {
+                if (!warm_trace.empty()) warm_trace += ',';
+                warm_trace += stage;
+            }, false);
+        if (!status.ok() || !warm.loaded_from_runtime_cache) {
+            return fail(std::string(non_root_profile ? "non-root" : "root") +
+                " boundary profile warm cache rejected: " + status.message + "; trace=" + warm_trace);
+        }
+        if (warm.cache_key != cold.cache_key ||
+            warm.difficulty_profiles.size() != cold.difficulty_profiles.size() ||
+            runtime_bytes.empty() || read_binary(runtime_path) != runtime_bytes ||
+            read_binary(cold.cache_sidecar_path) != sidecar_bytes ||
+            read_text(cold.cache_manifest_path) != manifest || read_text(resolved_path) != resolved) {
+            return fail(non_root_profile ? "non-root boundary profile did not reuse unchanged warm artifacts" :
+                "root boundary profile did not reuse unchanged warm artifacts");
+        }
+        const auto& profile = warm.difficulty_profiles[index];
+        ff7rp::pipeline::ChartEventPlan plan;
+        if (!ff7rp::pipeline::derive_profile_event_plan(profile, &plan) ||
+            plan.source_row_count != 513u || plan.native_prefix_event_count != 512u ||
+            plan.native_event_count != 513u || plan.required_action_count != 512u ||
+            profile.config.notes.back().group_index != 7u ||
+            profile.diagnostic_chart.tail_rows.front().source.group_index != 7u ||
+            !configs_equal(profile.config, cold.difficulty_profiles[index].config) ||
+            !charts_equal(profile.chart, cold.difficulty_profiles[index].chart) ||
+            !ff7rp::pipeline::diagnostic_charts_equal(profile.diagnostic_chart,
+                cold.difficulty_profiles[index].diagnostic_chart)) {
+            return fail("boundary group warm profile changed complete source/compiled topology");
+        }
+    }
+    return 0;
+}
+
 int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& root) {
     const std::filesystem::path song_directory = root / "ExtendedChartDiagnostic520";
     std::filesystem::create_directories(song_directory);
@@ -1625,6 +1698,7 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
         return fail("failed to create exactly-520 authored extended fixture");
     }
     ff7rp::pipeline::configure_chart_row_limit(true, true);
+    if (test_boundary_group_warm_cache(root) != 0) return 1;
     ff7rp::pipeline::LoadedSong generated;
     auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &generated);
     if (!status.ok() || generated.loaded_from_runtime_cache || generated.config.notes.size() != 512u ||

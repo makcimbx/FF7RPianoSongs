@@ -966,7 +966,7 @@ bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error)
     return true;
 }
 
-void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transaction,
+bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transaction,
     const SelectionAudioAdmissionAuthority& authority,
     void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
     int32_t diagnostic_target_count = 0;
@@ -979,10 +979,10 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
             || !diagnostic_profile->extended_chart_tail_notes.empty()
             || diagnostic_profile->diagnostic_tail_rows != 0));
     const auto reject = [&](const char* reason,
-        const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) noexcept {
+         const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) noexcept {
         // Menu/count/ordinary expansions still take every original guard/return,
         // but are not failed extended transactions and must not consume error logs.
-        if (!report_rejection) return;
+        if (!report_rejection) return false;
         try {
             std::ostringstream out;
             out << "[extended_chart] transaction=rejected phase=begin reason=" << reason
@@ -993,11 +993,11 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
         } catch (...) {
             // Diagnostics are best-effort and never cross the native detour boundary.
         }
+        return false;
     };
     if (g_transaction.active) {
         g_transaction.reserve_mismatch = true;
-        reject("nested_outer_transaction");
-        return;
+        return reject("nested_outer_transaction");
     }
     abort_extended_chart_transaction();
     if (!g_admissions.load(std::memory_order_acquire)) return reject("admission_closed");
@@ -1170,6 +1170,7 @@ void begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     } catch (...) {
         // Diagnostics are best-effort and never cross the native detour boundary.
     }
+    return true;
 }
 
 bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {

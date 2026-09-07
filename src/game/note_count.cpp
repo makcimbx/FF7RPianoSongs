@@ -435,6 +435,7 @@ void __fastcall chart_expand_detour(
     ChartAudioDiagnosticTransaction chart_audio_transaction;
     ChartAudioExpandTlsSnapshot chart_audio_expand;
     SelectionAudioAdmissionAuthority activation_authority;
+    SelectionAudioAdmission admission;
     try {
     auto callback = non_audio_hook_gate().try_enter();
     if (!callback) {
@@ -444,7 +445,7 @@ void __fastcall chart_expand_detour(
     void* caller = _ReturnAddress();
     const uintptr_t caller_rva = to_rva(caller);
     preparation = prepare_active_chart_row_patch_before_expand(
-        wrapper, chart_row, caller_rva, &chart_audio_transaction,
+        wrapper, chart_row, caller_rva, admission, &chart_audio_transaction,
         &activation_authority);
     if (!chart_expand_original_allowed(preparation)) {
         static std::atomic_int s_unresolved_logs{0};
@@ -457,11 +458,36 @@ void __fastcall chart_expand_detour(
             ChartAudioDiagnosticTerminalOutcome::MutationUnresolved);
         return;
     }
+    const auto* selected_profile = activation_authority.selection.profile;
+    const bool extension_required = preparation == ChartExpandPreparationOutcome::CustomCommitted
+        && selected_profile && !selected_profile->extended_chart_tail_notes.empty();
     if (g_original_chart_expand) {
         ChartAudioExpandTlsScope scope(
             chart_audio_transaction, wrapper, chart_audio_expand);
-        begin_extended_chart_transaction(current_chart_audio_expand_tls(),
-            activation_authority, wrapper, chart_row, caller_rva);
+        const bool extension_admitted = begin_extended_chart_transaction(
+            current_chart_audio_expand_tls(), activation_authority,
+            wrapper, chart_row, caller_rva);
+        preparation = chart_extension_admission_outcome(preparation,
+            extension_required, extension_admitted,
+            [&] { return cancel_prepared_chart_expansion(admission); });
+        if (extension_required && !extension_admitted) {
+            if (preparation == ChartExpandPreparationOutcome::MutationUnresolved)
+                fail_required_chart_expansion(activation_authority, wrapper);
+            finish_chart_audio_diagnostic_transaction(chart_audio_transaction,
+                preparation == ChartExpandPreparationOutcome::NativePristine
+                    ? ChartAudioDiagnosticTerminalOutcome::NativePristine
+                    : ChartAudioDiagnosticTerminalOutcome::MutationUnresolved);
+            // Only a restored stock row with a cancelled custom arm may forward.
+            // End custom TLS before that stock call; never run custom finish/count paths.
+            scope.finish();
+            admission = {};
+            if (chart_expand_original_allowed(preparation))
+                g_original_chart_expand(wrapper, chart_row, arg3, arg4);
+            return;
+        }
+        // Admission retains the rollback handle only through preflight, not its
+        // operation lock/aggregate lease across native expansion.
+        admission = {};
         g_original_chart_expand(wrapper, chart_row, arg3, arg4);
         scope.finish();
     }
@@ -472,7 +498,12 @@ void __fastcall chart_expand_detour(
     finish_active_chart_row_patch_after_expand(wrapper, caller_rva);
     const bool extended_committed =
         finish_extended_chart_transaction(wrapper, chart_row, caller_rva);
-    const auto& selected_profile = activation_authority.selection.profile;
+    if (extension_required && !extended_committed) {
+        fail_required_chart_expansion(activation_authority, wrapper);
+        finish_chart_audio_diagnostic_transaction(chart_audio_transaction,
+            ChartAudioDiagnosticTerminalOutcome::AudioFailed);
+        return;
+    }
     finish_chord_voicing_expansion(wrapper,
         preparation == ChartExpandPreparationOutcome::CustomCommitted
         && selected_profile
@@ -652,6 +683,9 @@ void __fastcall chart_expand_detour(
             chart_audio_transaction,
             ChartAudioDiagnosticTerminalOutcome::ExpandException);
         if (preparation == ChartExpandPreparationOutcome::CustomCommitted) {
+            if (activation_authority.selection.profile
+                && !activation_authority.selection.profile->extended_chart_tail_notes.empty())
+                fail_required_chart_expansion(activation_authority, wrapper);
             finish_chord_voicing_expansion(wrapper, false);
             block_custom_audio_route_for_unresolved_chart_mutation();
         }

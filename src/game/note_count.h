@@ -8,8 +8,19 @@
 namespace ff7r::piano::game {
 
 struct SelectionAudioAdmissionAuthority;
+class SelectionAudioAdmission;
 
 using ChartExpandPreparationOutcome = ChartMutationTransactionOutcome;
+
+// The expansion owner must resolve required-extension rejection before native
+// parsing. Cancellation owns both the row journal and the committed audio arm.
+template <typename Cancel>
+ChartExpandPreparationOutcome chart_extension_admission_outcome(
+    ChartExpandPreparationOutcome prepared, bool required, bool admitted,
+    Cancel&& cancel)
+{
+    return required && !admitted ? cancel() : prepared;
+}
 
 void capture_active_note_count(int note_count);
 int active_captured_note_count();
@@ -47,8 +58,11 @@ inline int menu_descriptor_note_count(const RenderSnapshot& menu) noexcept
 void log_active_chart_memory(float playback_seconds);
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(
     void* wrapper, void* chart_row, uintptr_t caller_rva,
+    SelectionAudioAdmission& admission,
     ChartAudioDiagnosticTransaction* diagnostic = nullptr,
     SelectionAudioAdmissionAuthority* authority = nullptr) noexcept;
+ChartExpandPreparationOutcome cancel_prepared_chart_expansion(
+    SelectionAudioAdmission& admission) noexcept;
 void finish_active_chart_row_patch_after_expand(
     void* wrapper, uintptr_t caller_rva) noexcept;
 bool restore_chart_patch_for_shutdown();

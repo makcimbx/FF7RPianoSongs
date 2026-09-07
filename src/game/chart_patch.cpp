@@ -2336,10 +2336,10 @@ void log_chart_prepare_outcome_best_effort(
 
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(
     void* wrapper, void* chart_row, uintptr_t caller_rva,
+    SelectionAudioAdmission& admission,
     ChartAudioDiagnosticTransaction* diagnostic,
     SelectionAudioAdmissionAuthority* authority) noexcept
 {
-    SelectionAudioAdmission admission{};
     if (diagnostic) *diagnostic = {};
     if (authority) *authority = {};
     try {
@@ -2371,6 +2371,15 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(
         }
         return outcome;
     }
+}
+
+ChartExpandPreparationOutcome cancel_prepared_chart_expansion(
+    SelectionAudioAdmission& admission) noexcept
+{
+    if (restore_chart_and_cancel_audio(admission, "required_extension_rejected"))
+        return ChartExpandPreparationOutcome::NativePristine;
+    block_custom_audio_route_for_unresolved_chart_mutation();
+    return ChartExpandPreparationOutcome::MutationUnresolved;
 }
 
 void finish_active_chart_row_patch_after_expand(

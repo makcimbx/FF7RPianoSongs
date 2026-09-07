@@ -65,7 +65,7 @@ inline constexpr bool extended_chart_begin_rejection_relevant(
         || (activation_present && !profile_present);
 }
 bool install_extended_chart_reserve_hook(HMODULE exe_module, std::string& error);
-void begin_extended_chart_transaction(
+bool begin_extended_chart_transaction(
     const ChartAudioExpandTlsSnapshot& transaction,
     const SelectionAudioAdmissionAuthority& authority, void* wrapper,
     void* chart_row, uintptr_t caller_rva) noexcept;

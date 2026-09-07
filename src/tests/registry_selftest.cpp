@@ -55,6 +55,76 @@ ff7r::piano::game::SongDescriptor profile_fixture(
     return song;
 }
 
+int characterize_required_extension_outcomes()
+{
+    using namespace ff7r::piano::game;
+    using Outcome = ChartExpandPreparationOutcome;
+    // This is the production expansion owner's admission decision, not a
+    // source-text oracle. Model strict tail-only FNAME_Find rejection and
+    // both complete and unresolved journal/audio cancellation.
+    for (bool required : {false, true}) {
+        for (bool admitted : {false, true}) {
+            for (bool cancelled : {false, true}) {
+                int cancellations = 0;
+                const auto outcome = chart_extension_admission_outcome(
+                    Outcome::CustomCommitted, required, admitted, [&] {
+                        ++cancellations;
+                        return cancelled ? Outcome::NativePristine : Outcome::MutationUnresolved;
+                    });
+                const bool rejected = required && !admitted;
+                if (cancellations != (rejected ? 1 : 0)
+                    || outcome != (rejected ? (cancelled ? Outcome::NativePristine
+                        : Outcome::MutationUnresolved) : Outcome::CustomCommitted)
+                    || chart_expand_original_allowed(outcome) != (!rejected || cancelled))
+                    return fail("required extension admission lost rollback/original gating");
+            }
+        }
+    }
+
+    // Exercise the actual registry outcome owner with no voicing binding.
+    // Publication before failure models nested/immediate PlaySetup; attempted
+    // publication after failure models delayed PlaySetup. Neither may retain
+    // a playable prefix or republish the failed lease.
+    for (bool publish_before_failure : {false, true}) {
+        SongRegistry tested;
+        tested.replace({registry_fixture("ExtendedWithoutVoicings", 7, 1)});
+        tested.set_active_selection(7, 0);
+        const auto selection = tested.selection_snapshot();
+        const CustomContextToken token{selection.generation, 2, 3, 4};
+        int wrapper_storage = 0;
+        void* wrapper = &wrapper_storage;
+        if (!tested.acquire_selection_guard(selection, token))
+            return fail("required extension fixture admission");
+        if (publish_before_failure && !tested.publish_playback_from_selection_guard(selection, token))
+            return fail("successful extension publication control");
+        if (tested.chart_update_admission(wrapper) != ChartUpdateAdmission::Stock)
+            return fail("ordinary/no-voicing success gained a chart denial");
+        auto stale = token;
+        ++stale.lease_generation;
+        if (tested.fail_chart_expansion(selection, stale, wrapper))
+            return fail("stale extension failure consumed another lease");
+        if (!tested.fail_chart_expansion(selection, token, wrapper)
+            || tested.playback_snapshot().song
+            || tested.selection_guard_matches(selection, token)
+            || !tested.cleanup_lease().token.same_lease(token)
+            || tested.chart_update_admission(wrapper) != ChartUpdateAdmission::Rejected
+            || tested.publish_playback_from_selection_guard(selection, token)
+            || tested.publish_playback(selection, token)
+            || tested.acquire_selection_guard(selection, token))
+            return fail("failed extension retained/published a shortened prefix");
+        tested.invalidate_chart_admission(wrapper);
+        if (tested.chart_update_admission(wrapper) != ChartUpdateAdmission::Rejected
+            || !tested.fail_chart_expansion(selection, token, wrapper))
+            return fail("reparse/repeated withdrawal erased failed-retained outcome");
+        if (tested.retire_cleanup_lease(stale)
+            || tested.chart_update_admission(wrapper) != ChartUpdateAdmission::Rejected
+            || !tested.retire_cleanup_lease(token)
+            || tested.chart_update_admission(wrapper) != ChartUpdateAdmission::Stock)
+            return fail("extension denial was not owned by exact cleanup lease");
+    }
+    return 0;
+}
+
 int characterize_last_played_profile_policy()
 {
     using namespace ff7r::piano::game;
@@ -678,6 +748,7 @@ int characterize_try_playback_snapshot_contention()
 
 int main()
 {
+    if (const int result = characterize_required_extension_outcomes()) return result;
     if (const int result = characterize_focus_bookmark()) return result;
     {
         using namespace ff7r::piano::game;

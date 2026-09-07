@@ -473,8 +473,9 @@ bool SongRegistry::profile_initialization_mutation_blocked_locked() const noexce
 bool SongRegistry::publish_playback(const SelectionSnapshot& selection, const CustomContextToken& token)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    if (cleanup_.chart_admission.binding && cleanup_.token.same_lease(token)
-        && cleanup_.chart_admission.state == ChartAdmissionState::Failed) return false;
+    if (cleanup_.token.same_lease(token)
+        && (cleanup_.failed_expansion_wrapper || (cleanup_.chart_admission.binding
+            && cleanup_.chart_admission.state == ChartAdmissionState::Failed))) return false;
     if (selection_guard_.song || !selection_matches_locked(selection)
         || token.registry_generation != generation_
         || !token.valid()) return false;
@@ -507,8 +508,9 @@ bool SongRegistry::acquire_selection_guard(
     const SelectionSnapshot& selection, const CustomContextToken& token)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    if (cleanup_.chart_admission.binding && cleanup_.token.same_lease(token)
-        && cleanup_.chart_admission.state == ChartAdmissionState::Failed) return false;
+    if (cleanup_.token.same_lease(token)
+        && (cleanup_.failed_expansion_wrapper || (cleanup_.chart_admission.binding
+            && cleanup_.chart_admission.state == ChartAdmissionState::Failed))) return false;
     if (!selection_matches_locked(selection) || !token.valid()
         || token.registry_generation != generation_) return false;
     if (selection_guard_.song) {
@@ -595,6 +597,37 @@ bool SongRegistry::revoke_playback(const CustomContextToken& token)
     if (cleanup_.chart_admission.binding)
         cleanup_.chart_admission.state = ChartAdmissionState::Failed;
     playback_ = {};
+    return true;
+}
+
+bool SongRegistry::fail_chart_expansion(const SelectionSnapshot& selection,
+    const CustomContextToken& token, void* wrapper)
+{
+    std::lock_guard lock(state_mutex_);
+    if (!wrapper || !token.valid()) return false;
+    const auto exact = [&](const SelectionSnapshot& current, const CustomContextToken& held) {
+        return current.song && held.same_lease(token)
+            && current.storage == selection.storage
+            && selection_semantically_matches(current, selection);
+    };
+    if (exact(playback_, playback_.token)) {
+        static_cast<SelectionSnapshot&>(cleanup_) = playback_;
+        cleanup_.token = playback_.token;
+        cleanup_.chart_admission = playback_.chart_admission;
+        playback_ = {};
+    } else if (exact(selection_guard_, selection_guard_token_)) {
+        static_cast<SelectionSnapshot&>(cleanup_) = selection_guard_;
+        cleanup_.token = selection_guard_token_;
+        cleanup_.chart_admission = selection_guard_chart_;
+        selection_guard_ = {};
+        selection_guard_token_ = {};
+        selection_guard_chart_ = {};
+    } else if (!exact(cleanup_, cleanup_.token)) {
+        return false;
+    }
+    cleanup_.failed_expansion_wrapper = wrapper;
+    if (cleanup_.chart_admission.binding)
+        cleanup_.chart_admission.state = ChartAdmissionState::Failed;
     return true;
 }
 
@@ -703,6 +736,8 @@ bool SongRegistry::fail_chart_admission(const std::shared_ptr<const ChordVoicing
 ChartUpdateAdmission SongRegistry::chart_update_admission(void* wrapper)
 {
     std::lock_guard lock(state_mutex_);
+    if (wrapper && cleanup_.failed_expansion_wrapper == wrapper)
+        return ChartUpdateAdmission::Rejected;
     for (auto* chart : {&selection_guard_chart_, &playback_.chart_admission,
              &cleanup_.chart_admission}) {
         if (!chart->binding || chart->binding->wrapper != wrapper) continue;

@@ -13549,6 +13549,28 @@ void block_custom_audio_route_for_unresolved_chart_mutation() noexcept
     }
 }
 
+void fail_required_chart_expansion(
+    const SelectionAudioAdmissionAuthority& authority, void* wrapper) noexcept
+{
+    try {
+        AudioCallbackScope callback_scope(AudioRouteCallbackKind::SelectionAdmission);
+        std::lock_guard<std::recursive_mutex> operation_lock(g_audio_route_operations.mutex());
+        // Withdraw guard or already-published playback atomically, retaining its
+        // cleanup lease and denying native chart updates even without voicings.
+        const auto playback = registry().playback_snapshot();
+        if (registry().fail_chart_expansion(authority.selection, authority.token, wrapper)) {
+            if (playback.song && playback.token.same_lease(authority.token))
+                (void)invalidate_scoreinfo_playback(playback.token);
+            clear_unpublished_audio_setup(
+                {authority.token.lease_generation, authority.token.song_key},
+                AudioRouteTransitionReason::SetupPlaybackRevoked);
+        }
+    } catch (...) {
+    }
+    // No Stop, native event destruction, lease retirement, or fake list return.
+    block_custom_audio_route_for_unresolved_chart_mutation();
+}
+
 AudioRouteArmLease arm_audio_route_for_song_id(const std::string& song_id)
 {
     AudioCallbackScope callback_scope(AudioRouteCallbackKind::Arm);

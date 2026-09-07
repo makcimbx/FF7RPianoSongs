@@ -501,7 +501,8 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
             const DiagnosticChartTailRow& row = profile.diagnostic_chart.tail_rows[tail_index];
             const DiagnosticChartTailRow& expected = expected_diagnostic.tail_rows[tail_index];
             const double seconds = row.source.beat * 60.0 / profile.config.bpm;
-            if (!std::isfinite(seconds) || seconds < profile.config.midi_minimum_lead_in_seconds - 1.0 / 60.0 ||
+            if (!std::isfinite(seconds) ||
+                (song.chart_from_midi && seconds < profile.config.midi_minimum_lead_in_seconds - 1.0 / 60.0) ||
                 seconds > duration + 1.0 / 60.0 || row.source.beat < previous_tail_beat ||
                 row.source_row != expected.source_row ||
                 !diagnostic_charts_equal(

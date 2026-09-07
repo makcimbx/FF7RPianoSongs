@@ -513,7 +513,7 @@ bool compiled_charts_equal(const CompiledChart& a, const CompiledChart& b) {
     return true;
 }
 
-bool valid_config_and_chart(const SongConfig& config, const CompiledChart& chart) {
+bool valid_config_and_chart_fields(const SongConfig& config, const CompiledChart& chart) {
     if ((config.schema != "ff7rpianosongs.song.v2" && config.schema != "v2") || config.title.empty() ||
         !std::isfinite(config.bpm) || config.bpm < 30.0 || config.bpm > 300.0 || config.difficulty < 0 ||
         !std::isfinite(config.midi_audio_offset_seconds) || !std::isfinite(config.midi_audio_alignment_seconds) ||
@@ -545,16 +545,8 @@ bool valid_config_and_chart(const SongConfig& config, const CompiledChart& chart
             !chart_note_semantics_equal(source, compiled)) return false;
         previous = source.beat;
     }
-    CompiledChart expected;
-    SongConfig compilable = config;
-    if (compilable.diagnostic_extended_chart_fixture && compilable.notes.size() == kMaxChartRows) {
-        compilable.diagnostic_extended_chart_fixture = false;
-    }
-    if (!compile_chart(compilable, &expected, nullptr, kMaxRuntimeCacheNotes).ok() ||
-        expected.notes.size() > chart.notes.size()) return false;
-    for (std::size_t index = 0; index < expected.notes.size(); ++index) {
-        if (!chart_notes_equal(expected.notes[index], chart.notes[index])) return false;
-    }
+    // A transport prefix can end at a group root. Whole-chart compilation and
+    // topology validation belong to valid_cached_profile, after tail assembly.
     return true;
 }
 
@@ -563,7 +555,12 @@ bool valid_cached_profile(const std::string& song_id, const bool extended,
     if (profile.config.notes.size() > kMaxChartRows || profile.chart.notes.size() > kMaxChartRows ||
         profile.config.notes.size() != profile.chart.notes.size()) return false;
     const auto& diagnostic = profile.diagnostic_chart;
-    if (!diagnostic.present()) return !profile.config.diagnostic_extended_chart_fixture;
+    if (!diagnostic.present()) {
+        CompiledChart expected;
+        return !profile.config.diagnostic_extended_chart_fixture &&
+            compile_chart(profile.config, &expected, nullptr, kMaxRuntimeCacheNotes).ok() &&
+            compiled_charts_equal(expected, profile.chart);
+    }
     if (!extended || !profile.config.diagnostic_extended_chart_fixture
         || !bounded_extended_retention_shape(diagnostic) ||
         diagnostic.native_prefix_row_count != kMaxChartRows ||
@@ -707,7 +704,7 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
     if (accepted != song->accepted_chart_input_limit) return false;
     if (song->config.chord_voicings != source_config.chord_voicings ||
         (midi != 0 && !song->config.chord_voicings.empty())) return false;
-    if (!valid_config_and_chart(song->config, song->chart)) return false;
+    if (!valid_config_and_chart_fields(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
     song->audio.stereo_samples.clear(); song->chart_from_midi = midi != 0;
     song->loudness_normalized = normalized != 0; song->loudness_gain_applied = gain != 0;
@@ -733,7 +730,7 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity,
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile)) return false;
         if (profile.config.chord_voicings != song->config.chord_voicings ||
-            !valid_config_and_chart(profile.config, profile.chart)) return false;
+            !valid_config_and_chart_fields(profile.config, profile.chart)) return false;
     }
     if (!song_configs_equal_impl(song->config, song->difficulty_profiles.front().config) ||
         !compiled_charts_equal(song->chart, song->difficulty_profiles.front().chart)) return false;

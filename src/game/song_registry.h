@@ -143,6 +143,9 @@ struct PlaybackSnapshot : SelectionSnapshot {
 struct CleanupLease : SelectionSnapshot {
     CustomContextToken token{};
     ChartAdmissionSnapshot chart_admission{};
+    // Denial only, never native dereference/destruction authority. Cleared by
+    // real lease retirement. A failed prefix is not stock after reparse either.
+    void* failed_expansion_wrapper = nullptr;
 };
 
 using ActiveSongSnapshot = SelectionSnapshot;
@@ -257,6 +260,8 @@ public:
     bool commit_if_current_chart(const std::shared_ptr<const ChordVoicingBinding>&,
         bool (*commit)(const ChartAdmissionSnapshot&, void*) noexcept, void* context);
     bool revoke_playback(const CustomContextToken& token);
+    bool fail_chart_expansion(const SelectionSnapshot&, const CustomContextToken&,
+        void* wrapper);
     bool retire_cleanup_lease(const CustomContextToken& token);
     bool commit_if_playback_token(
         const CustomContextToken& token, const std::function<bool()>& commit);

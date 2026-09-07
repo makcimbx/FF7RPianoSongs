@@ -206,7 +206,8 @@ LoadedSong diagnostic_tail_oracle_song() {
     return song;
 }
 
-LoadedSong playable_extended_oracle_song(const std::size_t row_count = 520u) {
+LoadedSong playable_extended_oracle_song(const std::size_t row_count = 520u,
+    const std::size_t group_root = 510u) {
     LoadedSong song = diagnostic_tail_oracle_song();
     song.chart_policy_identity = kPlayableExtendedChartRowPolicyIdentity;
     song.accepted_chart_input_limit = kMaximumExtendedChartRows;
@@ -227,7 +228,7 @@ LoadedSong playable_extended_oracle_song(const std::size_t row_count = 520u) {
         complete.notes[index].chord_id.clear();
     }
     if (row_count >= 513u) {
-        complete.notes[510].group_index = 7;
+        if (group_root == 510u) complete.notes[510].group_index = 7;
         complete.notes[511].group_index = 7;
         complete.notes[512].group_index = 7;
     }
@@ -275,6 +276,57 @@ bool expect_parent_oracle(
             (std::string(name) + " parent-oracle fixture did not decode").c_str()) &&
         expect(encode_runtime_cache(decoded, kMagic, kFormat, &round_trip), "parent-oracle round-trip did not encode") &&
         expect(round_trip == bytes, "parent-oracle round-trip bytes changed");
+}
+
+bool test_group_root_at_transport_boundary() {
+    for (const bool non_root_profile : {false, true}) {
+        auto song = playable_extended_oracle_song(513u, 511u);
+        if (!expect(!song.id.empty(), "boundary group failed whole-chart compilation")) return false;
+        if (non_root_profile) {
+            auto ordinary = representative_song().difficulty_profiles.front();
+            ordinary.config.difficulty = song.config.difficulty - 1;
+            song.difficulty_profiles.insert(song.difficulty_profiles.begin(), ordinary);
+            song.config = ordinary.config;
+            song.chart = ordinary.chart;
+        }
+        const std::size_t index = non_root_profile ? 1u : 0u;
+        const auto& profile = song.difficulty_profiles[index];
+        CompiledChart incomplete;
+        if (!expect(!compile_chart(profile.config, &incomplete).ok(),
+                "boundary fixture prefix no longer ends in a singleton group")) return false;
+        std::vector<std::uint8_t> bytes, round_trip;
+        auto decoded = song;
+        decoded.difficulty_profiles.clear();
+        decoded.chart.notes.clear();
+        if (!expect(encode_runtime_cache(song, kMagic, kFormat, &bytes) &&
+                decode_runtime_cache(bytes, kMagic, kFormat, &decoded) &&
+                encode_runtime_cache(decoded, kMagic, kFormat, &round_trip) && round_trip == bytes,
+                non_root_profile ? "non-root boundary profile failed stable warm codec reuse" :
+                    "root boundary profile failed stable warm codec reuse")) return false;
+        ChartEventPlan plan;
+        if (!expect(derive_profile_event_plan(decoded.difficulty_profiles[index], &plan) &&
+                plan.source_row_count == 513u && plan.native_prefix_event_count == 512u &&
+                plan.native_event_count == 513u && plan.required_action_count == 512u &&
+                diagnostic_charts_equal(profile.diagnostic_chart,
+                    decoded.difficulty_profiles[index].diagnostic_chart),
+                "boundary group lost complete topology or source/compiled tail semantics")) return false;
+
+        // Keep source and compiled group IDs consistent, and repair the descriptor
+        // hash: the whole-chart singleton rule, not stale hashes, must reject it.
+        auto invalid = song;
+        auto& broken = invalid.difficulty_profiles[index];
+        broken.diagnostic_chart.tail_rows.front().source.group_index = 0;
+        broken.diagnostic_chart.tail_rows.front().compiled.group_index = 0;
+        broken.diagnostic_chart.descriptor_hash = diagnostic_descriptor_hash(
+            invalid.id, broken.config.difficulty, broken.chart, broken.diagnostic_chart);
+        if (!expect(!encode_runtime_cache(invalid, kMagic, kFormat, &round_trip),
+                "whole-chart singleton at the transport boundary encoded")) return false;
+        invalid = song;
+        invalid.difficulty_profiles[index].chart.notes.back().camera_switch_timing = 1;
+        if (!expect(!encode_runtime_cache(invalid, kMagic, kFormat, &round_trip),
+                "inconsistent boundary prefix compiled fields encoded")) return false;
+    }
+    return true;
 }
 
 bool test_chord_voicing_cache() {
@@ -352,6 +404,7 @@ bool test_chord_voicing_cache() {
 } // namespace
 
 int main() {
+    if (!test_group_root_at_transport_boundary()) return 1;
     if (!test_chord_voicing_cache()) return 1;
     // Fixture provenance: parent 24ce7710af2595ca39ad89928381f052f4688c33 was
     // built privately and its internal writer established the original oracle.
@@ -537,13 +590,10 @@ int main() {
     invalid_semantics.difficulty_profiles[0].config.title.clear();
     LoadedSong invalid_enum = source;
     invalid_enum.chart.notes[0].monotone_note_type = 5;
-    invalid_enum.difficulty_profiles[0].chart.notes[0].monotone_note_type = 5;
     LoadedSong invalid_absent_side = source;
     invalid_absent_side.chart.notes[1].chord_note_type = 3;
-    invalid_absent_side.difficulty_profiles[0].chart.notes[1].chord_note_type = 3;
     LoadedSong invalid_source_override = source;
     invalid_source_override.config.notes[1].chord_note_value.value = {3, 0};
-    invalid_source_override.difficulty_profiles[0].config.notes[1].chord_note_value.value = {3, 0};
     LoadedSong invalid_count = source;
     invalid_count.config.notes.resize(8193u, source.config.notes.front());
     invalid_count.difficulty_profiles[0].config.notes = invalid_count.config.notes;
@@ -551,7 +601,16 @@ int main() {
     invalid_length.config.title.assign((1u << 20u) + 1u, 'x');
     LoadedSong invalid_ignore = comprehensive_oracle_song();
     invalid_ignore.config.notes[2].ignore_sound_pitches = {"Fn2"};
-    invalid_ignore.difficulty_profiles[0].config.notes[2].ignore_sound_pitches = {"Fn2"};
+    // Ordinary profiles now compile at the same complete-profile boundary used
+    // by the writer. Keep decoder-only root mutations below, and independently
+    // require rejection when the invalid semantics also reach the profile.
+    for (auto invalid_profile : {invalid_enum, invalid_absent_side, invalid_source_override, invalid_ignore}) {
+        invalid_profile.difficulty_profiles.front().config = invalid_profile.config;
+        invalid_profile.difficulty_profiles.front().chart = invalid_profile.chart;
+        std::vector<std::uint8_t> rejected;
+        if (!expect(!encode_runtime_cache(invalid_profile, kMagic, kFormat, &rejected),
+                "invalid ordinary profile escaped whole-chart writer validation")) return 1;
+    }
     LoadedSong invalid_playable_tail = playable_extended_oracle_song();
     invalid_playable_tail.difficulty_profiles.front().diagnostic_chart.tail_rows[0].compiled.group_index = 1;
     std::vector<std::uint8_t> invalid_playable_tail_bytes;

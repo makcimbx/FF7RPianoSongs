@@ -1,7 +1,7 @@
 # FF7RPianoSongs
-<!-- current-release-version: 0.1.3 -->
+<!-- current-release-version: 0.2.0 -->
 
-**Version 0.1.3** · Windows x64 · MIT
+**Version 0.2.0** · Windows x64 · MIT
 
 [![Windows CI](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml)
 
@@ -111,8 +111,9 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 
 - Each download supports exactly one Windows x64 game build. Updating or rolling back the game can require a different download.
 - [Custom chord compositions](docs/SongFormat.md#custom-chord-sounds) support the matching
-  1.004 and 1.005 builds with explicitly authored charts. Their in-game sound and transition checks remain pending;
-  free-play and wrong-key sounds are not replaced.
+  1.004 and 1.005 builds with explicitly authored charts. A limited auditory/count/completion
+  check passed on a 1.005 development build; full sound/input/transition checks and 1.004
+  gameplay remain unqualified. Free-play and wrong-key sounds are not replaced.
 - Longer charts and independent left/right note symbols have limited in-game testing on 1.005
   and remain **runtime-untested on 1.004**. Not every combination of grouping, chord filtering,
   and alternate input has been checked in-game.
@@ -123,6 +124,10 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 - Supply WAV, MP3, or FLAC audio within the [song limits](docs/SongFormat.md#folder-and-source-selection).
   Pre-encoded HCA/MABF files and audio looping are not supported authoring inputs.
 - Retry, abort, and unusual exit paths are not comprehensively tested. Keep backups of your song files.
+- The result screen's S-rank symbol may render incorrectly; this release does not fix that visual issue.
+- For 0.2.0, incomplete manual scenario coverage and the absence of new in-game checks on the
+  exact packaged artifacts are accepted release limitations. Development results do not qualify
+  every song, feature combination, or another game build.
 
 ## Reference
 
