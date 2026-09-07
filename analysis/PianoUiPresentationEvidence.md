@@ -108,14 +108,10 @@ evidence that an arbitrary Unicode star has the required RESULT font mapping.
 The older rank collection helper `143966A6C` / 1.004 `143C1264C` displays a
 collection of piano records and uses SetStringText; it is not this RESULT sink.
 
-**RESULT fix remains evidence-limited.** The actual localized `_S` value,
-the concrete RESULT rank widget, and its effective font/rich-text style were
-not recovered here. Changing list U+2605 cannot honestly be called a RESULT fix.
-Reusing native rank keys is the justified list-format boundary, not proof of a
-corrected result star. The bounded next evidence is the generic result consumer
-of owner+120+1B0 and its widget/font/localization assets (or an explicitly
-authorized observation of that exact sink); no global font/Unicode patch is
-justified. No RESULT hook or new rank-helper ABI is recommended yet.
+The actual localized `_S` value, concrete RESULT rank widget, and effective
+font/rich-text style were not recovered in this initial pass. Reusing native
+rank keys is the justified list-format boundary. These findings do not grant
+authority for a global font/Unicode patch, RESULT hook, or new rank-helper ABI.
 
 ## 3. Last-played focus: native first-FName match loses custom identity
 
@@ -217,17 +213,15 @@ private-row lifetime; labels 0/sparse/oversized with an explicit presentation
 policy; reordered/removed songs and profiles; stock activation after custom;
 same-index reopening; immediate profile/activation input without sleeps; stale
 widget/catalog rejection and scoped-field restoration. Native focus and icon
-appearance on both builds still need authorized in-game observation. RESULT
-glyph correction needs the missing sink/font evidence above before implementation.
+appearance on both builds still need authorized in-game observation.
 
 ## RESULT follow-up: concrete sink and remaining asset/observation boundary
 
 This append-only follow-up leaves the difficulty/focus sections frozen. It uses
 the same 1.005 identity and explicitly selected Ghidra program
 `ff7rebirth_.exe-9457d4`; no runtime calls, production changes, or catalog changes
-were made. The concrete text sink is now recovered. The resolved S glyph and
-its active font/symbol assets are still not established, so this is not a fix
-recommendation or an assertion that the mod causes a font mismatch.
+were made. The concrete text sink is now recovered. Runtime localization values
+and active font/symbol assets are outside the scope of these static findings.
 
 ### Recovered result state and widget binding
 
@@ -312,8 +306,7 @@ must not be passed to it as if it were the existing non-consuming list setter.
 Neither the current contents returned for `_S` nor the active font/resource
 object and its icon-map entry are serialized in these static code reads.
 No claim is made that `_S` actually contains an icon tag, that its glyph is
-U+2605, or that a particular font is wrong. The common renderer has no recovered
-S-only branch that explains the report independently of those missing values.
+U+2605, or that a particular font is wrong. No S-only rendering branch was recovered.
 
 ### Bounded retained-index check and disposition
 
@@ -331,24 +324,12 @@ Other retained manifest directories inspected contained legacy audio manifests
 or were empty. This is not evidence that the required asset is absent from the
 installed game or other containers.
 
-**Stop boundary:** the native sink and localization/symbol mechanism are proven;
-the actual S content and effective widget resource are not. No safe RESULT
-correction, global font change, replacement Unicode, or extra hook follows yet.
+**Evidence boundary:** the native sink and localization/symbol mechanism are proven;
+the actual S content and effective widget resource are not. These findings grant
+no authority for a font change, Unicode replacement, or extra hook.
 Because no new mutation seam is recommended, this follow-up does not claim new
 1.004 RESULT ABI/signature parity; the previously verified difficulty/focus
 addresses for both builds are unaffected.
-
-The smallest discriminating human evidence is a full RESULT screenshot plus
-rank crop for a stock S result and a custom S result with the same language,
-installation, and UI settings; an A result and the corresponding list-rank crop
-help identify whether the report concerns `Txt_Rank`, a list overlay, or the
-billboard. Same malformed shape on stock/custom points to shared presentation
-or its intended stylization, not proof of custom rank-string corruption.
-Correct stock S but malformed custom S narrows the next authorized observation
-to the two inputs at this exact sink: key/resolved UTF-16 including any tags and
-the effective text/font resource (including icon mapping). No such observation
-or game launch was performed here, and changing the installed artifact is not
-required by this research disposition.
 
 ### Optional numeric difficulty note from the shared text path
 
@@ -367,9 +348,8 @@ remain the difficulty owner's decision; no arbitrary cutoff was derived here.
 
 This append resolves the missing 1.004 `end_text_block_set_text` catalog evidence
 for the approved numeric presentation of difficulty labels above six. It does
-not modify the earlier sections, implement presentation, or resolve RESULT's
-separate glyph question. No production/catalog/generated edits, builds, tests,
-native calls, process operations, or Ghidra mutations were performed.
+not implement presentation or alter the RESULT path. No production/catalog/generated
+edits, builds, tests, native calls, process operations, or Ghidra mutations were performed.
 
 ### Exact identity and independent recovery
 

@@ -124,7 +124,6 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 - Supply WAV, MP3, or FLAC audio within the [song limits](docs/SongFormat.md#folder-and-source-selection).
   Pre-encoded HCA/MABF files and audio looping are not supported authoring inputs.
 - Retry, abort, and unusual exit paths are not comprehensively tested. Keep backups of your song files.
-- The result screen's S-rank symbol may render incorrectly; this release does not fix that visual issue.
 - For 0.2.0, incomplete manual scenario coverage and the absence of new in-game checks on the
   exact packaged artifacts are accepted release limitations. Development results do not qualify
   every song, feature combination, or another game build.

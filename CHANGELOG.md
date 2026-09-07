@@ -24,8 +24,7 @@
 - Corrected the song list's full selected-profile input count for long charts and its difficulty
   symbols: one per level, capped at six, with the exact number still in the title.
 - Restored the last played custom song and difficulty when reopening the list, using song and
-  difficulty identities rather than old row indices. The separately reported S-rank result glyph
-  is not fixed by this release.
+  difficulty identities rather than old row indices.
 - Corrected the return-focus implementation calling the game's focus-registration routine twice.
   The failed UI test could start vanilla music and charts after the first custom song; restoration
   now uses the single normal call during menu opening. The user reported successful repeat
