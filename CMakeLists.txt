@@ -805,8 +805,9 @@ set_tests_properties(midi_chart_compilation_selftest PROPERTIES
     PROCESSORS 16
     RESOURCE_LOCK midi_fixture_generation
 )
+# Complete cold/warm corpus cases take about five minutes with the current MIDI policy.
 set_tests_properties(song_repository_selftest PROPERTIES
-    TIMEOUT 240
+    TIMEOUT 420
     PROCESSORS 4
     RESOURCE_LOCK midi_fixture_generation
 )

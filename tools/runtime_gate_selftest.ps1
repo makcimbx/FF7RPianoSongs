@@ -136,6 +136,7 @@ function New-Fixture([string]$Root) {
         "cmake/apply_midifile_patch.cmake" = "fixture-patch-driver"
         "cmake/midifile-running-status.patch" = "fixture-dependency-patch"
         "cmake/release_identity.generated.h.in" = "fixture-template"
+        "src/game/chord_voicing_bridge.asm" = "fixture-production-adapter"
         "tools/generate_rva_catalog.py" = "fixture-generator"
         "build/CMakeCache.txt" = "fixture-cache"
         "build/generated/release_identity.generated.h" = "fixture-generated-release"
@@ -150,6 +151,7 @@ function New-Fixture([string]$Root) {
         "cmake/midifile-running-status.patch",
         "cmake/release_identity.generated.h.in",
         "release.json",
+        "src/game/chord_voicing_bridge.asm",
         "src/game/rva_catalog.json",
         "tools/generate_rva_catalog.py") | Sort-Object
     $inputRecords = @($inputPaths | ForEach-Object {

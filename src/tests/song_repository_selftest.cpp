@@ -1469,31 +1469,46 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
     const auto all_flat = [&expected_flat_chord](const ff7rp::pipeline::LoadedSong& song) {
         if (song.difficulty_profiles.empty()) return false;
         bool found_db_chord = false;
-        for (const auto& note : song.chart.notes) {
-            if (note.chord_id == expected_flat_chord) found_db_chord = true;
-            if ((!note.monotone_id.empty() && note.monotone_id != "C6"
-                    && note.monotone_id != "Db6" && note.monotone_id != "Dn6")
-                || (!note.chord_id.empty() && note.chord_id != expected_flat_chord)) return false;
+        bool found_db_melody = false;
+        // Selection is independent per label. v14 may retain the source-backed
+        // Ab3 alternate, and the root profile need not select any harmony.
+        // Check exact source identities/ticks and per-side lengths, not an old
+        // selector's choice of hand in the first visible profile.
+        for (const auto& profile : song.difficulty_profiles) {
+            if (profile.config.notes.empty() ||
+                profile.config.notes.size() != profile.chart.notes.size()) return false;
+            for (std::size_t row = 0; row < profile.config.notes.size(); ++row) {
+                const auto& note = profile.config.notes[row];
+                const auto& compiled = profile.chart.notes[row];
+                const double onset_index = (note.beat - 4.0) / 2.0;
+                if (!std::isfinite(onset_index) || onset_index < 0 || onset_index > 7 ||
+                    onset_index != std::floor(onset_index) || note.group_index != 0 ||
+                    compiled.beat != note.beat || compiled.time_str !=
+                        ff7rp::pipeline::beat_to_time_str(note.beat, profile.config.bpm)) return false;
+                const std::array<std::string, 3> melody{"C6", "Db6", "D6"};
+                const std::array<std::string, 3> native_melody{"Cn6", "Db6", "Dn6"};
+                const auto index = static_cast<std::size_t>(onset_index) % 3u;
+                if (!note.pitch.empty()) {
+                    const bool fallback = note.pitch == "Ab3";
+                    const ff7rp::pipeline::NoteValueOverride value{
+                        {static_cast<std::uint8_t>(fallback ? 2 : 3), 0}, true};
+                    if ((!fallback && note.pitch != melody[index]) ||
+                        compiled.monotone_id != (fallback ? "Ab3" : native_melody[index]) ||
+                        note.monotone_note_value != value) return false;
+                    found_db_melody |= note.pitch == "Db6";
+                } else if (!compiled.monotone_id.empty()) return false;
+                if (!note.chord_id.empty()) {
+                    if (note.chord_id != expected_flat_chord || compiled.chord_id != expected_flat_chord ||
+                        note.chord_note_value != ff7rp::pipeline::NoteValueOverride{{2, 0}, true}) return false;
+                    found_db_chord = true;
+                } else if (!compiled.chord_id.empty()) return false;
+            }
         }
-        return found_db_chord &&
-            std::all_of(song.difficulty_profiles.begin(), song.difficulty_profiles.end(),
-                [&expected_flat_chord](const auto& profile) {
-            return !profile.config.notes.empty() &&
-                std::all_of(profile.config.notes.begin(), profile.config.notes.end(),
-                    [&expected_flat_chord](const auto& note) {
-                    return note.group_index == 0
-                        && (note.pitch.empty() || note.pitch == "C6"
-                            || note.pitch == "Db6" || note.pitch == "D6")
-                        && (note.chord_id.empty() || note.chord_id == expected_flat_chord)
-                        && (note.pitch.empty() || note.monotone_note_value
-                            == ff7rp::pipeline::NoteValueOverride{{3, 0}, true})
-                        && (note.chord_id.empty() || note.chord_note_value
-                            == ff7rp::pipeline::NoteValueOverride{{2, 0}, true});
-                });
-        });
+        return found_db_chord && found_db_melody;
     };
     if (!status.ok() || accidental_cold.loaded_from_runtime_cache || !all_flat(accidental_cold)) {
-        return fail("key-signature accidental cache fixture did not cold-generate exact flat identities");
+        return fail("key-signature accidental cache fixture did not cold-generate exact flat identities: " +
+            status.message);
     }
     ff7rp::pipeline::LoadedSong accidental_warm;
     status = ff7rp::pipeline::load_song_directory(accidental_directory.string(), &accidental_warm);
@@ -3037,9 +3052,41 @@ int test_synthetic_gain_envelope_integration(const std::filesystem::path& root) 
         const double first = profile.config.notes.front().beat * 60.0 / profile.config.bpm;
         const double last = profile.config.notes.back().beat * 60.0 / profile.config.bpm;
         const double tail = song.audio.source_duration_seconds() - last;
-        if (std::fabs(first - 2.15) > 0.001 || std::fabs(last - 61.9) > 0.001 ||
+        const std::string timing = " profile=" + std::to_string(profile.config.difficulty) +
+            " first=" + std::to_string(first) + " last=" + std::to_string(last) +
+            " tail=" + std::to_string(tail) +
+            " audio_duration=" + std::to_string(song.audio.source_duration_seconds());
+        // Independent source-backed reduction may skip the first attack (v14
+        // selects the second at 2.4s for labels 1-3). It must not retime selected
+        // attacks or lose the final source attack and its exact audio tail.
+        long long previous_frame = -1;
+        for (const auto& note : profile.config.notes) {
+            const double frame = note.beat * 60.0 / profile.config.bpm * 60.0;
+            if (!std::isfinite(frame) || frame < 129.0 || frame > 3714.0 ||
+                std::fabs(frame - std::round(frame)) > 0.000001) {
+                return fail("synthetic envelope retimed source onset" + timing);
+            }
+            const long long source_frame = std::llround(frame);
+            const long long ordinal = (source_frame - 129) / 15;
+            constexpr std::array<const char*, 12> names{
+                "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            const int pitch = 64 + static_cast<int>((ordinal * 7) % 13);
+            if (source_frame != 129 + ordinal * 15 || source_frame <= previous_frame ||
+                note.pitch != std::string(names[pitch % 12]) + std::to_string(pitch / 12 - 1) ||
+                !note.chord_id.empty() || note.group_index != 0 || note.duration_beats != 0.25) {
+                return fail("synthetic envelope lost exact source witness at row=" +
+                    std::to_string(ordinal) + timing);
+            }
+            previous_frame = source_frame;
+        }
+        const auto route = ff7rp::pipeline::validate_midi_difficulty_route(
+            profile.config.notes, profile.config.bpm, profile.config.difficulty);
+        if (!route.feasible || route.ratio > route.margin + 0.000001) {
+            return fail("synthetic envelope lost profile feasibility" + timing);
+        }
+        if (std::fabs(last - 61.9) > 0.001 ||
             std::fabs(tail - 3.6) > 0.001) {
-            return fail("synthetic envelope final prompt or trailing-audio timing changed");
+            return fail("synthetic envelope final prompt or trailing-audio timing changed" + timing);
         }
     }
     if (!song.config.metronome_enabled || song.metronome_beat_count == 0 ||

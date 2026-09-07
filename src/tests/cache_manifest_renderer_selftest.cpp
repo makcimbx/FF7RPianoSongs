@@ -195,7 +195,8 @@ bool check_golden(
     }
     const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, manifest.data(), manifest.size());
     if (manifest.size() == expected_size && hash == expected_hash) return true;
-    std::cerr << name << " changed: bytes=" << manifest.size() << " hash=0x" << std::hex << hash << '\n';
+    std::cerr << name << " changed: bytes=" << manifest.size() << " hash=0x" << std::hex << hash
+        << std::dec << '\n';
     return false;
 }
 
@@ -204,19 +205,21 @@ bool check_golden(
 int main() {
     SongConfig source_config;
     const LoadedSong comprehensive = comprehensive_song(&source_config);
-    // The oracle includes the generated pipeline cache identity. It was
-    // regenerated for authored difficulty profiles without changing the cache
-    // manifest schema or rendering algorithm.
-    if (!check_golden(comprehensive, source_config, 5625u, 0x636c62b6ac2c3737ull, "comprehensive")) return 1;
+    // Compared byte-for-byte with the 193285b oracle: only pipeline v46 -> v48
+    // and config/profile/omission hashes changed. The latter now serialize the
+    // authored chord-voicing count (zero in these fixtures). All other bytes,
+    // including descriptor hashes and side-specific notation, are unchanged.
+    bool goldens_match = check_golden(comprehensive, source_config, 5625u, 0x80f1e801ca193405ull, "comprehensive");
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    if (!check_golden(empty, empty_source, 3715u, 0x56c3c5bd99160298ull, "empty")) return 1;
+    goldens_match &= check_golden(empty, empty_source, 3715u, 0xccc58dc8b0e505b6ull, "empty");
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    if (!check_golden(nonfinite, empty_source, 3716u, 0xd91d97759f5786aeull, "nonfinite")) return 1;
+    goldens_match &= check_golden(nonfinite, empty_source, 3716u, 0x982550d717c02358ull, "nonfinite");
+    if (!goldens_match) return 1;
 
     std::string unchanged = "unchanged";
     const Status null_status = render_cache_manifest(comprehensive, source_config, nullptr);
