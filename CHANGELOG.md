@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Corrected the song list's full selected-profile input count for long charts and its difficulty
+  symbols: one per level, capped at six, with the exact number still in the title.
+- Restored the last played custom song and difficulty when reopening the list, using song and
+  difficulty identities rather than old row indices. These UI changes still need in-game verification;
+  the separately reported S-rank result glyph is not fixed by this batch.
 - Made generated difficulty density and growth targets preferences rather than rejection quotas.
   Bounded selection seeks a valid full-song chart without requiring the preferred number of inputs;
   actual difficulty-load, source-note and chart-size checks remain in force.

@@ -74,6 +74,7 @@ constexpr ScoreInfoResultCatalogRole scoreinfo_result_catalog_role_from_rva(
     case rva::ScoreInfoRankTextReturn: return ScoreInfoResultCatalogRole::RankText;
     case rva::ScoreInfoThresholdsReturn: return ScoreInfoResultCatalogRole::Thresholds;
     case rva::ScoreInfoMenuDetailReturn: return ScoreInfoResultCatalogRole::MenuDetail;
+    case rva::ScoreInfoListItemCall + 0x0c: return ScoreInfoResultCatalogRole::ListItem;
     default: return ScoreInfoResultCatalogRole::Unavailable;
     }
 }
@@ -417,6 +418,7 @@ uintptr_t __fastcall scoreinfo_resolver_detour(void* arg0, void* arg1, void* arg
             static_cast<bool>(callback), recursion.outermost(), arg0 != nullptr,
             menu_before.song != nullptr && menu_before.profile != nullptr)) {
         try {
+            const bool list_item = catalog_role == ScoreInfoResultCatalogRole::ListItem;
             ScoreInfoResultInvocationFacts menu_facts{};
             const bool result_wrapper_exact
                 = result != 0 && result == reinterpret_cast<std::uintptr_t>(arg0);
@@ -432,6 +434,10 @@ uintptr_t __fastcall scoreinfo_resolver_detour(void* arg0, void* arg1, void* arg
             ScoreInfoOverlayRow built = make_scoreinfo_overlay_row(
                 *menu_before.song, menu_before.profile,
                 source_row, ScoreInfoOverlayRow::kRowSize);
+            if (list_item) {
+                built.difficulty = list_difficulty_icon_count(menu_before.profile->difficulty);
+                built.refresh_references();
+            }
             if (!scoreinfo_overlay_publishable(true, built)) return result;
             auto row = std::make_shared<const ScoreInfoOverlayRow>(std::move(built));
 
@@ -839,6 +845,12 @@ bool install_scoreinfo_overlay_hooks(const HookInstallContext& context)
     g_module_size = reinterpret_cast<std::uintptr_t>(image.base) == g_module_base
         ? image.size : 0;
     const HookSpec* spec = find_hook_spec("scoreinfo_resolver");
+    const auto* list_call = find_rva_signature("scoreinfo_list_item_call");
+    if (!list_call || list_call->expected_prologue.empty()
+        || list_call->rva > g_module_size
+        || list_call->expected_prologue.size() > g_module_size - list_call->rva
+        || !core::bytes_equal(reinterpret_cast<const uint8_t*>(g_module_base + list_call->rva),
+            list_call->expected_prologue)) return false;
     if (!spec) {
         core::log(core::LogLevel::Error, "[scoreinfo_overlay] status=install_failed error=missing_hook_spec");
         return false;

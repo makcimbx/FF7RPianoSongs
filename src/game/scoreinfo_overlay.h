@@ -80,6 +80,14 @@ constexpr int32_t native_scoreinfo_difficulty(const int difficulty)
     return difficulty < 1 ? 1 : (difficulty > 6 ? 6 : difficulty);
 }
 
+// List-only product policy. Never send a large public label to the allocating
+// native repetition loop. The exact title/profile label and the separate
+// result/scoring difficulty policy remain unchanged.
+constexpr int32_t list_difficulty_icon_count(int label) noexcept
+{
+    return label < 0 ? 0 : (label > 6 ? 6 : label);
+}
+
 constexpr float custom_scoreinfo_bpm(const float vanilla_bpm)
 {
     return vanilla_bpm;
@@ -129,7 +137,8 @@ inline constexpr bool scoreinfo_menu_detail_overlay_candidate(
     const bool outermost, const bool wrapper_present,
     const bool scoped_descriptor_present) noexcept
 {
-    return role == ScoreInfoResultCatalogRole::MenuDetail
+    return (role == ScoreInfoResultCatalogRole::MenuDetail
+            || role == ScoreInfoResultCatalogRole::ListItem)
         && callback_accepted && outermost && wrapper_present
         && scoped_descriptor_present;
 }

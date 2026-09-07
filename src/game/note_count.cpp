@@ -669,14 +669,14 @@ uintptr_t __fastcall note_count_detour(void* arg0, void* arg1, void* arg2, void*
     const SongDescriptor* song = menu.song ? menu.song : playback.song;
     const SongDifficultyProfile* profile = menu.profile ? menu.profile : playback.profile;
     const int replacement = resolve_menu_or_playback_note_count(menu, playback);
-    const bool extended_profile = profile
+    const bool extended_profile = !menu.song && profile
         && profile->source_row_count > ff7rp::pipeline::kMaxChartRows
         && profile->native_event_count > profile->native_prefix_event_count;
     const bool restricted_extended = extended_profile && replacement == profile->note_count
-        && (menu.song ? playable_extended_presentation(menu, playback)
-                      : playable_extended_playback(playback));
-    if (!song || (extended_profile && !restricted_extended)
-        || (!valid_note_count(replacement) && !restricted_extended)) {
+        && playable_extended_playback(playback);
+    if (!song || (menu.song ? replacement <= 0
+        : ((extended_profile && !restricted_extended)
+            || (!valid_note_count(replacement) && !restricted_extended)))) {
         return original;
     }
 
@@ -741,18 +741,10 @@ int resolve_note_count(const PlaybackSnapshot& playback)
 int resolve_menu_or_playback_note_count(
     const RenderSnapshot& menu, const PlaybackSnapshot& playback)
 {
-    const SongDifficultyProfile* selected = menu.song ? menu.profile : playback.profile;
-    const bool extended = selected
-        && selected->source_row_count > ff7rp::pipeline::kMaxChartRows
-        && selected->native_event_count > selected->native_prefix_event_count;
-    const bool active = extended
-        && (menu.song ? playable_extended_presentation(menu, playback)
-                      : playable_extended_playback(playback));
-    if (extended && !active) return 0;
-    const int maximum = active ? selected->note_count
-        : static_cast<int>(ff7rp::pipeline::effective_chart_row_limit());
-    return menu_or_playback_note_count_value(menu, playback,
-        active_captured_note_count(), maximum);
+    // Browsing precedes playback publication and continues after retirement.
+    // Do not consult (or activate/invalidate) the native commit from a menu scope.
+    if (menu.song) return menu_descriptor_note_count(menu);
+    return resolve_note_count(playback);
 }
 
 void __fastcall chart_update_detour(void* wrapper, float delta_seconds, void* arg3, void* arg4)

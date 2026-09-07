@@ -3,6 +3,7 @@
 #include "game/chart_patch.h"
 #include "game/song_registry.h"
 #include "game/runtime_context_policy.h"
+#include "pipeline/pipeline_limits.h"
 
 namespace ff7r::piano::game {
 
@@ -33,6 +34,15 @@ inline int menu_or_playback_note_count_value(
         : (playback.song ? playback.song->note_count : 0);
     if (valid(configured)) return configured;
     return valid(captured) ? captured : 0;
+}
+inline int menu_descriptor_note_count(const RenderSnapshot& menu) noexcept
+{
+    // The validated selected profile's compatibility note_count is the complete
+    // required-action count, not prefix rows or physical events (including followers).
+    // Presentation is not permission to construct/play an extended native chart.
+    if (!menu.song) return 0;
+    return menu_or_playback_note_count_value(menu, {}, 0,
+        static_cast<int>(ff7rp::pipeline::kMaximumNativeChartEvents));
 }
 void log_active_chart_memory(float playback_seconds);
 ChartExpandPreparationOutcome prepare_active_chart_row_patch_before_expand(

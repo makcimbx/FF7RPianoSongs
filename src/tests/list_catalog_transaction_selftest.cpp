@@ -78,6 +78,10 @@ bool menu_session_capture_for_callback(MenuSessionSnapshot&) noexcept { return f
 bool menu_session_generation_matches(uint64_t) noexcept { return false; }
 ProfileListCoordinator& profile_list_coordinator() { static ProfileListCoordinator value; return value; }
 bool ProfileListCoordinator::run_list_return(ListReturnCallbacks&, ProfileListCallbacks&) { return false; }
+bool ProfileListCoordinator::reconcile_open_focus(uint64_t, const SelectionSnapshot&) noexcept { return true; }
+bool synchronize_restored_menu_selection(void*, int, uint64_t) { return false; }
+bool menu_session_matches(uint64_t, void*, const UObjectLiveHandle&, bool) noexcept { return false; }
+bool resolve_piano_menu_widget_binding(void*, void*&, UObjectLiveHandle&) noexcept { return false; }
 bool custom_audio_route_idle_for_menu_input() noexcept { return true; }
 bool validate_live_uobject_handle(void* object, const UObjectLiveHandle& identity) {
     return ::identity(object, identity);

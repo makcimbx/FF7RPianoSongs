@@ -331,6 +331,12 @@ and its notes inside its own profile. The first profile is the default; labels c
 All profiles share the song's audio, BPM, and root `chord_voicings`, if supplied.
 An invalid authored profile rejects the song.
 In the song's detail view, use D-pad left/right or the keyboard arrow keys to select a profile.
+The list shows one difficulty symbol per level, up to a maximum of six; level 0 shows none.
+The exact numeric difficulty remains in the title, including labels above 6. This display cap
+does not change the profile's label, chart, or playback-speed setting.
+The displayed note count is the complete selected profile's required inputs, including
+inputs beyond the first 512 rows. Automatic group followers do not add required inputs;
+a row requiring both hands contributes two.
 
 ## MIDI-backed songs
 

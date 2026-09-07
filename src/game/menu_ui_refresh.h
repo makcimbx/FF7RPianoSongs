@@ -35,6 +35,8 @@ bool validate_active_list_item_ui_target(
     const SelectionSnapshot& expected, const ListItemUiRefreshTarget& target) noexcept;
 bool refresh_active_selection_ui(
     const SelectionSnapshot& expected, const SelectionUiRefreshTarget& target);
+bool synchronize_restored_menu_selection(void* context, int visible_index,
+    uint64_t before_generation);
 bool refresh_active_list_item_ui(
     const SelectionSnapshot& expected, const ListItemUiRefreshTarget& target);
 

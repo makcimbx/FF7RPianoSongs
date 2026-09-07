@@ -1,10 +1,12 @@
 #include "game/menu_session_authority.h"
 #include "game/mandatory_hook_transaction.h"
+#include "game/menu_focus_restore.h"
 
 #include <cstdint>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using namespace ff7r::piano::game;
@@ -14,6 +16,37 @@ int fail(const char* message) { std::cerr << message << '\n'; return 1; }
 }
 
 int main() {
+    for (int fault = 0; fault != 6; ++fault) {
+        uint64_t saved_name = 123;
+        int32_t selected = 7;
+        int calls = 0;
+        bool identity = fault != 1;
+        auto read = [&](ptrdiff_t offset, auto& out) noexcept {
+            out = static_cast<std::remove_reference_t<decltype(out)>>(offset == 0x478 ? saved_name : selected);
+            return true;
+        };
+        auto write = [&](ptrdiff_t offset, auto value) noexcept {
+            if (offset == 0x478) {
+                if (fault == 4 && value == 123) return false;
+                saved_name = static_cast<uint64_t>(value);
+            } else selected = static_cast<int32_t>(value);
+            return true;
+        };
+        const auto result = restore_menu_focus_fields(7, [&]() noexcept { return identity; }, read, write, [&] {
+            ++calls;
+            if (saved_name || selected != 7) throw 1;
+            if (fault == 2) throw 2;
+            if (fault == 3) identity = false;
+            if (fault == 5) saved_name = 999; // don't overwrite a new native owner
+        });
+        if (fault == 0 && (result != MenuFocusRestoreResult::Applied || calls != 1 || saved_name != 123 || selected != 7))
+            return fail("same-index focus restore failed");
+        if (fault == 1 && (result != MenuFocusRestoreResult::NotApplied || calls || saved_name != 123))
+            return fail("stale focus identity mutated native fields");
+        if (fault >= 2 && result != MenuFocusRestoreResult::Failed) return fail("focus mutation failure accepted");
+        if (fault == 2 && saved_name != 123) return fail("focus exception did not restore temporary name");
+        if (fault == 5 && saved_name != 999) return fail("focus restore overwrote drifted native name");
+    }
     if (should_restore_list_after_cancel_close(false, true, true, 0x0100,
             MenuListOwnership::Managed)
         || should_restore_list_after_cancel_close(true, false, true, 0x0100,

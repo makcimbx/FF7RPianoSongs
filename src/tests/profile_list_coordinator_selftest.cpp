@@ -117,6 +117,36 @@ std::size_t position(const std::vector<std::string>& events, const char* value) 
 
 int main()
 {
+    for (bool changed_target : {false, true}) {
+        ProfileListCoordinator coordinator;
+        Fixture f; f.session_phase = MenuSessionPhase::Opening;
+        auto cb = f.callbacks();
+        coordinator.begin_session(1);
+        ListReturnCallbacks list;
+        list.prepare = [&](ListSetupView& view) {
+            view.identity = {reinterpret_cast<void*>(2), reinterpret_cast<void*>(3),
+                6, 1, f.current, {2, 2}, {3, 3}, 1, true};
+            return true;
+        };
+        list.original_setup = [&](const ListSetupView&) {
+            (void)coordinator.submit_edge(1, cb);
+        };
+        list.cleanup_audio = [](const ListSetupView&) { return true; };
+        (void)coordinator.run_list_return(list, cb);
+        if (coordinator.state() != ProfileListCoordinatorState::ListWaitingReadiness)
+            return fail("opening focus fixture did not retain early input");
+        auto restored = f.current;
+        if (changed_target) {
+            restored.profile = &(*f.storage)[0].profiles[1]; restored.profile_index = 1;
+        }
+        if (!coordinator.reconcile_open_focus(1, restored)) return fail("opening focus reconciliation rejected");
+        f.session_phase = MenuSessionPhase::Ready;
+        const auto result = coordinator.notify_session_ready(1, cb);
+        if (changed_target && (result != ProfileEdgeResult::Rejected || contains(f.events, "cycle")))
+            return fail("restored focus silently retargeted already-bound input");
+        if (!changed_target && (result != ProfileEdgeResult::Changed || count(f.events, "cycle") != 1))
+            return fail("same focus failed to drain immediate input exactly once");
+    }
     {
         ProfileListCoordinator coordinator;
         if (!coordinator.try_ready_for_catalog_adoption())

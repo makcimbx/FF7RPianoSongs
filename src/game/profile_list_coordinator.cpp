@@ -469,6 +469,21 @@ void ProfileListCoordinator::begin_session(uint64_t generation) noexcept {
     } catch (...) {}
 }
 
+bool ProfileListCoordinator::reconcile_open_focus(uint64_t generation,
+    const SelectionSnapshot& target) noexcept
+{
+    std::lock_guard lock(mutex_);
+    if (!generation || session_generation_ != generation
+        || (state_ != ProfileListCoordinatorState::Ready
+            && state_ != ProfileListCoordinatorState::ListWaitingReadiness)) return false;
+    if (deferred_.delta && deferred_.session_generation
+        && !selection_semantically_matches(deferred_.bound_identity.setup_selection, target)) {
+        deferred_ = {}; list_identity_ = {}; notification_eligible_ = false;
+        state_ = ProfileListCoordinatorState::Ready;
+    }
+    return true;
+}
+
 void ProfileListCoordinator::retire_session(uint64_t generation) noexcept {
     try {
         std::lock_guard lock(mutex_);

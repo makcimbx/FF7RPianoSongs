@@ -122,6 +122,63 @@ int characterize_last_played_profile_policy()
     return 0;
 }
 
+int characterize_focus_bookmark()
+{
+    using namespace ff7r::piano::game;
+    SongRegistry r;
+    auto song = profile_fixture("focus", 7, {0, 3, 2147483647});
+    r.replace({song});
+    r.set_active_selection(7, 0);
+    if (r.prepare_last_played_focus()) return fail("hover created a focus bookmark");
+    if (!r.cycle_active_profile(1)) return fail("focus fixture could not select sparse label");
+    auto selected = r.selection_snapshot();
+    CustomContextToken token{selected.generation, 1, 2, 3};
+    if (!r.acquire_selection_guard(selected, token)
+        || !r.publish_playback_from_selection_guard(selected, token)) return fail("focus playback publication");
+    if (r.prepare_last_played_focus()) return fail("focus preference mutated live playback");
+    if (!r.revoke_playback(token)) return fail("focus fixture revoke");
+    const auto retained_generation = r.selection_snapshot().generation;
+    const auto retained_focus = r.prepare_last_played_focus();
+    if (!retained_focus || retained_focus.profile->difficulty != 3
+        || r.selection_snapshot().generation != retained_generation || !r.cleanup_lease())
+        return fail("unchanged focus waited for cleanup or mutated its retained authority");
+    if (!r.retire_cleanup_lease(token)) return fail("focus fixture cleanup");
+    if (!r.cycle_active_profile(1)) return fail("focus fixture hover change");
+    auto target = r.prepare_last_played_focus();
+    if (!target || target.profile->difficulty != 3) return fail("hover replaced accepted playback bookmark");
+    r.set_active_selection(-1, -1);
+    const auto adopt = [&](std::vector<SongDescriptor> songs) {
+        auto prepared = r.begin_catalog_commit(r.registry_snapshot(),
+            std::make_shared<const SongRegistryStorage>(std::move(songs)));
+        if (!prepared) return false;
+        r.commit_catalog(*prepared);
+        return true;
+    };
+    auto reordered = profile_fixture("focus", 9, {2147483647, 0, 3});
+    if (!adopt({profile_fixture("new-first", 7, {1}), reordered})) return fail("focus catalog adoption");
+    auto preferred = r.snapshot_for_visible_index(9);
+    if (!preferred.profile || preferred.profile->difficulty != 3 || preferred.profile_index != 2)
+        return fail("profile preference used obsolete catalog index");
+    target = r.prepare_last_played_focus();
+    if (!target || target.visible_index != 9 || target.profile_index != 2)
+        return fail("focus bookmark did not resolve stable song/profile identity");
+    auto removed = profile_fixture("focus", 8, {0, 6});
+    removed.default_profile_index = 1;
+    if (!adopt({removed})) return fail("focus removed-profile adoption");
+    target = r.prepare_last_played_focus();
+    if (!target || target.profile->difficulty != 6) return fail("removed profile did not use current default");
+    r.clear_last_played_focus();
+    if (r.prepare_last_played_focus()) return fail("stock activation did not clear bookmark");
+    r.set_active_selection(8, 0);
+    selected = r.selection_snapshot(); token = {selected.generation, 2, 4, 5};
+    if (!r.publish_playback(selected, token) || !r.revoke_playback(token)
+        || !r.retire_cleanup_lease(token)) return fail("direct publication bookmark fixture");
+    r.set_active_selection(-1, -1);
+    if (!adopt({profile_fixture("unrelated", 6, {1})}) || r.prepare_last_played_focus())
+        return fail("removed song did not fall back to native focus");
+    return 0;
+}
+
 int characterize_profile_initialization()
 {
     using namespace ff7r::piano::game;
@@ -621,6 +678,40 @@ int characterize_try_playback_snapshot_contention()
 
 int main()
 {
+    if (const int result = characterize_focus_bookmark()) return result;
+    {
+        using namespace ff7r::piano::game;
+        SongRegistry presentation_registry;
+        auto song = profile_fixture("IconPolicy", 7, {0, 1, 3, 6, 7, 2147483647});
+        song.difficulty = 2; // Root/default is not selected-profile authority.
+        for (auto& profile : song.profiles) {
+            profile.title = L"IconPolicy [Lv." + std::to_wstring(profile.difficulty) + L"]";
+            profile.note_count = 17;
+        }
+        presentation_registry.replace({song});
+        presentation_registry.set_active_selection(7, 0);
+        for (int label : {0, 1, 3, 6, 7, 2147483647}) {
+            const auto selected = presentation_registry.selection_snapshot();
+            if (!selected || selected.profile->difficulty != label)
+                return fail("icon policy selected-profile fixture");
+            ScopedSongRenderContext scope(selected);
+            const auto menu = presentation_registry.render_snapshot();
+            if (list_difficulty_icon_count(menu.profile->difficulty) != (label > 6 ? 6 : label)
+                || menu.profile->title != L"IconPolicy [Lv." + std::to_wstring(label) + L"]"
+                || menu.profile->difficulty != label || menu.profile->note_count != 17
+                || native_scoreinfo_difficulty(label) != (label == 0 ? 1 : (label > 6 ? 6 : label)))
+                return fail("list icon cap changed exact title/profile or result policy");
+            if (!scoreinfo_menu_detail_overlay_candidate(ScoreInfoResultCatalogRole::ListItem,
+                    true, true, true, true)
+                || scoreinfo_menu_detail_overlay_candidate(ScoreInfoResultCatalogRole::ListItem,
+                    true, true, true, false)
+                || scoreinfo_result_caller_for_catalog_role(ScoreInfoResultCatalogRole::ListItem, true)
+                    != ScoreInfoResultCaller::Unavailable)
+                return fail("list icon overlay lost private scope or gained result authority");
+            if (label != 2147483647 && !presentation_registry.cycle_active_profile(1))
+                return fail("icon policy profile refresh failed");
+        }
+    }
     using ff7r::piano::game::SongChartNote;
     using ff7r::piano::game::SongDescriptor;
     using ff7r::piano::game::SongDifficultyProfile;
@@ -992,6 +1083,45 @@ int main()
         return fail("no-scope metadata did not preserve playback/vanilla fallback");
     }
 
+    // Full selected-profile menu metadata must not require a playback lease or
+    // inherit the root profile, native prefix, physical events, or captured count.
+    SongDescriptor extended_menu = menu_song;
+    extended_menu.profiles[0].note_count = 513;
+    extended_menu.profiles[0].required_action_count = 513;
+    extended_menu.profiles[0].source_row_count = 513;
+    extended_menu.profiles[0].native_prefix_event_count = 512;
+    extended_menu.profiles[0].native_event_count = 513;
+    extended_menu.profiles[1].note_count = 549;
+    extended_menu.profiles[1].required_action_count = 549;
+    extended_menu.profiles[1].source_row_count = 600;
+    extended_menu.profiles[1].native_prefix_event_count = 560;
+    extended_menu.profiles[1].native_event_count = 658;
+    song_registry.replace({extended_menu});
+    song_registry.set_active_selection(12, 0);
+    {
+        ff7r::piano::game::ScopedSongRenderContext menu(song_registry.selection_snapshot());
+        if (ff7r::piano::game::menu_descriptor_note_count(song_registry.render_snapshot()) != 513)
+            return fail("extended menu required playback publication or truncated the full profile");
+    }
+    if (!song_registry.cycle_active_profile(1))
+        return fail("extended menu selected-profile fixture did not advance");
+    {
+        ff7r::piano::game::ScopedSongRenderContext menu(song_registry.selection_snapshot());
+        if (ff7r::piano::game::menu_descriptor_note_count(song_registry.render_snapshot()) != 549)
+            return fail("extended menu counted events/followers or used the default profile");
+    }
+    for (const auto count : {1006, 8192, 8193, 0, -1}) {
+        extended_menu.profiles[0].note_count = count;
+        song_registry.replace({extended_menu});
+        song_registry.set_active_selection(12, 0);
+        ff7r::piano::game::ScopedSongRenderContext menu(song_registry.selection_snapshot());
+        const int expected = count == 1006 || count == 8192 ? count : 0;
+        if (ff7r::piano::game::menu_descriptor_note_count(song_registry.render_snapshot()) != expected)
+            return fail("complete menu action count lost its native hard bound");
+    }
+    if (ff7r::piano::game::menu_descriptor_note_count({}) != 0)
+        return fail("unscoped/stock menu acquired descriptor count authority");
+
     std::weak_ptr<const int> exception_owner;
     try {
         ff7r::piano::game::ScopedSongRenderContext menu(
@@ -1028,6 +1158,16 @@ int main()
             != ff7r::piano::game::ScoreInfoResultCaller::Unavailable) {
         return fail("menu detail escaped exact caller or entered result authority");
     }
+    using namespace ff7r::piano::game;
+    if (!scoreinfo_menu_detail_overlay_candidate(ScoreInfoResultCatalogRole::ListItem,
+            true, true, true, true)
+        || scoreinfo_menu_detail_overlay_candidate(ScoreInfoResultCatalogRole::ListItem,
+            true, true, true, false)
+        || scoreinfo_menu_detail_overlay_candidate(ScoreInfoResultCatalogRole::ListItem,
+            true, false, true, true)
+        || scoreinfo_result_caller_for_catalog_role(ScoreInfoResultCatalogRole::ListItem, true)
+            != ScoreInfoResultCaller::Unavailable)
+        return fail("list-item private row escaped owning scope or entered RESULT policy");
 
     std::cout << "registry_selftest ok\n";
     return 0;

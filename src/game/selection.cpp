@@ -467,6 +467,20 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     const SelectionSnapshot descriptor = descriptor_for_visible_index(selected_index);
     if (!descriptor) {
         const SelectionSnapshot prior_selection = registry().selection_snapshot();
+        // Only the exact native activation getter supersedes custom focus.
+        // Ordinary stock hover/getter queries must leave the bookmark alone.
+        const auto session = capture_ready_menu_session();
+        PianoListArrayView stock_list{};
+        int32_t first_custom = 0;
+        if (g_selection_exe_base && rva::SelectedEntryGetterActivationReturn
+            && return_address == g_selection_exe_base + rva::SelectedEntryGetterActivationReturn
+            && session && session.widget == context
+            && validate_live_uobject_handle(context, session.widget_identity)
+            && read_music_list_array(context, stock_list)
+            && piano_list_first_custom_row(context, session.widget_identity, first_custom)
+            && selected_index >= 0 && selected_index < first_custom
+            && selected_index < stock_list.count)
+            registry().clear_last_played_focus();
         if (revoke_selection_audio_activation_if_pending()) {
             log_activation_handoff(false, "descriptor_drift",
                 prior_selection.generation, prior_selection.generation);
@@ -751,6 +765,21 @@ bool refresh_active_selection_ui(const SelectionSnapshot& expected,
     ScopedSongRenderContext menu_metadata(expected);
     g_original_on_menu_selected_index_changed_body(target.context, target.visible_index);
     return true;
+}
+
+bool synchronize_restored_menu_selection(void* context, const int visible_index,
+    const uint64_t before_generation)
+{
+    auto current = registry().selection_snapshot();
+    SelectionUiRefreshTarget target;
+    // A helper-emitted delegate already went through this same owner. Do not
+    // replay it; same-index/no-delegate restoration needs exactly one detail call.
+    if (current.generation == before_generation || current.visible_index != visible_index
+        || !capture_active_selection_ui_target(current, target) || target.context != context)
+        on_menu_selected_index_changed_body_detour(context, visible_index);
+    current = registry().selection_snapshot();
+    return current && current.visible_index == visible_index
+        && capture_active_selection_ui_target(current, target) && target.context == context;
 }
 
 bool install_selection_hooks(const HookInstallContext& context)

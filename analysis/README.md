@@ -16,6 +16,7 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 
 - [PianoMenuSessionEvidence-20260729.md](PianoMenuSessionEvidence-20260729.md) preserves matching-build list open/close, state-exit, teardown, and session-generation evidence for Phase 4 coordination.
 - [PianoMenuMetadataEvidence-20260802.md](PianoMenuMetadataEvidence-20260802.md) preserves the matching-build selected-index duration, note-count, and menu-detail ScoreInfo call chain plus the scoped metadata authority decision.
+- [PianoUiPresentationEvidence.md](PianoUiPresentationEvidence.md) records both-build list difficulty and native focus-restoration paths, plus the distinct RESULT rank/localization sink and its unresolved glyph/font comparison. The recovered borrowed text-setter ABI is not a requirement to replace the approved six-icon display cap with numeric text.
 - [PianoPageSelectionGuardEvidence-20260803.md](PianoPageSelectionGuardEvidence-20260803.md) preserves the historical and decisive negative-selection crash evidence, exact single-site rel32 ownership, and durable bypass contract.
 - [ControlledTeardownInvalidation-20260731.md](ControlledTeardownInvalidation-20260731.md) records the two invalidated live-teardown attempts and the resulting unsupported/NO-GO disposition.
 

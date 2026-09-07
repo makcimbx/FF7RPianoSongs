@@ -271,6 +271,10 @@ public:
     bool freeze_active_profile();
     void clear_frozen_profile();
     int active_visible_index() const;
+    // Presentation preference only: accepted playback records stable identity;
+    // cleanup retains neither a lease nor a native pointer for menu focus.
+    SelectionSnapshot prepare_last_played_focus();
+    void clear_last_played_focus();
     int active_base_slot() const;
     size_t custom_count() const;
 #ifdef FF7RP_CATALOG_ADOPTION_SELFTEST
@@ -295,7 +299,10 @@ private:
     mutable std::mutex state_mutex_;
     int active_visible_index_ = -1;
     int active_base_slot_ = -1;
-    std::unordered_map<std::string, int> selected_profiles_;
+    std::unordered_map<std::string, int> selected_profiles_; // difficulty labels, not indices
+    // Pins immutable ID/label without allocating in accepted audio publication.
+    // Only those values are used after catalog adoption, never stored indices.
+    SelectionSnapshot last_played_;
     std::string profile_lock_song_id_;
     int profile_lock_index_ = -1;
     uint64_t profile_lock_reservation_generation_ = 0;

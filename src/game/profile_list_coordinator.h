@@ -86,6 +86,8 @@ public:
     ProfileEdgeResult notify_session_ready(
         uint64_t generation, ProfileListCallbacks& callbacks) noexcept;
     void begin_session(uint64_t generation) noexcept;
+    // An Opening restore must not retarget input already bound to another row.
+    bool reconcile_open_focus(uint64_t generation, const SelectionSnapshot& target) noexcept;
     void retire_session(uint64_t generation) noexcept;
     void shutdown() noexcept;
     ProfileListCoordinatorState state() const noexcept;

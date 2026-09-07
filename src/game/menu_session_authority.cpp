@@ -34,6 +34,7 @@ CloseFn g_original_close = nullptr;
 ControllerFn g_original_exit = nullptr;
 ControllerFn g_original_destructor = nullptr;
 HMODULE g_module = nullptr;
+ControllerFn g_restore_selection = nullptr;
 core::RawRvaHook g_open_hook;
 core::RawRvaHook g_close_hook;
 core::RawRvaHook g_exit_hook;
@@ -175,7 +176,8 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
     bool ready = false;
     try {
         uint16_t word = 0; void* widget = nullptr; UObjectLiveHandle identity{};
-        ready = read_active_word(list, word) && resolve_piano_menu_widget_binding(list, widget, identity)
+        ready = restore_last_played_menu_focus(opening, g_restore_selection)
+            && read_active_word(list, word) && resolve_piano_menu_widget_binding(list, widget, identity)
             && menu_session_authority().publish_ready(opening, word, widget, identity);
     } catch (...) {}
     if (!ready) {
@@ -287,7 +289,10 @@ bool resolve_piano_menu_widget_binding(void* embedded_list, void*& widget,
 bool install_menu_session_hooks(const HookInstallContext& context) {
     g_module = context.exe_module;
     if (!signature_matches(context.exe_module, "piano_menu_list_open_call")
-        || !signature_matches(context.exe_module, "piano_menu_list_cancel_close_call")) return false;
+        || !signature_matches(context.exe_module, "piano_menu_list_cancel_close_call")
+        || !signature_matches(context.exe_module, "piano_list_restore_selection")) return false;
+    g_restore_selection = reinterpret_cast<ControllerFn>(
+        reinterpret_cast<uintptr_t>(context.exe_module) + rva::PianoListRestoreSelection);
     std::array<MandatoryHookOperation, 4> operations{{
         {[&] { return install_one(context, "piano_menu_list_open", reinterpret_cast<void*>(&open_detour), reinterpret_cast<void**>(&g_original_open), g_open_hook); }, [&] { return g_open_hook.disable(); }, [&] { return g_open_hook.remove(); }},
         {[&] { return install_one(context, "piano_menu_list_cancel_close", reinterpret_cast<void*>(&close_detour), reinterpret_cast<void**>(&g_original_close), g_close_hook); }, [&] { return g_close_hook.disable(); }, [&] { return g_close_hook.remove(); }},
@@ -296,6 +301,7 @@ bool install_menu_session_hooks(const HookInstallContext& context) {
     const auto transaction = install_mandatory_hook_transaction(operations);
     if (transaction == MandatoryHookTransactionResult::Installed) return true;
     if (transaction == MandatoryHookTransactionResult::RolledBack) {
+        g_restore_selection = nullptr;
         g_original_destructor = nullptr; g_original_exit = nullptr;
         g_original_close = nullptr; g_original_open = nullptr; g_module = nullptr;
     } else {
@@ -310,7 +316,8 @@ core::HookShutdownResult shutdown_menu_session() {
         core::teardown_operation(g_destructor_hook), core::teardown_operation(g_exit_hook),
         core::teardown_operation(g_close_hook), core::teardown_operation(g_open_hook),
     }, [] { return true; }, [] {
-        menu_session_authority().shutdown(); g_original_destructor = nullptr; g_original_exit = nullptr;
+        menu_session_authority().shutdown(); g_restore_selection = nullptr;
+        g_original_destructor = nullptr; g_original_exit = nullptr;
         g_original_close = nullptr; g_original_open = nullptr; g_module = nullptr;
     });
 }

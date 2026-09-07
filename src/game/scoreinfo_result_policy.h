@@ -24,6 +24,7 @@ enum class ScoreInfoResultCatalogRole : std::uint8_t {
     RankText,
     Thresholds,
     MenuDetail,
+    ListItem,
 };
 
 enum class ScoreInfoResultPhase : std::uint8_t {
@@ -192,6 +193,7 @@ constexpr ScoreInfoResultCaller scoreinfo_result_caller_for_catalog_role(
         return ScoreInfoResultCaller::Thresholds;
     case ScoreInfoResultCatalogRole::Unavailable:
     case ScoreInfoResultCatalogRole::MenuDetail:
+    case ScoreInfoResultCatalogRole::ListItem:
         return ScoreInfoResultCaller::Unavailable;
     }
     return ScoreInfoResultCaller::Unavailable;

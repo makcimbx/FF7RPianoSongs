@@ -3953,6 +3953,56 @@
           ]
         }
       }
+    },
+    {
+      "id": "piano_list_restore_selection",
+      "cpp_symbol": "PianoListRestoreSelection",
+      "kind": "function",
+      "subsystem": "menu_session",
+      "requirement": "release",
+      "validation": { "policy": "signature" },
+      "install_policy": "callable",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": ["src/game/menu_session_authority.cpp"],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039b0ff0",
+          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 84 ab 7b fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3: independently unique 24-byte complete-instruction entry in explicitly selected 1.005 image. Open CALL 1439b8cc1 targets this void(widget*) helper; +478 zero skips duplicate-FName scan, +480 selects the internal list control. Scoped saved-FName restoration required."}]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c5784c",
+          "signature": { "bytes": "40 53 b8 30 00 00 00 e8 d8 76 45 fe 48 2b e0 8b 81 80 04 00 00 48 8b d9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 3: independently unique 24-byte complete-instruction entry in explicitly selected 1.004 image. Open CALL 143c5f695 targets void(widget*); same saved-FName and selected-index semantics independently recovered, not translated RVAs."}]
+        }
+      }
+    },
+    {
+      "id": "scoreinfo_list_item_call",
+      "cpp_symbol": "ScoreInfoListItemCall",
+      "kind": "call_site",
+      "subsystem": "scoreinfo",
+      "requirement": "release",
+      "validation": { "policy": "signature" },
+      "install_policy": "signature_only",
+      "status": "production",
+      "hook_owner": null,
+      "consumers": ["src/game/scoreinfo_overlay.cpp"],
+      "hook_spec": null,
+      "builds": {
+        "ff7rebirth-steam-win64-6a16ced2": {
+          "rva": "0x039a8ceb",
+          "signature": { "bytes": "48 8b d3 48 8d 4d d0 e8 65 90 fa ff b8 00 40 00 00 66 41 85 07", "mask": "xxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 1: independently unique 21-byte caller window in explicit 1.005 image. Return window+0x0c (039a8cf7) from existing ScoreInfo resolver; list difficulty reads row+6c and repeats localized tokens, not the speed panel."}]
+        },
+        "ff7rebirth-steam-win64-68fd6fde": {
+          "rva": "0x03c4fa33",
+          "signature": { "bytes": "48 8b d3 48 8d 4d d0 e8 65 f6 fa ff b8 00 40 00 00 66 41 85 07", "mask": "xxxxxxxxxxxxxxxxxxxxx" },
+          "evidence": [{"type": "ghidra_static_analysis", "path": "analysis/PianoUiPresentationEvidence.md", "detail": "Section 1: independently unique 21-byte caller window in explicit 1.004 image. Return window+0x0c (03c4fa3f), resolver 03bff0a4 and row+6c repetition independently recovered."}]
+        }
+      }
     }
   ],
   "locators": [

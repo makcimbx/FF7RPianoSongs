@@ -23,7 +23,10 @@ int selected_profile_index(
     const std::unordered_map<std::string, int>& selected_profiles)
 {
     if (song.profiles.empty()) return -1;
-    if (const auto it = selected_profiles.find(song.id); it != selected_profiles.end()) return it->second;
+    if (const auto it = selected_profiles.find(song.id); it != selected_profiles.end()) {
+        for (size_t i = 0; i < song.profiles.size(); ++i)
+            if (song.profiles[i].difficulty == it->second) return static_cast<int>(i);
+    }
     return song.default_profile_index;
 }
 
@@ -60,6 +63,7 @@ void SongRegistry::replace(std::vector<SongDescriptor> songs)
     active_visible_index_ = -1;
     active_base_slot_ = -1;
     selected_profiles_.clear();
+    last_played_ = {};
     profile_lock_song_id_.clear();
     profile_lock_index_ = -1;
     profile_lock_reservation_generation_ = 0;
@@ -394,10 +398,10 @@ bool SongRegistry::initialize_profile_if_absent(
     if (selected == selected_profiles_.end()) {
         if (profile_initialization_mutation_blocked_locked()) return false;
         selected = selected_profiles_.emplace(
-            current_song->id, profile_index).first;
+            current_song->id, current_song->profiles[static_cast<size_t>(profile_index)].difficulty).first;
         ++generation_;
     }
-    const int selected_index = selected->second;
+    const int selected_index = selected_profile_index(*current_song, selected_profiles_);
     if (selected_index < 0
         || selected_index >= static_cast<int>(current_song->profiles.size())) {
         return false;
@@ -441,16 +445,17 @@ InitializedProfileState SongRegistry::initialized_profile_state(
         initialized = expected;
         return InitializedProfileState::Deferred;
     }
-    if (selected->second < 0
-        || selected->second >= static_cast<int>(current_song->profiles.size())) {
+    const int selected_index = selected_profile_index(*current_song, selected_profiles_);
+    if (selected_index < 0
+        || selected_index >= static_cast<int>(current_song->profiles.size())) {
         return InitializedProfileState::Invalid;
     }
     initialized.generation = generation_;
     initialized.storage = songs_;
     initialized.song = current_song;
-    initialized.profile_index = selected->second;
+    initialized.profile_index = selected_index;
     initialized.profile
-        = &current_song->profiles[static_cast<std::size_t>(selected->second)];
+        = &current_song->profiles[static_cast<std::size_t>(selected_index)];
     initialized.visible_index = expected.visible_index;
     initialized.base_slot = expected.base_slot;
     return InitializedProfileState::Present;
@@ -473,6 +478,7 @@ bool SongRegistry::publish_playback(const SelectionSnapshot& selection, const Cu
     if (selection_guard_.song || !selection_matches_locked(selection)
         || token.registry_generation != generation_
         || !token.valid()) return false;
+    last_played_ = selection;
     playback_ = {};
     static_cast<SelectionSnapshot&>(playback_) = selection;
     playback_.token = token;
@@ -549,6 +555,7 @@ bool SongRegistry::publish_playback_from_selection_guard(
     if (!selection_guard_.song || !selection_guard_token_.same_lease(token)
         || !selection_matches_locked(selection) || token.registry_generation != generation_
         || !token.valid()) return false;
+    last_played_ = selection;
     playback_ = {};
     static_cast<SelectionSnapshot&>(playback_) = selection;
     playback_.token = token;
@@ -747,12 +754,11 @@ bool SongRegistry::cycle_active_profile(int delta)
         }
     }
     if (!song || song->profiles.size() < 2 || profile_lock_song_id_ == song->id) return false;
-    auto [it, inserted] = selected_profiles_.try_emplace(song->id, song->default_profile_index);
-    int& index = it->second;
-    if (!inserted && (index < 0 || index >= static_cast<int>(song->profiles.size()))) index = song->default_profile_index;
+    const int index = selected_profile_index(*song, selected_profiles_);
+    if (index < 0 || index >= static_cast<int>(song->profiles.size())) return false;
     const int next = std::clamp(index + (delta < 0 ? -1 : 1), 0, static_cast<int>(song->profiles.size()) - 1);
     if (next == index) return false;
-    index = next;
+    selected_profiles_[song->id] = song->profiles[static_cast<size_t>(next)].difficulty;
     ++generation_;
     return true;
 }
@@ -767,15 +773,13 @@ bool SongRegistry::cycle_active_profile_exact(
     if (!selection_matches_locked(expected) || selection_guard_.song) return false;
     const SongDescriptor& song = *expected.song;
     if (song.profiles.size() < 2 || profile_lock_song_id_ == song.id) return false;
-    auto [it, inserted] = selected_profiles_.try_emplace(
-        song.id, song.default_profile_index);
-    int& index = it->second;
-    if (!inserted && (index < 0 || index >= static_cast<int>(song.profiles.size())))
+    const int index = selected_profile_index(song, selected_profiles_);
+    if (index < 0 || index >= static_cast<int>(song.profiles.size()))
         return false;
     const int next = std::clamp(index + (delta < 0 ? -1 : 1), 0,
         static_cast<int>(song.profiles.size()) - 1);
     if (next == index) return false;
-    index = next;
+    selected_profiles_[song.id] = song.profiles[static_cast<size_t>(next)].difficulty;
     ++generation_;
     changed = selection_snapshot_locked();
     return static_cast<bool>(changed);
@@ -787,8 +791,7 @@ bool SongRegistry::freeze_active_profile()
     if (selection_guard_.song) return false;
     for (const auto& song : *songs_) {
         if (song.visible_index != active_visible_index_ || song.profiles.empty()) continue;
-        int index = song.default_profile_index;
-        if (const auto it = selected_profiles_.find(song.id); it != selected_profiles_.end()) index = it->second;
+        const int index = selected_profile_index(song, selected_profiles_);
         if (index < 0 || index >= static_cast<int>(song.profiles.size())) return false;
         profile_lock_song_id_ = song.id;
         profile_lock_index_ = index;
@@ -797,6 +800,40 @@ bool SongRegistry::freeze_active_profile()
         return true;
     }
     return false;
+}
+
+SelectionSnapshot SongRegistry::prepare_last_played_focus()
+{
+    std::lock_guard lock(state_mutex_);
+    if (!last_played_ || generation_ == UINT64_MAX
+        || playback_.song || selection_guard_.song || selection_guard_token_.valid()) return {};
+    for (const auto& song : *songs_) {
+        if (song.id != last_played_.song->id || song.profiles.empty()) continue;
+        int index = song.default_profile_index;
+        for (size_t i = 0; i < song.profiles.size(); ++i)
+            if (song.profiles[i].difficulty == last_played_.profile->difficulty) index = static_cast<int>(i);
+        if (index < 0 || index >= static_cast<int>(song.profiles.size())) return {};
+        if (selected_profile_index(song, selected_profiles_) != index) {
+            if (profile_initialization_mutation_blocked_locked()) return {};
+            selected_profiles_[song.id] = song.profiles[static_cast<size_t>(index)].difficulty;
+            ++generation_;
+        }
+        // An unchanged preference is usable immediately even while native audio
+        // cleanup is retained. This neither thaws a profile nor mutates its lease.
+        SelectionSnapshot result;
+        result.storage = songs_; result.generation = generation_;
+        result.song = &song; result.profile_index = index;
+        result.profile = &song.profiles[static_cast<size_t>(index)];
+        result.visible_index = song.visible_index; result.base_slot = song.base_slot;
+        return result;
+    }
+    return {};
+}
+
+void SongRegistry::clear_last_played_focus()
+{
+    std::lock_guard lock(state_mutex_);
+    last_played_ = {};
 }
 
 void SongRegistry::clear_frozen_profile()
