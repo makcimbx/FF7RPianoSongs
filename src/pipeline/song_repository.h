@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <functional>
@@ -10,6 +11,9 @@
 #include "song_types.h"
 
 namespace ff7rp::pipeline {
+
+inline constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
+inline constexpr std::uint32_t kRuntimeCacheFormat = 16;
 
 enum class SongDiscoveryCode {
     Completed,

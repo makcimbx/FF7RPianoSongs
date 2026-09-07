@@ -25,6 +25,15 @@ Run the supported wrapper rather than duplicating generator or host parallelism 
 ./build.ps1 -Configuration Release
 ```
 
+For a focused development check, select only the affected target (or pass an array to `-Target`):
+
+```powershell
+./build.ps1 -Configuration Release -Target pipeline_selftest
+ctest --test-dir build -C Release -R '^pipeline_selftest$' --output-on-failure
+```
+
+A test-only target does not rebuild or replace the `dist` ASI. Select `FF7RPianoSongs` when a new game-loadable artifact is needed; building still does not install it.
+
 One ASI supports one game build. `-CatalogBuildId` selects which cataloged build identity it is
 compiled against; without it, the catalog's `default_build` is used:
 
@@ -62,6 +71,8 @@ cmake --build build --config Release --target help
 
 ## Catalog And Tests
 
+For Debug and Integration, build the affected targets and run the tests that exercise the change. A scoped uncommitted worktree is a valid development baseline; no checkpoint commit or stash is required. Run tooling tests when that tooling changes and documentation audits when the documentation surface changes. The complete suite and package qualification are Release activities, not prerequisites for every development edit.
+
 Validate the machine-readable RVA catalog:
 
 ```powershell
@@ -69,7 +80,7 @@ Validate the machine-readable RVA catalog:
 ```
 
 This validates and byte-compares the generated tree of every build the catalog declares, not
-only the build selected for compilation. Regenerate all trees after any catalog edit:
+only the build selected for compilation. Regenerate after changes to catalog data or generated output:
 
 ```powershell
 python tools/generate_rva_catalog.py --write
@@ -77,11 +88,28 @@ python tools/generate_rva_catalog.py --write
 
 Never hand-edit a file under `src/generated/`; the check fails when a tree is stale.
 
+Generated headers depend on catalog values and generated output, not raw catalog whitespace or generator comments. Production build provenance still records the exact catalog and generator source files for artifact attribution.
+
 List the tests registered by the current CMake configuration:
 
 ```powershell
 ctest --test-dir build -C Release -N
 ```
+
+Tests have one category label: `functional` for product behavior, `audit` for source/catalog/documentation checks, and `tooling` for build/install/package tooling tests. Existing scenario labels remain available. Combine a category with `-R` to select only the affected tests; labeling does not build their executables.
+
+```powershell
+# Behavior check, after building pipeline_selftest
+ctest --test-dir build -C Release -L functional -R '^pipeline_selftest$' --output-on-failure
+
+# Source audits, after building release_audit_tool
+ctest --test-dir build -C Release -L audit --output-on-failure
+
+# Tooling checks when these tools change
+ctest --test-dir build -C Release -L tooling -R '^(rva_catalog_generator_selftest|build_provenance_selftest)$' --output-on-failure
+```
+
+`pipeline_selftest` does not read documentation. `documentation_audit` runs the existing release audit separately; documentation checks cover structured fields/examples, links, release markers, and inventory rather than exact prose or heading order. `tracked_binary_audit` checks tracked files and pinned fixture hashes, not unrelated untracked local songs.
 
 Run the complete Release suite:
 
@@ -132,7 +160,7 @@ catalog layout and generator invariants are described in
 
 ## Release Audit
 
-Run the built audit against the source tree before staging. The audit derives pipeline/cache metadata, CTest registration, hook inventory, package-document ownership, INI coverage, and Markdown policy from source inputs. Documentation checks are limited to the canonical files registered in `package-docs.json`; unrelated Markdown and build trees are not scanned:
+Build the audit tool after changing cache constants, hook records, or CTest registration, then run it against the source tree before staging. Cache metadata comes from compiled production constants, hook inventory from compiled generated records, and test inventory from the configured CMake graph. The audit reads package-document ownership, INI coverage, and documentation from the source tree. Documentation checks are limited to the canonical files registered in `package-docs.json`; unrelated Markdown and build trees are not scanned:
 
 ```powershell
 ./build/Release/release_audit_tool.exe .

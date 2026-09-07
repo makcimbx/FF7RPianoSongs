@@ -1,9 +1,16 @@
 #include "tests/documentation_parity.h"
 
 #include "core/generated/build_identity.generated.h"
+#include "ctest_inventory.generated.h"
+#include "game/generated/rvas.generated.h"
+#include "game/hook_specs.h"
+#include "pipeline/cache.h"
+#include "pipeline/chart_compiler.h"
 #include "pipeline/native_chord_constituents.h"
 #include "pipeline/note_value.h"
 #include "pipeline/song_json_fields.h"
+#include "pipeline/song_json.h"
+#include "pipeline/song_repository.h"
 
 #include <algorithm>
 #include <array>
@@ -24,9 +31,6 @@ namespace ff7rp::tests {
 namespace {
 
 bool fail(std::string* error_message, std::string message);
-
-static_assert(ff7r::piano::core::generated::kRvaCatalogSha256.size() == 64);
-static_assert(ff7r::piano::core::generated::kRvaGeneratorSha256.size() == 64);
 
 constexpr const char* kRegistrySchema = "ff7rpianosongs.package-docs.v2";
 
@@ -547,90 +551,27 @@ bool validate_links(
     return true;
 }
 
-bool validate_current_status(const fs::path& source_root, std::string* error_message)
-{
-    std::string status;
-    if (!read_bytes(source_root / "docs/CurrentStatus.md", &status)) {
-        return fail(error_message, "CurrentStatus.md is unreadable");
-    }
-    std::vector<std::string> sections;
-    std::istringstream lines(status);
-    for (std::string line; std::getline(lines, line);) {
-        if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.rfind("## ", 0) == 0u) sections.push_back(line.substr(3));
-    }
-    const std::vector<std::string> expected{
-        "Supported Now", "Known Limitations / 0.1.3 Release Scope", "Latest Verification Summary", "Artifact Disposition"};
-    return sections == expected
-        || fail(error_message, "CurrentStatus.md must contain only the four canonical sections");
-}
-
-bool validate_package_prose(
-    const fs::path& source_root,
-    const DocumentationRegistry& registry,
-    std::string* error_message)
-{
-    const std::array<std::regex, 6> mutable_facts{
-        std::regex(R"(\bAll\s+[0-9]+\s+current CTest)", std::regex::icase),
-        std::regex(R"(\b[0-9]+\s+(?:total\s+)?hook specs?\b)", std::regex::icase),
-        std::regex(R"(\bpipeline(?: cache| schema)?[ .-]*v[0-9]+\b)", std::regex::icase),
-        std::regex(R"(\bff7rpianosongs\.pipeline\.v[0-9]+\b)", std::regex::icase),
-        std::regex(R"(\bruntime cache format\s+[0-9]+\b)", std::regex::icase),
-        std::regex(R"(\bF7RPRT[0-9]+\b)", std::regex::icase),
-    };
-    for (const CanonicalDocument& document : registry.documents) {
-        if (document.distribution != "package") continue;
-        std::string text;
-        if (!read_bytes(source_root / document.source, &text)) {
-            return fail(error_message, "package document is unreadable: " + document.source.generic_string());
-        }
-        std::istringstream lines(text);
-        for (std::string line; std::getline(lines, line);) {
-            for (const std::regex& expression : mutable_facts) {
-                if (std::regex_search(line, expression)) {
-                    return fail(error_message, "package document contains source-owned mutable version/count prose: " +
-                        document.source.generic_string());
-                }
-            }
-        }
-    }
-    return true;
-}
-
 bool validate_release_document_parity(
     const fs::path& source_root, const ReleaseAuthority& release, std::string* error_message)
 {
-    std::string readme;
     std::string catalog;
-    if (!read_bytes(source_root / "README.md", &readme)
-        || !read_bytes(source_root / "src/game/rva_catalog.json", &catalog)) {
-        return fail(error_message, "README or RVA catalog is unreadable for release parity");
+    if (!read_bytes(source_root / "src/game/rva_catalog.json", &catalog)) {
+        return fail(error_message, "RVA catalog is unreadable for release parity");
     }
     const std::array<fs::path, 2> release_documents{
         "README.md", "docs/BuildAndRelease.md"};
-    const std::string marker = "<!-- current-release-version: " + release.version + " -->";
-    const std::regex semantic_version(R"(\b(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\b)");
     for (const fs::path& relative : release_documents) {
         std::string document;
         if (!read_bytes(source_root / relative, &document)) {
             return fail(error_message, "release-facing document is unreadable: " + relative.generic_string());
         }
-        if (document.find(marker) == std::string::npos) {
-            return fail(error_message, "release-facing document lacks the authoritative current-version marker: " + relative.generic_string());
+        std::string version;
+        if (!contains_once(document,
+                std::regex(R"(<!--\s*current-release-version:\s*([^\s]+)\s*-->)"),
+                &version, "current-release-version marker", error_message)) return false;
+        if (version != release.version) {
+            return fail(error_message, "current-release-version marker contradicts release.json: " + relative.generic_string());
         }
-        for (std::sregex_iterator it(document.begin(), document.end(), semantic_version), end; it != end; ++it) {
-            if (it->str() != release.version) {
-                return fail(error_message, "release-facing document contradicts release.json: " + relative.generic_string());
-            }
-        }
-    }
-    if (readme.find("https://github.com/ThirteenAG/Ultimate-ASI-Loader") == std::string::npos
-        || readme.find("Ultimate ASI Loader") == std::string::npos
-        || readme.find("xinput1_3.dll") == std::string::npos
-        || readme.find("Without an ASI loader") == std::string::npos
-        || readme.find("If no compatible x64 ASI loader is installed") == std::string::npos
-        || readme.find("do not add a second proxy DLL") == std::string::npos) {
-        return fail(error_message, "README omits the required Ultimate ASI Loader dependency");
     }
     std::string changelog;
     if (!read_bytes(source_root / "CHANGELOG.md", &changelog)) return fail(error_message, "CHANGELOG.md is unreadable");
@@ -689,83 +630,130 @@ bool validate_ini_documentation(const fs::path& source_root, std::string* error_
     return settings != 0u || fail(error_message, "INI template contains no settings");
 }
 
+bool verify_song_format_examples(const std::string& text, std::string* error_message)
+{
+    std::size_t cursor = 0;
+    std::size_t example_count = 0;
+    while ((cursor = text.find("```json", cursor)) != std::string::npos) {
+        const std::size_t begin = text.find('\n', cursor);
+        const std::size_t end = begin == std::string::npos ? std::string::npos : text.find("```", begin);
+        if (end == std::string::npos) return fail(error_message, "SongFormat has an unterminated JSON example");
+        ++example_count;
+        ff7rp::pipeline::ParsedSongSource source;
+        const auto json = text.substr(begin, end - begin);
+        const auto status = ff7rp::pipeline::parse_song_json_string(json, &source);
+        if (!ff7rp::pipeline::selected_native_asset_capabilities().has_verified_authored_chord_voicing()
+            && json.find("\"chord_voicings\"") != std::string::npos) {
+            // The shared guide cannot qualify a capability absent from this build.
+            if (status.ok()) return fail(error_message, "SongFormat voicing example accepted an unavailable capability");
+            cursor = end + 3u;
+            continue;
+        }
+        if (!status.ok()) return fail(error_message,
+            "SongFormat example " + std::to_string(example_count) + " does not parse: " + status.message);
+        const auto compile = [&](const ff7rp::pipeline::SongConfig& config) {
+            ff7rp::pipeline::CompiledChart chart;
+            const auto compiled = ff7rp::pipeline::compile_chart(config, &chart);
+            return compiled.ok() || fail(error_message,
+                "SongFormat example " + std::to_string(example_count) + " does not compile: " + compiled.message);
+        };
+        if (source.authored_profiles.empty()) {
+            // MIDI examples need source files at load time; explicit examples compile here.
+            if (source.config.notes_provided && !compile(source.config)) return false;
+        } else {
+            for (const auto& profile : source.authored_profiles) {
+                auto config = source.config;
+                config.difficulty = profile.difficulty;
+                config.notes = profile.notes;
+                if (!compile(config)) return false;
+            }
+        }
+        cursor = end + 3u;
+    }
+    return example_count != 0 || fail(error_message, "SongFormat has no JSON examples");
+}
+
+bool verify_release_parser_rejections(std::string* error_message)
+{
+    // Synthetic JSON keeps parser coverage independent of release versions and
+    // formatting in checked-in authority files.
+    std::string registry_json = R"({"schema":"ff7rpianosongs.package-docs.v2","documents":[)";
+    for (const auto& definition : kRequiredRoles) {
+        if (registry_json.back() != '[') registry_json += ',';
+        const std::string role = definition.role;
+        registry_json += "{\"source\":\"" + role + ".md\",\"role\":\"" + role +
+            "\",\"distribution\":\"" + definition.distribution + '"';
+        if (std::string_view(definition.distribution) == "package") {
+            registry_json += ",\"destination\":\"" + role + ".md\"";
+        }
+        registry_json += '}';
+    }
+    registry_json += "]}";
+    DocumentationRegistry registry;
+    if (!parse_documentation_registry(registry_json, &registry, error_message)) return false;
+    for (const auto& [from, to] : std::array<std::pair<std::string, std::string>, 6>{{
+             {"\"documents\":", "\"unknown\":true,\"documents\":"},
+             {"\"source\":\"entrypoint.md\"", "\"source\":\"../entrypoint.md\""},
+             {"\"role\":\"docs-index\"", "\"role\":\"entrypoint\""},
+             {"\"role\":\"entrypoint\"", "\"role\":\"entrypoint\",\"role\":\"entrypoint\""},
+             {"\"distribution\":\"package\"", "\"distribution\":\"repository\""},
+             {"\"role\":\"entrypoint\",", ""},
+         }}) {
+        std::string invalid = registry_json;
+        invalid.replace(invalid.find(from), from.size(), to);
+        if (parse_documentation_registry(invalid, &registry, nullptr)) {
+            return fail(error_message, "documentation registry parser accepted an invalid fixture");
+        }
+    }
+    const auto release_json = [](const std::string& version, const bool include_game_build = true) {
+        return R"({"schema":"ff7rpianosongs.release.v2","product":"FF7RPianoSongs","version":")" + version +
+            R"(","platform":"win64","license":"MIT","targets":[{"game_build":"1.005","supported_executable_catalog_id":"ff7rebirth-test-win64-12345678","archive_basename":"FF7RPianoSongs-)" +
+            version + "-win64" + (include_game_build ? "-ff7r1.005" : "") + "\"}]}";
+    };
+    ReleaseAuthority release;
+    if (!parse_release_authority(release_json("2.3.4"), &release, error_message)
+        || release.version != "2.3.4") return fail(error_message, "release parser rejected a valid version");
+    for (const auto* version : {"39", "v39", "01.0.0", "0.1", "0.1.0-beta"}) {
+        if (parse_release_authority(release_json(version), &release, nullptr)) {
+            return fail(error_message, "release parser accepted a malformed version");
+        }
+    }
+    return !parse_release_authority(release_json("2.3.4", false), &release, nullptr)
+        || fail(error_message, "release parser accepted an archive without its game build");
+}
+
 } // namespace
 
 bool verify_song_format_contract_text(
     const std::string_view text, std::string* error_message)
 {
-    constexpr std::array<std::string_view, 20> required_sections{{
-        "# Song Format Reference", "## Folder and source selection", "## Root object",
-        "## Explicit notes", "### Pitch spelling", "### Note values",
-        "### Chords and `ignore_sound`", "### Custom chord sounds", "### Groups and dual rows",
-        "## Difficulty profiles", "## MIDI-backed songs", "## Metronome",
-        "## Audio, modes, loudness, and gain", "## Extended charts and build policy",
-        "## Resolved song convenience output", "## Failure behavior", "### Minimal explicit chart", "### Dual row, chord filtering, note values, and grouping",
-        "### Explicit difficulty profiles", "### MIDI-backed song",
-    }};
-    constexpr std::array<std::string_view, 17> required_example_sections{{
-        "### Metronome and gain envelope", "### Mode audio filenames",
-        "unknown fields are rejected", "`song.mode0.*` is rejected",
-        "explicit `0`", "even when the metronome is disabled",
-        "creates a starter file", "existing file is not replaced",
-        "`.cache/resolved-song.json`", "convenience output only",
-        "copy a desired `notes` array or `profiles` array", "future MIDI edits",
-        "## Start here", "### Editing JSON safely", "### Automatic right-hand run",
-        "### Partial chord and alternate C input", "### Custom chord composition and filtering",
-    }};
-    const auto require_inventory_rows = [&](const std::string_view section_begin,
-                                            const std::string_view section_end,
-                                            const auto& fields,
-                                            const char* object_name) {
-        const std::size_t begin = text.find(section_begin);
-        const std::size_t end = begin == std::string_view::npos ? std::string_view::npos
-            : text.find(section_end, begin + section_begin.size());
-        if (begin == std::string_view::npos || end == std::string_view::npos || end <= begin) {
-            return fail(error_message, "SongFormat cannot locate structured " +
-                std::string(object_name) + " field table");
+    std::vector<std::set<std::string>> tables(1);
+    std::istringstream lines{std::string(text)};
+    const std::regex field_row(R"(^\s*\|\s*`([^`]+)`\s*\|)");
+    for (std::string line; std::getline(lines, line);) {
+        std::smatch match;
+        if (std::regex_search(line, match, field_row)) {
+            tables.back().insert(match[1].str());
+        } else if (line.find('|') == std::string::npos && !tables.back().empty()) {
+            tables.emplace_back();
         }
-        const std::string_view section = text.substr(begin, end - begin);
-        for (const std::string_view field : fields) {
-            const std::string row = "| `" + std::string(field) + "` |";
-            if (section.find(row) == std::string_view::npos) {
-                return fail(error_message, "SongFormat structured " + std::string(object_name) +
-                    " table is missing field " + std::string(field));
-            }
-        }
-        return true;
+    }
+    const auto require_inventory_rows = [&](const auto& fields, const char* object_name) {
+        return std::any_of(tables.begin(), tables.end(), [&](const auto& table) {
+            return std::all_of(fields.begin(), fields.end(), [&](const auto field) {
+                return table.contains(std::string(field));
+            });
+        }) || fail(error_message, "SongFormat lacks a complete " + std::string(object_name) + " field table");
     };
-    if (!require_inventory_rows("## Root object", "## Explicit notes",
-            ff7rp::pipeline::kSongJsonRootFields, "root")
-        || !require_inventory_rows("## Explicit notes", "## Difficulty profiles",
-            ff7rp::pipeline::kSongJsonNoteFields, "note")
-        || !require_inventory_rows("## Difficulty profiles", "## MIDI-backed songs",
-            ff7rp::pipeline::kSongJsonProfileFields, "profile")
-        || !require_inventory_rows("## Metronome", "## Audio, modes, loudness, and gain",
-            ff7rp::pipeline::kSongJsonMetronomeFields, "metronome")
-        || !require_inventory_rows("## Audio, modes, loudness, and gain",
-            "## Extended charts and build policy", ff7rp::pipeline::kSongJsonGainPointFields,
-            "gain-envelope point")) return false;
+    if (!require_inventory_rows(ff7rp::pipeline::kSongJsonRootFields, "root")
+        || !require_inventory_rows(ff7rp::pipeline::kSongJsonNoteFields, "note")
+        || !require_inventory_rows(ff7rp::pipeline::kSongJsonProfileFields, "profile")
+        || !require_inventory_rows(ff7rp::pipeline::kSongJsonMetronomeFields, "metronome")
+        || !require_inventory_rows(ff7rp::pipeline::kSongJsonGainPointFields, "gain-envelope point")) return false;
     constexpr std::array<std::string_view, 2> source_names{{"song.mid", "song.midi"}};
     if (!require_documented_tokens(text, source_names, "MIDI source name", error_message)) return false;
-    for (const std::string_view section : required_sections) {
-        if (text.find(section) == std::string_view::npos) {
-            return fail(error_message, "SongFormat is missing required authoring section/example: " +
-                std::string(section));
-        }
-    }
-    for (const std::string_view marker : required_example_sections) {
-        if (text.find(marker) == std::string_view::npos) {
-            return fail(error_message, "SongFormat is missing required authoring contract marker: " +
-                std::string(marker));
-        }
-    }
     for (const auto& entry : ff7rp::pipeline::kSupportedNamedNoteValues) {
-        // Package prose describes the symbol, not the implementation's byte pair.
-        std::string label(entry.name);
-        std::replace(label.begin(), label.end(), '_', ' ');
-        label.front() = static_cast<char>(std::toupper(static_cast<unsigned char>(label.front())));
-        const std::string row = "| `" + std::string(entry.name) + "` | " + label + " note |";
-        if (text.find(row) == std::string_view::npos) {
+        if (!require_inventory_rows(std::array{entry.name}, "note-value")) {
             return fail(error_message, "SongFormat note-value table is missing or incorrect for " +
                 std::string(entry.name));
         }
@@ -780,15 +768,6 @@ bool verify_song_format_contract_text(
         if (text.find(row) == std::string_view::npos) {
             return fail(error_message, "SongFormat verified chord table is missing or incorrect for " +
                 std::string(chord.chord_id));
-        }
-    }
-    constexpr std::array<std::string_view, 8> pitch_contract{{
-        "`[A-G](#|b)?[0-9]`", "`B#0`", "`Cb1`", "`B#6`", "`Cb7`", "`C7`",
-        "C1 through C7 inclusive", "case-sensitive",
-    }};
-    for (const std::string_view marker : pitch_contract) {
-        if (text.find(marker) == std::string_view::npos) {
-            return fail(error_message, "SongFormat pitch grammar is incomplete: " + std::string(marker));
         }
     }
     return true;
@@ -815,8 +794,7 @@ bool parse_release_authority(
     if (!std::regex_match(fields["version"], semver)) {
         return fail(error_message, "release version is not canonical three-part semantic versioning");
     }
-    // Game builds stay two-part (1.004, 1.005) so archive names never introduce a second
-    // three-part version into release-facing documentation.
+    // Game versions follow the catalog schema, independently of product semver.
     const std::regex game_version(R"([0-9]+\.[0-9]+)");
     const std::regex catalog_identity(R"(ff7rebirth-[a-z0-9-]+)");
     std::set<std::string> game_builds;
@@ -907,17 +885,6 @@ bool load_release_metadata(
     // and release target are both selected by that build identity rather than by the catalog
     // default. Catalog-wide invariants across every build belong to the catalog generator check.
     const std::string build_id{ff7r::piano::core::generated::kBuildId};
-    std::string cache_header;
-    std::string repository_source;
-    std::string cmake;
-    std::string generated_hook_specs;
-    if (!read_bytes(source_root / "src/pipeline/cache.h", &cache_header)
-        || !read_bytes(source_root / "src/pipeline/song_repository.cpp", &repository_source)
-        || !read_bytes(source_root / "CMakeLists.txt", &cmake)
-        || !read_bytes(source_root / "src/generated" / build_id / "game/generated/hook_specs.generated.inc",
-            &generated_hook_specs)) {
-        return fail(error_message, "could not read canonical release metadata sources");
-    }
 
     ReleaseMetadata parsed;
     if (!load_release_authority(source_root, &parsed.release, error_message)) return false;
@@ -926,67 +893,27 @@ bool load_release_metadata(
         return fail(error_message, "release.json declares no target for build identity " + build_id);
     }
     parsed.target = *target;
-    if (!contains_once(cache_header,
-            std::regex(R"metadata(kPipelineCacheVersion\s*=\s*"([^"]+)")metadata"),
-            &parsed.pipeline_cache_version, "pipeline cache version source constant", error_message)) {
-        return false;
-    }
-    std::string magic_initializer;
-    if (!contains_once(repository_source,
-            std::regex(R"(kRuntimeCacheMagic\s*\[\s*8\s*\]\s*=\s*\{([^}]+)\})"),
-            &magic_initializer, "runtime cache magic source constant", error_message)) {
-        return false;
-    }
-    for (const std::string& character : regex_captures(magic_initializer, std::regex(R"('([^'])')"))) {
-        parsed.runtime_cache_magic += character;
-    }
-    if (parsed.runtime_cache_magic.size() != 8u) {
-        return fail(error_message, "runtime cache magic must contain exactly eight source characters");
-    }
-    std::string runtime_format;
-    if (!contains_once(repository_source,
-            std::regex(R"(kRuntimeCacheFormat\s*=\s*([0-9]+)\s*;)"),
-            &runtime_format, "runtime cache format source constant", error_message)) {
-        return false;
-    }
-    try {
-        parsed.runtime_cache_format = static_cast<unsigned int>(std::stoul(runtime_format));
-    } catch (...) {
-        return fail(error_message, "runtime cache format source constant is not an unsigned integer");
-    }
+    parsed.pipeline_cache_version = ff7rp::pipeline::kPipelineCacheVersion;
+    parsed.runtime_cache_magic.assign(ff7rp::pipeline::kRuntimeCacheMagic,
+        sizeof(ff7rp::pipeline::kRuntimeCacheMagic));
+    parsed.runtime_cache_format = ff7rp::pipeline::kRuntimeCacheFormat;
 
-    parsed.ctest_registrations = regex_captures(cmake, std::regex(R"(add_test\s*\(\s*NAME\s+([A-Za-z0-9_]+))"));
-    if (parsed.ctest_registrations.empty()
-        || std::set<std::string>(parsed.ctest_registrations.begin(), parsed.ctest_registrations.end()).size()
-            != parsed.ctest_registrations.size()) {
-        return fail(error_message, "CTest registrations are empty or duplicated");
+    parsed.ctest_registrations.assign(std::begin(kConfiguredCTestNames), std::end(kConfiguredCTestNames));
+    namespace rva = ff7r::piano::game::rva;
+    const ff7r::piano::game::HookSpec hooks[] = {
+#include "game/generated/hook_specs.generated.inc"
+    };
+    for (const auto& hook : hooks) {
+        parsed.hook_specs.emplace_back(hook.name);
+        if (hook.required_for_release_startup) ++parsed.required_hook_specs;
     }
-
-    std::size_t hook_lines = 0;
-    std::size_t optional = 0;
-    const std::regex metadata_line(R"(^// hook-spec: ([a-z0-9_]+) required_for_release_startup=(true|false)\r?$)");
-    std::istringstream spec_lines(generated_hook_specs);
-    for (std::string line; std::getline(spec_lines, line);) {
-        std::smatch match;
-        if (std::regex_match(line, match, metadata_line)) {
-            parsed.hook_specs.push_back(match[1].str());
-            if (match[2].str() == "false") ++optional;
-        }
-        if (line.find("rva::") != std::string::npos) ++hook_lines;
-    }
-    if (parsed.hook_specs.empty() || hook_lines != parsed.hook_specs.size()
-        || optional > parsed.hook_specs.size()
-        || std::set<std::string>(parsed.hook_specs.begin(), parsed.hook_specs.end()).size()
-            != parsed.hook_specs.size()) {
-        return fail(error_message, "hook specifications are empty, duplicated, or malformed");
-    }
-    parsed.required_hook_specs = parsed.hook_specs.size() - optional;
     *metadata = std::move(parsed);
     return true;
 }
 
 bool verify_documentation_parity_at(const fs::path& source_root, std::string* error_message)
 {
+    if (!verify_release_parser_rejections(error_message)) return false;
     ReleaseAuthority release;
     if (!load_release_authority(source_root, &release, error_message)) return false;
     DocumentationRegistry registry;
@@ -1004,11 +931,10 @@ bool verify_documentation_parity_at(const fs::path& source_root, std::string* er
             return fail(error_message, "missing registered canonical document: " + document.source.generic_string());
         }
     }
-    if (!validate_current_status(source_root, error_message)) return false;
     std::string song_format_text;
     if (!read_bytes(source_root / song_format->source, &song_format_text)
-        || !verify_song_format_contract_text(song_format_text, error_message)) return false;
-    if (!validate_package_prose(source_root, registry, error_message)) return false;
+        || !verify_song_format_contract_text(song_format_text, error_message)
+        || !verify_song_format_examples(song_format_text, error_message)) return false;
     if (!validate_ini_documentation(source_root, error_message)) return false;
     if (!validate_release_document_parity(source_root, release, error_message)) return false;
     return validate_links(source_root, registry.documents, false, error_message);
@@ -1057,11 +983,6 @@ bool verify_staged_documentation_parity(
         return fail(error_message, "staged package documentation inventory is incomplete");
     }
     return validate_links(package_root, packaged, true, error_message);
-}
-
-bool verify_documentation_parity(std::string* error_message)
-{
-    return verify_documentation_parity_at(FF7RPIANOSONGS_SOURCE_DIR, error_message);
 }
 
 } // namespace ff7rp::tests

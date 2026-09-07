@@ -5,6 +5,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from typing import Any
 from pathlib import Path
 from unittest import mock
 
@@ -165,6 +166,28 @@ class RuntimeLocatorGeneratorTests(unittest.TestCase):
                 stale_path.write_bytes(b"stale\n")
                 with self.assertRaisesRegex(generator.CatalogError, "stale tracked generated file"):
                     generator.check_outputs(outputs, root / "comparison")
+
+    def test_source_formatting_does_not_change_generated_outputs(self) -> None:
+        expected = generator.generated_outputs(self.catalog, self.entries, self.locators)
+        # JSON has no comments. Exercise whitespace/key order in the catalog and
+        # comment/blank-line changes in the generator entirely in memory.
+        formatted_catalog = json.dumps(self.catalog, indent=4, sort_keys=True)
+        original_read_text = Path.read_text
+
+        def read_text(path, *args, **kwargs):
+            if path == generator.CATALOG_PATH:
+                return formatted_catalog
+            return original_read_text(path, *args, **kwargs)
+
+        with mock.patch.object(Path, "read_text", read_text):
+            catalog, entries, locators = generator.load_and_validate_catalog()
+        self.assertEqual(expected, generator.generated_outputs(catalog, entries, locators))
+        source = GENERATOR_PATH.read_text(encoding="utf-8")
+        namespace: dict[str, Any] = {"__file__": str(GENERATOR_PATH), "__name__": "formatting_test"}
+        exec(compile(source + "\n\n# Comment-only generator edit.\n", str(GENERATOR_PATH), "exec"), namespace)
+        # Rendering must not reread raw inputs, even to stamp a digest in a header.
+        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("raw source read during rendering")):
+            self.assertEqual(expected, namespace["generated_outputs"](catalog, entries, locators))
 
 
 class MultiBuildCatalogTests(unittest.TestCase):

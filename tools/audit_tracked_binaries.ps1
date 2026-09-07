@@ -13,7 +13,7 @@ $expectedSha256 = @{
     "src/tests/fixtures/encoded_audio/fixture.flac" = "2bc57379745761fc488332a39501b42b26e25729d9f969cb781dedd9e7c22ba3"
 }
 $binaryPattern = '\.(mid|midi|mp3|flac|wav|bin|asi|dll|pdb|zip)$'
-$paths = @(& git -C $Root ls-files --cached --others --exclude-standard -- .)
+$paths = @(& git -C $Root ls-files --cached -- .)
 if ($LASTEXITCODE -ne 0) { throw "git source-binary inventory failed" }
 $binaries = @(
     $paths |

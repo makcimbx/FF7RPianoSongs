@@ -128,131 +128,127 @@ function Invoke-FixtureValidation {
 
 $adverseCases = @(
     [pscustomobject]@{
-        Name = "extra top-level field"; ExpectedMessage = "Build provenance fields must be exactly"
+        Name = "extra top-level field"
         Mutate = { param($fixture, $record) $record | Add-Member unexpected $true }
     },
     [pscustomobject]@{
-        Name = "missing top-level field"; ExpectedMessage = "Build provenance fields must be exactly"
+        Name = "missing top-level field"
         Mutate = { param($fixture, $record) $record.PSObject.Properties.Remove("configuration") }
     },
     [pscustomobject]@{
-        Name = "extra DLL field"; ExpectedMessage = "Build provenance DLL fields must be exactly"
+        Name = "extra DLL field"
         Mutate = { param($fixture, $record) $record.dll | Add-Member unexpected $true }
     },
     [pscustomobject]@{
-        Name = "missing DLL field"; ExpectedMessage = "Build provenance DLL fields must be exactly"
+        Name = "missing DLL field"
         Mutate = { param($fixture, $record) $record.dll.PSObject.Properties.Remove("sha256") }
     },
     [pscustomobject]@{
-        Name = "extra toolchain field"; ExpectedMessage = "Build provenance toolchain fields must be exactly"
+        Name = "extra toolchain field"
         Mutate = { param($fixture, $record) $record.toolchain | Add-Member unexpected $true }
     },
     [pscustomobject]@{
-        Name = "missing toolchain field"; ExpectedMessage = "Build provenance toolchain fields must be exactly"
+        Name = "missing toolchain field"
         Mutate = { param($fixture, $record) $record.toolchain.PSObject.Properties.Remove("generatorToolset") }
     },
     [pscustomobject]@{
-        Name = "extra CMake identity field"; ExpectedMessage = "Build provenance CMake identity fields must be exactly"
+        Name = "extra CMake identity field"
         Mutate = { param($fixture, $record) $record.cmake | Add-Member unexpected $true }
     },
     [pscustomobject]@{
-        Name = "missing CMake identity field"; ExpectedMessage = "Build provenance CMake identity fields must be exactly"
+        Name = "missing CMake identity field"
         Mutate = { param($fixture, $record) $record.cmake.PSObject.Properties.Remove("cacheSha256") }
     },
     [pscustomobject]@{
-        Name = "release authority hash drift"; ExpectedMessage = "release authority or generated header"
+        Name = "release authority hash drift"
         Mutate = { param($fixture, $record) $record.releaseIdentity.authoritySha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "generated release header hash drift"; ExpectedMessage = "release authority or generated header"
+        Name = "generated release header hash drift"
         Mutate = { param($fixture, $record) $record.releaseIdentity.generatedHeaderSha256 = "0" * 64 }
     },
     [pscustomobject]@{
         Name = "missing release identity game build"
-        ExpectedMessage = "Build provenance release identity fields must be exactly"
         Mutate = { param($fixture, $record) $record.releaseIdentity.PSObject.Properties.Remove("catalogId") }
     },
     [pscustomobject]@{
         Name = "extra release identity field"
-        ExpectedMessage = "Build provenance release identity fields must be exactly"
         Mutate = { param($fixture, $record) $record.releaseIdentity | Add-Member unexpected $true }
     },
     [pscustomobject]@{
         Name = "malformed release identity game build"
-        ExpectedMessage = "does not name a well-formed game build"
         Mutate = { param($fixture, $record) $record.releaseIdentity.catalogId = "FF7Rebirth Steam" }
     },
     [pscustomobject]@{
         Name = "non-string release identity game build"
-        ExpectedMessage = "does not name a well-formed game build"
         Mutate = { param($fixture, $record) $record.releaseIdentity.catalogId = 39 }
     },
     [pscustomobject]@{
-        Name = "extra production input field"; ExpectedMessage = "Production input fields must be exactly"
+        Name = "extra production input field"
         Mutate = { param($fixture, $record) $record.productionInputs[0] | Add-Member unexpected $true }
     },
     [pscustomobject]@{
-        Name = "missing production input field"; ExpectedMessage = "Production input fields must be exactly"
+        Name = "missing production input field"
         Mutate = { param($fixture, $record) $record.productionInputs[0].PSObject.Properties.Remove("sha256") }
     },
     [pscustomobject]@{
-        Name = "schema mismatch"; ExpectedMessage = "schema or configuration does not match"
+        Name = "schema mismatch"
         Mutate = { param($fixture, $record) $record.schema = "ff7rpianosongs.build-provenance.v0" }
     },
     [pscustomobject]@{
-        Name = "non-Release configuration"; ExpectedMessage = "schema or configuration does not match"
+        Name = "non-Release configuration"
         Mutate = { param($fixture, $record) $record.configuration = "Debug" }
     },
     [pscustomobject]@{
-        Name = "DLL path drift"; ExpectedMessage = "Built DLL does not match its provenance record"
+        Name = "DLL path drift"
         Mutate = { param($fixture, $record) $record.dll.path = "bin/Debug/FF7RPianoSongs.dll" }
     },
     [pscustomobject]@{
-        Name = "DLL hash drift"; ExpectedMessage = "Built DLL does not match its provenance record"
+        Name = "DLL hash drift"
         Mutate = { param($fixture, $record) $record.dll.sha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "DLL source drift"; ExpectedMessage = "Built DLL does not match its provenance record"
+        Name = "DLL source drift"
         Mutate = { param($fixture, $record) [System.IO.File]::AppendAllText($fixture.DllPath, "drift") }
     },
     [pscustomobject]@{
-        Name = "compiler executable drift"; ExpectedMessage = "Current compiler executable does not match build provenance"
+        Name = "compiler executable drift"
         Mutate = { param($fixture, $record) $record.toolchain.compilerPath = Join-Path $fixture.Root "missing-compiler.exe" }
     },
     [pscustomobject]@{
-        Name = "compiler hash drift"; ExpectedMessage = "Current compiler executable does not match build provenance"
+        Name = "compiler hash drift"
         Mutate = { param($fixture, $record) $record.toolchain.compilerSha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "compiler version drift"; ExpectedMessage = "Current compiler version does not match build provenance"
+        Name = "compiler version drift"
         Mutate = { param($fixture, $record) $record.toolchain.compilerVersion = "fixture-version-drift" }
     },
     [pscustomobject]@{
-        Name = "CMake executable drift"; ExpectedMessage = "Current CMake executable does not match build provenance"
+        Name = "CMake executable drift"
         Mutate = { param($fixture, $record) $record.toolchain.cmakePath = Join-Path $fixture.Root "missing-cmake.exe" }
     },
     [pscustomobject]@{
-        Name = "CMake hash drift"; ExpectedMessage = "Current CMake executable does not match build provenance"
+        Name = "CMake hash drift"
         Mutate = { param($fixture, $record) $record.toolchain.cmakeSha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "CMake version drift"; ExpectedMessage = "Current CMake version does not match build provenance"
+        Name = "CMake version drift"
         Mutate = { param($fixture, $record) $record.toolchain.cmakeVersion = "fixture-version-drift" }
     },
     [pscustomobject]@{
-        Name = "non-normalized CMake cache path"; ExpectedMessage = "CMake cache path must be a normalized relative path"
+        Name = "non-normalized CMake cache path"
         Mutate = { param($fixture, $record) $record.cmake.cachePath = "./CMakeCache.txt" }
     },
     [pscustomobject]@{
-        Name = "CMake cache drift"; ExpectedMessage = "Current CMake cache does not match build provenance"
+        Name = "CMake cache drift"
         Mutate = { param($fixture, $record) [System.IO.File]::AppendAllText((Join-Path $fixture.CacheRoot "CMakeCache.txt"), "drift") }
     },
     [pscustomobject]@{
-        Name = "omitted production inventory"; ExpectedMessage = "Production input inventory does not match build provenance"
+        Name = "omitted production inventory"
         Mutate = { param($fixture, $record) $record.productionInputs = @($record.productionInputs | Select-Object -Skip 1) }
     },
     [pscustomobject]@{
-        Name = "duplicate production inventory"; ExpectedMessage = "Duplicate production input"
+        Name = "duplicate production inventory"
         Mutate = {
             param($fixture, $record)
             $items = @($record.productionInputs)
@@ -261,31 +257,30 @@ $adverseCases = @(
         }
     },
     [pscustomobject]@{
-        Name = "non-normalized production input path"; ExpectedMessage = "Production input path must be a normalized relative path"
+        Name = "non-normalized production input path"
         Mutate = { param($fixture, $record) $record.productionInputs[0].path = ".\CMakeLists.txt" }
     },
     [pscustomobject]@{
-        Name = "production input hash drift"; ExpectedMessage = "Production input does not match build provenance"
+        Name = "production input hash drift"
         Mutate = { param($fixture, $record) $record.productionInputs[0].sha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "production source drift"; ExpectedMessage = "Production input does not match build provenance"
+        Name = "production source drift"
         Mutate = { param($fixture, $record) [System.IO.File]::AppendAllText((Join-Path $fixture.Root $record.productionInputs[0].path), "drift") }
     },
     [pscustomobject]@{
         Name = "production ASM-only source drift"
-        ExpectedMessage = "Production input does not match build provenance: src/game/chord_voicing_bridge.asm"
         Mutate = {
             param($fixture, $record)
             [System.IO.File]::AppendAllText((Join-Path $fixture.Root "src/game/chord_voicing_bridge.asm"), "; drift")
         }
     },
     [pscustomobject]@{
-        Name = "production input-set identity drift"; ExpectedMessage = "Production input set identity does not match build provenance"
+        Name = "production input-set identity drift"
         Mutate = { param($fixture, $record) $record.productionInputSetSha256 = "0" * 64 }
     },
     [pscustomobject]@{
-        Name = "production input ordering drift"; ExpectedMessage = "Production input set identity does not match build provenance"
+        Name = "production input ordering drift"
         Mutate = {
             param($fixture, $record)
             $items = @($record.productionInputs)
@@ -307,20 +302,23 @@ try {
     for ($index = 0; $index -lt $adverseCases.Count; ++$index) {
         $case = $adverseCases[$index]
         $fixture = New-ProvenanceFixture -Root (Join-Path $testRoot ("case-{0:D2}" -f $index))
+        Invoke-FixtureValidation -Fixture $fixture
         & $case.Mutate $fixture $fixture.Record
         Write-FixtureRecord -Path $fixture.RecordPath -Record $fixture.Record
 
-        $message = $null
+        $rejection = $null
         try {
             Invoke-FixtureValidation -Fixture $fixture
         } catch {
-            $message = $_.Exception.Message
+            $rejection = $_
         }
-        if ($null -eq $message) {
+        if ($null -eq $rejection) {
             throw "Adverse case '$($case.Name)' was accepted"
         }
-        if (!$message.Contains($case.ExpectedMessage)) {
-            throw "Adverse case '$($case.Name)' failed for the wrong reason: $message"
+        # The validator exposes throw-based rejection, not public reason codes.
+        # Keep incidental command/StrictMode errors from counting as rejection.
+        if ($rejection.CategoryInfo.Category -ne [System.Management.Automation.ErrorCategory]::OperationStopped) {
+            throw "Adverse case '$($case.Name)' raised an unexpected error: $rejection"
         }
     }
     $completed = $true

@@ -48,8 +48,6 @@
 namespace ff7rp::pipeline {
 namespace {
 
-constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
-constexpr std::uint32_t kRuntimeCacheFormat = 16;
 constexpr std::uint32_t kRuntimeSongSection = 0x474e4f53u;
 constexpr std::uint32_t kMaxRuntimeCacheNotes = 8192;
 

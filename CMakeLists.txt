@@ -260,11 +260,9 @@ target_link_libraries(mabf_builder_selftest PRIVATE ff7rp_pipeline)
 
 add_executable(pipeline_selftest
     src/tests/pipeline_selftest.cpp
-    src/tests/documentation_parity.cpp
 )
 ff7rp_apply_cpp_policy(pipeline_selftest)
-target_compile_definitions(pipeline_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
-    FF7RPIANOSONGS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(pipeline_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(pipeline_selftest PRIVATE "src")
 target_link_libraries(pipeline_selftest PRIVATE ff7rp_pipeline)
 ff7rp_use_generated_catalog(pipeline_selftest)
@@ -396,9 +394,9 @@ set_property(TARGET release_audit_tool APPEND PROPERTY LINK_DEPENDS
     ${FF7RP_RVA_GENERATED_FILES}
 )
 ff7rp_apply_cpp_policy(release_audit_tool OMIT_FP_PRECISE)
-target_compile_definitions(release_audit_tool PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
-    FF7RPIANOSONGS_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-target_include_directories(release_audit_tool PRIVATE "src")
+target_compile_definitions(release_audit_tool PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(release_audit_tool PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}")
+target_link_libraries(release_audit_tool PRIVATE ff7rp_pipeline)
 ff7rp_use_generated_catalog(release_audit_tool)
 add_executable(song_descriptor_builder_selftest
     src/tests/song_descriptor_builder_selftest.cpp
@@ -726,6 +724,9 @@ add_test(NAME tracked_binary_audit
     COMMAND "${FF7RP_PWSH_EXECUTABLE}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/audit_tracked_binaries.ps1"
 )
+add_test(NAME documentation_audit
+    COMMAND release_audit_tool "${CMAKE_CURRENT_SOURCE_DIR}"
+)
 
 set(FF7RP_BOUNDED_SELFTESTS
     rva_catalog_check
@@ -770,6 +771,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     build_provenance_selftest
     release_package_selftest
     tracked_binary_audit
+    documentation_audit
 )
 set_tests_properties(${FF7RP_BOUNDED_SELFTESTS} PROPERTIES TIMEOUT 60)
 set_tests_properties(
@@ -801,6 +803,26 @@ set_tests_properties(song_repository_selftest PROPERTIES
     PROCESSORS 4
     RESOURCE_LOCK midi_fixture_generation
 )
+
+# Use CMake's configured registrations, not the spelling of add_test calls.
+get_property(FF7RP_REGISTERED_TESTS DIRECTORY PROPERTY TESTS)
+set(FF7RP_AUDIT_TESTS rva_catalog_check tracked_binary_audit documentation_audit)
+set(FF7RP_TOOLING_TESTS rva_catalog_generator_selftest runtime_gate_selftest
+    build_provenance_selftest release_package_selftest)
+foreach(test IN LISTS FF7RP_REGISTERED_TESTS)
+    if(test IN_LIST FF7RP_AUDIT_TESTS)
+        set_property(TEST ${test} APPEND PROPERTY LABELS audit)
+    elseif(test IN_LIST FF7RP_TOOLING_TESTS)
+        set_property(TEST ${test} APPEND PROPERTY LABELS tooling)
+    else()
+        set_property(TEST ${test} APPEND PROPERTY LABELS functional)
+    endif()
+endforeach()
+list(SORT FF7RP_REGISTERED_TESTS)
+string(JOIN "\",\n    \"" FF7RP_CTEST_INVENTORY ${FF7RP_REGISTERED_TESTS})
+file(CONFIGURE OUTPUT "${FF7RP_RELEASE_GENERATED_DIR}/ctest_inventory.generated.h"
+    CONTENT "#pragma once\ninline constexpr const char* kConfiguredCTestNames[] = {\n    \"@FF7RP_CTEST_INVENTORY@\"\n};\n"
+    @ONLY NEWLINE_STYLE LF)
 
 add_executable(extended_chart_fixture_tool
     src/tools/extended_chart_fixture_tool.cpp
