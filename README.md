@@ -1,7 +1,7 @@
 # FF7RPianoSongs
-<!-- current-release-version: 0.2.0 -->
+<!-- current-release-version: 0.2.1 -->
 
-**Version 0.2.0** · Windows x64 · MIT
+**Version 0.2.1** · Windows x64 · MIT
 
 [![Windows CI](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml)
 
@@ -124,7 +124,7 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 - Supply WAV, MP3, or FLAC audio within the [song limits](docs/SongFormat.md#folder-and-source-selection).
   Pre-encoded HCA/MABF files and audio looping are not supported authoring inputs.
 - Retry, abort, and unusual exit paths are not comprehensively tested. Keep backups of your song files.
-- For 0.2.0, incomplete manual scenario coverage and the absence of new in-game checks on the
+- For 0.2.1, incomplete manual scenario coverage and the absence of new in-game checks on the
   exact packaged artifacts are accepted release limitations. Development results do not qualify
   every song, feature combination, or another game build.
 

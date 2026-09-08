@@ -716,12 +716,135 @@ SupersetChordMatch infer_unique_native_chord_superset(
     return std::move(candidates.front());
 }
 
+// Half-open source-tick intervals: an ended note (including this exact tick)
+// grants no context. Ordered events/queries avoid scanning all melody attacks
+// for every accompaniment onset. Nothing from a future attack is consulted.
+std::map<int, int> sounding_melody_floors(
+    const std::vector<OnsetCluster>& clusters, const std::set<SourceIdentity>& melody_sources) {
+    struct Change { int tick; int pitch; int delta; };
+    std::vector<Change> changes;
+    for (const auto& source : melody_sources) {
+        if (source.end_tick <= source.tick) continue;
+        changes.push_back({source.tick, source.pitch, 1});
+        changes.push_back({source.end_tick, source.pitch, -1});
+    }
+    std::sort(changes.begin(), changes.end(), [](const Change& a, const Change& b) {
+        return std::tie(a.tick, a.delta, a.pitch) < std::tie(b.tick, b.delta, b.pitch);
+    });
+    std::map<int, int> floors;
+    for (const auto& cluster : clusters)
+        for (const auto& note : cluster.notes) floors.emplace(note.source.tick, 128);
+    std::multiset<int> sounding;
+    std::size_t next = 0;
+    for (auto& [tick, floor] : floors) {
+        while (next < changes.size() && changes[next].tick <= tick) {
+            const auto& change = changes[next++];
+            if (change.delta > 0) sounding.insert(change.pitch);
+            else sounding.erase(sounding.find(change.pitch));
+        }
+        if (!sounding.empty()) floor = *sounding.begin();
+    }
+    return floors;
+}
+
+bool build_partial_chord_candidate(
+    const OnsetCluster& cluster, const std::vector<const MidiNoteEvent*>& harmony,
+    const std::set<int>& fresh_pitch_classes, const std::set<SourceIdentity>& melody_sources,
+    const std::map<int, int>& sounding_floors, const NativeAssetCapabilities native_assets,
+    Attack* out) {
+    if (fresh_pitch_classes.empty() || fresh_pitch_classes.size() > 2u ||
+        !native_assets.has_verified_authored_chord_voicing()) return false;
+    int same_onset_floor = 128;
+    for (const auto& note : cluster.notes)
+        if (melody_sources.count(note.source))
+            same_onset_floor = std::min(same_onset_floor, note.source.pitch);
+    std::set<int> supported_pitches;
+    for (const auto& carrier : kVerifiedNativeChordConstituents) {
+        if (!find_verified_native_chord(carrier.chord_id, native_assets)) continue;
+        for (std::size_t index = 0; index < carrier.sound_count; ++index) {
+            const auto sound = carrier.sound_names[index];
+            int pitch_class = 0;
+            if (native_sound_pitch_class(sound, &pitch_class))
+                supported_pitches.insert((sound[2] - '0' + 1) * 12 + pitch_class);
+        }
+    }
+    // Fix the intended fresh notes before choosing a carrier. Sustained melody
+    // is context only, never a chord constituent or a newly emitted attack.
+    // Only octave doubling may be reduced; no unmappable class is discarded.
+    std::vector<const MidiNoteEvent*> intended;
+    for (const int pitch_class : fresh_pitch_classes) {
+        const MidiNoteEvent* source = nullptr;
+        for (const auto* note : harmony) {
+            const int floor = same_onset_floor != 128 ? same_onset_floor :
+                sounding_floors.at(note->source.tick);
+            if (floor != 128 && note->source.pitch % 12 == pitch_class &&
+                note->source.pitch < floor && supported_pitches.count(note->source.pitch) &&
+                (!source || note->source.pitch < source->source.pitch ||
+                    (note->source.pitch == source->source.pitch && note->source < source->source)))
+                source = note;
+        }
+        if (!source) return false;
+        intended.push_back(source);
+    }
+    if (std::any_of(intended.begin(), intended.end(), [&](const auto* note) {
+        return note->source.tick != intended.front()->source.tick ||
+            note->source.track != intended.front()->source.track ||
+            note->source.channel != intended.front()->source.channel;
+    })) return false;
+    std::string best_id;
+    std::vector<std::string> best_ignores;
+    for (const auto& carrier : kVerifiedNativeChordConstituents) {
+        if (!find_verified_native_chord(carrier.chord_id, native_assets)) continue;
+        std::size_t matched = 0;
+        std::vector<std::string> ignores;
+        for (std::size_t index = 0; index < carrier.sound_count; ++index) {
+            const auto sound = carrier.sound_names[index];
+            int pitch_class = 0;
+            if (!native_sound_pitch_class(sound, &pitch_class)) continue;
+            const int pitch = (sound[2] - '0' + 1) * 12 + pitch_class;
+            if (std::any_of(intended.begin(), intended.end(), [&](const auto* note) {
+                return note->source.pitch == pitch;
+            })) ++matched;
+            else ignores.emplace_back(sound);
+        }
+        if (matched != intended.size() || ignores.size() > 3u) continue;
+        if (best_id.empty() || ignores.size() < best_ignores.size() ||
+            (ignores.size() == best_ignores.size() && carrier.chord_id < best_id)) {
+            best_id = carrier.chord_id;
+            best_ignores = std::move(ignores);
+        }
+    }
+    if (best_id.empty()) return false;
+    const auto* source = *std::min_element(intended.begin(), intended.end(),
+        [](const auto* a, const auto* b) { return a->source < b->source; });
+    out->event = *source;
+    out->start = source->start;
+    out->end = source->end;
+    out->beat = source->beat;
+    out->metric_accent = cluster.metric_accent;
+    out->melody_evidence = midi_melody_scoring_detail::melody_evidence(
+        source->source.pitch, source->source.velocity, source->start, source->end, source->stream_prior);
+    out->chord_id = std::move(best_id);
+    out->ignore_sound_pitches = std::move(best_ignores);
+    std::sort(intended.begin(), intended.end(), [](const auto* a, const auto* b) {
+        if (a->source.pitch != b->source.pitch) return a->source.pitch < b->source.pitch;
+        return a->source < b->source;
+    });
+    for (const auto* note : intended) {
+        out->end = std::max(out->end, note->end);
+        out->source_chord_pitches.push_back(pitch_name(note->source.pitch));
+        out->chord_sources.push_back(note->source);
+    }
+    return true;
+}
+
 std::vector<Attack> build_chord_candidates(
     const std::vector<OnsetCluster>& clusters,
     const std::set<SourceIdentity>& melody_sources,
     const std::vector<MidiAccidentalOrientationChange>& accidental_orientation,
     const NativeAssetCapabilities native_assets) {
     std::vector<Attack> result;
+    const auto sounding_floors = sounding_melody_floors(clusters, melody_sources);
     for (const OnsetCluster& cluster : clusters) {
         std::vector<const MidiNoteEvent*> harmony;
         std::set<int> fresh_pitch_classes;
@@ -751,7 +874,13 @@ std::vector<Attack> build_chord_candidates(
             match = std::move(superset.chord);
             ignored_sounds = std::move(superset.ignored_sounds);
         }
-        if (match.id.empty()) continue;
+        if (match.id.empty()) {
+            Attack partial;
+            if (build_partial_chord_candidate(cluster, harmony, fresh_pitch_classes,
+                    melody_sources, sounding_floors, native_assets, &partial))
+                result.push_back(std::move(partial));
+            continue;
+        }
         if (match.quality == ChordQuality::Diminished) {
             const int possible_dominant_root = (match.root + 8) % 12;
             const bool inversion_ambiguity = std::any_of(cluster.notes.begin(), cluster.notes.end(),

@@ -1576,11 +1576,11 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v14 invalidates selection caches. This one-note fixture
+        // Generated-MIDI v15 invalidates selection caches. This one-note fixture
         // retains its exact semantics and all six labels; only cache identity
         // and its manifest binding change, not pipeline v48 or binary format 16.
-        expected_cache_key = 0x52c9762ba315b1c3ull;
-        expected_normalized_manifest_digest = 0x6aeab7c8992e3f9dull;
+        expected_cache_key = 0x76bdb0aa2140a5f3ull;
+        expected_normalized_manifest_digest = 0x30279b050cfc9089ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -3345,6 +3345,59 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
     return 0;
 }
 
+int test_partial_lh_cache(const std::filesystem::path& root) {
+    ff7rp::pipeline::configure_chart_row_limit(false);
+    for (const int scenario : {0, 1, 2, 3}) {
+        const bool expect_left = scenario == 1 || scenario == 2;
+        const auto directory = root / ("partial-lh-" + std::to_string(scenario));
+        std::filesystem::create_directories(directory);
+        std::vector<MidiEvent> melody, bass;
+        for (int i = 0; i < 8; ++i) {
+            const int tick = 1920 + i * 960;
+            add_note(&melody, tick, scenario == 2 ? 720 : scenario == 3 ? 480 : 360, 72 + i % 5, 104);
+            if (scenario != 0) {
+                const int bass_tick = tick + (scenario >= 2 ? 480 : 0);
+                const int bass_duration = scenario >= 2 ? 240 : 720;
+                add_note(&bass, bass_tick, bass_duration, 36, 82);
+                if (i % 2) add_note(&bass, bass_tick, bass_duration, 43, 81);
+            }
+        }
+        if (!write_bytes(directory / "song.mid", build_format_one_midi(melody, bass)) ||
+            !write_silent_wav(directory / "song.wav", 12.0) ||
+            !write_song_json(directory / "song.json", "Partial LH Cache"))
+            return fail("partial LH cache fixture creation failed");
+        ff7rp::pipeline::LoadedSong cold, warm;
+        auto status = ff7rp::pipeline::load_song_directory(directory.string(), &cold);
+        if (!status.ok() || cold.loaded_from_runtime_cache)
+            return fail("partial LH cold generation failed: " + status.message);
+        const auto runtime = read_binary(directory / ".cache" / "runtime.bin");
+        const auto manifest = read_text(cold.cache_manifest_path);
+        const auto sidecar = read_binary(cold.cache_sidecar_path);
+        status = ff7rp::pipeline::load_song_directory(directory.string(), &warm, {}, false);
+        if (!status.ok() || !warm.loaded_from_runtime_cache || cold.cache_key != warm.cache_key ||
+            cold.difficulty_profiles.size() != warm.difficulty_profiles.size() || runtime.empty() ||
+            runtime != read_binary(directory / ".cache" / "runtime.bin") ||
+            manifest != read_text(warm.cache_manifest_path) || sidecar != read_binary(warm.cache_sidecar_path))
+            return fail("partial LH warm artifacts rejected or changed: " + status.message);
+        std::size_t left = 0;
+        for (std::size_t i = 0; i < cold.difficulty_profiles.size(); ++i) {
+            const auto& profile = cold.difficulty_profiles[i];
+            if (!song_configs_equal(profile.config, warm.difficulty_profiles[i].config) ||
+                !charts_equal(profile.chart, warm.difficulty_profiles[i].chart))
+                return fail("partial LH warm source/compiled semantics changed");
+            for (const auto& note : profile.config.notes) {
+                if (note.chord_id.empty()) continue;
+                ++left;
+                if (note.source_chord_pitches.empty() || note.ignore_sound_pitches.empty())
+                    return fail("partial LH warm profile lost source/filtered voicing");
+            }
+        }
+        if (expect_left != (left != 0)) return fail("partial LH cache hand control failed, scenario=" +
+            std::to_string(scenario));
+    }
+    return 0;
+}
+
 } // namespace
 
 int main() {
@@ -3370,6 +3423,7 @@ int main() {
     if (run("physical_midi_cache", [&] { return test_physical_midi_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("dense_collision_cache", [&] { return test_dense_collision_cache_round_trip(root.path()); }) != 0) return 1;
     if (run("offline_goldens", [&] { return test_offline_artifact_goldens(root.path()); }) != 0) return 1;
+    if (run("partial_lh_cache", [&] { return test_partial_lh_cache(root.path()); }) != 0) return 1;
     if (run("normal_policy", [&] { return test_normal_chart_cache_policy_normalization(root.path()); }) != 0) return 1;
     if (run("extended_diagnostic", [&] { return test_extended_chart_diagnostic_cache_isolation(root.path()); }) != 0) return 1;
     if (run("adaptive_metronome", [&] { return test_adaptive_metronome_modes(root.path()); }) != 0) return 1;

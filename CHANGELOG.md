@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-09-08
+
+- Improved left-hand participation in generated MIDI charts. Fresh bass notes and two-note
+  accompaniment can now use filtered native chord inputs even when no complete chord is struck.
+- A melody still sounding above the accompaniment can supply context, not just a melody note
+  struck at the same time. Only fresh accompaniment is emitted at its original source onset;
+  sustained notes are not retriggered.
+- Partial voicings keep supported source notes in their original octave and suppress every
+  extra native sound. No missing chord tones, fixed left-hand quota, or higher difficulty limits
+  are introduced. Left-hand activity still depends on the arrangement and selected difficulty.
+- Generated MIDI caches rebuild automatically once; no manual deletion is needed. Authored
+  JSON charts and source audio are unchanged. Initial preparation can take longer.
+- A focused 1.005 development playtest received positive feedback on sound and left-hand
+  participation. Broader manual scenarios, 1.004 gameplay and the exact packaged artifacts
+  remain unqualified; those limitations are accepted for this release.
+
 ## 0.2.0 - 2026-09-07
 
 - Improved MIDI reduction to favor musically prominent source notes over extra ease among

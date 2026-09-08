@@ -13,7 +13,76 @@
 - Ordinary post-expand count cleanup now derives its upper bound from the canonical compiled event plan rather than the number of source rows. This preserves both events of a dual row; required-action counts and stale stored totals do not grant authority. Retained-tail charts keep the existing source-row fallback unless the exact synchronous extended transaction authorizes preservation. The dedicated 1.005 five-row/seven-event Development result below supplies bounded count and score evidence, not qualification of every chart shape.
 - Explicit and MIDI alternate emission is restricted to natural C2–C6 and exact C#2–C#6. [Exact 1.005 monotone inventory](../analysis/PianoMonotoneAssignEvidence-20260905.md) proves ten alternate rows with assignment 7 and unchanged sound references, no `Cn1_2`/`Cn7_2`, and ordinary `Cn7` already assigned high C. It contains no C-flat alternate; that request remains unsupported. This narrows the existing shared emitter conservatively, not a new 1.004 capability claim; exact 1.004 monotone parity and physical-input/audio behavior remain unqualified. The pipeline identity change invalidates cached unsupported boundary assignments without changing runtime-cache layout.
 
-## Known Limitations / 0.2.0 Release Scope
+## Integration: Partial MIDI LH Candidates (2026-09-08)
+
+- Generated MIDI policy v15 adds exact-octave filtered bass/dyad carriers only
+  below a tracked melody at the same onset cluster or still sounding at the
+  fresh source tick, after complete inference declines. An ordered half-open
+  source timeline excludes ended/future notes; sustained melody supplies context
+  only, never a reattack or chord constituent. It uses verified native constituents and existing IgnoreSound,
+  without new runtime capability, quotas, scores, route limits or held-tone
+  inference. Authored JSON v2, pipeline v48 and binary format 16 are unchanged;
+  generated caches deliberately invalidate. See [MIDI Generation](MidiGeneration.md).
+- Isolated Everlasting Summer copies compared with clean `6d28ebb`: LH counts
+  changed from zero to 7/7/9/11/24/25 for labels 1–6 (first same-onset-only
+  iteration: 0/0/1/1/9/7). Source inspection found 67 exact-carrier fresh-onset
+  opportunities during tracked melody sustain. Every surviving LH sound
+  matched an exact normalized source pitch and source-onset native frame.
+  Final prompt stayed 149.183333s; labels 1–2's first prompt moved from 3.033333s
+  to 3.683333s and label 4's to 3.466667s. Tracked-melody RH retention changed
+  from 138/149/189/192/170/165 to 140/147/183/193/168/171 (264 eligible tracked attacks). This is an explicit
+  selection tradeoff, not a claim of improved musical quality. Same-frame hand
+  competition remains; no salience inflation or dual-row rewrite was added.
+- Cold preparation measured 36.28s before and 42.83s after on this host; warm
+  reuse took 0.20s with identical artifact hashes. All six profiles remained
+  complete and within existing physical routes/512-row bounds. Evidence is
+  retained outside Git at `Temp/opencode/lh-integration-6d28ebb`; installed
+  sources/cache were never modified. This is offline Integration evidence,
+  not release certification or human play/listening qualification.
+- Focused compilation/generator suites, repository `partial_lh_cache`,
+  `offline_goldens`, and `normal_policy` passed. Controls cover exact bass/dyad
+  sounds, reduced octave doubling, unmappable dyads/octaves, unknown capability,
+  monophonic/high leads, sustained versus exactly-ended/expired/future melody,
+  deterministic reductions and unchanged warm artifacts. Renderer/artifact-validator
+  goldens passed without changes in the first iteration. LH remains sparse;
+  easy labels' last LH is 39.25s in a 153.496s song. This does not solve the
+  overall accompaniment UX; simultaneous RH/LH selection remains outside this
+  batch. Stock-name research is not used to recalibrate physical routes.
+- The user-authorized 1.005 Development installation built this uncommitted
+  candidate and prepared session `20260908T092138Z-236bd71a0b1e` for Everlasting
+  Summer. Installed/dist SHA-256 matched
+  `c8ab000c97ec8f3c7de5d02866e64bb270c3e49091beef66d713e5954b1fbf0a`;
+  normal executable/provenance/process guards passed. The prior packaged session
+  `20260907T213156Z-eabae8976248` was collected and finalized Keep after loader/
+  settlement evidence and bounded review found completed cleanup for all five
+  observed leases, with no unresolved stop condition. It remains the new session's
+   release-binary rollback baseline. The candidate was initially **AwaitingUserRun**;
+   the subsequent bounded result and disposition follow below.
+  No game launch, INI/song/score/cache edit, package or publication was performed.
+
+The tester subsequently reported that both the sound and increased left-hand participation
+were enjoyable and requested no further algorithm changes. Session
+`20260908T092138Z-236bd71a0b1e` was collected and finalized **Keep** on 2026-09-08.
+Its immutable machine assessment remains **NotObserved**: the selected sidecar was ready,
+but accepted startup ordering and full repository settlement were not observed. Bounded
+log review found all five observed cleanup leases reaching custom-bank absence and complete
+cleanup; deferred handoffs and an uncommitted retirement refusal resolved, without an
+outstanding stop condition. Log SHA-256 is
+`708e3840f84074314a775480db7cb5e7558a6888bb1c8049ad243c4a8300d3c1`;
+the external session retains `manual-result.md`, immutable collection and rollback evidence.
+This is positive auditory/play feedback on the exact installed Development artifact, not
+complete musical, input, lifecycle, process-exit, other-build or packaged-artifact qualification.
+
+## Known Limitations / 0.2.1 Release Scope
+
+On 2026-09-08 the product owner explicitly authorized publication of 0.2.1, including
+commits, tag and per-build GitHub packages, after independent review and complete automated
+Release validation. Incomplete manual scenario coverage, no new 1.004 gameplay qualification
+and no repeat test of the exact packaged artifacts on either build are accepted as
+version-scoped unqualified limitations. The successful Development feedback above remains
+specific to that artifact. This decision supersedes historical manual-qualification gates
+for 0.2.1 only; it does not waive demonstrated defects, failed automated checks or blocking
+review findings. It does not transfer evidence across builds or artifacts.
 
 On 2026-09-07 the product owner explicitly authorized publication of 0.2.0, including the required commits, tag and per-build GitHub archives, after independent review and complete automated Release validation. The owner explicitly accepted incomplete focused manual coverage, no new gameplay qualification on 1.004, and no repeated qualification of the exact packaged artifacts on either build as version-scoped limitations. This decision supersedes historical manual-qualification prerequisites below for this release only; it does not waive a demonstrated safety defect, failed automated check, or blocking review finding, and transfers no evidence across artifacts or builds.
 
@@ -122,4 +191,4 @@ Maintainer evidence is indexed by `analysis/README.md` in the source repository 
 
 ## Artifact Disposition
 
-Repository builds and staged packages remain engineering artifacts until the exact 0.2.0 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Publication remains gated by clean-checkpoint Release/package validation. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.0 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.
+Repository builds and staged packages remain engineering artifacts until the exact 0.2.1 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Publication remains gated by clean-checkpoint Release/package validation. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.1 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.

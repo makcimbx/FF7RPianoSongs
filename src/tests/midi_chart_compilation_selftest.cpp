@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +16,7 @@
 #include "pipeline/midi_analysis_core.h"
 #include "pipeline/midi_source_normalizer.h"
 #include "pipeline/native_asset_capabilities.h"
+#include "pipeline/native_chord_constituents.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/pipeline_limits.h"
@@ -891,6 +893,126 @@ int main(int argc, char** argv) {
             {1800, {69}, 100, 180}});
 
     const WavAudio no_audio;
+    for (const auto pitches : {std::initializer_list<int>{36}, {36, 43}, {36, 48},
+            {72}, {24}, {36, 37}, {}}) {
+        const auto path = write_bytes_fixture("partial-lh.mid", single_chord_midi_bytes(pitches));
+        const bool supported = pitches.size() && *pitches.begin() == 36 &&
+            (pitches.size() == 1u || *(pitches.begin() + 1) != 37);
+        std::size_t selected_left = 0;
+        for (int difficulty = 1; difficulty <= 6; ++difficulty) {
+            auto config = config_for(difficulty);
+            config.midi_audio_alignment_seconds = 0.0;
+            config.midi_audio_offset_seconds = 0.0;
+            const auto observed = generate(path, no_audio, config);
+            const auto repeated = generate(path, no_audio, config);
+            if (!observed.status.ok() || fingerprint(observed) != fingerprint(repeated) ||
+                observed.stats.source_pitch_witness_failures ||
+                !ff7rp::pipeline::validate_midi_difficulty_route(
+                    observed.notes, observed.stats.source_bpm, difficulty).feasible)
+                return fail("partial LH lost deterministic source-backed feasible output");
+            if (!supported && observed.stats.chord_candidates)
+                return fail("monophonic/high/unsupported-octave source offered partial LH");
+            for (const auto& note : observed.notes) {
+                if (note.chord_id.empty()) continue;
+                ++selected_left;
+                const auto* carrier = ff7rp::pipeline::find_verified_native_chord(
+                    note.chord_id, ff7rp::pipeline::selected_native_asset_capabilities());
+                if (!carrier || note.group_index || note.source_chord_pitches.empty() ||
+                    note.ignore_sound_pitches.size() > 3u)
+                    return fail("partial LH lost verified carrier/source/ignore bounds");
+                std::set<std::string> surviving;
+                for (std::size_t i = 0; i < carrier->sound_count; ++i) {
+                    const std::string sound(carrier->sound_names[i]);
+                    if (std::find(note.ignore_sound_pitches.begin(), note.ignore_sound_pitches.end(), sound) ==
+                        note.ignore_sound_pitches.end()) surviving.insert(sound);
+                }
+                std::set<std::string> expected_sounds;
+                if (pitches.size() == 2u && *(pitches.begin() + 1) == 43 &&
+                    note.source_chord_pitches != std::vector<std::string>{"C2", "G2"})
+                    return fail("supported dyad lost an exactly representable constituent");
+                for (const auto& pitch : note.source_chord_pitches) {
+                    if (pitch == "C2") expected_sounds.insert("Cn2");
+                    else if (pitch == "G2") expected_sounds.insert("Gn2");
+                    else if (pitch == "C3" && pitches.size() == 2u && *(pitches.begin() + 1) == 48)
+                        expected_sounds.insert("Cn3");
+                    else return fail("partial LH invented/transposed a source tone");
+                }
+                if (note.beat < 0.0 || note.beat > 14.0 ||
+                    note.beat != 2.0 * std::round(note.beat / 2.0) ||
+                    surviving != expected_sounds || !note.chord_note_value.provided ||
+                    note.chord_note_value.value != ff7rp::pipeline::NativeNoteValue{2, 1})
+                    return fail("partial LH leaked native sound or lost exact source notation");
+            }
+        }
+        if (supported && !selected_left) return fail("bass/dyad fixture never selected partial LH");
+        if (supported) {
+            const auto unknown = generate(path, no_audio, config_for(6), nullptr, 0,
+                ff7rp::pipeline::native_asset_capabilities_for_catalog("unknown"));
+            if (!unknown.status.ok() || unknown.stats.chord_candidates)
+                return fail("unknown capability offered partial LH");
+        }
+    }
+    // Fresh bass lies between melodic onsets. Only a still-sounding tracked
+    // melody grants context; exact note-off, earlier note-off, and future
+    // melody are negative controls. The sustained tone must never be emitted
+    // as a new LH constituent.
+    for (const int mode : {0, 1, 2, 3}) {
+        std::vector<MidiEvent> melody, bass;
+        melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+        for (int i = 0; i < 8; ++i) {
+            const int tick = i * 1920;
+            const int duration = mode == 1 ? 480 : mode == 2 ? 479 : 1440;
+            add_note(&melody, tick + (mode == 3 ? 960 : 0), duration, 84 + i % 3, 108);
+            add_note(&bass, tick + 480, 240, 36, 82);
+            add_note(&bass, tick + 480, 240, 43, 80);
+        }
+        // Anchor the tracked stream at both ends. Otherwise the tracker can
+        // legitimately choose the terminal/initial G2 as melody, accidentally
+        // testing the preserved same-onset rule instead of sustain expiry.
+        add_note(&melody, 8 * 1920, 480, 84, 108);
+        if (mode == 3) add_note(&melody, 0, 240, 84, 108);
+        std::vector<unsigned char> context_bytes{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&context_bytes, 1); append_u16(&context_bytes, 2); append_u16(&context_bytes, 480);
+        append_midi_track(&context_bytes, std::move(melody));
+        append_midi_track(&context_bytes, std::move(bass));
+        const auto path = write_bytes_fixture("sustained-context.mid", context_bytes);
+        ff7rp::pipeline::NormalizedMidiSource context_source;
+        if (!ff7rp::pipeline::normalize_midi_source(path.string(), &context_source).ok())
+            return fail("sustained context fixture normalization failed");
+        const auto context_clusters = ff7rp::pipeline::build_onset_clusters(context_source.notes,
+            context_source.ticks_per_quarter, context_source.tempos, context_source.meters, nullptr, nullptr);
+        const auto context_voice = ff7rp::pipeline::track_midi_melody_voice(context_clusters);
+        if (context_voice.attacks.empty() || std::any_of(context_voice.attacks.begin(),
+            context_voice.attacks.end(), [](const auto& attack) { return attack.event.source.pitch < 84; }))
+            return fail("sustained context fixture no longer isolates the tracked upper melody");
+        std::size_t left = 0;
+        for (int difficulty = 1; difficulty <= 6; ++difficulty) {
+            auto config = config_for(difficulty);
+            config.midi_audio_alignment_seconds = 0.0;
+            config.midi_audio_offset_seconds = 0.0;
+            const auto observed = generate(path, no_audio, config);
+            const auto repeated = generate(path, no_audio, config);
+            if (!observed.status.ok() || fingerprint(observed) != fingerprint(repeated) ||
+                observed.stats.source_pitch_witness_failures ||
+                !ff7rp::pipeline::validate_midi_difficulty_route(
+                    observed.notes, observed.stats.source_bpm, difficulty).feasible)
+                return fail("sustained context lost deterministic source/route validity, mode=" + std::to_string(mode));
+            if ((mode == 0) != (observed.stats.chord_candidates != 0))
+                return fail("sustained/ended/future melody context eligibility changed, mode=" + std::to_string(mode));
+            for (const auto& note : observed.notes) {
+                if (note.chord_id.empty()) continue;
+                ++left;
+                if (note.source_chord_pitches != std::vector<std::string>{"C2", "G2"} ||
+                    note.chord_id != "pca_C" || note.ignore_sound_pitches != std::vector<std::string>{"En2"} ||
+                    note.beat < 1.0 || note.beat > 29.0 ||
+                    note.beat != 1.0 + 4.0 * std::round((note.beat - 1.0) / 4.0) ||
+                    note.chord_note_value != ff7rp::pipeline::NoteValueOverride{{3, 0}, true})
+                    return fail("sustained-context LH reattacked/retimed a tone or leaked native sound");
+            }
+        }
+        if ((mode == 0) != (left != 0))
+            return fail("sustained/ended/future context selected LH control failed, mode=" + std::to_string(mode));
+    }
     const auto find_pitch = [](const Observation& observation, const std::string_view pitch) {
         return std::find_if(observation.notes.begin(), observation.notes.end(), [&](const Note& note) {
             return note.pitch == pitch;
@@ -1345,7 +1467,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates:v14") {
+        != "midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v15") {
         return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));

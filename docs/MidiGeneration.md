@@ -120,7 +120,7 @@ are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. Generated rows remain ungrouped. This derivation is covered by
-`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates:v14`.
+`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v15`.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
@@ -169,6 +169,25 @@ Native ninth assignments deliberately omit the template seventh: their verified
 voicing is root, third, fifth, and ninth. Superset matching therefore declines a
 partial ninth that relies on the seventh, and never emits that nonmember as an
 ignored sound.
+
+When complete inference fails, one or two fresh accompaniment pitch classes may
+offer a filtered LH carrier below the tracked melody in the same onset cluster.
+Without a same-onset tracked melody, a tracked melodic note that is still sounding
+at the fresh source tick may supply accompaniment context instead. An ordered
+source-tick sweep uses half-open note-on/note-off intervals: ended notes and
+future melody provide no authority. The sustained melody is never added to the
+voicing or emitted again; only fresh accompaniment supplies LH constituents.
+This path requires verified native-asset capability and matches absolute source
+semitones **including octave**, not chord pitch classes. It preserves an actual
+source subset (octave doubling retains the lowest supported source octave of
+each class; an unmappable class declines), one track/channel and exact tick,
+and suppresses every other native sound with at most three IgnoreSound entries.
+It retains only the surviving source identities, exact onset and note values.
+Every candidate carrier must reproduce that same intended subset; fewest ignores
+then lexical native ID breaks ties. The carrier does not assert missing major/minor harmony.
+Unknown capability, monophonic melody, high ornaments outside the native voicing,
+or unmappable octaves decline this path. There is no LH quota, score bonus,
+held-note invention, dual-row rewrite, or relaxation of route/spacing limits.
 
 ## Author Expectations
 
