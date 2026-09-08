@@ -187,6 +187,21 @@ The first independent 0.2.0 Release run at `e8c280228c11e7475d9443890514ca475452
 
 Repository expectations also retained superseded selection assumptions: the root difficulty need not contain a chord, source-backed lower-register alternatives are valid, and every profile need not start on the first source attack. Tests now verify exact source pitches/onsets, native spelling, side-specific values, route feasibility and preserved final attack/audio tail rather than pinning those old selection choices. The full run passed through the corrected accidental/cache case; the later synthetic-envelope and every remaining internal case passed separately after the first-input correction. Detailed historical/current manifest comparison and remaining-case logs are retained outside Git under `manifest-oracle-e8c2802`. No production selection, serialization or cache identity changed in this test-only follow-up. Observed prefix and remaining-case runtimes total approximately five minutes, so the repository test's bounded timeout is increased from 240 to 420 seconds; assertions and scenario coverage are unchanged. A successful unfiltered run and both-build clean-checkpoint packaging remain for the independent validator, not inferred from these partial runs.
 
+The first independent 0.2.1 run at `522ae8bf70c2206473fc78a6974754d7fde6dde1`
+passed its 1.005 full build, actual-artifact provenance, both-build catalog checks and
+47 registered tests, but `song_repository_selftest` timed out at its 420-second limit.
+No package was produced. A separate read-only run of the same unchanged executable
+completed all 23 internal cases in 376.46 seconds, exit zero. Buffered output arrived
+only at completion, explaining the empty timeout capture but not identifying the
+precise original progress or cause. Physical-MIDI caches, synthetic profiles and row
+limits accounted for most execution time. High host load was observed in the diagnostic
+run; no unrelated applications were stopped. The measured pass left little headroom,
+so only the registered bound advances to 600 seconds, retaining all assertions,
+processors and resource locks. Production code is unchanged. The original failed
+Release report and separate `repository-timeout-diagnosis-522ae8b-20260908` evidence
+remain outside Git. This diagnostic does not waive the failed gate: an independent
+registered full-suite pass and complete clean-checkpoint packages are still required.
+
 Maintainer evidence is indexed by `analysis/README.md` in the source repository and is intentionally excluded from the user package. Those records do not qualify the limitations above.
 
 ## Artifact Disposition
