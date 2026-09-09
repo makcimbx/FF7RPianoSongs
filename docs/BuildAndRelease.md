@@ -1,5 +1,5 @@
 # Build And Release
-<!-- current-release-version: 0.2.1 -->
+<!-- current-release-version: 0.2.2 -->
 
 This is the canonical repository workflow. Commands are run from the repository
 root in PowerShell; no parent repository is required.
@@ -119,6 +119,32 @@ ctest --test-dir build -C Release --output-on-failure
 
 Test names and totals are derived from CMake/CTest and release-audit output. They are deliberately not copied into status prose.
 
+## Measure Song Preparation
+
+Build the production cache tool for an explicit catalog identity:
+
+```powershell
+./build.ps1 -Configuration Release -CatalogBuildId <catalog-build-id> -Target song_cache_tool
+./build/Release/song_cache_tool.exe "<isolated-song-directory>" --playable-extended
+```
+
+The tool writes caches and resolved exports in the supplied song directory. Use
+an external scratch copy of the song inputs, never installed Music, for cold
+benchmarks. `--playable-extended` selects offline chart policy only; it does not
+authorize runtime hooks or installation.
+
+`timing elapsed_ms=... delta_ms=... stage=...` records steady-clock time at the
+actual load callbacks. A delta belongs to the interval since the preceding stage,
+not necessarily work named by the current marker. Runtime discovery buffers text
+traces per song, so adjacent timestamps in the installed log are not phase timings.
+
+Measure a fresh cold preparation separately from the next warm-cache load. For
+semantics-preserving optimizations, retain a baseline executable and compare all
+complete cache artifacts (manifest, resolved export, runtime cache, and MABF), not
+only prefix rows or displayed action counts. Hold input, build, chart policy, and
+machine load constant. A single-song result does not establish simultaneous
+startup throughput: other workers and the running game compete for CPU and memory.
+
 ## Add A Game Build
 
 Signatures cataloged for one build are not portable across builds: rescanning an adjacent
@@ -198,7 +224,7 @@ or developer tools are copied. Do not add a second document list.
 `release.json` declares one target per supported game build. Each target names its game
 version, the executable catalog identity that build is compiled against, and an archive
 basename derived as `<product>-<version>-<platform>-ff7r<game-version>`, so the 1.005 artifact
-publishes as `FF7RPianoSongs-0.2.1-win64-ff7r1.005`. Stage one archive per game build,
+publishes as `FF7RPianoSongs-0.2.2-win64-ff7r1.005`. Stage one archive per game build,
 selecting the same build the ASI was compiled for. `-GameBuild` here takes the target's game
 version and is required once more than one target exists:
 

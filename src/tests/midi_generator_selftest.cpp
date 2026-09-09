@@ -724,13 +724,19 @@ int test_crossing_voice_and_pitch_witness() {
         return fail("repeated reduction was not deterministic");
     }
     const std::array<std::string, 5> expected{{"C5", "A#4", "G#4", "G4", "E4"}};
-    if (first.size() != expected.size()) return fail("crossing voice fixture lost melody events");
+    if (first.size() != 2 * expected.size() || first_stats.selected_actions != expected.size())
+        return fail("crossing voice fixture lost melody inputs or simultaneous followers");
     for (std::size_t i = 0; i < expected.size(); ++i) {
-        if (first[i].pitch != expected[i]) {
+        const auto& root = first[2 * i];
+        const auto& follower = first[2 * i + 1];
+        if (root.pitch != expected[i]) {
             return fail("voice DP switched at the crossing: expected " + expected[i] +
-                ", got " + first[i].pitch);
+                ", got " + root.pitch);
         }
-        if (source_pitches.find(pitch_to_midi(first[i].pitch)) == source_pitches.end()) {
+        if (source_pitches.find(pitch_to_midi(root.pitch)) == source_pitches.end() ||
+            source_pitches.find(pitch_to_midi(follower.pitch)) == source_pitches.end() ||
+            root.group_index == 0 || root.group_index != follower.group_index ||
+            root.beat != follower.beat || root.pitch == follower.pitch) {
             return fail("generated pitch had no source-event witness");
         }
     }
@@ -1138,7 +1144,7 @@ int test_global_native_frame_conflict_policy() {
     }
     // Each frame now offers the melody, one bounded alternate, and the chord.
     // Exactly one wins; neither discarded action is retimed into another frame.
-    if (stats.right_events + stats.left_events != onset_count ||
+    if (stats.right_events + stats.left_events != notes.size() ||
         stats.merged_events != 0 || stats.cross_hand_conflicts != onset_count ||
         stats.scheduled_conflicts != 0 || stats.dropped_conflicts != onset_count * 2 ||
         stats.selected_actions != onset_count || stats.candidate_actions != onset_count * 3 ||
@@ -1153,7 +1159,7 @@ int test_global_native_frame_conflict_policy() {
         }
         frames.insert(std::llround(note.beat * 0.5 * 60.0));
     }
-    if (frames.size() != notes.size()) return fail("generated chart contains simultaneous directional prompts");
+    if (frames.size() != stats.selected_actions) return fail("generated chart changed independent input frames");
     const long long final_source_frame = (onset_count - 1) * 60;
     if (frames.rbegin() == frames.rend() || *frames.rbegin() != final_source_frame ||
         notes.back().pitch.empty() ||
@@ -1174,10 +1180,10 @@ int test_globally_unschedulable_conflict_drop() {
     std::vector<ff7rp::pipeline::Note> notes;
     ff7rp::pipeline::MidiChartStats stats;
     const auto status = generate(midi.path(), fixture_config(6), &notes, &stats);
-    if (!status.ok() || notes.size() != 1 || notes.front().pitch != "C5" ||
+    if (!status.ok() || notes.size() != 4 || notes.front().pitch != "C5" ||
         stats.selected_actions != 1 || stats.candidate_actions != 3 || stats.cross_hand_conflicts != 1 ||
         stats.scheduled_conflicts != 0 || stats.dropped_conflicts != 2 ||
-        stats.desired_rows != 1) {
+        stats.desired_rows != 4) {
         return fail("globally full one-frame timing domain did not report its dropped alternate and chord actions");
     }
     return 0;

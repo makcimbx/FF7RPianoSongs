@@ -5,6 +5,8 @@
 #include "startup/startup_cache_progress.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <condition_variable>
 #include <filesystem>
 #include <fstream>
@@ -501,6 +503,74 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
     const std::filesystem::path temp =
         std::filesystem::temp_directory_path() / "ff7rp_music_repository_loader_selftest";
     std::error_code ec;
+    {
+        const std::filesystem::path pool_root = temp.string() + "_worker_pool";
+        std::filesystem::remove_all(pool_root, ec);
+        for (std::size_t index = 0; index < 6; ++index) {
+            std::filesystem::create_directories(pool_root / std::to_string(index), ec);
+        }
+        std::mutex pool_mutex;
+        std::condition_variable pool_changed;
+        std::vector<std::size_t> started_workers;
+        std::array<unsigned, 6> visits{};
+        std::size_t first_wave_arrivals = 0;
+        std::size_t active = 0;
+        std::size_t maximum_active = 0;
+        std::size_t finished_workers = 0;
+        ff7rp::pipeline::SongDiscoveryHooks pool_hooks;
+        pool_hooks.before_worker_start = [&](const std::size_t index) {
+            started_workers.push_back(index);
+        };
+        pool_hooks.before_candidate_load = [&](const std::size_t index) {
+            std::unique_lock lock(pool_mutex);
+            ++visits.at(index);
+            maximum_active = std::max(maximum_active, ++active);
+            // Admission publishes the complete worker set before any candidate runs.
+            // Hold the first wave until all admitted workers actually enter it.
+            if (index < started_workers.size()) {
+                ++first_wave_arrivals;
+                pool_changed.notify_all();
+                pool_changed.wait(lock, [&] {
+                    return first_wave_arrivals == started_workers.size();
+                });
+            }
+        };
+        pool_hooks.after_candidate_load = [&](std::size_t) {
+            std::lock_guard lock(pool_mutex);
+            --active;
+        };
+        pool_hooks.after_worker_body = [&](std::size_t) {
+            std::lock_guard lock(pool_mutex);
+            ++finished_workers;
+        };
+        const auto pooled = ff7rp::pipeline::discover_songs(pool_root, pool_hooks);
+        ok &= require(started_workers == std::vector<std::size_t>{0, 1}
+                && maximum_active == 2 && active == 0 && finished_workers == 2
+                && visits == std::array<unsigned, 6>{1, 1, 1, 1, 1, 1}
+                && pooled.discovery_code == SongDiscoveryCode::Completed
+                && pooled.candidates.size() == 6,
+            "discovery must run two bounded joined workers and visit each candidate exactly once");
+        for (std::size_t index = 0; index < pooled.candidates.size(); ++index) {
+            ok &= require(pooled.candidates[index].directory_name == std::to_string(index),
+                "two-worker completion must preserve deterministic candidate order");
+        }
+        for (const std::size_t failed_worker : {std::size_t{0}, std::size_t{1}}) {
+            std::size_t attempted_workers = 0;
+            std::atomic<unsigned> premature_loads{0};
+            ff7rp::pipeline::SongDiscoveryHooks failure_hooks;
+            failure_hooks.before_worker_start = [&](const std::size_t index) {
+                ++attempted_workers;
+                if (index == failed_worker) throw std::runtime_error("partial pool start");
+            };
+            failure_hooks.before_candidate_load = [&](std::size_t) { ++premature_loads; };
+            const auto failed_pool = ff7rp::pipeline::discover_songs(pool_root, failure_hooks);
+            ok &= require(failed_pool.discovery_code == SongDiscoveryCode::WorkerStartFailed
+                    && attempted_workers == failed_worker + 1 && premature_loads == 0
+                    && failed_pool.candidates.empty() && failed_pool.songs.empty(),
+                "failed two-worker start must join started threads without starting a song load");
+        }
+        std::filesystem::remove_all(pool_root, ec);
+    }
     std::filesystem::remove_all(temp, ec);
     std::filesystem::create_directories(temp / "ZSecond", ec);
     std::filesystem::create_directories(temp / "AFirst", ec);

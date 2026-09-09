@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-09-09
+
+- Generated MIDI charts now preserve additional simultaneous notes from the selected note's
+  exact source tick, track and channel as automatic group followers. One root input triggers
+  the group; the extra sounds do not require extra button presses. Nearby arpeggio notes and
+  sustained notes are not merged or retriggered, and source pitches are not transposed.
+- Followers retain source voicing while avoiding duplicate pitches and sounds already covered
+  by selected left-hand accompaniment. All sounds count toward complete chart limits; oversized
+  profiles are rejected rather than silently shortened.
+- Reduced MIDI preparation overhead by sharing immutable search-row data instead of repeatedly
+  copying it. Isolated cold preparation improved from 124.4 to 41.7 seconds for Sorairo Days and
+  from 27.7 to 11.6 seconds for Zanarkand on the test host. The optimization preserved complete
+  cache artifacts byte-for-byte; these measurements are not a per-song time guarantee.
+- Song preparation remains limited to two concurrent workers to avoid the increased load of
+  the experimental four-worker setting. Warm caches remain reusable.
+- Updating from 0.2.1 automatically rebuilds generated MIDI caches once for the new groups;
+  manual deletion is unnecessary. Authored JSON charts and source audio are unchanged.
+- A bounded 1.005 development run completed Sorairo Days Lv.4 with grouped extended events,
+  the expected required-action total, score persistence and cleanup. Broader group timing/input
+  scenarios, new 1.004 gameplay checks and exact packaged-artifact qualification remain
+  incomplete and are explicitly accepted release limitations.
+
 ## 0.2.1 - 2026-09-08
 
 - Improved left-hand participation in generated MIDI charts. Fresh bass notes and two-note

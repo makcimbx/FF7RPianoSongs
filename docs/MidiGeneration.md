@@ -40,10 +40,17 @@ native-superset chords. Exact source voicing remains attached to inferred chords
 IgnoreSound can suppress only verified extra native constituents. Accepted chords
 are not converted to monotones merely to simplify publication.
 
-All automatically generated rows serialize with `group_index = 0`. Every generated
-monotone or chord event is therefore a parentless required action and participates
-in spacing, route, strain, score-growth, and recognizability analysis. The selector
-does not create automated followers or run topology. Difficulty-specific spacing,
+The selector still chooses independent single-sided required inputs for spacing,
+route, strain, score-growth, and recognizability analysis. After selection, each
+right-hand root retains the other unique supported source pitches at exactly its
+source tick, track, and channel as consecutive same-beat automatic group followers.
+The root stays first; followers sort by pitch then immutable source identity, with
+same-pitch duplicates removed. Alternating group IDs keep neighboring groups
+independent. Nearby ticks, other streams, and sustained notes are not merged or
+reattacked. Sounds already covered by selected left-hand accompaniment at that
+source onset are excluded. Followers reuse the existing exact spelling, note-value,
+and canonical alternate-input mapping; they add physical rows/events, not inputs
+or strain. Previous-profile preference considers roots only. Difficulty-specific spacing,
 salience, source preference, calibrated density goals, and route limits may select
 different source events and produce different physical digests. A previously visible
 profile is only source-backed preference evidence for the next label; it is not a
@@ -103,6 +110,13 @@ promise of instant generation or a strict total-operation ceiling. Cold diagnost
 report the selected beam width, traversed frames, measured full/prefix skill-analysis
 row visits, and outcome. Warm-cache reuse does not repeat that optimization.
 
+Retained beam paths reference immutable rows owned by the selection-local baseline
+map and the already-sorted candidate vector. These owners remain stable throughout
+the search, including parallel analysis; the selected path is copied into owning
+output before return. Path copies therefore do not duplicate each row's strings,
+chord pitches, or source witnesses. This changes allocation cost, not selection
+arithmetic, search breadth, generated output, or cache identity.
+
 Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Authored calibration routes overlap, and incomplete recovered evidence is treated as unknown rather than as rests or easy material.
 
 ## Timing And Audio
@@ -119,8 +133,14 @@ are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
 5 and 6 are intentionally unsupported. Nonmatching or heterogeneous
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
-guessing is used. Generated rows remain ungrouped. This derivation is covered by
-`midi_generation=independent_ungrouped:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v15`.
+guessing is used. This derivation is covered by
+`midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v16`.
+The policy identity rebuilds generated MIDI caches without changing authored JSON
+semantics or the binary cache layout. Complete enriched rows pass the existing
+compiler and event-plan topology/physical limits; oversized profiles are omitted,
+never truncated or reduced to an unsafe playable prefix. Same-time native group
+followers may sound on the next game frame. This Integration experiment still
+requires focused in-game sound, scoring, and full-tail verification.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`

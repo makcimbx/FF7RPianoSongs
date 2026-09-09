@@ -13,6 +13,39 @@
 - Ordinary post-expand count cleanup now derives its upper bound from the canonical compiled event plan rather than the number of source rows. This preserves both events of a dual row; required-action counts and stale stored totals do not grant authority. Retained-tail charts keep the existing source-row fallback unless the exact synchronous extended transaction authorizes preservation. The dedicated 1.005 five-row/seven-event Development result below supplies bounded count and score evidence, not qualification of every chart shape.
 - Explicit and MIDI alternate emission is restricted to natural C2–C6 and exact C#2–C#6. [Exact 1.005 monotone inventory](../analysis/PianoMonotoneAssignEvidence-20260905.md) proves ten alternate rows with assignment 7 and unchanged sound references, no `Cn1_2`/`Cn7_2`, and ordinary `Cn7` already assigned high C. It contains no C-flat alternate; that request remains unsupported. This narrows the existing shared emitter conservatively, not a new 1.004 capability claim; exact 1.004 monotone parity and physical-input/audio behavior remain unqualified. The pipeline identity change invalidates cached unsupported boundary assignments without changing runtime-cache layout.
 
+## Integration: Simultaneous MIDI Groups And Preparation (2026-09-09)
+
+- Generated MIDI policy v16 preserves the selected RH root and adds unique supported
+  pitches at the exact same source tick, track and channel as automatic same-time
+  group followers. Adjacent groups remain independent; existing LH sounds are not
+  duplicated. Followers consume physical rows/events but not required inputs or
+  root-route strain. Complete enriched limits and compiler validation remain mandatory.
+  Authored charts, pipeline v48 and binary format 16 are unchanged; generated caches
+  invalidate once for the group policy.
+- Selection paths now borrow immutable selection-local rows, copying only final owning
+  output. This removes repeated allocation without changing traversal, beam breadth or
+  scoring. Isolated Sorairo cold preparation fell from 124.38 to 41.66 seconds and
+  Zanarkand from 27.66 to 11.64 seconds. Full manifest, resolved-chart, runtime-cache and
+  MABF hashes matched before/after and on warm reuse for both songs. External evidence
+  is retained at `Temp/opencode/preparation-ab`. These are bounded single-song runs,
+  not worst-case or concurrent startup guarantees.
+- The experimental four-worker pool was rejected by the user for excessive load;
+  the shipping pool and ETA cap remain two, with the allocation optimization retained.
+  Focused grouping, compilation, cache, loader and ETA checks passed during development;
+  independent immutable-row lifetime/concurrency review found no blocking defect.
+- Exact-1.005 Development session `20260909T135525Z-f305839d6259` used ASI SHA-256
+  `9f2d64f48e1d1c3cc1e88174c52b32df8abbd3ab36f359e36f12d999274fe2e0`.
+  The user reported excellent sound and requested release. Immutable collection passed
+  progressive startup, full repository settlement and Sorairo sidecar readiness. The log
+  records Sorairo Lv.4 expansion to 1062 events with 545 group links and 517 required
+  actions, natural completion with native counters summing to 517, exact-profile score
+  persistence, custom-bank absence, complete cleanup and return to the list. The retained
+  handoff warning resolves before cleanup; subsequent controller destruction rejects an
+  unconfirmed reservation rather than authorizing playback. Log SHA-256 is
+  `c8a71c2fc868445a05a05197fd3b6e81457a8983fe9784b8284f795b513c6763`.
+  This is bounded Development evidence, not every follower's acoustic timing, every
+  grouped-tail/input combination, process-detach, other-build or packaged qualification.
+
 ## Integration: Partial MIDI LH Candidates (2026-09-08)
 
 - Generated MIDI policy v15 adds exact-octave filtered bass/dyad carriers only
@@ -73,7 +106,16 @@ the external session retains `manual-result.md`, immutable collection and rollba
 This is positive auditory/play feedback on the exact installed Development artifact, not
 complete musical, input, lifecycle, process-exit, other-build or packaged-artifact qualification.
 
-## Known Limitations / 0.2.1 Release Scope
+## Known Limitations / 0.2.2 Release Scope
+
+On 2026-09-09 the product owner explicitly authorized publication of 0.2.2 and
+accepted incomplete focused manual coverage (including broader long-group scenarios),
+no new 1.004 gameplay checks and no repeated test of the exact packaged artifacts on
+either build as version-scoped unqualified limitations. The Development evidence above
+does not transfer to either release artifact. Independent release review and complete
+automated build/test/package checks remain mandatory; this decision waives no demonstrated
+defect, failed automated check or blocking review finding. Historical manual gates below
+are superseded only for this version's explicitly accepted unqualified scope.
 
 On 2026-09-08 the product owner explicitly authorized publication of 0.2.1, including
 commits, tag and per-build GitHub packages, after independent review and complete automated
@@ -95,7 +137,7 @@ On 2026-09-07 the product owner explicitly authorized publication of 0.2.0, incl
 
 ## Latest Verification Summary
 
-Historical full-repository and focused results below belong to their recorded checkpoints. At this 0.2.0 source-preparation boundary, independent exact-checkpoint canonical Release validation has not yet run; its subsequent report must identify the actual clean commit and artifact identities. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
+Historical full-repository and focused results below belong to their recorded checkpoints. At this 0.2.2 source-preparation boundary, independent exact-checkpoint canonical Release validation has not yet run; its subsequent report must identify the actual clean commit and artifact identities. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
 
 Focused development runtime qualification has passed custom-to-custom and custom-to-native-to-custom transitions, including canonical request rebasing, the native list-return route reset, immediate custom admission, a further custom switch, and verified custom cleanup after each song. This closes that transition-specific lifecycle defect, but does not replace the remaining retry, completion, abort, and broader teardown scenarios above.
 
@@ -206,4 +248,4 @@ Maintainer evidence is indexed by `analysis/README.md` in the source repository 
 
 ## Artifact Disposition
 
-Repository builds and staged packages remain engineering artifacts until the exact 0.2.1 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Publication remains gated by clean-checkpoint Release/package validation. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.1 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.
+Repository builds and staged packages remain engineering artifacts until the exact 0.2.2 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Publication remains gated by clean-checkpoint Release/package validation. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.2 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.

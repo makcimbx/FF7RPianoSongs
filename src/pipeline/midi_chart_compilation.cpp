@@ -2,6 +2,7 @@
 #include "midi_analysis_core.h"
 #include "native_chord_constituents.h"
 #include "pipeline_limits.h"
+#include "chart_compiler.h"
 
 #include <algorithm>
 #include <array>
@@ -1625,7 +1626,11 @@ struct IncrementalCandidate {
     bool preferred = false;
 };
 
-using IncrementalRow = std::pair<long long, OutputRow>;
+// A beam path only selects immutable rows. Baseline map nodes and the sorted
+// candidate vector own them for the entire search; materialize owning output
+// only when returning the selected path. Copying a path must not deep-copy each
+// note's strings, chord pitches, and source witnesses.
+using IncrementalRow = std::pair<long long, const OutputRow*>;
 using IncrementalRows = std::vector<IncrementalRow>;
 
 struct IncrementalState {
@@ -1679,7 +1684,13 @@ std::vector<Note> notes_from_rows(const std::map<long long, OutputRow>& rows, co
 }
 
 std::vector<Note> notes_from_rows(const IncrementalRows& rows, const Profile&) {
-    return ungrouped_notes_from_rows(rows);
+    std::vector<Note> notes;
+    notes.reserve(rows.size());
+    for (const auto& entry : rows) {
+        notes.push_back(entry.second->note);
+        notes.back().group_index = 0;
+    }
+    return notes;
 }
 
 std::size_t required_action_count(const std::vector<Note>& notes) {
@@ -1715,18 +1726,18 @@ InsertionSemantics analyze_incremental_insertion(
 
     for (std::size_t index = position; index > 0;) {
         const IncrementalRow& row = rows[--index];
-        const bool same_hand = right ? row.second.has_right : row.second.has_left;
+        const bool same_hand = right ? row.second->has_right : row.second->has_left;
         if (!same_hand) continue;
-        const Attack& existing = right ? row.second.right : row.second.left;
+        const Attack& existing = right ? row.second->right : row.second->left;
         if (std::fabs(candidate_attack.start - existing.start) + kComparisonEpsilon < spacing) return result;
         break;
     }
 
     for (std::size_t index = position; index < rows.size(); ++index) {
         const IncrementalRow& row = rows[index];
-        const bool same_hand = right ? row.second.has_right : row.second.has_left;
+        const bool same_hand = right ? row.second->has_right : row.second->has_left;
         if (!same_hand) continue;
-        const Attack& existing = right ? row.second.right : row.second.left;
+        const Attack& existing = right ? row.second->right : row.second->left;
         if (std::fabs(candidate_attack.start - existing.start) + kComparisonEpsilon < spacing) return result;
         break;
     }
@@ -1744,13 +1755,13 @@ bool contains_frame(const IncrementalRows& rows, const long long frame) {
 
 std::map<long long, OutputRow> map_from_incremental_rows(const IncrementalRows& rows) {
     std::map<long long, OutputRow> result;
-    for (const IncrementalRow& row : rows) result.emplace(row.first, row.second);
+    for (const IncrementalRow& row : rows) result.emplace(row.first, *row.second);
     return result;
 }
 
 std::vector<Note> notes_from_rows_with_candidate(
     const IncrementalRows& rows, const IncrementalCandidate* candidate,
-    const Profile&,
+    const Profile& profile,
     const long long through_frame = std::numeric_limits<long long>::max()) {
     IncrementalRows materialized;
     materialized.reserve(rows.size() + (candidate != nullptr ? 1u : 0u));
@@ -1758,13 +1769,13 @@ std::vector<Note> notes_from_rows_with_candidate(
     for (const auto& entry : rows) {
         if (entry.first > through_frame) break;
         if (!inserted && candidate->frame < entry.first) {
-            materialized.emplace_back(candidate->frame, candidate->row);
+            materialized.emplace_back(candidate->frame, &candidate->row);
             inserted = true;
         }
         materialized.push_back(entry);
     }
-    if (!inserted) materialized.emplace_back(candidate->frame, candidate->row);
-    return ungrouped_notes_from_rows(materialized);
+    if (!inserted) materialized.emplace_back(candidate->frame, &candidate->row);
+    return notes_from_rows(materialized, profile);
 }
 
 std::vector<AnalysisNote> analysis_notes_from_rows_with_candidate(
@@ -1785,7 +1796,7 @@ std::vector<AnalysisNote> analysis_notes_from_rows_with_candidate(
             append(candidate->frame, candidate->row);
             inserted = true;
         }
-        append(entry.first, entry.second);
+        append(entry.first, *entry.second);
     }
     if (!inserted) append(candidate->frame, candidate->row);
     return notes;
@@ -1922,12 +1933,12 @@ IncrementalSelection select_incremental_rows(
     IncrementalState initial;
     auto initial_rows = std::make_shared<IncrementalRows>();
     initial_rows->reserve(baseline.size());
-    for (auto& entry : baseline) initial_rows->emplace_back(entry.first, std::move(entry.second));
+    for (const auto& entry : baseline) initial_rows->emplace_back(entry.first, &entry.second);
     initial.rows = std::move(initial_rows);
     initial.row_count = baseline_actions;
     initial.preferred_actions = std::min(preferred_baseline_actions, initial.rows->size());
     analyze(&initial);
-    for (const auto& entry : *initial.rows) initial.salience += output_row_score(entry.second);
+    for (const auto& entry : *initial.rows) initial.salience += output_row_score(*entry.second);
     std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) {
         if (a.frame != b.frame) return a.frame < b.frame;
         if (std::fabs(a.salience - b.salience) > kComparisonEpsilon) return a.salience > b.salience;
@@ -2252,7 +2263,7 @@ IncrementalSelection select_incremental_rows(
                     selected_rows->begin(), selected_rows->end(), state.deferred_candidate->frame,
                     [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
                 selected_rows->emplace(
-                    insertion, state.deferred_candidate->frame, state.deferred_candidate->row);
+                    insertion, state.deferred_candidate->frame, &state.deferred_candidate->row);
                 found = committed_rows.emplace(key, std::move(selected_rows)).first;
             }
             state.rows = found->second;
@@ -2424,6 +2435,17 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     const WavAudio& audio = request.audio;
     const SongConfig& config = request.config;
     const std::vector<Note>* preferred_baseline = request.preferred_baseline;
+    // Preference and growth describe inputs, never the automatic sound rows.
+    std::vector<Note> preferred_roots;
+    if (preferred_baseline) {
+        std::uint8_t previous_group = 0;
+        for (const Note& note : *preferred_baseline) {
+            const bool follower = note.group_index != 0 && note.group_index == previous_group;
+            previous_group = note.group_index;
+            if (!follower) preferred_roots.push_back(note);
+        }
+        preferred_baseline = &preferred_roots;
+    }
     const std::size_t maximum_visible_rows = request.maximum_visible_rows;
     MidiChartCompilationResult result;
     if (!config.chord_voicings.empty()) {
@@ -2801,7 +2823,57 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         }));
     out_notes->clear();
     out_notes->reserve(rows.size());
-    *out_notes = notes_from_rows(rows, profile);
+    // Exact tick/track/channel is the authority, not the humanized onset cluster
+    // or rounded native frame. Index once and retain stable pitch/source order.
+    using OnsetStream = std::tuple<int, int, int>;
+    std::map<OnsetStream, std::vector<const MidiNoteEvent*>> simultaneous;
+    for (const auto& event : source)
+        simultaneous[{event.source.tick, event.source.track, event.source.channel}].push_back(&event);
+    for (auto& [key, events] : simultaneous) {
+        std::sort(events.begin(), events.end(), [](const auto* a, const auto* b) {
+            if (a->source.pitch != b->source.pitch) return a->source.pitch < b->source.pitch;
+            return a->source < b->source;
+        });
+    }
+    // Inferred LH cluster timing can precede its constituent ticks. Exclude only
+    // actual unmuted native sounds backed by that selected accompaniment onset.
+    std::map<int, std::set<int>> selected_left_sounds;
+    for (const auto& [frame, row] : rows) {
+        if (!row.has_left) continue;
+        const auto* chord = find_verified_native_chord(row.note.chord_id, request.native_assets);
+        if (!chord) continue;
+        for (const auto& constituent : row.left.chord_sources) {
+            for (std::size_t i = 0; i < chord->sound_count; ++i) {
+                const std::string sound(chord->sound_names[i]);
+                if (std::find(row.note.ignore_sound_pitches.begin(), row.note.ignore_sound_pitches.end(), sound)
+                    == row.note.ignore_sound_pitches.end())
+                    selected_left_sounds[constituent.tick].insert(strain_pitch_number(sound));
+            }
+        }
+    }
+    std::uint8_t next_group = 1;
+    for (const auto& [frame, row] : rows) {
+        const std::size_t root_index = out_notes->size();
+        out_notes->push_back(row.note);
+        if (!row.has_right) continue;
+        const auto& root = row.right.event.source;
+        std::set<int> emitted{root.pitch};
+        const auto covered = selected_left_sounds.find(root.tick);
+        if (covered != selected_left_sounds.end()) emitted.insert(covered->second.begin(), covered->second.end());
+        for (const auto* event : simultaneous.at({root.tick, root.track, root.channel})) {
+            if (!emitted.insert(event->source.pitch).second) continue;
+            OutputAction follower;
+            follower.right = true;
+            follower.attack.event = *event;
+            Note note = make_row(frame, follower).note;
+            note.group_index = next_group;
+            out_notes->push_back(std::move(note));
+        }
+        if (out_notes->size() != root_index + 1) {
+            (*out_notes)[root_index].group_index = next_group;
+            next_group = next_group == 1 ? 2 : 1;
+        }
+    }
     if (out_stats) {
         std::set<int> source_tracks;
         std::set<SourceIdentity> source_identities;
@@ -2864,7 +2936,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         out_stats->melody_candidates = primary.size();
         out_stats->fallback_candidates = fallback.size();
         out_stats->chord_candidates = chords.size();
-        out_stats->right_events = emitted_right;
+        out_stats->right_events = emitted_right + out_notes->size() - rows.size();
         out_stats->left_events = emitted_left;
         out_stats->fallback_events = emitted_fallback;
         out_stats->merged_events = merged;
@@ -2894,10 +2966,10 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         out_stats->added_actions = rows.size() > selection.retained_actions ?
             rows.size() - selection.retained_actions : 0;
         out_stats->local_skills = local_skills;
-        out_stats->desired_rows = rows.size();
+        out_stats->desired_rows = out_notes->size();
         out_stats->lead_in_rejections = lead_in_rejections;
         out_stats->audio_duration_rejections = audio_duration_rejections;
-        out_stats->row_limit_exceeded = rows.size() > chart_row_limit;
+        out_stats->row_limit_exceeded = out_notes->size() > chart_row_limit;
         out_stats->voice_stream_changes = stream_changes;
         out_stats->time_signature_changes = explicit_meters;
         out_stats->metric_downbeat_candidates = downbeat_candidates;
@@ -2917,14 +2989,21 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         out_stats->audio_offset_seconds = audio_offset_seconds;
         out_stats->alignment_confidence = estimated_alignment.confidence;
     }
-    if (rows.size() > chart_row_limit) {
+    if (out_notes->size() > chart_row_limit) {
+        const std::size_t complete_rows = out_notes->size();
         out_notes->clear();
         result.status = Status::error(StatusCode::ChartRowLimitExceeded,
-            "complete generated chart requires " + std::to_string(rows.size()) +
+            "complete generated chart requires " + std::to_string(complete_rows) +
             " rows, above the effective parser limit of " + std::to_string(chart_row_limit));
         return result;
     }
-    result.status = Status::ok_status();
+    SongConfig final_config = config;
+    final_config.bpm = chart_bpm;
+    final_config.notes = *out_notes;
+    CompiledChart compiled;
+    DiagnosticChartRetention tail;
+    result.status = compile_chart(final_config, &compiled, &tail, chart_row_limit, request.native_assets);
+    if (!result.status.ok()) out_notes->clear();
     return result;
 }
 

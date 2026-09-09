@@ -314,8 +314,10 @@ For a fast right-hand run, give two or more consecutive note rows the same `grou
 - Groups can also contain chords or rows with both hands. A first row containing both `pitch`
   and `chord_id` still requires **both** inputs; grouping does not turn a two-hand root into one input.
 
-Automatic MIDI generation never creates groups. Add them yourself after exporting the generated
-chart if you want this gameplay. Long grouped charts have the additional limits below.
+Automatic MIDI generation creates same-time groups for simultaneous pitches on the
+selected right-hand note's exact MIDI tick, track, and channel. It does not turn
+nearby notes into automatic runs; add those yourself after exporting the chart.
+Long grouped charts have the additional limits below.
 
 ## Difficulty profiles
 
@@ -349,8 +351,12 @@ is not discarded just because it has fewer notes than the target. A higher level
 can have a similar number of notes but more demanding timing or input patterns.
 The generator still checks the actual playing load and chart limits; it does not
 promise that every MIDI can supply six distinct difficulties.
-The generator may choose stock chords, partial chords, and alternate C/C-sharp inputs, but never automatic
-groups. It uses key signatures for sharp/flat spelling and exact supported MIDI lengths for note
+The generator may choose stock chords, partial chords, and alternate C/C-sharp inputs.
+Simultaneous same-stream pitches follow the selected right-hand input automatically
+at the same chart time, without adding required inputs; duplicate pitches and sounds
+already covered by selected left-hand accompaniment are not added. Native followers
+may sound on the next game frame; this generated behavior needs focused in-game testing.
+It uses key signatures for sharp/flat spelling and exact supported MIDI lengths for note
 symbols; other lengths use the default symbols described above. `chord_voicings` is for explicit
 charts only; export and edit the generated chart before adding custom chord compositions.
 

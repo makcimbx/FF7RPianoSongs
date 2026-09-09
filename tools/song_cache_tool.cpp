@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -41,14 +42,26 @@ int main(int argc, char** argv)
     // Offline chart-policy selection, not installation or native-hook authority.
     ff7rp::pipeline::configure_chart_row_limit(playable_extended, playable_extended);
     ff7rp::pipeline::LoadedSong song;
+    const auto started = std::chrono::steady_clock::now();
+    auto previous_stage = started;
     const ff7rp::pipeline::Status status = ff7rp::pipeline::load_song_directory(argv[1], &song,
         [&](const char* stage) {
+            const auto now = std::chrono::steady_clock::now();
+            std::cout << "timing elapsed_ms="
+                      << std::chrono::duration<double, std::milli>(now - started).count()
+                      << " delta_ms="
+                      << std::chrono::duration<double, std::milli>(now - previous_stage).count()
+                      << " stage=" << stage << '\n';
+            previous_stage = now;
             if (std::string_view(stage).starts_with("midi_source_warning:")) {
                 std::cerr << "warning song_directory=" << argv[1] << " " << stage << '\n';
             } else if (std::string_view(stage).starts_with("midi_selection:")) {
                 std::cout << stage << '\n';
             }
         });
+    std::cout << "timing elapsed_ms="
+              << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count()
+              << " stage=load_song_directory_returned\n";
     if (!status.ok()) {
         std::cerr << "error song_directory=" << argv[1] << " " << status.message << '\n';
         return 1;

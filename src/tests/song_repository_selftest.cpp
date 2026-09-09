@@ -1147,6 +1147,8 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
     constexpr int onset_count = 630;
     for (int index = 0; index < onset_count; ++index) {
         add_note(&track, index * 348, 80, 72 + index % 5, 110);
+        add_note(&track, index * 348, 80, 60 + index % 5, 60);
+        add_note(&track, index * 348, 80, 55 + index % 5, 50);
     }
     if (!write_bytes(song_directory / "song.mid", build_midi(std::move(track), 460000u))
         || !write_silent_wav(song_directory / "song.wav", 220.0)
@@ -1179,16 +1181,16 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
         || extended_plan.source_row_count <= ff7rp::pipeline::kMaxChartRows
         || extended_plan.native_prefix_event_count != ff7rp::pipeline::kMaxChartRows
         || extended_plan.source_row_count != extended_plan.native_event_count
-        || extended_plan.native_event_count != extended_plan.required_action_count
+        || extended_plan.native_event_count != 3 * extended_plan.required_action_count
         || extended_plan.required_action_count != extended->diagnostics.selected_actions
         || extended_plan.physical_digest == 0
         || std::any_of(extended->config.notes.begin(), extended->config.notes.end(), [](const auto& note) {
-            return note.group_index != 0;
+            return note.group_index == 0;
         }) || std::any_of(extended->diagnostic_chart.tail_rows.begin(),
             extended->diagnostic_chart.tail_rows.end(), [](const auto& row) {
-                return row.source.group_index != 0 || row.compiled.group_index != 0;
+                return row.source.group_index == 0 || row.compiled.group_index != row.source.group_index;
             })) {
-        return fail("generated extended MIDI profile was clipped, grouped, or had inconsistent R/P/E/A");
+        return fail("generated extended MIDI groups were clipped or had inconsistent R/P/E/A");
     }
     const std::string cold_resolved = read_text(
         ff7rp::pipeline::resolved_song_json_path(song_directory.string()));
@@ -1205,11 +1207,11 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
         resolved_extended->notes.size() != extended_plan.source_row_count ||
         std::any_of(resolved_extended->notes.begin(), resolved_extended->notes.end(),
             [](const auto& note) {
-                return note.group_index != 0 ||
+                return note.group_index == 0 ||
                     (!note.pitch.empty() && !note.monotone_note_value.provided) ||
                     (!note.chord_id.empty() && !note.chord_note_value.provided);
             })) {
-        return fail("generated extended MIDI resolved output clipped its tail or introduced groups");
+        return fail("generated extended MIDI resolved output clipped its tail or lost groups");
     }
 
     ff7rp::pipeline::LoadedSong warm;
@@ -1252,7 +1254,11 @@ int test_physical_midi_cache_round_trip(const std::filesystem::path& root) {
     ff7rp::pipeline::configure_chart_row_limit(false, false);
     ff7rp::pipeline::LoadedSong unsupported;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &unsupported);
-    if (!status.ok() || unsupported.loaded_from_runtime_cache
+    const bool all_oversized = status.code == ff7rp::pipeline::StatusCode::InvalidChart
+        && unsupported.difficulty_profiles.empty() && unsupported.difficulty_profile_omissions.size() == 6
+        && std::all_of(unsupported.difficulty_profile_omissions.begin(), unsupported.difficulty_profile_omissions.end(),
+            [](const auto& omission) { return omission.desired_rows > ff7rp::pipeline::kMaxChartRows; });
+    if ((!status.ok() && !all_oversized) || unsupported.loaded_from_runtime_cache
         || std::any_of(unsupported.difficulty_profiles.begin(), unsupported.difficulty_profiles.end(),
             [](const auto& profile) {
                 return profile.config.notes.size() > ff7rp::pipeline::kMaxChartRows
@@ -1470,8 +1476,8 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
         if (song.difficulty_profiles.empty()) return false;
         bool found_db_chord = false;
         bool found_db_melody = false;
-        // Selection is independent per label. v14 may retain the source-backed
-        // Ab3 alternate, and the root profile need not select any harmony.
+        // Selection is independent per label. The source-backed Ab3 fallback
+        // carries Db3/F3 followers; the root profile need not select harmony.
         // Check exact source identities/ticks and per-side lengths, not an old
         // selector's choice of hand in the first visible profile.
         for (const auto& profile : song.difficulty_profiles) {
@@ -1482,18 +1488,18 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
                 const auto& compiled = profile.chart.notes[row];
                 const double onset_index = (note.beat - 4.0) / 2.0;
                 if (!std::isfinite(onset_index) || onset_index < 0 || onset_index > 7 ||
-                    onset_index != std::floor(onset_index) || note.group_index != 0 ||
+                    onset_index != std::floor(onset_index) || compiled.group_index != note.group_index ||
                     compiled.beat != note.beat || compiled.time_str !=
                         ff7rp::pipeline::beat_to_time_str(note.beat, profile.config.bpm)) return false;
                 const std::array<std::string, 3> melody{"C6", "Db6", "D6"};
                 const std::array<std::string, 3> native_melody{"Cn6", "Db6", "Dn6"};
                 const auto index = static_cast<std::size_t>(onset_index) % 3u;
                 if (!note.pitch.empty()) {
-                    const bool fallback = note.pitch == "Ab3";
+                    const bool fallback = note.pitch == "Ab3" || note.pitch == "Db3" || note.pitch == "F3";
                     const ff7rp::pipeline::NoteValueOverride value{
                         {static_cast<std::uint8_t>(fallback ? 2 : 3), 0}, true};
                     if ((!fallback && note.pitch != melody[index]) ||
-                        compiled.monotone_id != (fallback ? "Ab3" : native_melody[index]) ||
+                        compiled.monotone_id != (fallback ? (note.pitch == "F3" ? "Fn3" : note.pitch) : native_melody[index]) ||
                         note.monotone_note_value != value) return false;
                     found_db_melody |= note.pitch == "Db6";
                 } else if (!compiled.monotone_id.empty()) return false;
@@ -1576,11 +1582,11 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v15 invalidates selection caches. This one-note fixture
+        // Generated-MIDI v16 invalidates selection caches. This one-note fixture
         // retains its exact semantics and all six labels; only cache identity
         // and its manifest binding change, not pipeline v48 or binary format 16.
-        expected_cache_key = 0x76bdb0aa2140a5f3ull;
-        expected_normalized_manifest_digest = 0x30279b050cfc9089ull;
+        expected_cache_key = 0xdcd6e784a648752bull;
+        expected_normalized_manifest_digest = 0xf43907a972107a5cull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -1886,66 +1892,19 @@ int test_row_limit_omission(const std::filesystem::path& root) {
 
     ff7rp::pipeline::LoadedSong song;
     const auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
-    if (!status.ok()) return fail("row-limit fixture generation failed: " + status.message);
-    if (song.difficulty_profiles.empty()) {
-        std::ostringstream details;
-        details << "row-limit fixture did not exercise a meaningful production visibility prefix; visible=";
-        for (const auto& profile : song.difficulty_profiles) {
-            details << profile.config.difficulty << ':' << profile.chart.notes.size() << ',';
-        }
-        details << " omissions=";
-        for (const auto& value : song.difficulty_profile_omissions) {
-            details << value.difficulty << ':' << value.desired_rows << ':' << value.reason << ',';
-        }
-        return fail(details.str());
-    }
-    bool observed_bounded_repair = false;
-    for (std::size_t i = 0; i < song.difficulty_profiles.size(); ++i) {
-        const auto& profile = song.difficulty_profiles[i];
-        if (profile.chart.notes.size() > ff7rp::pipeline::kMaxChartRows ||
-            !profile.diagnostics.complete || profile.diagnostics.row_limit_exceeded) {
-            return fail("repository exposed a truncated/incomplete row-limit profile");
-        }
-        if (i > 0) {
-            const auto& previous = song.difficulty_profiles[i - 1];
-            if (profile.config.difficulty <= previous.config.difficulty ||
-                profile.diagnostics.protected_baseline_actions != previous.chart.notes.size()) {
-                return fail("repository lost independent labels or previous source-preference diagnostics");
-            }
-            observed_bounded_repair = observed_bounded_repair || !profile.diagnostics.nested_from_previous;
-        }
-    }
-    if (song.difficulty_profiles.size() > 1 && !observed_bounded_repair) {
-        return fail("repository fixture did not exercise bounded replacement repair");
+    // The independent root routes fit, but exact simultaneous followers push
+    // every complete profile beyond 512. Do not repair by dropping sounds.
+    if (status.code != ff7rp::pipeline::StatusCode::InvalidChart ||
+        !song.difficulty_profiles.empty() || song.difficulty_profile_omissions.size() != 6 ||
+        song.loaded_from_runtime_cache) return fail("oversized enriched profiles were published");
+    for (const auto& omission : song.difficulty_profile_omissions) {
+        if (omission.desired_rows <= ff7rp::pipeline::kMaxChartRows ||
+            !omission.diagnostics.row_limit_exceeded || omission.diagnostics.complete)
+            return fail("enriched row-limit omission lost its complete physical count");
     }
     if (ff7rp::pipeline::maximum_midi_visible_profile_actions(221) > 299 ||
         ff7rp::pipeline::maximum_midi_visible_profile_actions(256) > 346) {
         return fail("maximum adjacent visible-step policy permits the proven 221/256-row jumps");
-    }
-    for (const auto& profile : song.difficulty_profiles) {
-        const double span = (profile.config.notes.back().beat - profile.config.notes.front().beat) *
-            60.0 / profile.config.bpm;
-        if (span < 190.0 || !ff7rp::pipeline::validate_midi_difficulty_route(
-                profile.config.notes, profile.config.bpm, profile.config.difficulty).feasible) {
-            return fail("soft-density row-limited chart lost complete source coverage or real route safety");
-        }
-    }
-
-    ff7rp::pipeline::LoadedSong cached;
-    const auto cached_status = ff7rp::pipeline::load_song_directory(song_directory.string(), &cached);
-    if (!cached_status.ok() || !cached.loaded_from_runtime_cache ||
-        cached.difficulty_profiles.size() != song.difficulty_profiles.size() ||
-        !omissions_equal(cached.difficulty_profile_omissions, song.difficulty_profile_omissions)) {
-        return fail("sparse nested repository result did not survive runtime-cache reload");
-    }
-    for (std::size_t i = 0; i < song.difficulty_profiles.size(); ++i) {
-        const auto& expected = song.difficulty_profiles[i];
-        const auto& actual = cached.difficulty_profiles[i];
-        if (actual.config.difficulty != expected.config.difficulty ||
-            !charts_equal(actual.chart, expected.chart) ||
-            !diagnostics_equal(actual.diagnostics, expected.diagnostics)) {
-            return fail("runtime cache changed a sparse nested profile label, chart, or diagnostic");
-        }
     }
     return 0;
 }

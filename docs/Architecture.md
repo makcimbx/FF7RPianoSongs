@@ -128,10 +128,11 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
   identity to every MIDI cache key. The source model preserves exact authored black-key
   sharp/flat identity and independent monotone/chord note/dot values; generated
-  MIDI's v14 identity additionally covers normalized key-signature orientation,
+  MIDI's policy identity additionally covers normalized key-signature orientation,
   exact rational source-length notation, policy-independent exclusion of
   out-of-range source attacks, soft density/growth goals and bounded feasible-beam
-  selection with feasible salience priority and source-timed fallback competition.
+  selection with feasible salience priority, source-timed fallback competition,
+  exact partial LH carriers, and final same-tick/track/channel RH group enrichment.
   Cold normalization emits count/range warnings through
   existing song-scoped trace stages; valid warm caches do not reparse MIDI merely
   to repeat those warnings. Every authored-JSON and
@@ -159,8 +160,11 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   `native_prefix_event_count`, `native_event_count`, and `required_action_count`
   are distinct authoritative facts; compatibility `note_count` means required
   actions. Native event order within a row is monotone then chord. Automatically
-  generated MIDI rows are ungrouped parentless actions and profiles may have
-  different physical digests. Runtime support for explicit mixed row-level groups,
+  generated MIDI roots remain independent actions; exact simultaneous same-stream
+  source pitches become same-time grouped followers only after route selection.
+  Followers add rows/events but not required actions or strain, and complete enriched
+  material must pass the existing compiler/event-plan limits before publication.
+  Profiles may have different physical digests. Runtime support for mixed row-level groups,
   explicit dual rows, generated one-event rows, chord/IgnoreSound tails, and
   event-count allocation remains a separate qualification gate; offline authority
   does not authorize mutation on an older runtime.
@@ -195,6 +199,12 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
 - Diagnostic helper availability without playable runtime capability does not
   authorize extended input, cache reuse, or descriptor publication.
 - Failure never publishes a partial descriptor or partially replaces the active package directory.
+- Discovery uses at most two joined song-load workers, admitted only after the
+  complete pool starts successfully. Worker-owned slots and serialized contiguous
+  lexical settlement remain unchanged. Startup ETA uses the same two-worker cap;
+  this is song-level concurrency, not a limit on all process threads or a guarantee
+  of proportional speedup. Decoding and chart preparation can increase simultaneous
+  memory and CPU demand.
 - Release hooks install against an explicit empty custom catalog. Discovery exposes stable non-owning views of each newly contiguous lexical settlement delta only for the synchronous callback lifetime. Startup admits descriptors once and offers every increased fully validated prefix. If the unchanged final prefix follows a recoverable publication rejection, it receives exactly one final publication retry from the retained immutable descriptor/sidecar candidate without source I/O, sidecar reconstruction, or allocation; invalid-only settlement does not republish an already accepted descriptor identity. Each admitted song owns one immutable shared sidecar node linked to the prior prefix, so snapshots are O(1), prior MABF data is never reread or reallocated, and aggregate sidecar preparation is O(N).
 - Progressive composition centralizes the already-enforced piano-list bound of 128 total rows (five vanilla plus at most 123 custom rows). This is an existing runtime safety bound, not a new recovered layout or address claim; exceeding it fails composition while retaining any earlier accepted catalog.
 - Pending catalogs are adopted only by the game thread at the exact pre-open boundary after callback, menu, selection, playback, list, audio, and registry quiescence are revalidated. List tuple, owner, sidecar, and registry publication is one failure-atomic transaction; an already open list or playback retains its previous catalog identity. Registry state generation guards the quiescent transaction and mutable selection/profile/playback state, while a separate monotonic catalog revision plus immutable storage identity owns list coherence and changes only when storage is replaced.
