@@ -16,6 +16,7 @@ The offline pipeline completes validation before a descriptor is visible to runt
 
 - `src/core/` owns generic logging, configuration, memory/PE helpers, and hook infrastructure. It does not own song semantics.
 - `src/pipeline/` owns user-file discovery, strict schema validation, audio/chart generation, cache identity, and publication of validated descriptors. It does not read or write game memory.
+- `src/game/song_descriptor.h` owns value-only descriptor, profile, and chart-note shapes. `src/song_descriptor_builder.cpp` projects all three chart-note locations through one field-complete mapping; it does not include registry authority. `src/game/song_registry.h` owns synchronized catalog storage, selection, and adoption, not offline projection.
 - `src/game/` owns executable-version gating, addresses, hook installation, native object identity, UI/list/selection/chart integration, and audio lifecycle interaction.
 - `src/generated/<build-id>/` holds one derived source tree per supported game build, and a build selects exactly one of them. Generated files are outputs, not a second hand-edited source of truth.
 - `src/tests/` owns offline validation and release-audit enforcement; tests do not establish in-game proof.
@@ -137,7 +138,7 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   existing song-scoped trace stages; valid warm caches do not reparse MIDI merely
   to repeat those warnings. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
-  identity selected from the exact generated catalog build ID; descriptive game
+   identity supplied explicitly by composition from the exact catalog build ID; descriptive game
   version strings never grant asset authority. Runtime-cache format 16 serializes
   both source-side overrides and the separate compiled monotone/chord pairs, plus
   canonical song-level chord definitions in each configuration. Ordered sound slots
@@ -191,10 +192,22 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   170 decoded `PianoChordsAssign`/`PianoChordsConfig` chord identities, including
   distinct sharp and flat IDs. Each row preserves the asset's ordered stock
   sounds for `ignore_sound`, authored voicings, and MIDI inference. Authored
-  voicings require the compile-selected exact generated catalog's asset
+   voicings require the compile-selected exact catalog's asset
   capability; the additional `pca_Db` stock entry is also capability-gated.
   Exact builds 1.004 and 1.005 share the verified-equal chord rows. Resolution
-  neither reads game memory nor constructs native FNames from source-note spelling.
+   neither reads game memory nor constructs native FNames from source-note spelling.
+
+The CMake-resolved `FF7RP_GAME_BUILD` (catalog default unless explicitly selected)
+is passed as a private composition definition to the ASI, offline tool, and
+target-aware tests. They map it to the pure native-asset capability value
+and pass that value through parsing, MIDI generation, chart compilation,
+rendering, repository cache identity, and warm-cache semantic recompilation.
+The pipeline does not include generated hook addresses or infer a selected
+build itself. An unknown catalog ID is rejected at configure time; the pure
+capability mapping remains conservative for unknown inputs. The same source
+schema v2 works in offline-only and runtime builds; cache reuse still requires
+the exact capability identity and complete policy snapshot, and no cache
+compatibility is claimed across different game targets.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
 - Diagnostic helper availability without playable runtime capability does not
   authorize extended input, cache reuse, or descriptor publication.

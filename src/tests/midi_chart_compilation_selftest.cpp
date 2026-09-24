@@ -18,6 +18,7 @@
 #include "pipeline/native_asset_capabilities.h"
 #include "pipeline/native_chord_constituents.h"
 #include "pipeline/chart_compiler.h"
+#include "tests/target_native_assets.h"
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/pipeline_limits.h"
 #include "tests/test_support.h"
@@ -516,7 +517,7 @@ Observation generate(const std::filesystem::path& path, const WavAudio& audio,
                      const SongConfig& config, const std::vector<Note>* baseline = nullptr,
                      const std::size_t maximum_visible_rows = 0,
                      const ff7rp::pipeline::NativeAssetCapabilities native_assets =
-                         ff7rp::pipeline::selected_native_asset_capabilities()) {
+                          ff7rp::pipeline::test_target_native_assets()) {
     Observation value;
     value.status = ff7rp::pipeline::generate_notes_from_midi(path.string(), audio, config,
         &value.notes, &value.stats, baseline, maximum_visible_rows, native_assets);
@@ -730,7 +731,7 @@ int test_chord_inventory(const std::filesystem::path& root) {
             if (tonic == 6u && quality == 6u) id = "pca_Gb_Maj7";
             std::vector<int> pitches;
             for (const int interval : intervals[quality]) pitches.push_back(48 + static_cast<int>(tonic) + interval);
-            if (!find_verified_native_chord(id, selected_native_asset_capabilities()) ||
+            if (!find_verified_native_chord(id, test_target_native_assets()) ||
                 infer_native_chord_from_fresh_midi_pitches(pitches) != id)
                 return fail("complete observed root/quality inference failed: " + id);
         }
@@ -1136,7 +1137,7 @@ int main(int argc, char** argv) {
                 if (note.chord_id.empty()) continue;
                 ++selected_left;
                 const auto* carrier = ff7rp::pipeline::find_verified_native_chord(
-                    note.chord_id, ff7rp::pipeline::selected_native_asset_capabilities());
+                    note.chord_id, ff7rp::pipeline::test_target_native_assets());
                 if (!carrier || note.group_index || note.source_chord_pitches.empty() ||
                     note.ignore_sound_pitches.size() > 3u)
                     return fail("partial LH lost verified carrier/source/ignore bounds");
@@ -1488,7 +1489,7 @@ int main(int argc, char** argv) {
     const ff7rp::pipeline::NormalizedMidiSource original = normalized;
     const SongConfig direct_config = config_for(4);
     const auto direct = ff7rp::pipeline::compile_normalized_midi_chart(
-        {normalized, no_audio, direct_config, nullptr, 0});
+        {normalized, no_audio, direct_config, nullptr, 0, ff7rp::pipeline::test_target_native_assets()});
     const Observation direct_observation{direct.status, direct.notes, direct.stats};
     std::vector<Note> normalized_facade_notes;
     MidiChartStats normalized_facade_stats;

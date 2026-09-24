@@ -65,15 +65,15 @@ std::string runtime_cache_path(const std::string& song_directory) {
     return path_string(std::filesystem::path(cache_directory_path(song_directory)) / "runtime.bin");
 }
 
-bool write_runtime_cache(const LoadedSong& song) {
+bool write_runtime_cache(const LoadedSong& song, const NativeAssetCapabilities native_assets) {
     const std::string path = runtime_cache_path(song.directory);
     if (cache_artifact_writer::create_parent_directories(path)) return false;
     std::vector<std::uint8_t> bytes;
-    if (!encode_runtime_cache(song, kRuntimeCacheMagic, kRuntimeCacheFormat, &bytes)) return false;
+    if (!encode_runtime_cache(song, native_assets, kRuntimeCacheMagic, kRuntimeCacheFormat, &bytes)) return false;
     return cache_artifact_writer::write_binary_file_unreported(path, bytes);
 }
 
-bool read_runtime_cache(LoadedSong* song) {
+bool read_runtime_cache(LoadedSong* song, const NativeAssetCapabilities native_assets) {
     if (!song) return false;
     std::ifstream in(runtime_cache_path(song->directory), std::ios::binary | std::ios::ate);
     if (!in) return false;
@@ -82,7 +82,7 @@ bool read_runtime_cache(LoadedSong* song) {
     in.seekg(0, std::ios::beg);
     std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
     if (!in.read(reinterpret_cast<char*>(bytes.data()), size)) return false;
-    return decode_runtime_cache(bytes, kRuntimeCacheMagic, kRuntimeCacheFormat, song);
+    return decode_runtime_cache(bytes, native_assets, kRuntimeCacheMagic, kRuntimeCacheFormat, song);
 }
 
 void report_resolved_song_stage_best_effort(
@@ -95,11 +95,13 @@ void report_resolved_song_stage_best_effort(
 }
 
 void publish_resolved_song_best_effort(
-    const LoadedSong& song, const bool source_declared_profiles, const SongLoadTrace& trace) noexcept {
+    const LoadedSong& song, const NativeAssetCapabilities native_assets,
+    const bool source_declared_profiles, const SongLoadTrace& trace) noexcept {
     const char* exception_stage = "resolved_song_render_failed";
     try {
         std::string rendered;
-        const Status render_status = render_resolved_song_json(song, source_declared_profiles, &rendered);
+        const Status render_status = render_resolved_song_json(song, native_assets,
+            source_declared_profiles, &rendered);
         if (!render_status.ok()) {
             report_resolved_song_stage_best_effort(trace, "resolved_song_render_failed");
             return;
@@ -336,7 +338,8 @@ ProfileActionComparison compare_profiles(const SongConfig& previous, const SongC
     return result;
 }
 
-bool runtime_profiles_semantically_valid(const LoadedSong& song) {
+bool runtime_profiles_semantically_valid(const LoadedSong& song,
+    const NativeAssetCapabilities native_assets) {
     const double duration = song.audio.source_duration_seconds();
     const MabfArtifactMetadata& mabf = song.mabf_metadata;
     if (song.difficulty_profiles.empty() || !std::isfinite(duration) || duration <= 0.0 ||
@@ -493,7 +496,7 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song) {
         }
         CompiledChart expected_complete_chart;
         DiagnosticChartRetention expected_diagnostic;
-        if (!compile_chart(complete_config, &expected_complete_chart, &expected_diagnostic,
+        if (!compile_chart(complete_config, native_assets, &expected_complete_chart, &expected_diagnostic,
                 complete_config.notes.size()).ok() ||
             expected_diagnostic.tail_rows.size() != profile.diagnostic_chart.tail_rows.size()) return false;
         double previous_tail_beat = profile.config.notes.empty() ? -1.0 : profile.config.notes.back().beat;
@@ -726,6 +729,7 @@ ProfileActionComparison compare_profile_actions(const SongConfig& previous, cons
 
 Status load_song_directory(
     const std::string& song_directory,
+    const NativeAssetCapabilities native_assets,
     LoadedSong* out_song,
     SongLoadTrace trace,
     const bool rebuild_invalid_cache,
@@ -775,7 +779,7 @@ Status load_song_directory(
         }
     }
     ParsedSongSource parsed_source;
-    status = load_song_json_file(json_path, &parsed_source);
+    status = load_song_json_file(json_path, native_assets, &parsed_source);
     if (!status.ok()) {
         song.status = status;
         write_last_error(song.directory, status);
@@ -826,7 +830,7 @@ Status load_song_directory(
     std::vector<std::string> cache_identity{
         kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
         song.chart_policy_identity,
-        std::string(selected_native_asset_capabilities().cache_identity()),
+        std::string(native_assets.cache_identity()),
         "audio_processing=gain_envelope_then_loudness_or_limiter:v1",
         song.config.metronome_enabled
             ? "metronome=resolved_mode0_only_before_hca"
@@ -853,9 +857,10 @@ Status load_song_directory(
     const SongConfig source_config = song.config;
     LoadedSong cached_song = song;
     report("runtime_cache_read_started");
-    const bool runtime_cache_read = read_runtime_cache(&cached_song);
+    const bool runtime_cache_read = read_runtime_cache(&cached_song, native_assets);
     report(runtime_cache_read ? "runtime_cache_read" : "runtime_cache_rejected");
-    const bool runtime_semantics_valid = runtime_cache_read && runtime_profiles_semantically_valid(cached_song);
+    const bool runtime_semantics_valid = runtime_cache_read &&
+        runtime_profiles_semantically_valid(cached_song, native_assets);
     report(runtime_semantics_valid ? "runtime_semantics_valid" : "runtime_semantics_rejected");
     std::string artifact_failure;
     const bool runtime_artifacts_valid = runtime_semantics_valid &&
@@ -870,7 +875,7 @@ Status load_song_directory(
     if (runtime_artifacts_valid) {
         cached_song.loaded_from_runtime_cache = true;
         publish_resolved_song_best_effort(
-            cached_song, !parsed_source.authored_profiles.empty(), trace);
+            cached_song, native_assets, !parsed_source.authored_profiles.empty(), trace);
         clear_last_error(cached_song.directory);
         *out_song = std::move(cached_song);
         return Status::ok_status();
@@ -951,7 +956,7 @@ Status load_song_directory(
                 maximum_visible_rows = maximum_midi_visible_profile_actions(
                     song.difficulty_profiles.back().diagnostics.selected_actions);
             }
-            status = generate_notes_from_normalized_midi(normalized_midi, song.audio, profile.config,
+            status = generate_notes_from_normalized_midi(normalized_midi, song.audio, profile.config, native_assets,
                 &profile.config.notes, &stats, baseline, maximum_visible_rows);
             const std::string selection_stage = "midi_selection:difficulty=" + std::to_string(difficulty) +
                 " beam_width=" + std::to_string(stats.selector_beam_width) +
@@ -1006,7 +1011,7 @@ Status load_song_directory(
                 }
                 profile.config.diagnostic_extended_chart_fixture =
                     profile.config.notes.size() > kMaxChartRows;
-                status = compile_chart(profile.config, &profile.chart,
+                status = compile_chart(profile.config, native_assets, &profile.chart,
                     profile.config.diagnostic_extended_chart_fixture ? &profile.diagnostic_chart : nullptr,
                     song.accepted_chart_input_limit);
                 if (status.ok() && profile.diagnostic_chart.present()) {
@@ -1077,7 +1082,7 @@ Status load_song_directory(
             }
             profile.config.diagnostic_extended_chart_fixture =
                 profile.config.notes.size() > kMaxChartRows;
-            status = compile_chart(profile.config, &profile.chart, &profile.diagnostic_chart,
+            status = compile_chart(profile.config, native_assets, &profile.chart, &profile.diagnostic_chart,
                 song.accepted_chart_input_limit);
             if (!status.ok()) {
                 song.status = status;
@@ -1244,21 +1249,22 @@ Status load_song_directory(
     }
     advance(SongLoadProgressStage::PublishingCache);
     report("runtime_cache_write_started");
-    if (!write_runtime_cache(song)) {
+    if (!write_runtime_cache(song, native_assets)) {
         song.status = Status::error(StatusCode::IoError, "failed to write runtime cache: " + runtime_cache_path(song.directory));
         write_last_error(song.directory, song.status);
         *out_song = std::move(song);
         return out_song->status;
     }
     report("runtime_cache_write_ready");
-    publish_resolved_song_best_effort(song, !parsed_source.authored_profiles.empty(), trace);
+    publish_resolved_song_best_effort(song, native_assets, !parsed_source.authored_profiles.empty(), trace);
     clear_last_error(song.directory);
     *out_song = std::move(song);
     return Status::ok_status();
 }
 
 SongRepositoryResult discover_songs(
-    const std::filesystem::path& music_root, const SongDiscoveryHooks& hooks) {
+    const std::filesystem::path& music_root, const NativeAssetCapabilities native_assets,
+    const SongDiscoveryHooks& hooks) {
     constexpr std::size_t kMaxConcurrentSongLoads = 2;
     SongRepositoryResult result;
     try {
@@ -1383,7 +1389,7 @@ SongRepositoryResult discover_songs(
                         }
                     };
                     pending[index].status = load_song_directory(
-                        path_string(candidates[index].directory), &pending[index].song,
+                        path_string(candidates[index].directory), native_assets, &pending[index].song,
                         [&](const char* stage) {
                             pending[index].trace_stages.emplace_back(stage);
                         }, true, report_progress);
@@ -1466,14 +1472,16 @@ SongRepositoryResult discover_songs(
     return result;
 }
 
-SongRepositoryResult discover_songs(const std::filesystem::path& music_root) {
-    return discover_songs(music_root, SongDiscoveryHooks{});
+SongRepositoryResult discover_songs(const std::filesystem::path& music_root,
+    const NativeAssetCapabilities native_assets) {
+    return discover_songs(music_root, native_assets, SongDiscoveryHooks{});
 }
 
 SongRepositoryResult discover_songs(
-    const std::string& music_root, const SongDiscoveryHooks& hooks) {
+    const std::string& music_root, const NativeAssetCapabilities native_assets,
+    const SongDiscoveryHooks& hooks) {
     try {
-        return discover_songs(std::filesystem::path(music_root), hooks);
+        return discover_songs(std::filesystem::path(music_root), native_assets, hooks);
     } catch (const std::exception&) {
         SongRepositoryResult result;
         detail::project_song_discovery_setup_failure(result, false);
@@ -1485,8 +1493,9 @@ SongRepositoryResult discover_songs(
     }
 }
 
-SongRepositoryResult discover_songs(const std::string& music_root) {
-    return discover_songs(music_root, SongDiscoveryHooks{});
+SongRepositoryResult discover_songs(const std::string& music_root,
+    const NativeAssetCapabilities native_assets) {
+    return discover_songs(music_root, native_assets, SongDiscoveryHooks{});
 }
 
 } // namespace ff7rp::pipeline

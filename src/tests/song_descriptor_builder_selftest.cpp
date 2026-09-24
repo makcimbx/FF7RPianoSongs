@@ -4,6 +4,7 @@
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chord_voicing.h"
+#include "tests/target_native_assets.h"
 
 #include <array>
 #include <cmath>
@@ -40,6 +41,26 @@ bool chart_note_equal(const SongChartNote& left, const SongChartNote& right)
         left.camera_switch_timing == right.camera_switch_timing &&
         left.group_index == right.group_index &&
         left.ignore_sound_ids == right.ignore_sound_ids;
+}
+
+bool projected_note_equal(const SongChartNote& projected, const ChartNote& source)
+{
+    return chart_note_equal(projected, SongChartNote{
+        source.time_str, source.monotone_id, source.chord_id,
+        source.monotone_note_type, source.monotone_dot_type,
+        source.chord_note_type, source.chord_dot_type,
+        source.camera_switch_timing, source.group_index, source.ignore_sound_ids});
+}
+
+bool tail_projection_equal(const LoadedSong& source, const SongDescriptor& descriptor)
+{
+    const auto& compiled = source.difficulty_profiles.front().diagnostic_chart.tail_rows;
+    const auto& projected = descriptor.profiles.front().extended_chart_tail_notes;
+    if (compiled.size() != projected.size()) return false;
+    for (std::size_t i = 0; i < projected.size(); ++i) {
+        if (!projected_note_equal(projected[i], compiled[i].compiled)) return false;
+    }
+    return true;
 }
 
 bool profile_equal(const SongDifficultyProfile& left, const SongDifficultyProfile& right)
@@ -296,14 +317,16 @@ int main()
     LoadedSong playable = extended_song_fixture(513);
     SongDescriptor playable_descriptor = ff7r::piano::build_song_descriptor(playable, 17);
     if (playable_descriptor.profiles.front().note_count != 513
-        || playable_descriptor.profiles.front().extended_chart_tail_notes.size() != 1) {
+        || playable_descriptor.profiles.front().extended_chart_tail_notes.size() != 1
+        || !tail_projection_equal(playable, playable_descriptor)) {
         return fail("exact eligible 513 descriptor did not publish its immutable tail");
     }
     LoadedSong playable_520 = extended_song_fixture(520);
     const SongDescriptor playable_520_descriptor = ff7r::piano::build_song_descriptor(playable_520, 17);
     if (playable_520_descriptor.profiles.front().note_count != 520
         || playable_520_descriptor.profiles.front().chart_notes.size() != 512
-        || playable_520_descriptor.profiles.front().extended_chart_tail_notes.size() != 8) {
+        || playable_520_descriptor.profiles.front().extended_chart_tail_notes.size() != 8
+        || !tail_projection_equal(playable_520, playable_520_descriptor)) {
         return fail("exact eligible 520 descriptor did not publish its immutable tail vector");
     }
     LoadedSong warm_520 = playable_520;
@@ -320,7 +343,8 @@ int main()
         if (maximum_profile.note_count != static_cast<int>(ff7rp::pipeline::kMaximumExtendedChartRows)
             || maximum_profile.chart_notes.size() != ff7rp::pipeline::kMaxChartRows
             || maximum_profile.extended_chart_tail_notes.size()
-                != ff7rp::pipeline::kMaximumExtendedChartTailRows) {
+                != ff7rp::pipeline::kMaximumExtendedChartTailRows
+             || !tail_projection_equal(maximum, ff7r::piano::build_song_descriptor(maximum, 17))) {
             return fail("8192-row eligible descriptor did not publish its complete owned tail");
         }
     }
@@ -372,7 +396,8 @@ int main()
         chord_tail.difficulty_profiles.front().chart, chord_diagnostic);
     const auto chord_profile = ff7r::piano::build_song_descriptor(chord_tail, 17).profiles.front();
     if (chord_profile.note_count != 521 || chord_profile.native_event_count != 521
-        || chord_profile.extended_chart_tail_notes.size() != 8) {
+        || chord_profile.extended_chart_tail_notes.size() != 8
+        || !tail_projection_equal(chord_tail, ff7r::piano::build_song_descriptor(chord_tail, 17))) {
         return fail("dual-hand exact-520 tail did not publish distinct row/event/action counts");
     }
     const auto rejects_tail_mutation = [&](const char* label, const auto& mutate) {
@@ -459,7 +484,7 @@ int main()
         return fail("single-profile title unexpectedly gained a level suffix");
     }
 
-    if (ff7rp::pipeline::selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+    if (ff7rp::pipeline::test_target_native_assets().has_verified_authored_chord_voicing()) {
         LoadedSong voiced;
         voiced.id = "authored-voicing";
         voiced.config.title = "Voiced";

@@ -2,6 +2,7 @@
 
 #include "pipeline/cache.h"
 #include "pipeline/chart_compiler.h"
+#include "tests/target_native_assets.h"
 #include "pipeline/pipeline_limits.h"
 
 #include <cmath>

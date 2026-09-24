@@ -1,4 +1,5 @@
 #include "pipeline/song_repository.h"
+#include "tests/target_native_assets.h"
 #include "pipeline/pipeline_limits.h"
 
 #include <chrono>

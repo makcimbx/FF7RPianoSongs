@@ -18,7 +18,7 @@ inline bool is_verified_native_sound(const std::string_view sound) {
 }
 
 inline Status validate_chord_voicings(const SongConfig& config,
-    const NativeAssetCapabilities assets = selected_native_asset_capabilities()) {
+    const NativeAssetCapabilities assets) {
     if (config.chord_voicings.empty()) return Status::ok_status();
     if (!config.notes_provided) return Status::error(StatusCode::InvalidChart,
         "chord_voicings requires explicit notes or profiles; export resolved-song.json then author the chart");

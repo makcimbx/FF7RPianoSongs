@@ -204,9 +204,10 @@ Status append_complete_notes(std::string* out, const LoadedDifficultyProfile& pr
     return Status::ok_status();
 }
 
-Status append_root_settings(std::string* out, const LoadedSong& song, const bool emit_profiles) {
+Status append_root_settings(std::string* out, const LoadedSong& song, const bool emit_profiles,
+    const NativeAssetCapabilities native_assets) {
     const SongConfig& config = song.config;
-    const Status voicing_status = validate_chord_voicings(config);
+    const Status voicing_status = validate_chord_voicings(config, native_assets);
     if (!voicing_status.ok()) return invalid_projection(voicing_status.message);
     if (!std::isfinite(config.bpm) || !std::isfinite(config.midi_audio_offset_seconds) ||
         !std::isfinite(config.midi_audio_alignment_seconds) ||
@@ -296,7 +297,8 @@ std::string resolved_song_json_path(const std::string& song_directory) {
 }
 
 Status render_resolved_song_json(
-    const LoadedSong& song, const bool source_declared_profiles, std::string* out_json) {
+    const LoadedSong& song, const NativeAssetCapabilities native_assets,
+    const bool source_declared_profiles, std::string* out_json) {
     if (!out_json) return Status::error(StatusCode::InvalidArgument, "out_json must not be null");
     const bool emit_profiles = song.chart_from_midi || source_declared_profiles;
     if (song.difficulty_profiles.empty()) return invalid_projection("song has no visible profile");
@@ -306,7 +308,7 @@ Status render_resolved_song_json(
         if (profile.config.chord_voicings != song.config.chord_voicings)
             return invalid_projection("profile chord_voicings differs from song root");
     std::string rendered;
-    Status status = append_root_settings(&rendered, song, emit_profiles);
+    Status status = append_root_settings(&rendered, song, emit_profiles, native_assets);
     if (!status.ok()) return status;
     if (emit_profiles) {
         rendered.append(",\n  \"profiles\": [\n");

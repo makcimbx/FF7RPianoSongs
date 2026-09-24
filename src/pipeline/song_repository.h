@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "song_types.h"
+#include "native_asset_capabilities.h"
 
 namespace ff7rp::pipeline {
 
@@ -119,23 +120,27 @@ using SongLoadTrace = std::function<void(const char* stage)>;
 
 Status load_song_directory(
     const std::string& song_directory,
+    NativeAssetCapabilities native_assets,
     LoadedSong* out_song,
     SongLoadTrace trace = {},
     bool rebuild_invalid_cache = true,
     SongLoadProgress progress = {});
-SongRepositoryResult discover_songs(const std::string& music_root);
-SongRepositoryResult discover_songs(const std::string& music_root, const SongDiscoveryHooks& hooks);
-SongRepositoryResult discover_songs(const std::filesystem::path& music_root);
+SongRepositoryResult discover_songs(const std::string& music_root, NativeAssetCapabilities native_assets);
+SongRepositoryResult discover_songs(const std::string& music_root,
+    NativeAssetCapabilities native_assets, const SongDiscoveryHooks& hooks);
+SongRepositoryResult discover_songs(const std::filesystem::path& music_root,
+    NativeAssetCapabilities native_assets);
 SongRepositoryResult discover_songs(
-    const std::filesystem::path& music_root, const SongDiscoveryHooks& hooks);
+    const std::filesystem::path& music_root, NativeAssetCapabilities native_assets,
+    const SongDiscoveryHooks& hooks);
 
-inline SongRepositoryResult discover_songs(const char* music_root) {
-    return discover_songs(std::string(music_root));
+inline SongRepositoryResult discover_songs(const char* music_root, NativeAssetCapabilities native_assets) {
+    return discover_songs(std::string(music_root), native_assets);
 }
 
 inline SongRepositoryResult discover_songs(
-    const char* music_root, const SongDiscoveryHooks& hooks) {
-    return discover_songs(std::string(music_root), hooks);
+    const char* music_root, NativeAssetCapabilities native_assets, const SongDiscoveryHooks& hooks) {
+    return discover_songs(std::string(music_root), native_assets, hooks);
 }
 
 } // namespace ff7rp::pipeline

@@ -1,6 +1,6 @@
 #include "tests/documentation_parity.h"
 
-#include "core/generated/build_identity.generated.h"
+#include "tests/target_native_assets.h"
 #include "ctest_inventory.generated.h"
 #include "game/generated/rvas.generated.h"
 #include "game/hook_specs.h"
@@ -642,7 +642,7 @@ bool verify_song_format_examples(const std::string& text, std::string* error_mes
         ff7rp::pipeline::ParsedSongSource source;
         const auto json = text.substr(begin, end - begin);
         const auto status = ff7rp::pipeline::parse_song_json_string(json, &source);
-        if (!ff7rp::pipeline::selected_native_asset_capabilities().has_verified_authored_chord_voicing()
+        if (!ff7rp::pipeline::test_target_native_assets().has_verified_authored_chord_voicing()
             && json.find("\"chord_voicings\"") != std::string::npos) {
             // The shared guide cannot qualify a capability absent from this build.
             if (status.ok()) return fail(error_message, "SongFormat voicing example accepted an unavailable capability");
@@ -884,7 +884,7 @@ bool load_release_metadata(
     // The audit describes the artifact this translation unit was compiled for, so hook inventory
     // and release target are both selected by that build identity rather than by the catalog
     // default. Catalog-wide invariants across every build belong to the catalog generator check.
-    const std::string build_id{ff7r::piano::core::generated::kBuildId};
+    const std::string build_id{FF7RP_TARGET_BUILD_ID};
 
     ReleaseMetadata parsed;
     if (!load_release_authority(source_root, &parsed.release, error_message)) return false;

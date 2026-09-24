@@ -131,9 +131,9 @@ std::string beat_to_time_str(double beat, double bpm) {
     return out.str();
 }
 
-Status compile_chart(const SongConfig& config, CompiledChart* out_chart,
-    DiagnosticChartRetention* out_diagnostic, const std::size_t input_row_limit,
-    const NativeAssetCapabilities native_assets) {
+Status compile_chart(const SongConfig& config, const NativeAssetCapabilities native_assets,
+    CompiledChart* out_chart, DiagnosticChartRetention* out_diagnostic,
+    const std::size_t input_row_limit) {
     if (!out_chart) {
         return Status::error(StatusCode::InvalidArgument, "out_chart must not be null");
     }

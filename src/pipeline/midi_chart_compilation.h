@@ -18,7 +18,7 @@ struct MidiChartCompilationRequest {
     const SongConfig& config;
     const std::vector<Note>* preferred_baseline = nullptr;
     std::size_t maximum_visible_rows = 0;
-    NativeAssetCapabilities native_assets = selected_native_asset_capabilities();
+    NativeAssetCapabilities native_assets;
 };
 
 struct MidiChartCompilationResult {

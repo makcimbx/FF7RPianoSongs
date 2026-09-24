@@ -2,6 +2,7 @@
 
 #include "core/logging.h"
 #include "pipeline/song_repository_detail.h"
+#include "tests/target_native_assets.h"
 #include "startup/startup_cache_progress.h"
 
 #include <algorithm>

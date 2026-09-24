@@ -18,6 +18,7 @@
 #include <Windows.h>
 
 #include "pipeline/midi_chart_generator.h"
+#include "tests/target_native_assets.h"
 #include "pipeline/pipeline_limits.h"
 #include "tests/test_support.h"
 

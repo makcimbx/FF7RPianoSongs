@@ -9,6 +9,7 @@
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/resolved_song_renderer.h"
 #include "pipeline/song_json.h"
+#include "tests/target_native_assets.h"
 
 namespace {
 
@@ -110,7 +111,7 @@ int main() {
         std::string("\xf4\x90\x80\x80", 4),
         std::string("\xe2\x28\xa1", 3),
     }};
-    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+    if (test_target_native_assets().has_verified_authored_chord_voicing()) {
         auto voiced_config = config;
         voiced_config.notes_provided = true;
         voiced_config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}, {"pca_G_9", {"Gn2", "Bn2", "Dn3"}}};
@@ -212,7 +213,7 @@ int main() {
         return fail("extended projection clipped or changed its retained tail");
     }
 
-    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+    if (test_target_native_assets().has_verified_authored_chord_voicing()) {
         extended_song.config.notes_provided = true;
         extended_song.config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
         extended_song.difficulty_profiles.front().config = extended_song.config;

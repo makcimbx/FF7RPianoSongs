@@ -27,6 +27,5 @@ private:
 // Resolve only exact generated catalog identities. Version strings and other
 // descriptive metadata are deliberately not accepted as asset authority.
 NativeAssetCapabilities native_asset_capabilities_for_catalog(std::string_view build_id);
-NativeAssetCapabilities selected_native_asset_capabilities();
 
 } // namespace ff7rp::pipeline

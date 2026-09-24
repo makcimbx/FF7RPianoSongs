@@ -2355,13 +2355,14 @@ IncrementalSelection select_incremental_rows(
 
 } // namespace
 
-std::string infer_native_chord_from_fresh_midi_pitches(const std::vector<int>& midi_pitches) {
+std::string infer_native_chord_from_fresh_midi_pitches(
+    const std::vector<int>& midi_pitches, const NativeAssetCapabilities native_assets) {
     std::set<int> fresh_pitch_classes;
     for (const int pitch : midi_pitches) {
         if (pitch >= 0 && pitch <= 127) fresh_pitch_classes.insert(pitch % 12);
     }
     return infer_native_chord_match(
-        fresh_pitch_classes, false, selected_native_asset_capabilities()).id;
+        fresh_pitch_classes, false, native_assets).id;
 }
 
 std::array<int, 2> vanilla_mode_change_counts_for_route(const std::string_view route_name) {
@@ -3004,7 +3005,7 @@ MidiChartCompilationResult compile_normalized_midi_chart(
     final_config.notes = *out_notes;
     CompiledChart compiled;
     DiagnosticChartRetention tail;
-    result.status = compile_chart(final_config, &compiled, &tail, chart_row_limit, request.native_assets);
+    result.status = compile_chart(final_config, request.native_assets, &compiled, &tail, chart_row_limit);
     if (!result.status.ok()) out_notes->clear();
     return result;
 }

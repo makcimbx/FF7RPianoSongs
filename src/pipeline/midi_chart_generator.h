@@ -170,7 +170,8 @@ struct MidiChartStats {
 
 // Returns an observed native pca_* ID only for one unambiguous, complete chord.
 // Input pitches must be fresh non-melody MIDI attacks from one onset cluster.
-std::string infer_native_chord_from_fresh_midi_pitches(const std::vector<int>& midi_pitches);
+std::string infer_native_chord_from_fresh_midi_pitches(
+    const std::vector<int>& midi_pitches, NativeAssetCapabilities native_assets);
 
 // Returns the authored Vanilla adaptive-mode thresholds for a calibrated route.
 // Unknown routes return {0, 0} so callers can preserve their existing fallback.
@@ -180,20 +181,20 @@ Status generate_notes_from_midi(
     const std::string& midi_path,
     const WavAudio& audio,
     const SongConfig& config,
+    NativeAssetCapabilities native_assets,
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats = nullptr,
     const std::vector<Note>* preferred_baseline = nullptr,
-    std::size_t maximum_visible_rows = 0,
-    NativeAssetCapabilities native_assets = selected_native_asset_capabilities());
+    std::size_t maximum_visible_rows = 0);
 
 Status generate_notes_from_normalized_midi(
     const NormalizedMidiSource& source,
     const WavAudio& audio,
     const SongConfig& config,
+    NativeAssetCapabilities native_assets,
     std::vector<Note>* out_notes,
     MidiChartStats* out_stats = nullptr,
     const std::vector<Note>* preferred_baseline = nullptr,
-    std::size_t maximum_visible_rows = 0,
-    NativeAssetCapabilities native_assets = selected_native_asset_capabilities());
+    std::size_t maximum_visible_rows = 0);
 
 } // namespace ff7rp::pipeline

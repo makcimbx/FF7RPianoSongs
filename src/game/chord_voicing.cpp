@@ -250,7 +250,7 @@ std::shared_ptr<ChordVoicingBinding> preflight_chord_voicing(
                 ? row.chord_id : row.monotone_id, name)) return {};
         binding->event_names.push_back(name);
     }
-    const auto assets = ff7rp::pipeline::selected_native_asset_capabilities();
+    const auto assets = ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID);
     if (!assets.has_verified_authored_chord_voicing()) return {};
     binding->voicings.reserve(selection.song->chord_voicings.size());
     for (const auto& authored : selection.song->chord_voicings) {

@@ -709,7 +709,8 @@ Status validate_schema(const JsonValue& root, SongConfig* out_config) {
 
 } // namespace
 
-Status parse_song_json_string(const std::string& json, ParsedSongSource* out_source) {
+Status parse_song_json_string(const std::string& json,
+    const NativeAssetCapabilities native_assets, ParsedSongSource* out_source) {
     if (!out_source) {
         return Status::error(StatusCode::InvalidArgument, "out_source must not be null");
     }
@@ -906,7 +907,7 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
             }
             config.chord_voicings.push_back(std::move(voicing));
         }
-        status = validate_chord_voicings(config);
+        status = validate_chord_voicings(config, native_assets);
         if (!status.ok()) return Status::error(StatusCode::InvalidJson, status.message);
     }
     out_source->config = std::move(config);
@@ -914,17 +915,19 @@ Status parse_song_json_string(const std::string& json, ParsedSongSource* out_sou
     return Status::ok_status();
 }
 
-Status parse_song_json_string(const std::string& json, SongConfig* out_config) {
+Status parse_song_json_string(const std::string& json,
+    const NativeAssetCapabilities native_assets, SongConfig* out_config) {
     if (!out_config) {
         return Status::error(StatusCode::InvalidArgument, "out_config must not be null");
     }
     ParsedSongSource source;
-    Status status = parse_song_json_string(json, &source);
+    Status status = parse_song_json_string(json, native_assets, &source);
     if (status.ok()) *out_config = std::move(source.config);
     return status;
 }
 
-Status load_song_json_file(const std::string& path, ParsedSongSource* out_source) {
+Status load_song_json_file(const std::string& path,
+    const NativeAssetCapabilities native_assets, ParsedSongSource* out_source) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
         return Status::error(StatusCode::NotFound, "failed to open song JSON: " + path);
@@ -935,19 +938,20 @@ Status load_song_json_file(const std::string& path, ParsedSongSource* out_source
     if (!file.good() && !file.eof()) {
         return Status::error(StatusCode::IoError, "failed to read song JSON: " + path);
     }
-    Status status = parse_song_json_string(buffer.str(), out_source);
+    Status status = parse_song_json_string(buffer.str(), native_assets, out_source);
     if (!status.ok()) {
         status.message = path + ": " + status.message;
     }
     return status;
 }
 
-Status load_song_json_file(const std::string& path, SongConfig* out_config) {
+Status load_song_json_file(const std::string& path,
+    const NativeAssetCapabilities native_assets, SongConfig* out_config) {
     if (!out_config) {
         return Status::error(StatusCode::InvalidArgument, "out_config must not be null");
     }
     ParsedSongSource source;
-    Status status = load_song_json_file(path, &source);
+    Status status = load_song_json_file(path, native_assets, &source);
     if (status.ok()) *out_config = std::move(source.config);
     return status;
 }

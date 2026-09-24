@@ -12,6 +12,7 @@
 #include "pipeline/song_repository.h"
 #include "pipeline/song_json.h"
 #include "tests/test_support.h"
+#include "tests/target_native_assets.h"
 
 #include <algorithm>
 #include <array>
@@ -1470,7 +1471,7 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
     ff7rp::pipeline::LoadedSong accidental_cold;
     auto status = ff7rp::pipeline::load_song_directory(accidental_directory.string(), &accidental_cold);
     const std::string expected_flat_chord =
-        ff7rp::pipeline::selected_native_asset_capabilities().has_verified_pca_db_voicing()
+        ff7rp::pipeline::test_target_native_assets().has_verified_pca_db_voicing()
         ? "pca_Db" : "pca_Cs";
     const auto all_flat = [&expected_flat_chord](const ff7rp::pipeline::LoadedSong& song) {
         if (song.difficulty_profiles.empty()) return false;
@@ -1580,7 +1581,7 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     std::uint64_t expected_cache_key = 0;
     std::uint64_t expected_normalized_manifest_digest = 0;
     const auto selected_asset_identity =
-        ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
+        ff7rp::pipeline::test_target_native_assets().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
         // Generated-MIDI v18 expands note values and chord coverage. Relative to
         // v16, this one-note fixture retains exact semantics and all six labels:
@@ -2579,7 +2580,7 @@ int test_authored_chord_voicings(const std::filesystem::path& root) {
         return fail("failed to create authored voicing fixture");
     LoadedSong cold;
     auto status = load_song_directory(directory.string(), &cold);
-    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing())
+    if (!test_target_native_assets().has_verified_authored_chord_voicing())
         return !status.ok() && status.message.find("verified exact 1.005") != std::string::npos
             ? 0 : fail("unsupported catalog accepted authored voicing repository source");
     const std::vector<ChordVoicing> expected{{"pca_C", {"Cn3", "En3", "Gn3"}}};

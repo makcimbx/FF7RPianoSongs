@@ -13,6 +13,11 @@ root in PowerShell; no parent repository is required.
   already available in the local CMake dependency cache. These dependencies
   are not checked into this repository.
 
+An offline-only build needs MSVC, CMake, and the pinned miniaudio/midifile
+dependencies (Git/network on first population). It does not need MASM,
+MinHook, Python, PowerShell 7, generated game-address headers, or release.json
+validation. Runtime builds keep the full prerequisites above.
+
 Build and packaging commands do not install the mod or launch the game. The
 runtime-gate workflow below installs only after explicit human authorization;
 it never launches the game.
@@ -45,6 +50,33 @@ The selection chooses the generated tree under `src/generated/<catalog-build-id>
 compiled into the artifact, so producing artifacts for every supported build means running this
 command once per build. Switching builds always reconfigures CMake; a cache configured for
 another build is never reused silently.
+
+### Offline-only pipeline configuration
+
+Run these commands from this native repository root, using a separate build
+directory so an offline configuration cannot replace the runtime build graph:
+
+```powershell
+cmake -S . -B build-offline -DFF7RP_BUILD_RUNTIME=OFF -DFF7RP_GAME_BUILD=ff7rebirth-steam-win64-6a16ced2
+cmake --build build-offline --config Release --parallel 8
+ctest --test-dir build-offline -C Release -R '^(offline_configuration_selftest|pipeline_selftest|song_descriptor_builder_selftest|song_repository_selftest|runtime_cache_codec_selftest|midi_generator_selftest|midi_chart_compilation_selftest|resolved_song_renderer_selftest)$' --output-on-failure
+```
+
+Omit `FF7RP_GAME_BUILD` to select the catalog default; an ID not listed in
+`src/game/rva_catalog.json` fails configuration. `FF7RP_BUILD_RUNTIME=ON` is
+the default and retains ASI generation, generated-address checks, exact-build
+release binding, and runtime tests. The offline tool remains target-bound at
+compile time; it has no target-selection CLI argument. For artifact comparison
+use isolated authored and MIDI song folders, rebuilding each configuration
+cold at the same absolute path (runtime-cache payloads contain paths), the same
+catalog target, compiler/toolchain, and full chart/MIDI policy snapshot. Run
+each tool once cold in each configuration, then compare cache key and byte
+hashes of the runtime cache and MABF. Timing lines are not parity evidence.
+With both `song_cache_tool` targets built under the **same** catalog ID, run
+`./tools/check_offline_runtime_parity.ps1 -OfflineTool ./build-offline/Release/song_cache_tool.exe -RuntimeTool ./build/Release/song_cache_tool.exe -FixtureRoot "$env:TEMP/ff7rp-portability-parity"`
+to create isolated authored/MIDI fixtures and compare cold cache keys plus
+SHA-256 hashes. This optional parity check uses PowerShell 7; the offline
+configure/build itself does not require PowerShell.
 
 ### Refresh The clangd Compilation Database
 

@@ -1,6 +1,5 @@
 #include "native_asset_capabilities.h"
 
-#include "core/generated/build_identity.generated.h"
 
 namespace ff7rp::pipeline {
 
@@ -12,10 +11,6 @@ NativeAssetCapabilities native_asset_capabilities_for_catalog(const std::string_
         return {true, "native_assets=pca_Db_voicing:verified1004+1005", true};
     }
     return {false, "native_assets=pca_Db_voicing:unverified_unknown"};
-}
-
-NativeAssetCapabilities selected_native_asset_capabilities() {
-    return native_asset_capabilities_for_catalog(ff7r::piano::core::generated::kBuildId);
 }
 
 } // namespace ff7rp::pipeline

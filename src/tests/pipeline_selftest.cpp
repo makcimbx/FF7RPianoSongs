@@ -1,4 +1,4 @@
-#include "core/generated/build_identity.generated.h"
+#include "tests/target_native_assets.h"
 #include "game/song_registry.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chart_event_plan.h"
@@ -98,7 +98,7 @@ int test_chord_inventory()
             "notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_F_dim","ignore_sound":["Gs2"]}]})", &parsed).ok() ||
         !compile_chart(parsed, &chart).ok() || chart.notes.front().ignore_sound_ids[0] != "Gs2")
         return fail("authored Fdim stock IgnoreSound JSON failed");
-    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing() &&
+    if (test_target_native_assets().has_verified_authored_chord_voicing() &&
         (!parse_song_json_string(R"({"schema":"v2","title":"Fdim revoiced","bpm":120,
             "chord_voicings":{"pca_F_dim":["Fn3","Gs3","Bn3"]},
             "notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_F_dim","ignore_sound":["Gs3"]}]})", &parsed).ok() ||
@@ -121,7 +121,8 @@ int test_authored_chord_voicings()
     config.chord_voicings = {{"pca_C", {"Cn3", "En3", "Gn3"}}};
     const NormalizedMidiSource unused_source;
     const WavAudio unused_audio;
-    const auto midi_attempt = compile_normalized_midi_chart({unused_source, unused_audio, config});
+    const auto midi_attempt = compile_normalized_midi_chart(
+        {unused_source, unused_audio, config, nullptr, 0, test_target_native_assets()});
     if (midi_attempt.status.ok() || !midi_attempt.notes.empty() ||
         midi_attempt.status.message.find("cannot revoice automatic MIDI inference") == std::string::npos)
         return fail("automatic MIDI compilation silently applied authored voicing");
@@ -172,7 +173,7 @@ int test_authored_chord_voicings()
     const std::string mapping = R"({"pca_C":["Cn3","En3","Gn3"]})";
     SongConfig parsed;
     const auto parsed_status = parse_song_json_string(prefix + mapping + "}", &parsed);
-    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing()) {
+    if (!test_target_native_assets().has_verified_authored_chord_voicing()) {
         if (parsed_status.ok()) return fail("unsupported selected catalog accepted authored voicing JSON");
         return 0;
     }
@@ -309,14 +310,14 @@ int main(int argc, char** argv)
         "ff7rebirth-steam-win64-6a16ced2");
     const auto assets_unknown = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-unknown");
-    const auto selected_assets = ff7rp::pipeline::selected_native_asset_capabilities();
+    const auto selected_assets = ff7rp::pipeline::test_target_native_assets();
     if (!assets_1004.has_verified_pca_db_voicing() || !assets_1005.has_verified_pca_db_voicing()
         || assets_unknown.has_verified_pca_db_voicing()
         || assets_1004.cache_identity() != assets_1005.cache_identity()
         || assets_1004.cache_identity() == assets_unknown.cache_identity()
         || assets_1005.cache_identity() == assets_unknown.cache_identity()
         || selected_assets.cache_identity() != ff7rp::pipeline::native_asset_capabilities_for_catalog(
-            ff7r::piano::core::generated::kBuildId).cache_identity()) {
+             FF7RP_TARGET_BUILD_ID).cache_identity()) {
         return fail("exact catalog native-asset capabilities were not fail-closed and deterministic");
     }
     std::uint64_t assets_1004_key = 0;

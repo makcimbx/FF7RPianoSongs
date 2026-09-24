@@ -6,6 +6,7 @@
 #include "pipeline/extended_chart_eligibility.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/chord_voicing.h"
+#include "pipeline/native_asset_capabilities.h"
 
 #include <algorithm>
 #include <utility>
@@ -60,13 +61,22 @@ float song_duration_seconds(const ff7rp::pipeline::LoadedSong& song)
     return std::max(chart_duration_seconds(song), static_cast<float>(song.audio.source_duration_seconds()));
 }
 
+game::SongChartNote project_chart_note(const ff7rp::pipeline::ChartNote& note)
+{
+    return {note.time_str, note.monotone_id, note.chord_id,
+        note.monotone_note_type, note.monotone_dot_type,
+        note.chord_note_type, note.chord_dot_type,
+        note.camera_switch_timing, note.group_index, note.ignore_sound_ids};
+}
+
 } // namespace
 
 game::SongDescriptor build_song_descriptor(
-    const ff7rp::pipeline::LoadedSong& song, int visible_index)
+    const ff7rp::pipeline::LoadedSong& song, int visible_index,
+    const ff7rp::pipeline::NativeAssetCapabilities native_assets)
 {
     game::SongDescriptor descriptor;
-    const auto voicing_status = ff7rp::pipeline::validate_chord_voicings(song.config);
+    const auto voicing_status = ff7rp::pipeline::validate_chord_voicings(song.config, native_assets);
     if (!voicing_status.ok()) throw std::invalid_argument(voicing_status.message);
     if (song.chart_from_midi && !song.config.chord_voicings.empty())
         throw std::invalid_argument("MIDI-generated charts cannot carry authored chord_voicings");
@@ -92,18 +102,7 @@ game::SongDescriptor build_song_descriptor(
     }
     descriptor.chart_notes.reserve(song.chart.notes.size());
     for (const auto& note : song.chart.notes) {
-        game::SongChartNote chart_note;
-        chart_note.time_str = note.time_str;
-        chart_note.monotone_id = note.monotone_id;
-        chart_note.chord_id = note.chord_id;
-        chart_note.monotone_note_type = note.monotone_note_type;
-        chart_note.monotone_dot_type = note.monotone_dot_type;
-        chart_note.chord_note_type = note.chord_note_type;
-        chart_note.chord_dot_type = note.chord_dot_type;
-        chart_note.camera_switch_timing = note.camera_switch_timing;
-        chart_note.group_index = note.group_index;
-        chart_note.ignore_sound_ids = note.ignore_sound_ids;
-        descriptor.chart_notes.push_back(std::move(chart_note));
+        descriptor.chart_notes.push_back(project_chart_note(note));
     }
     descriptor.sidecar_path = core::widen(song.cache_sidecar_path);
     descriptor.default_profile_index = 0;
@@ -137,10 +136,7 @@ game::SongDescriptor build_song_descriptor(
         }
         profile.chart_notes.reserve(source_profile.chart.notes.size());
         for (const auto& note : source_profile.chart.notes) {
-            profile.chart_notes.push_back({note.time_str, note.monotone_id, note.chord_id,
-                note.monotone_note_type, note.monotone_dot_type,
-                note.chord_note_type, note.chord_dot_type,
-                note.camera_switch_timing, note.group_index, note.ignore_sound_ids});
+            profile.chart_notes.push_back(project_chart_note(note));
         }
         profile.diagnostic_source_rows = source_profile.diagnostic_chart.source_row_count;
         profile.diagnostic_native_prefix_rows = source_profile.diagnostic_chart.native_prefix_row_count;
@@ -164,12 +160,7 @@ game::SongDescriptor build_song_descriptor(
             profile.extended_chart_tail_notes.reserve(source_profile.diagnostic_chart.tail_rows.size());
             for (const auto& tail_row : source_profile.diagnostic_chart.tail_rows) {
                 const auto& note = tail_row.compiled;
-                profile.extended_chart_tail_notes.push_back(game::SongChartNote{
-                note.time_str, note.monotone_id, note.chord_id,
-                note.monotone_note_type, note.monotone_dot_type,
-                note.chord_note_type, note.chord_dot_type,
-                note.camera_switch_timing, note.group_index,
-                note.ignore_sound_ids});
+                profile.extended_chart_tail_notes.push_back(project_chart_note(note));
             }
             const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
             if (policy.playable_extended_available && song.chart_policy_enabled

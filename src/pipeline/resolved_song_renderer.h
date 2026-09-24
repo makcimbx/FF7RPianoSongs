@@ -3,6 +3,7 @@
 #include <string>
 
 #include "song_types.h"
+#include "native_asset_capabilities.h"
 
 namespace ff7rp::pipeline {
 
@@ -15,6 +16,7 @@ std::string resolved_song_json_path(const std::string& song_directory);
 // shape, which cannot otherwise be distinguished from root notes after load.
 Status render_resolved_song_json(
     const LoadedSong& song,
+    NativeAssetCapabilities native_assets,
     bool source_declared_profiles,
     std::string* out_json);
 

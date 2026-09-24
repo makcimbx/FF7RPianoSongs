@@ -44,7 +44,8 @@ int main(int argc, char** argv)
     ff7rp::pipeline::LoadedSong song;
     const auto started = std::chrono::steady_clock::now();
     auto previous_stage = started;
-    const ff7rp::pipeline::Status status = ff7rp::pipeline::load_song_directory(argv[1], &song,
+    const ff7rp::pipeline::Status status = ff7rp::pipeline::load_song_directory(argv[1],
+        ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID), &song,
         [&](const char* stage) {
             const auto now = std::chrono::steady_clock::now();
             std::cout << "timing elapsed_ms="

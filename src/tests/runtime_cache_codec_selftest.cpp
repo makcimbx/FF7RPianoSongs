@@ -4,6 +4,7 @@
 #include "pipeline/chord_voicing.h"
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/runtime_cache_codec.h"
+#include "tests/target_native_assets.h"
 
 #include <algorithm>
 #include <array>
@@ -330,7 +331,7 @@ bool test_group_root_at_transport_boundary() {
 }
 
 bool test_chord_voicing_cache() {
-    if (!selected_native_asset_capabilities().has_verified_authored_chord_voicing()) return true;
+    if (!test_target_native_assets().has_verified_authored_chord_voicing()) return true;
     auto song = representative_song();
     song.config.notes = {{0, 1, "", "pca_C"}};
     song.config.notes.front().ignore_sound_pitches = {"En3"};

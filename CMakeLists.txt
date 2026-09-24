@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(FF7RPianoSongs LANGUAGES CXX)
-enable_language(ASM_MASM)
+option(FF7RP_BUILD_RUNTIME "Build the FF7 Rebirth ASI and runtime integration tests" ON)
+if(FF7RP_BUILD_RUNTIME)
+    enable_language(ASM_MASM)
+endif()
 
 set(FF7RP_FIRST_PARTY_CXX_FEATURE cxx_std_23)
 
@@ -40,6 +43,7 @@ if(NOT FF7RP_GAME_BUILD IN_LIST FF7RP_CATALOG_BUILD_IDS)
 endif()
 set_property(CACHE FF7RP_GAME_BUILD PROPERTY STRINGS ${FF7RP_CATALOG_BUILD_IDS})
 
+if(FF7RP_BUILD_RUNTIME)
 set(FF7RP_RELEASE_JSON "${CMAKE_CURRENT_SOURCE_DIR}/release.json")
 set(FF7RP_RELEASE_TEMPLATE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/release_identity.generated.h.in")
 file(READ "${FF7RP_RELEASE_JSON}" FF7RP_RELEASE_JSON_TEXT)
@@ -101,6 +105,7 @@ configure_file("${FF7RP_RELEASE_TEMPLATE}"
     "${FF7RP_RELEASE_GENERATED_DIR}/release_identity.generated.h" @ONLY NEWLINE_STYLE LF)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${FF7RP_RELEASE_JSON}" "${FF7RP_RELEASE_TEMPLATE}")
+endif()
 
 function(ff7rp_apply_cpp_policy target)
     cmake_parse_arguments(POLICY "OMIT_EHSC;OMIT_FP_PRECISE" "" "" ${ARGN})
@@ -109,6 +114,9 @@ function(ff7rp_apply_cpp_policy target)
     endif()
 
     target_compile_features(${target} PRIVATE ${FF7RP_FIRST_PARTY_CXX_FEATURE})
+    if(NOT target STREQUAL "ff7rp_pipeline")
+        target_compile_definitions(${target} PRIVATE FF7RP_TARGET_BUILD_ID="${FF7RP_GAME_BUILD}")
+    endif()
     if(MSVC)
         target_compile_options(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive->")
         if(NOT POLICY_OMIT_EHSC)
@@ -120,6 +128,7 @@ function(ff7rp_apply_cpp_policy target)
     endif()
 endfunction()
 
+if(FF7RP_BUILD_RUNTIME)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 find_program(FF7RP_PWSH_EXECUTABLE NAMES pwsh REQUIRED)
 
@@ -152,15 +161,18 @@ add_custom_target(check_rva_catalog
     COMMENT "Validating canonical FF7 Rebirth RVA catalog"
     VERBATIM
 )
+endif()
 
 include(FetchContent)
 find_package(Git REQUIRED)
+if(FF7RP_BUILD_RUNTIME)
 FetchContent_Declare(
     minhook
     GIT_REPOSITORY https://github.com/TsudaKageyu/minhook.git
     GIT_TAG c3fcafdc10146beb5919319d0683e44e3c30d537
 )
 FetchContent_MakeAvailable(minhook)
+endif()
 
 FetchContent_Declare(
     miniaudio
@@ -222,7 +234,7 @@ target_compile_definitions(ff7rp_pipeline PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(ff7rp_pipeline PUBLIC
     "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(ff7rp_pipeline PUBLIC midifile)
-ff7rp_use_generated_catalog(ff7rp_pipeline)
+if(FF7RP_BUILD_RUNTIME)
 add_library(FF7RPianoSongs SHARED ${FF7RPIANOSONGS_SOURCES})
 target_sources(FF7RPianoSongs PRIVATE src/game/chord_voicing_bridge.asm)
 add_dependencies(FF7RPianoSongs check_rva_catalog)
@@ -249,6 +261,7 @@ set_target_properties(FF7RPianoSongs PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
+endif()
 
 add_executable(mabf_builder_selftest
     src/tests/mabf_builder_selftest.cpp
@@ -265,7 +278,6 @@ ff7rp_apply_cpp_policy(pipeline_selftest)
 target_compile_definitions(pipeline_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(pipeline_selftest PRIVATE "src")
 target_link_libraries(pipeline_selftest PRIVATE ff7rp_pipeline)
-ff7rp_use_generated_catalog(pipeline_selftest)
 
 add_executable(hca_encoder_selftest
     src/tests/hca_encoder_selftest.cpp
@@ -298,6 +310,7 @@ target_compile_definitions(encoded_audio_fixture_selftest PRIVATE
 target_include_directories(encoded_audio_fixture_selftest PRIVATE "src")
 target_link_libraries(encoded_audio_fixture_selftest PRIVATE ff7rp_pipeline)
 
+if(FF7RP_BUILD_RUNTIME)
 add_executable(registry_selftest
     src/tests/registry_selftest.cpp
     src/game/completion_timing.cpp
@@ -398,6 +411,7 @@ target_compile_definitions(release_audit_tool PRIVATE WIN32_LEAN_AND_MEAN NOMINM
 target_include_directories(release_audit_tool PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}")
 target_link_libraries(release_audit_tool PRIVATE ff7rp_pipeline)
 ff7rp_use_generated_catalog(release_audit_tool)
+endif()
 add_executable(song_descriptor_builder_selftest
     src/tests/song_descriptor_builder_selftest.cpp
     src/song_descriptor_builder.cpp
@@ -407,6 +421,7 @@ ff7rp_apply_cpp_policy(song_descriptor_builder_selftest)
 target_compile_definitions(song_descriptor_builder_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_descriptor_builder_selftest PRIVATE "src")
 target_link_libraries(song_descriptor_builder_selftest PRIVATE ff7rp_pipeline)
+if(FF7RP_BUILD_RUNTIME)
 add_executable(music_repository_loader_selftest
     src/tests/music_repository_loader_selftest.cpp
     src/startup/music_repository_loader.cpp
@@ -435,6 +450,7 @@ target_compile_definitions(startup_cache_overlay_selftest PRIVATE WIN32_LEAN_AND
 target_include_directories(startup_cache_overlay_selftest PRIVATE "src")
 target_link_libraries(startup_cache_overlay_selftest PRIVATE minhook)
 ff7rp_use_generated_catalog(startup_cache_overlay_selftest)
+endif()
 add_executable(song_cache_tool
     tools/song_cache_tool.cpp
 )
@@ -496,6 +512,7 @@ ff7rp_apply_cpp_policy(metronome_selftest)
 target_compile_definitions(metronome_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(metronome_selftest PRIVATE "src" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(metronome_selftest PRIVATE ff7rp_pipeline midifile)
+if(FF7RP_BUILD_RUNTIME)
 add_executable(extended_chart_selftest
     src/tests/extended_chart_selftest.cpp
     src/tools/extended_chart_fixture_tool.cpp
@@ -636,7 +653,19 @@ add_executable(uobject_identity_selftest
 ff7rp_apply_cpp_policy(uobject_identity_selftest OMIT_FP_PRECISE)
 target_compile_definitions(uobject_identity_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(uobject_identity_selftest PRIVATE "src")
+endif()
 enable_testing()
+if(NOT FF7RP_BUILD_RUNTIME)
+    add_test(NAME offline_configuration_selftest
+        COMMAND ${CMAKE_COMMAND}
+            -DFF7RP_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -DFF7RP_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/offline-configuration-selftest
+            -DFF7RP_TEST_BUILD_ID=${FF7RP_GAME_BUILD}
+            -DFF7RP_MINIAUDIO_SOURCE_DIR=${miniaudio_SOURCE_DIR}
+            -DFF7RP_MIDIFILE_SOURCE_DIR=${midifile_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/src/tests/offline_configuration_selftest.cmake)
+endif()
+if(FF7RP_BUILD_RUNTIME)
 add_test(NAME rva_catalog_check
     COMMAND "${Python3_EXECUTABLE}" "${FF7RP_RVA_GENERATOR}" --check
         --temp-dir "${CMAKE_CURRENT_BINARY_DIR}/rva_catalog_ctest"
@@ -645,12 +674,14 @@ add_test(NAME rva_catalog_generator_selftest
     COMMAND "${Python3_EXECUTABLE}" -B
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_rva_catalog.py"
 )
+endif()
 add_test(NAME mabf_builder_selftest COMMAND mabf_builder_selftest)
 add_test(NAME pipeline_selftest COMMAND pipeline_selftest)
 add_test(NAME hca_encoder_selftest COMMAND hca_encoder_selftest)
 add_test(NAME audio_artifact_builder_selftest COMMAND audio_artifact_builder_selftest)
 add_test(NAME wav_reader_selftest COMMAND wav_reader_selftest)
 add_test(NAME encoded_audio_fixture_selftest COMMAND encoded_audio_fixture_selftest)
+if(FF7RP_BUILD_RUNTIME)
 add_test(NAME registry_selftest COMMAND registry_selftest)
 add_test(NAME catalog_adoption_selftest COMMAND catalog_adoption_selftest)
 add_test(NAME release_hook_empty_catalog_selftest COMMAND release_hook_empty_catalog_selftest)
@@ -658,9 +689,12 @@ add_test(NAME piano_page_selection_guard_selftest COMMAND piano_page_selection_g
 add_test(NAME list_catalog_transaction_selftest COMMAND list_catalog_transaction_selftest)
 add_test(NAME profile_list_coordinator_selftest COMMAND profile_list_coordinator_selftest)
 add_test(NAME menu_session_authority_selftest COMMAND menu_session_authority_selftest)
+endif()
 add_test(NAME song_descriptor_builder_selftest COMMAND song_descriptor_builder_selftest)
+if(FF7RP_BUILD_RUNTIME)
 add_test(NAME music_repository_loader_selftest COMMAND music_repository_loader_selftest)
 add_test(NAME startup_cache_overlay_selftest COMMAND startup_cache_overlay_selftest)
+endif()
 add_test(NAME midi_generator_selftest COMMAND midi_generator_selftest)
 add_test(NAME midi_chart_compilation_selftest COMMAND midi_chart_compilation_selftest)
 add_test(NAME midi_analysis_core_selftest COMMAND midi_analysis_core_selftest)
@@ -692,6 +726,7 @@ target_link_libraries(cache_artifact_writer_selftest PRIVATE ff7rp_pipeline)
 ff7rp_apply_cpp_policy(cache_artifact_writer_selftest)
 add_test(NAME cache_artifact_writer_selftest COMMAND cache_artifact_writer_selftest)
 add_test(NAME metronome_selftest COMMAND metronome_selftest)
+if(FF7RP_BUILD_RUNTIME)
 add_test(NAME extended_chart_selftest COMMAND extended_chart_selftest)
 add_test(NAME chord_voicing_selftest COMMAND chord_voicing_selftest)
 add_test(NAME runtime_lifecycle_selftest COMMAND runtime_lifecycle_selftest)
@@ -707,6 +742,8 @@ add_test(NAME audio_play_setup_diagnostics_selftest COMMAND audio_play_setup_dia
 add_test(NAME scoreinfo_result_policy_selftest COMMAND scoreinfo_result_policy_selftest)
 add_test(NAME startup_thread_selftest COMMAND startup_thread_selftest)
 add_test(NAME uobject_identity_selftest COMMAND uobject_identity_selftest)
+endif()
+if(FF7RP_BUILD_RUNTIME)
 add_test(NAME runtime_gate_selftest
     COMMAND "${FF7RP_PWSH_EXECUTABLE}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/runtime_gate_selftest.ps1"
@@ -727,6 +764,7 @@ add_test(NAME tracked_binary_audit
 add_test(NAME documentation_audit
     COMMAND release_audit_tool "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+endif()
 
 set(FF7RP_BOUNDED_SELFTESTS
     rva_catalog_check
@@ -773,7 +811,21 @@ set(FF7RP_BOUNDED_SELFTESTS
     tracked_binary_audit
     documentation_audit
 )
+if(NOT FF7RP_BUILD_RUNTIME)
+    list(REMOVE_ITEM FF7RP_BOUNDED_SELFTESTS
+        rva_catalog_check rva_catalog_generator_selftest registry_selftest
+        profile_list_coordinator_selftest menu_session_authority_selftest
+        music_repository_loader_selftest startup_cache_overlay_selftest extended_chart_selftest runtime_lifecycle_selftest
+        audio_native_call_policy_selftest audio_production_wiring_selftest
+        audio_memory_read_policy_selftest pause_resume_policy_selftest
+        selection_substrate_policy_selftest bgm_playback_aggregate_policy_selftest
+        mabf_sidecar_loader_selftest audio_pointer_patch_runtime_selftest
+        audio_play_setup_diagnostics_selftest scoreinfo_result_policy_selftest
+        startup_thread_selftest uobject_identity_selftest runtime_gate_selftest
+        build_provenance_selftest release_package_selftest tracked_binary_audit documentation_audit)
+endif()
 set_tests_properties(${FF7RP_BOUNDED_SELFTESTS} PROPERTIES TIMEOUT 60)
+if(FF7RP_BUILD_RUNTIME)
 set_tests_properties(
     registry_selftest
     runtime_lifecycle_selftest
@@ -792,6 +844,7 @@ set_tests_properties(
     runtime_gate_selftest
     PROPERTIES
     LABELS "runtime;context-regression")
+endif()
 set_tests_properties(midi_generator_selftest PROPERTIES
     TIMEOUT 180
     RUN_SERIAL TRUE
@@ -828,12 +881,16 @@ foreach(test IN LISTS FF7RP_REGISTERED_TESTS)
 endforeach()
 list(SORT FF7RP_REGISTERED_TESTS)
 string(JOIN "\",\n    \"" FF7RP_CTEST_INVENTORY ${FF7RP_REGISTERED_TESTS})
+if(FF7RP_BUILD_RUNTIME)
 file(CONFIGURE OUTPUT "${FF7RP_RELEASE_GENERATED_DIR}/ctest_inventory.generated.h"
     CONTENT "#pragma once\ninline constexpr const char* kConfiguredCTestNames[] = {\n    \"@FF7RP_CTEST_INVENTORY@\"\n};\n"
     @ONLY NEWLINE_STYLE LF)
+endif()
 
+if(FF7RP_BUILD_RUNTIME)
 add_executable(extended_chart_fixture_tool
     src/tools/extended_chart_fixture_tool.cpp
 )
 ff7rp_apply_cpp_policy(extended_chart_fixture_tool OMIT_EHSC OMIT_FP_PRECISE)
 target_include_directories(extended_chart_fixture_tool PRIVATE "src")
+endif()

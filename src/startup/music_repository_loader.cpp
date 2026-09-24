@@ -264,7 +264,8 @@ public:
                     throw std::length_error("validated custom-song count exceeds the existing piano-list bound");
                 }
                 game::SongDescriptor descriptor = build_song_descriptor(
-                    candidate.song, game::kUnresolvedVisibleIndex);
+                    candidate.song, game::kUnresolvedVisibleIndex,
+                    ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID));
                 if (publisher_.admit_descriptor(descriptor)) {
                     descriptors_.push_back(std::move(descriptor));
                     emit(event(MusicRepositoryLogLevel::Info, loaded_log(candidate.song)));
@@ -335,7 +336,8 @@ MusicRepositoryPlan compose_music_repository(ff7rp::pipeline::SongRepositoryResu
         }
         try {
             plan.descriptors.push_back(
-                build_song_descriptor(song, game::kUnresolvedVisibleIndex));
+                build_song_descriptor(song, game::kUnresolvedVisibleIndex,
+                    ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID)));
         } catch (const std::exception& error) {
             fail_plan(plan, "song descriptor composition failed for directory " +
                 candidate.directory_name + ": " + error.what());
@@ -381,7 +383,8 @@ bool load_music_repository(const std::wstring& dll_dir, StartupCacheProgress* pr
         hooks.on_progress = [progress](const ff7rp::pipeline::SongRepositoryProgress& event) {
             if (progress) progress->observe(event);
         };
-        auto discovery = ff7rp::pipeline::discover_songs(music_root, hooks);
+        auto discovery = ff7rp::pipeline::discover_songs(music_root,
+            ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID), hooks);
         if (progress && !discovery_started_emitted) {
             progress->begin(discovery.discovered_candidate_count);
         }
@@ -439,7 +442,8 @@ ProgressiveRepositoryState run_progressive_music_repository(
         hooks.on_settled_delta = [&](const ff7rp::pipeline::SongRepositorySettlementDelta& delta) {
             accumulator.observe(delta);
         };
-        const auto discovery = ff7rp::pipeline::discover_songs(music_root, hooks);
+        const auto discovery = ff7rp::pipeline::discover_songs(music_root,
+            ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID), hooks);
         if (!discovery.enumeration_completed) {
             state.candidate_count = discovery.discovered_candidate_count;
             state.phase = is_fatal_discovery(discovery.discovery_code)

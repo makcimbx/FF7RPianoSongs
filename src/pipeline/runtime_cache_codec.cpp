@@ -211,7 +211,6 @@ bool read_note(RuntimeCacheReader& in, Note* note) {
 }
 
 bool write_song_config(RuntimeCacheWriter& out, const SongConfig& config) {
-    if (!validate_chord_voicings(config).ok()) return false;
     if (!out.string(config.schema) || !out.string(config.title) || !out.pod(config.bpm) ||
         !out.pod(static_cast<std::int32_t>(config.difficulty)) ||
         !write_int_vector(out, config.score_thresholds) || !write_int_vector(out, config.mode_change_combo_counts) ||
@@ -281,7 +280,7 @@ bool read_song_config(RuntimeCacheReader& in, SongConfig* config) {
         voicing.sound_ids.resize(sounds);
         for (auto& sound : voicing.sound_ids) if (!in.string(&sound)) return false;
     }
-    return validate_chord_voicings(*config).ok();
+    return true;
 }
 
 bool write_compiled_chart(RuntimeCacheWriter& out, const CompiledChart& chart) {
@@ -551,14 +550,15 @@ bool valid_config_and_chart_fields(const SongConfig& config, const CompiledChart
 }
 
 bool valid_cached_profile(const std::string& song_id, const bool extended,
-    const bool playable_extended, const LoadedDifficultyProfile& profile) {
+    const bool playable_extended, const LoadedDifficultyProfile& profile,
+    const NativeAssetCapabilities native_assets) {
     if (profile.config.notes.size() > kMaxChartRows || profile.chart.notes.size() > kMaxChartRows ||
         profile.config.notes.size() != profile.chart.notes.size()) return false;
     const auto& diagnostic = profile.diagnostic_chart;
     if (!diagnostic.present()) {
         CompiledChart expected;
         return !profile.config.diagnostic_extended_chart_fixture &&
-            compile_chart(profile.config, &expected, nullptr, kMaxRuntimeCacheNotes).ok() &&
+            compile_chart(profile.config, native_assets, &expected, nullptr, kMaxRuntimeCacheNotes).ok() &&
             compiled_charts_equal(expected, profile.chart);
     }
     if (!extended || !profile.config.diagnostic_extended_chart_fixture
@@ -573,7 +573,7 @@ bool valid_cached_profile(const std::string& song_id, const bool extended,
     for (const auto& row : diagnostic.tail_rows) complete.notes.push_back(row.source);
     CompiledChart expected_chart;
     DiagnosticChartRetention expected_diagnostic;
-    if (!compile_chart(complete, &expected_chart, &expected_diagnostic,
+    if (!compile_chart(complete, native_assets, &expected_chart, &expected_diagnostic,
             kMaximumExtendedChartRows).ok()
         || !compiled_charts_equal(expected_chart, profile.chart)) return false;
     expected_diagnostic.descriptor_hash = diagnostic_descriptor_hash(
@@ -611,8 +611,10 @@ std::uint64_t omission_semantic_hash_impl(const DifficultyProfileOmission& omiss
     return out.payload_hash(kFnv1a64OffsetBasis ^ 0x6f6d697373696f6eull);
 }
 
-bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
-    if (song.chart_from_midi && !song.config.chord_voicings.empty()) return false;
+bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song,
+    const NativeAssetCapabilities native_assets) {
+    if (!validate_chord_voicings(song.config, native_assets).ok() ||
+        (song.chart_from_midi && !song.config.chord_voicings.empty())) return false;
     for (const auto& profile : song.difficulty_profiles)
         if (profile.config.chord_voicings != song.config.chord_voicings) return false;
     const auto accepted = static_cast<std::uint32_t>(song.accepted_chart_input_limit);
@@ -646,7 +648,7 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
         const auto hash = profile_semantic_hash_impl(profile);
         const bool playable_extended =
             song.chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity;
-        if (!valid_cached_profile(song.id, playable_extended, playable_extended, profile) ||
+        if (!valid_cached_profile(song.id, playable_extended, playable_extended, profile, native_assets) ||
             !write_song_config(out, profile.config) || !write_compiled_chart(out, profile.chart) ||
             !write_profile_diagnostics(out, profile.diagnostics) || !write_diagnostic_chart(out, profile.diagnostic_chart) ||
             hash == 0 || !out.pod(hash)) return false;
@@ -666,7 +668,8 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song) {
     return true;
 }
 
-bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
+bool read_payload(RuntimeCacheReader& in, LoadedSong* song,
+    const NativeAssetCapabilities native_assets) {
     const SongConfig source_config = song->config;
     std::uint64_t cache_key = 0, generation = 0, source_frames = 0;
     std::uint32_t accepted = 0, published = 0, envelope_points = 0;
@@ -702,7 +705,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
         !std::isfinite(song->gain_envelope_min_gain_db) || !std::isfinite(song->metronome_first_beat_seconds) ||
         !std::isfinite(song->metronome_last_beat_seconds)) return false;
     if (accepted != song->accepted_chart_input_limit) return false;
-    if (song->config.chord_voicings != source_config.chord_voicings ||
+    if (!validate_chord_voicings(song->config, native_assets).ok() ||
+        song->config.chord_voicings != source_config.chord_voicings ||
         (midi != 0 && !song->config.chord_voicings.empty())) return false;
     if (!valid_config_and_chart_fields(song->config, song->chart)) return false;
     song->audio.source_frame_count = static_cast<std::size_t>(source_frames);
@@ -728,7 +732,8 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song) {
             !in.pod(&hash) || hash == 0 || hash != profile_semantic_hash_impl(profile) ||
             !valid_cached_profile(song->id,
                 song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity,
-                song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile)) return false;
+                song->chart_policy_identity == kPlayableExtendedChartRowPolicyIdentity, profile,
+                native_assets)) return false;
         if (profile.config.chord_voicings != song->config.chord_voicings ||
             !valid_config_and_chart_fields(profile.config, profile.chart)) return false;
     }
@@ -780,11 +785,12 @@ std::uint64_t omission_semantic_hash(const DifficultyProfileOmission& omission) 
     return omission_semantic_hash_impl(omission);
 }
 
-bool encode_runtime_cache(const LoadedSong& song, const std::span<const char, 8> magic,
+bool encode_runtime_cache(const LoadedSong& song, const NativeAssetCapabilities native_assets,
+    const std::span<const char, 8> magic,
     const std::uint32_t format, std::vector<std::uint8_t>* bytes) {
     if (!bytes) return false;
     RuntimeCacheWriter payload;
-    if (!write_payload(payload, song) || payload.payload().size() > std::numeric_limits<std::uint64_t>::max()) return false;
+    if (!write_payload(payload, song, native_assets) || payload.payload().size() > std::numeric_limits<std::uint64_t>::max()) return false;
     std::vector<std::uint8_t> encoded;
     encoded.insert(encoded.end(), magic.begin(), magic.end());
     append_le(&encoded, format, 4); append_le(&encoded, kRuntimeSongSection, 4);
@@ -797,7 +803,8 @@ bool encode_runtime_cache(const LoadedSong& song, const std::span<const char, 8>
     return true;
 }
 
-bool decode_runtime_cache(const std::span<const std::uint8_t> bytes, const std::span<const char, 8> magic,
+bool decode_runtime_cache(const std::span<const std::uint8_t> bytes,
+    const NativeAssetCapabilities native_assets, const std::span<const char, 8> magic,
     const std::uint32_t format, LoadedSong* song) {
     if (!song || bytes.size() < kRuntimeCacheEnvelopeBytes || bytes.size() > (64u << 20u) ||
         !std::equal(magic.begin(), magic.end(), bytes.begin()) || read_le(bytes, 8, 4) != format ||
@@ -807,7 +814,7 @@ bool decode_runtime_cache(const std::span<const std::uint8_t> bytes, const std::
             bytes.size() - kRuntimeCacheEnvelopeBytes) != read_le(bytes, bytes.size() - 16u, 8u)) return false;
     LoadedSong decoded = *song;
     RuntimeCacheReader payload(bytes.subspan(24u, bytes.size() - kRuntimeCacheEnvelopeBytes));
-    if (!read_payload(payload, &decoded)) return false;
+    if (!read_payload(payload, &decoded, native_assets)) return false;
     *song = std::move(decoded);
     return true;
 }
