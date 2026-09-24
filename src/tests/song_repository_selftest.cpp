@@ -1582,11 +1582,13 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::selected_native_asset_capabilities().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v16 invalidates selection caches. This one-note fixture
-        // retains its exact semantics and all six labels; only cache identity
-        // and its manifest binding change, not pipeline v48 or binary format 16.
-        expected_cache_key = 0xdcd6e784a648752bull;
-        expected_normalized_manifest_digest = 0xf43907a972107a5cull;
+        // Generated-MIDI v18 expands note values and chord coverage. Relative to
+        // v16, this one-note fixture retains exact semantics and all six labels:
+        // changing only the policy token reproduces the cache-key delta, and
+        // restoring the old cache_key line recovers the old manifest digest.
+        // Pipeline v48 and binary format 16 are unchanged.
+        expected_cache_key = 0x4573351caad21631ull;
+        expected_normalized_manifest_digest = 0x645b7fc861ae049eull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
