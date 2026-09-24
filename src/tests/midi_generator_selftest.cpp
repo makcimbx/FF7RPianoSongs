@@ -513,8 +513,8 @@ int test_chord_inference() {
     if (!infer_native_chord_from_fresh_midi_pitches({60, 64, 68}).empty()) {
         return fail("unsupported augmented chord was accepted");
     }
-    if (!infer_native_chord_from_fresh_midi_pitches({62, 66, 69, 72}).empty()) {
-        return fail("unverified native D7 identifier was emitted");
+    if (infer_native_chord_from_fresh_midi_pitches({62, 66, 69, 72}) != "pca_D_7") {
+        return fail("native D7 identifier was not recognized");
     }
     if (infer_native_chord_from_fresh_midi_pitches({60, 65, 67}) != "pca_C_sus4") {
         return fail("C suspended fourth was not recognized");

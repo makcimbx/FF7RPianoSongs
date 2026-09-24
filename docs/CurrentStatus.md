@@ -13,6 +13,22 @@
 - Ordinary post-expand count cleanup now derives its upper bound from the canonical compiled event plan rather than the number of source rows. This preserves both events of a dual row; required-action counts and stale stored totals do not grant authority. Retained-tail charts keep the existing source-row fallback unless the exact synchronous extended transaction authorizes preservation. The dedicated 1.005 five-row/seven-event Development result below supplies bounded count and score evidence, not qualification of every chart shape.
 - Explicit and MIDI alternate emission is restricted to natural C2–C6 and exact C#2–C#6. [Exact 1.005 monotone inventory](../analysis/PianoMonotoneAssignEvidence-20260905.md) proves ten alternate rows with assignment 7 and unchanged sound references, no `Cn1_2`/`Cn7_2`, and ordinary `Cn7` already assigned high C. It contains no C-flat alternate; that request remains unsupported. This narrows the existing shared emitter conservatively, not a new 1.004 capability claim; exact 1.004 monotone parity and physical-input/audio behavior remain unqualified. The pipeline identity change invalidates cached unsupported boundary assignments without changing runtime-cache layout.
 
+## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
+
+- The offline chord inventory now includes all decoded assignment/config joins,
+  preserving exact ordered stock sounds for authored voicings, IgnoreSound and
+  partial MIDI carriers. MIDI root/quality mappings now cover every root for the
+  existing quality templates, without changing prior non-null mappings.
+- Named note values include native one-third/sixth and their dotted variants;
+  per-side runtime transport accepts the recovered types. Exact MIDI duration
+  inference preserves older named values when durations coincide.
+- Generated MIDI policy changes invalidate generated caches; authored cache and
+  binary layout are unchanged. See [Song Format](SongFormat.md) and
+  [MIDI Generation](MidiGeneration.md) for the current supported values and policy.
+- This is asset-level and offline Integration support, not individual in-game
+  qualification of every added chord or fractional value. Camera and strength
+  authoring are unchanged.
+
 ## Integration: Simultaneous MIDI Groups And Preparation (2026-09-09)
 
 - Generated MIDI policy v16 preserves the selected RH root and adds unique supported

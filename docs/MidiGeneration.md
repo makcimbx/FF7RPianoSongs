@@ -125,16 +125,17 @@ Generated charts preserve source onset identity. MIDI offset, alignment, and min
 
 Generated notation is independent per side and does not change row timing. A
 retained monotone receives an explicit native note/dot value only when its
-authoritative source tick length exactly equals one of the ten schema values
-(whole through dotted sixteenth) as a rational multiple of the MIDI ticks per
-quarter. An inferred chord receives an explicit value only when every represented
-constituent has the same exact supported tick length. The resulting native types
-are 0 through 4 (whole through sixteenth); native one-third and one-sixth types
-5 and 6 are intentionally unsupported. Nonmatching or heterogeneous
+authoritative source tick length exactly equals one of the fourteen schema values
+(whole through dotted sixteenth, native one-third/sixth and their dotted forms)
+as a rational multiple of the MIDI ticks per quarter. An inferred chord receives
+an explicit value only when every represented constituent has the same exact
+supported tick length. The resulting native types
+are 0 through 6. Where dotted/native values have the same duration, the earlier
+whole-through-sixteenth value keeps precedence. Nonmatching or heterogeneous
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. This derivation is covered by
-`midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v16`.
+`midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v18`.
 The policy identity rebuilds generated MIDI caches without changing authored JSON
 semantics or the binary cache layout. Complete enriched rows pass the existing
 compiler and event-plan topology/physical limits; oversized profiles are omitted,

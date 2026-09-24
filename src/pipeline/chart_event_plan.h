@@ -213,7 +213,7 @@ inline ChartEventPlan derive_chart_event_plan(const std::vector<ChartEventRow>& 
         const bool right = !row.monotone_id.empty();
         const bool left = !row.chord_id.empty();
         const auto valid_side = [](const std::int32_t note_type, const std::int32_t dot_type) {
-            return note_type >= 0 && note_type <= 4 && dot_type >= 0 && dot_type <= 1;
+            return note_type >= 0 && note_type <= 6 && dot_type >= 0 && dot_type <= 1;
         };
         if ((!right && !left)
             || (right ? !valid_side(row.monotone_note_type, row.monotone_dot_type)

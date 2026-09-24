@@ -456,7 +456,7 @@ bool valid_descriptor_note_value(const bool present, const int32_t note_type,
     const int32_t dot_type) noexcept
 {
     return present
-        ? note_type >= 0 && note_type <= 4 && dot_type >= 0 && dot_type <= 1
+        ? note_type >= 0 && note_type <= 6 && dot_type >= 0 && dot_type <= 1
         : note_type == 0 && dot_type == 0;
 }
 
@@ -1897,8 +1897,22 @@ bool chart_patch_ignore_sound_selftest()
         return fail();
     }
 
+    SongDifficultyProfile fractional_pair = root_profile;
+    fractional_pair.chart_notes[0].monotone_note_type = 5;
+    fractional_pair.chart_notes[0].monotone_dot_type = 1;
+    fractional_pair.chart_notes[0].chord_note_type = 6;
+    PlannedDescriptorChartPatch fractional_plan;
+    if (!try_plan_descriptor_chart_patch(fractional_pair, "selftest-fractional-pair",
+            layout, resolver, fractional_plan, &reason)
+        || !fractional_plan.arrays
+        || fractional_plan.arrays->monotone_note_types != std::vector<uint8_t>({5, 3})
+        || fractional_plan.arrays->monotone_dot_types != std::vector<uint8_t>({1, 0})
+        || fractional_plan.arrays->chord_note_types != std::vector<uint8_t>({6, 0})) {
+        return fail();
+    }
+
     SongDifficultyProfile malformed_pair = root_profile;
-    malformed_pair.chart_notes[0].monotone_note_type = 5;
+    malformed_pair.chart_notes[0].monotone_note_type = 7;
     PlannedDescriptorChartPatch malformed_plan;
     if (try_plan_descriptor_chart_patch(malformed_pair, "selftest-malformed-pair",
             layout, resolver, malformed_plan, &reason)

@@ -13,7 +13,7 @@ bool modeled_event_note_value(const ff7rp::pipeline::ChartEventRow& row,
     const bool present = monotone ? !row.monotone_id.empty() : !row.chord_id.empty();
     const int value = monotone ? row.monotone_note_type : row.chord_note_type;
     const int dot = monotone ? row.monotone_dot_type : row.chord_dot_type;
-    if (!present || value < 0 || value > 4 || dot < 0 || dot > 1) return false;
+    if (!present || value < 0 || value > 6 || dot < 0 || dot > 1) return false;
     note_type = static_cast<std::uint8_t>(value);
     dot_type = static_cast<std::uint8_t>(dot);
     return true;

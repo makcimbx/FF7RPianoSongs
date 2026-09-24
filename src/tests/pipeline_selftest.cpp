@@ -45,6 +45,68 @@ std::string expected_monotone(int semitone)
     return std::string(ids[semitone % 12]) + std::to_string(semitone / 12);
 }
 
+int test_chord_inventory()
+{
+    using namespace ff7rp::pipeline;
+    const auto current = native_asset_capabilities_for_catalog("ff7rebirth-steam-win64-6a16ced2");
+    const auto older = native_asset_capabilities_for_catalog("ff7rebirth-steam-win64-68fd6fde");
+    const auto unknown = native_asset_capabilities_for_catalog("unknown");
+    std::size_t three = 0, four = 0;
+    std::set<std::string_view> ids;
+    for (const auto& entry : kVerifiedNativeChordConstituents) {
+        if (!ids.insert(entry.chord_id).second) return fail("duplicate native chord ID");
+        if (entry.sound_count == 3u) ++three;
+        else if (entry.sound_count == 4u) ++four;
+        else return fail("unsupported native chord width");
+        std::set<std::string_view> sounds;
+        for (std::size_t index = 0; index < entry.sound_names.size(); ++index) {
+            const auto sound = entry.sound_names[index];
+            if (index >= entry.sound_count) {
+                if (!sound.empty()) return fail("nonempty unused native chord slot");
+                continue;
+            }
+            if (!is_verified_native_sound(sound) || !sounds.insert(sound).second)
+                return fail("invalid or duplicate exact native chord sound");
+            for (const auto assets : {older, current}) {
+                SongConfig config;
+                config.bpm = 120;
+                config.notes_provided = true;
+                config.notes = {{0, 1, "", std::string(entry.chord_id)}};
+                config.notes.front().ignore_sound_pitches = {std::string(sound)};
+                CompiledChart chart;
+                if (find_verified_native_chord(entry.chord_id, assets) != &entry ||
+                    !compile_chart(config, &chart, nullptr, 512, assets).ok() ||
+                    chart.notes.front().ignore_sound_ids != std::array<std::string, 3>{std::string(sound), "", ""})
+                    return fail("stock native constituent failed exact IgnoreSound compilation");
+                config.notes.front().ignore_sound_pitches = {"Cn7"};
+                if (compile_chart(config, &chart, nullptr, 512, assets).ok())
+                    return fail("stock native chord accepted a nonconstituent");
+            }
+        }
+    }
+    if (ids.size() != 170u || three != 68u || four != 102u)
+        return fail("complete native chord inventory count/width mismatch");
+    const auto* fdim = find_verified_native_chord("pca_F_dim", current);
+    if (!fdim || fdim->sound_count != 3u ||
+        fdim->sound_names != std::array<std::string_view, 4>{"Fn2", "Gs2", "Bn2", ""} ||
+        find_verified_native_chord("pca_Db", unknown) ||
+        find_verified_native_chord("pca_unknown", current))
+        return fail("Fdim native spelling or fail-closed Db/unknown identity changed");
+    SongConfig parsed;
+    CompiledChart chart;
+    if (!parse_song_json_string(R"({"schema":"v2","title":"Fdim","bpm":120,
+            "notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_F_dim","ignore_sound":["Gs2"]}]})", &parsed).ok() ||
+        !compile_chart(parsed, &chart).ok() || chart.notes.front().ignore_sound_ids[0] != "Gs2")
+        return fail("authored Fdim stock IgnoreSound JSON failed");
+    if (selected_native_asset_capabilities().has_verified_authored_chord_voicing() &&
+        (!parse_song_json_string(R"({"schema":"v2","title":"Fdim revoiced","bpm":120,
+            "chord_voicings":{"pca_F_dim":["Fn3","Gs3","Bn3"]},
+            "notes":[{"beat":0,"duration_beats":1,"chord_id":"pca_F_dim","ignore_sound":["Gs3"]}]})", &parsed).ok() ||
+         !compile_chart(parsed, &chart).ok() || chart.notes.front().ignore_sound_ids[0] != "Gs3"))
+        return fail("authored Fdim ordered three-slot voicing JSON failed");
+    return 0;
+}
+
 int test_authored_chord_voicings()
 {
     using namespace ff7rp::pipeline;
@@ -157,15 +219,90 @@ int test_authored_chord_voicings()
     return 0;
 }
 
+int test_note_values()
+{
+    using namespace ff7rp::pipeline;
+    constexpr std::array<const char*, 14> names{{
+        "whole", "dotted_whole", "half", "dotted_half", "quarter", "dotted_quarter",
+        "eighth", "dotted_eighth", "sixteenth", "dotted_sixteenth",
+        "one_third", "dotted_one_third", "one_sixth", "dotted_one_sixth"}};
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        const NativeNoteValue expected{static_cast<std::uint8_t>(index / 2u),
+            static_cast<std::uint8_t>(index % 2u)};
+        // Exercise each present side and absent-side zeroing, plus independent dual values.
+        for (const int sides : {1, 2, 3}) {
+            std::string row = R"({"beat":1.25,"duration_beats":0.375)";
+            if (sides & 1) row += std::string(R"(,"pitch":"C4","monotone_note_value":")") + names[index] + '"';
+            if (sides & 2) row += std::string(R"(,"chord_id":"pca_C","chord_note_value":")") +
+                names[sides == 3 ? (index + 1u) % names.size() : index] + '"';
+            row += '}';
+            SongConfig config;
+            const auto status = parse_song_json_string(
+                R"({"schema":"v2","title":"values","bpm":120,"notes":[)" + row + "]}", &config);
+            CompiledChart chart;
+            ChartEventPlan plan;
+            if (!status.ok() || !compile_chart(config, &chart).ok() ||
+                !derive_chart_event_plan(config.notes, chart.notes, &plan))
+                return fail("authored note value failed parsing, compilation, or event planning");
+            const auto& source = config.notes.front();
+            const auto& compiled = chart.notes.front();
+            const std::size_t chord_index = sides == 3 ? (index + 1u) % names.size() : index;
+            const NativeNoteValue chord_expected{static_cast<std::uint8_t>(chord_index / 2u),
+                static_cast<std::uint8_t>(chord_index % 2u)};
+            if (source.monotone_note_value != ((sides & 1) ? NoteValueOverride{expected, true} : NoteValueOverride{}) ||
+                source.chord_note_value != ((sides & 2) ? NoteValueOverride{chord_expected, true} : NoteValueOverride{}) ||
+                compiled.monotone_note_type != ((sides & 1) ? expected.note_type : 0) ||
+                compiled.monotone_dot_type != ((sides & 1) ? expected.dot_type : 0) ||
+                compiled.chord_note_type != ((sides & 2) ? chord_expected.note_type : 0) ||
+                compiled.chord_dot_type != ((sides & 2) ? chord_expected.dot_type : 0) ||
+                compiled.beat != 1.25 || compiled.duration_beats != 0.375 || compiled.time_str != "00_38" ||
+                plan.native_event_count != (sides == 3 ? 2u : 1u) ||
+                plan.required_action_count != plan.native_event_count)
+                return fail("note-value extension changed exact pairs, timing, absent sides, or actions");
+            auto event = chart_event_row_from_compiled(compiled);
+            for (const int invalid : {-1, 7, 255, 256}) {
+                auto bad = event;
+                if (sides & 1) bad.monotone_note_type = invalid;
+                else bad.chord_note_type = invalid;
+                if (derive_chart_event_plan({bad}).error != ChartEventPlanError::InvalidRow)
+                    return fail("event planner accepted an unsupported note type");
+            }
+            for (const int invalid : {-1, 2, 255, 256}) {
+                auto bad = event;
+                if (sides & 2) bad.chord_dot_type = invalid;
+                else bad.monotone_dot_type = invalid;
+                if (derive_chart_event_plan({bad}).error != ChartEventPlanError::InvalidRow)
+                    return fail("event planner accepted an unsupported dot type");
+            }
+        }
+    }
+    for (unsigned type = 0; type < 256; ++type) {
+        for (unsigned dot = 0; dot < 256; ++dot) {
+            if (supported_native_note_value({static_cast<std::uint8_t>(type), static_cast<std::uint8_t>(dot)}) !=
+                (type <= 6u && dot <= 1u)) return fail("native byte domain is not exactly 0..6 / 0..1");
+        }
+    }
+    for (const char* value : {"\"thirty_second\"", "\"One_third\"", "\"one_third \"", "5", "null"}) {
+        SongConfig rejected;
+        if (parse_song_json_string(std::string(R"({"schema":"v2","title":"bad","bpm":120,"notes":[{"beat":0,"duration_beats":1,"pitch":"C4","monotone_note_value":)") +
+                value + "}]}", &rejected).ok()) return fail("malformed note-value token accepted");
+    }
+    return 0;
+}
+
 } // namespace
 
-int main()
+int main(int argc, char** argv)
 {
+    if (test_note_values() != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--note-values-only") return 0;
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
         != "ff7rpianosongs.pipeline.v48") {
         return fail("pipeline cache identity did not invalidate pre-voicing serialized configurations");
     }
     if (test_authored_chord_voicings() != 0) return 1;
+    if (test_chord_inventory() != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--chords-only") return 0;
     const auto assets_1004 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
         "ff7rebirth-steam-win64-68fd6fde");
     const auto assets_1005 = ff7rp::pipeline::native_asset_capabilities_for_catalog(
@@ -362,9 +499,10 @@ int main()
         {0, 1}, {1, 0}, {1, 1}, {2, 0}, {2, 1}, {3, 0}, {3, 1}, {4, 0}, {4, 1}}};
     if (!ff7rp::pipeline::supported_native_note_value({0, 0})
         || !ff7rp::pipeline::supported_native_note_value({4, 1})
-        || ff7rp::pipeline::supported_native_note_value({5, 0})
-        || ff7rp::pipeline::supported_native_note_value({6, 0})) {
-        return fail("native note-value authoring domain did not remain exactly types 0 through 4");
+        || !ff7rp::pipeline::supported_native_note_value({5, 0})
+        || !ff7rp::pipeline::supported_native_note_value({6, 1})
+        || ff7rp::pipeline::supported_native_note_value({7, 0})) {
+        return fail("native note-value authoring domain did not remain exactly types 0 through 6");
     }
     for (std::size_t index = 1; index < note_values_chart.notes.size(); ++index) {
         const auto expected = expected_note_values[index - 1u];
@@ -418,24 +556,6 @@ int main()
             || exact_accidental_chart.notes[index].monotone_id != exact_accidental_ids[index]) {
             return fail("authored accidental spelling was not preserved exactly");
         }
-    }
-    std::size_t three_sound_chords = 0;
-    std::size_t four_sound_chords = 0;
-    std::set<std::string_view> verified_chord_ids;
-    for (const auto& chord : ff7rp::pipeline::kVerifiedNativeChordConstituents) {
-        if (!verified_chord_ids.insert(chord.chord_id).second) return fail("verified chord table contains duplicate IDs");
-        if (chord.sound_count == 3u) ++three_sound_chords;
-        else if (chord.sound_count == 4u) ++four_sound_chords;
-        else return fail("verified chord table contains an unsupported constituent count");
-        std::set<std::string_view> sounds;
-        for (std::size_t sound = 0; sound < chord.sound_count; ++sound) {
-            if (chord.sound_names[sound].empty() || !sounds.insert(chord.sound_names[sound]).second) {
-                return fail("verified chord table contains empty or duplicate constituents");
-            }
-        }
-    }
-    if (verified_chord_ids.size() != 64u || three_sound_chords != 41u || four_sound_chords != 23u) {
-        return fail("verified chord table coverage changed");
     }
     const char* extended_notes_json = R"json({
         "schema":"ff7rpianosongs.song.v2","title":"Extended notes","bpm":120,"notes":[

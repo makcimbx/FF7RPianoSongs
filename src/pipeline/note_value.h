@@ -25,17 +25,19 @@ struct NamedNativeNoteValue {
     NativeNoteValue value;
 };
 
-inline constexpr std::array<NamedNativeNoteValue, 10> kSupportedNamedNoteValues{{
+inline constexpr std::array<NamedNativeNoteValue, 14> kSupportedNamedNoteValues{{
     {"whole", {0, 0}}, {"dotted_whole", {0, 1}},
     {"half", {1, 0}}, {"dotted_half", {1, 1}},
     {"quarter", {2, 0}}, {"dotted_quarter", {2, 1}},
     {"eighth", {3, 0}}, {"dotted_eighth", {3, 1}},
     {"sixteenth", {4, 0}}, {"dotted_sixteenth", {4, 1}},
+    {"one_third", {5, 0}}, {"dotted_one_third", {5, 1}},
+    {"one_sixth", {6, 0}}, {"dotted_one_sixth", {6, 1}},
 }};
 
 inline constexpr bool supported_native_note_value(const NativeNoteValue value)
 {
-    return value.note_type <= 4u && value.dot_type <= 1u;
+    return value.note_type <= 6u && value.dot_type <= 1u;
 }
 
 inline constexpr bool valid_note_value_override(const NoteValueOverride& value)

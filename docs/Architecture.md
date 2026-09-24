@@ -187,14 +187,14 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   and checked for every profile. Source pitch spelling, authored IgnoreSound, and
   retained MIDI chord voicing remain protected by diagnostic/cache semantic hashes;
   they are deliberately outside the runtime-reconstructible physical digest.
-- The offline pipeline owns an immutable exact-spelling evidence table for 64
-  chord identities, including distinct `pca_Cs` and `pca_Db` rows. Build-scoped
-  entries are available to IgnoreSound and MIDI inference only when the
-  compile-selected exact generated catalog exposes the matching immutable asset
-  capability. Exact builds 1.004 and 1.005 expose the verified-equal `pca_Db`
-  row under one `verified1004+1005` capability identity; unknown catalogs do
-  not. Resolution neither reads game memory nor
-  constructs native FNames from source-note spelling.
+- The offline pipeline owns an immutable exact-spelling evidence table for all
+  170 decoded `PianoChordsAssign`/`PianoChordsConfig` chord identities, including
+  distinct sharp and flat IDs. Each row preserves the asset's ordered stock
+  sounds for `ignore_sound`, authored voicings, and MIDI inference. Authored
+  voicings require the compile-selected exact generated catalog's asset
+  capability; the additional `pca_Db` stock entry is also capability-gated.
+  Exact builds 1.004 and 1.005 share the verified-equal chord rows. Resolution
+  neither reads game memory nor constructs native FNames from source-note spelling.
 - Playable chart publication never exceeds the shipping boundary in [Chart Limits](ChartLimits.md).
 - Diagnostic helper availability without playable runtime capability does not
   authorize extended input, cache reuse, or descriptor publication.

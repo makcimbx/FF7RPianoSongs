@@ -34,6 +34,8 @@ NoteValueOverride exact_midi_note_value(
         {4, 1, {0, 0}}, {6, 1, {0, 1}}, {2, 1, {1, 0}}, {3, 1, {1, 1}},
         {1, 1, {2, 0}}, {3, 2, {2, 1}}, {1, 2, {3, 0}}, {3, 4, {3, 1}},
         {1, 4, {4, 0}}, {3, 8, {4, 1}},
+        // Preserve ordinary eighth/sixteenth precedence for the dotted overlaps.
+        {1, 3, {5, 0}}, {1, 2, {5, 1}}, {1, 6, {6, 0}}, {1, 4, {6, 1}},
     };
     for (const Candidate& candidate : candidates) {
         if (ticks * candidate.denominator ==
@@ -147,18 +149,18 @@ constexpr std::array<ChordTemplate, 10> kChordTemplates{{
 }};
 using ChordIds = std::array<const char*, static_cast<std::size_t>(ChordQuality::Count)>;
 constexpr std::array<ChordIds, 12> kNativeChordIds{{
-    ChordIds{{"pca_C",  "pca_C_m",  "pca_C_dim",  "pca_C_sus4",  "pca_C_7",  "pca_C_m7",  "pca_C_Maj7",  "pca_C_9",  nullptr,      nullptr}},
-    ChordIds{{"pca_Cs", "pca_Cs_m", nullptr,      "pca_Db_sus4", nullptr,    nullptr,     "pca_Db_Maj7", nullptr,    nullptr,      nullptr}},
-    ChordIds{{"pca_D",  "pca_D_m",  "pca_D_dim",  "pca_D_sus4",  nullptr,    "pca_D_m7",  nullptr,       "pca_D_9",  "pca_D_m9",  nullptr}},
-    ChordIds{{"pca_Eb", nullptr,      "pca_Eb_dim", "pca_Eb_sus4", nullptr,    "pca_Eb_m7", nullptr,       "pca_Eb_9", nullptr,      "pca_Eb_mM7"}},
-    ChordIds{{"pca_E",  "pca_E_m",  "pca_E_dim",  "pca_E_sus4",  nullptr,    nullptr,     nullptr,       nullptr,    nullptr,      nullptr}},
-    ChordIds{{"pca_F",  "pca_F_m",  nullptr,      "pca_F_sus4",  "pca_F_7",  "pca_F_m7",  nullptr,       "pca_F_9",  nullptr,      nullptr}},
-    ChordIds{{"pca_Fs", nullptr,      "pca_Fs_dim", nullptr,      "pca_Fs_7", nullptr,     "pca_Gb_Maj7",nullptr,    nullptr,      nullptr}},
-    ChordIds{{"pca_G",  "pca_G_m",  "pca_G_dim",  "pca_G_sus4",  "pca_G_7",  nullptr,     "pca_G_Maj7",  "pca_G_9",  nullptr,      "pca_G_mM7"}},
-    ChordIds{{"pca_Ab", "pca_Ab_m", "pca_Ab_dim", nullptr,      nullptr,    nullptr,     nullptr,       nullptr,    nullptr,      nullptr}},
-    ChordIds{{"pca_A",  "pca_A_m",  nullptr,      "pca_A_sus4",  nullptr,    "pca_A_m7",  nullptr,       "pca_A_9",  nullptr,      nullptr}},
-    ChordIds{{"pca_Bb", "pca_Bb_m", "pca_Bb_dim", "pca_Bb_sus4", nullptr,    "pca_Bb_m7", nullptr,       nullptr,    nullptr,      nullptr}},
-    ChordIds{{nullptr,   "pca_B_m",  "pca_B_dim",  "pca_B_sus4",  nullptr,    nullptr,     nullptr,       nullptr,    nullptr,      nullptr}},
+    ChordIds{{"pca_C",  "pca_C_m",  "pca_C_dim",  "pca_C_sus4",  "pca_C_7",  "pca_C_m7",  "pca_C_Maj7",  "pca_C_9",  "pca_C_m9",  "pca_C_mM7"}},
+    ChordIds{{"pca_Cs", "pca_Cs_m", "pca_Cs_dim", "pca_Db_sus4", "pca_Cs_7", "pca_Cs_m7", "pca_Db_Maj7", "pca_Cs_9", "pca_Cs_m9", "pca_Cs_mM7"}},
+    ChordIds{{"pca_D",  "pca_D_m",  "pca_D_dim",  "pca_D_sus4",  "pca_D_7",  "pca_D_m7",  "pca_D_Maj7",  "pca_D_9",  "pca_D_m9",  "pca_D_mM7"}},
+    ChordIds{{"pca_Eb", "pca_Eb_m", "pca_Eb_dim", "pca_Eb_sus4", "pca_Eb_7", "pca_Eb_m7", "pca_Eb_Maj7", "pca_Eb_9", "pca_Eb_m9", "pca_Eb_mM7"}},
+    ChordIds{{"pca_E",  "pca_E_m",  "pca_E_dim",  "pca_E_sus4",  "pca_E_7",  "pca_E_m7",  "pca_E_Maj7",  "pca_E_9",  "pca_E_m9",  "pca_E_mM7"}},
+    ChordIds{{"pca_F",  "pca_F_m",  "pca_F_dim",  "pca_F_sus4",  "pca_F_7",  "pca_F_m7",  "pca_F_Maj7",  "pca_F_9",  "pca_F_m9",  "pca_F_mM7"}},
+    ChordIds{{"pca_Fs", "pca_Fs_m", "pca_Fs_dim", "pca_Fs_sus4", "pca_Fs_7", "pca_Fs_m7", "pca_Gb_Maj7", "pca_Fs_9", "pca_Fs_m9", "pca_Fs_mM7"}},
+    ChordIds{{"pca_G",  "pca_G_m",  "pca_G_dim",  "pca_G_sus4",  "pca_G_7",  "pca_G_m7",  "pca_G_Maj7",  "pca_G_9",  "pca_G_m9",  "pca_G_mM7"}},
+    ChordIds{{"pca_Ab", "pca_Ab_m", "pca_Ab_dim", "pca_Ab_sus4", "pca_Ab_7", "pca_Ab_m7", "pca_Ab_Maj7", "pca_Ab_9", "pca_Ab_m9", "pca_Ab_mM7"}},
+    ChordIds{{"pca_A",  "pca_A_m",  "pca_A_dim",  "pca_A_sus4",  "pca_A_7",  "pca_A_m7",  "pca_A_Maj7",  "pca_A_9",  "pca_A_m9",  "pca_A_mM7"}},
+    ChordIds{{"pca_Bb", "pca_Bb_m", "pca_Bb_dim", "pca_Bb_sus4", "pca_Bb_7", "pca_Bb_m7", "pca_Bb_Maj7", "pca_Bb_9", "pca_Bb_m9", "pca_Bb_mM7"}},
+    ChordIds{{"pca_B",  "pca_B_m",  "pca_B_dim",  "pca_B_sus4",  "pca_B_7",  "pca_B_m7",  "pca_B_Maj7",  "pca_B_9",  "pca_B_m9",  "pca_B_mM7"}},
 }};
 
 struct SelectionStats {

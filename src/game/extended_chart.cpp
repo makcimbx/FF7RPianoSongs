@@ -1054,7 +1054,7 @@ bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
             const int32_t event_dot_type =
                 entry.kind == ff7rp::pipeline::ChartEventKind::Monotone
                 ? note->monotone_dot_type : note->chord_dot_type;
-            if (event_note_type < 0 || event_note_type > 4
+            if (event_note_type < 0 || event_note_type > 6
                 || event_dot_type < 0 || event_dot_type > 1)
                 return reject("event_note_value_unsupported", i);
             plan.note_type = static_cast<uint8_t>(event_note_type);

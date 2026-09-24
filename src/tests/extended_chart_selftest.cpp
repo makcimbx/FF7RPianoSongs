@@ -250,8 +250,24 @@ bool test_generalized_representative_plan()
         return false;
     }
 
+    ChartEventRow native_fraction = explicit_dual;
+    native_fraction.monotone_note_type = 5;
+    native_fraction.monotone_dot_type = 1;
+    native_fraction.chord_note_type = 6;
+    native_fraction.chord_dot_type = 0;
+    if (!derive_chart_event_plan({native_fraction}).valid()
+        || !ff7r::piano::game::synthetic_model::modeled_event_note_value(
+            native_fraction, ChartEventKind::Monotone, selected_type, selected_dot)
+        || selected_type != 5 || selected_dot != 1
+        || !ff7r::piano::game::synthetic_model::modeled_event_note_value(
+            native_fraction, ChartEventKind::Chord, selected_type, selected_dot)
+        || selected_type != 6 || selected_dot != 0) {
+        std::cerr << "native fractional note-value selection failed\n";
+        return false;
+    }
+
     ChartEventRow malformed = explicit_dual;
-    malformed.chord_note_type = 5;
+    malformed.chord_note_type = 7;
     if (derive_chart_event_plan({malformed}).valid()
         || ff7r::piano::game::synthetic_model::modeled_event_note_value(
             malformed, ChartEventKind::Chord, selected_type, selected_dot)) {

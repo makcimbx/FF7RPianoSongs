@@ -711,6 +711,145 @@ int test_simultaneous_groups(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_chord_inventory(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    // These are the observed canonical IDs, retaining all earlier enharmonic choices.
+    constexpr std::array<const char*, 12> roots{
+        "pca_C", "pca_Cs", "pca_D", "pca_Eb", "pca_E", "pca_F",
+        "pca_Fs", "pca_G", "pca_Ab", "pca_A", "pca_Bb", "pca_B"};
+    constexpr std::array<const char*, 10> suffixes{
+        "", "_m", "_dim", "_sus4", "_7", "_m7", "_Maj7", "_9", "_m9", "_mM7"};
+    const std::array<std::vector<int>, 10> intervals{{
+        {0, 4, 7}, {0, 3, 7}, {0, 3, 6}, {0, 5, 7}, {0, 4, 7, 10},
+        {0, 3, 7, 10}, {0, 4, 7, 11}, {0, 2, 4, 7, 10}, {0, 2, 3, 7, 10}, {0, 3, 7, 11}}};
+    for (std::size_t tonic = 0; tonic < roots.size(); ++tonic) {
+        for (std::size_t quality = 0; quality < suffixes.size(); ++quality) {
+            std::string id = std::string(roots[tonic]) + suffixes[quality];
+            if (tonic == 1u && quality == 3u) id = "pca_Db_sus4";
+            if (tonic == 1u && quality == 6u) id = "pca_Db_Maj7";
+            if (tonic == 6u && quality == 6u) id = "pca_Gb_Maj7";
+            std::vector<int> pitches;
+            for (const int interval : intervals[quality]) pitches.push_back(48 + static_cast<int>(tonic) + interval);
+            if (!find_verified_native_chord(id, selected_native_asset_capabilities()) ||
+                infer_native_chord_from_fresh_midi_pitches(pitches) != id)
+                return fail("complete observed root/quality inference failed: " + id);
+        }
+    }
+    struct Fixture {
+        std::initializer_list<int> pitches;
+        const char* id;
+        std::vector<std::string> source;
+        std::vector<std::string> ignores;
+    };
+    const std::array<Fixture, 7> fixtures{{
+        {{41, 44, 47}, "pca_F_dim", {"F2", "G#2", "B2"}, {}},
+        {{38, 42, 45, 48}, "pca_D_7", {"D2", "F#2", "A2", "C3"}, {}},
+        {{47, 51, 54}, "pca_B", {"B2", "D#3", "F#3"}, {}},
+        // The newly recovered Fdim carrier reproduces both exact source octaves.
+        {{41, 47}, "pca_F_dim", {"F2", "B2"}, {"Gs2"}},
+        {{41, 45, 52}, "pca_F_Maj7", {"F2", "A2", "E3"}, {"Cn3"}},
+        {{41, 45, 51}, "", {}, {}}, // ambiguous F7/F9; no guessing
+        {{41, 42}, "", {}, {}}, // no exact native dyad carrier
+    }};
+    for (std::size_t index = 0; index < fixtures.size(); ++index) {
+        const auto& fixture = fixtures[index];
+        const auto path = root / ("chord-inventory-" + std::to_string(index) + ".mid");
+        const auto bytes = single_chord_midi_bytes(fixture.pitches);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        const auto observed = generate(path, WavAudio{}, config);
+        const auto repeated = generate(path, WavAudio{}, config);
+        if (!observed.status.ok() || !repeated.status.ok() ||
+            fingerprint(observed) != fingerprint(repeated) || observed.stats.source_pitch_witness_failures ||
+            !validate_midi_difficulty_route(observed.notes, observed.stats.source_bpm, 6).feasible)
+            return fail("expanded native chord inference lost deterministic source/route validity");
+        std::size_t chords = 0;
+        for (const auto& note : observed.notes) {
+            if (note.chord_id.empty()) continue;
+            ++chords;
+            if (note.chord_id != fixture.id || note.source_chord_pitches != fixture.source ||
+                note.ignore_sound_pitches != fixture.ignores || note.group_index ||
+                note.beat < 0 || note.beat > 14 || note.beat != 2.0 * std::round(note.beat / 2.0) ||
+                note.chord_note_value != NoteValueOverride{{2, 1}, true})
+                return fail("expanded native chord changed exact source/ignore/frame/notation semantics: " +
+                    std::to_string(index));
+        }
+        if ((*fixture.id != '\0') != (chords != 0u) ||
+            (*fixture.id == '\0' && observed.stats.chord_candidates != 0u))
+            return fail("new chord omitted or unsafe partial chord offered: " + std::to_string(index));
+        config.bpm = observed.stats.source_bpm;
+        config.notes = observed.notes;
+        config.notes_provided = true;
+        CompiledChart chart;
+        ChartEventPlan plan;
+        if (!compile_chart(config, &chart).ok() || !derive_chart_event_plan(config.notes, chart.notes, &plan))
+            return fail("expanded chord output did not compile into an exact event plan");
+    }
+    return 0;
+}
+
+int test_exact_note_values(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    struct Case { int numerator; int denominator; NativeNoteValue value; };
+    constexpr std::array<Case, 14> cases{{
+        {4, 1, {0, 0}}, {6, 1, {0, 1}}, {2, 1, {1, 0}}, {3, 1, {1, 1}},
+        {1, 1, {2, 0}}, {3, 2, {2, 1}}, {1, 2, {3, 0}}, {3, 4, {3, 1}},
+        {1, 4, {4, 0}}, {3, 8, {4, 1}}, {1, 3, {5, 0}}, {1, 6, {6, 0}},
+        // Dotted third/sixth durations remain ordinary eighth/sixteenth in MIDI.
+        {1, 2, {3, 0}}, {1, 4, {4, 0}}}};
+    for (const int ppq : {480, 960, 100}) {
+        std::vector<MidiEvent> track;
+        track.push_back({0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}});
+        std::vector<NoteValueOverride> expected_values;
+        for (const auto& item : cases) {
+            const int ticks = ppq * item.numerator / item.denominator;
+            add_note(&track, (4 + static_cast<int>(expected_values.size()) * 8) * ppq,
+                ticks, 72, 100);
+            expected_values.push_back(ppq * item.numerator % item.denominator == 0 ?
+                NoteValueOverride{item.value, true} : NoteValueOverride{});
+        }
+        for (const int ticks : {ppq / 3 - 1, ppq / 3 + 1, ppq / 6 - 1, ppq / 6 + 1}) {
+            add_note(&track, (4 + static_cast<int>(expected_values.size()) * 8) * ppq, ticks, 72, 100);
+            expected_values.push_back({});
+        }
+        std::vector<unsigned char> bytes{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&bytes, 0); append_u16(&bytes, 1); append_u16(&bytes, ppq);
+        append_midi_track(&bytes, std::move(track));
+        const auto path = root / ("note-values-" + std::to_string(ppq) + ".mid");
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        const auto actual = generate(path, WavAudio{}, config);
+        const auto repeated = generate(path, WavAudio{}, config);
+        if (!actual.status.ok() || !repeated.status.ok() || actual.notes.size() != expected_values.size() ||
+            canonical_note_bytes(actual.notes) != canonical_note_bytes(repeated.notes))
+            return fail("exact note-value fixture lost deterministic complete output: " + actual.status.message);
+        config.bpm = 120; config.notes = actual.notes;
+        CompiledChart chart;
+        ChartEventPlan plan;
+        if (!compile_chart(config, &chart).ok() || !derive_chart_event_plan(config.notes, chart.notes, &plan))
+            return fail("exact MIDI note values failed compiled event planning");
+        for (std::size_t index = 0; index < expected_values.size(); ++index) {
+            const auto& note = actual.notes[index];
+            const auto& compiled = chart.notes[index];
+            const auto resolved = expected_values[index].provided ? expected_values[index].value : NativeNoteValue{3, 0};
+            std::uint64_t frame = 0;
+            if (note.monotone_note_value != expected_values[index] || note.chord_note_value.provided ||
+                note.beat != 4.0 + index * 8.0 || note.duration_beats != 0.25 ||
+                compiled.monotone_note_type != resolved.note_type || compiled.monotone_dot_type != resolved.dot_type ||
+                !chart_event_time_frame(compiled.time_str, &frame) || frame != 120u + index * 240u)
+                return fail("rational notation, overlap precedence, fallback, or source-frame timing changed at PPQ " +
+                    std::to_string(ppq) + " row " + std::to_string(index));
+        }
+    }
+    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v18"))
+        return fail("new exact MIDI notation did not invalidate generated policy caches");
+    return 0;
+}
+
 int test_pitch_exclusion(const std::filesystem::path& root) {
     const auto fixture = [&](const char* name, const bool supported, const bool outside,
                              const bool drums) {
@@ -808,6 +947,10 @@ int test_pitch_exclusion(const std::filesystem::path& root) {
 
 int main(int argc, char** argv) {
     ff7rp::tests::TemporaryDirectory temporary("ff7rp-midi-compilation-oracle");
+    if (test_exact_note_values(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--note-values-only") return 0;
+    if (test_chord_inventory(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--chords-only") return 0;
     if (test_simultaneous_groups(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--simultaneous-only") return 0;
     if (test_salient_reduction(temporary.path()) != 0) return 1;
@@ -1544,7 +1687,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v16") {
+        != "midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v18") {
         return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));

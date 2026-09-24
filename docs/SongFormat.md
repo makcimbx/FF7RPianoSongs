@@ -158,7 +158,7 @@ check; compatibility of these mappings with 1.004 has not been independently con
 `monotone_note_value` changes the right-hand note symbol; `chord_note_value` changes the left-hand
 symbol. Set either or both independently. They do not move the note or change `duration_beats`.
 
-| JSON value | Displayed note |
+| JSON value | Native note value (5/6 display unverified) |
 | --- | --- |
 | `whole` | Whole note |
 | `dotted_whole` | Dotted whole note |
@@ -170,8 +170,14 @@ symbol. Set either or both independently. They do not move the note or change `d
 | `dotted_eighth` | Dotted eighth note |
 | `sixteenth` | Sixteenth note |
 | `dotted_sixteenth` | Dotted sixteenth note |
+| `one_third` | Native one-third-beat value |
+| `dotted_one_third` | Native dotted one-third-beat value |
+| `one_sixth` | Native one-sixth-beat value |
+| `dotted_one_sixth` | Native dotted one-sixth-beat value |
 
-These are the only supported values. Without an override, durations of at least 2 beats display
+These are the supported native values. The one-third and one-sixth values are supported by the
+game's duration helper, but their notation, input, and scoring behavior in custom charts has not
+yet been checked in game. Without an override, durations of at least 2 beats display
 a quarter note; shorter durations display an eighth note. This compatibility default is not a full
 rhythmic transcription, so set an explicit value when the symbol matters.
 
@@ -194,6 +200,8 @@ is allowed but leaves its input silent.
 Names are matched exactly, not by sounding pitch: `Ab2` does not remove `Gs2`.
 The table below describes **stock** chord sounds. A custom composition replaces the corresponding
 list for this song; it does not add sounds to it.
+It includes all 170 chord assignments decoded from the supported game assets,
+with their exact ordered sounds; this is asset coverage, not individual in-game qualification.
 
 | Chord ID | Stock sounds / allowed `ignore_sound` without an override |
 | --- | --- |
@@ -261,6 +269,112 @@ list for this song; it does not add sounds to it.
 | `pca_B_m` | `Bn2`, `Dn3`, `Fs3` |
 | `pca_B_dim` | `Bn2`, `Dn3`, `Fn3` |
 | `pca_B_sus4` | `Bn2`, `En3`, `Fs3` |
+| `pca_A_7` | `An2`, `Cs3`, `En3`, `Gn3` |
+| `pca_A_Maj7` | `An2`, `Cs3`, `En3`, `Gs3` |
+| `pca_A_dim` | `An2`, `Cn3`, `Ds3` |
+| `pca_A_m9` | `An2`, `Cn3`, `En3`, `Bn3` |
+| `pca_A_mM7` | `An2`, `Cn3`, `En3`, `Gs3` |
+| `pca_Ab_7` | `Ab2`, `Cn3`, `Eb3`, `Gb3` |
+| `pca_Ab_9` | `Ab2`, `Cn3`, `Eb3`, `Bb3` |
+| `pca_Ab_Maj7` | `Ab2`, `Cn3`, `Eb3`, `Gn3` |
+| `pca_Ab_m7` | `Ab2`, `Bn2`, `Eb3`, `Gb3` |
+| `pca_Ab_m9` | `Ab2`, `Bn2`, `Eb3`, `Bb3` |
+| `pca_Ab_mM7` | `Ab2`, `Bn2`, `Eb3`, `Gn3` |
+| `pca_Ab_sus4` | `Ab2`, `Db3`, `Eb3` |
+| `pca_As` | `As2`, `Dn3`, `Fn3` |
+| `pca_As_7` | `As2`, `Dn3`, `Fn3`, `Gs3` |
+| `pca_As_9` | `As2`, `Dn3`, `Fn3`, `Cn3` |
+| `pca_As_Maj7` | `As2`, `Dn3`, `Fn3`, `An3` |
+| `pca_As_dim` | `As2`, `Cs3`, `En3` |
+| `pca_As_m` | `As2`, `Cs3`, `Fn3` |
+| `pca_As_m7` | `As2`, `Cs3`, `Fn3`, `Gs3` |
+| `pca_As_m9` | `As2`, `Cs3`, `Fn3`, `Cn3` |
+| `pca_As_mM7` | `As2`, `Cs3`, `Fn3`, `An3` |
+| `pca_As_sus4` | `As2`, `Ds3`, `Fn3` |
+| `pca_B` | `Bn2`, `Ds3`, `Fs3` |
+| `pca_B_7` | `Bn2`, `Ds3`, `Fs3`, `An3` |
+| `pca_B_9` | `Bn2`, `Ds3`, `Fs3`, `Cs3` |
+| `pca_B_Maj7` | `Bn2`, `Ds3`, `Fs3`, `As3` |
+| `pca_B_m7` | `Bn2`, `Dn3`, `Fs3`, `An3` |
+| `pca_B_m9` | `Bn2`, `Dn3`, `Fs3`, `Cs3` |
+| `pca_B_mM7` | `Bn2`, `Dn3`, `Fs3`, `As3` |
+| `pca_Bb_7` | `Bb2`, `Dn3`, `Fn3`, `Ab3` |
+| `pca_Bb_9` | `Bb2`, `Dn3`, `Fn3`, `Cn3` |
+| `pca_Bb_Maj7` | `Bb2`, `Dn3`, `Fn3`, `An3` |
+| `pca_Bb_m9` | `Bb2`, `Db3`, `Fn3`, `Cn3` |
+| `pca_Bb_mM7` | `Bb2`, `Db3`, `Fn3`, `An3` |
+| `pca_C_m9` | `Cn2`, `Ds2`, `Gn2`, `Dn3` |
+| `pca_C_mM7` | `Cn2`, `Ds2`, `Gn2`, `Bn2` |
+| `pca_Cs_7` | `Cs2`, `Fn2`, `Gs2`, `Bn2` |
+| `pca_Cs_9` | `Cs2`, `Fn2`, `Gs2`, `Ds3` |
+| `pca_Cs_Maj7` | `Cs2`, `Fn2`, `Gs2`, `Cn3` |
+| `pca_Cs_dim` | `Cs2`, `En2`, `Gn2` |
+| `pca_Cs_m7` | `Cs2`, `En2`, `Gs2`, `Bn2` |
+| `pca_Cs_m9` | `Cs2`, `En2`, `Gs2`, `Ds3` |
+| `pca_Cs_mM7` | `Cs2`, `En2`, `Gs2`, `Cn3` |
+| `pca_Cs_sus4` | `Cs2`, `Fs2`, `Gs2` |
+| `pca_D_7` | `Dn2`, `Fs2`, `An2`, `Cn3` |
+| `pca_D_Maj7` | `Dn2`, `Fs2`, `An2`, `Cs3` |
+| `pca_D_mM7` | `Dn2`, `Fn2`, `An2`, `Cs3` |
+| `pca_Db_7` | `Db2`, `Fn2`, `Ab2`, `Bn2` |
+| `pca_Db_9` | `Db2`, `Fn2`, `Ab2`, `Eb3` |
+| `pca_Db_dim` | `Db2`, `En2`, `Gn2` |
+| `pca_Db_m` | `Db2`, `En2`, `Ab2` |
+| `pca_Db_m7` | `Db2`, `En2`, `Ab2`, `Bn2` |
+| `pca_Db_m9` | `Db2`, `En2`, `Ab2`, `Eb3` |
+| `pca_Db_mM7` | `Db2`, `En2`, `Ab2`, `Cn3` |
+| `pca_Ds` | `Ds2`, `Gn2`, `As2` |
+| `pca_Ds_7` | `Ds2`, `Gn2`, `As2`, `Cs3` |
+| `pca_Ds_9` | `Ds2`, `Gn2`, `As2`, `Fn3` |
+| `pca_Ds_Maj7` | `Ds2`, `Gn2`, `As2`, `Dn3` |
+| `pca_Ds_dim` | `Ds2`, `Fs2`, `An2` |
+| `pca_Ds_m` | `Ds2`, `Fs2`, `As2` |
+| `pca_Ds_m7` | `Ds2`, `Fs2`, `As2`, `Cs3` |
+| `pca_Ds_m9` | `Ds2`, `Fs2`, `As2`, `Fn3` |
+| `pca_Ds_mM7` | `Ds2`, `Fs2`, `As2`, `Dn3` |
+| `pca_Ds_sus4` | `Ds2`, `Gs2`, `As2` |
+| `pca_E_7` | `En2`, `Gs2`, `Bn2`, `Dn3` |
+| `pca_E_9` | `En2`, `Gs2`, `Bn2`, `Fs3` |
+| `pca_E_Maj7` | `En2`, `Gs2`, `Bn2`, `Ds3` |
+| `pca_E_m7` | `En2`, `Gn2`, `Bn2`, `Dn3` |
+| `pca_E_m9` | `En2`, `Gn2`, `Bn2`, `Fs3` |
+| `pca_E_mM7` | `En2`, `Gn2`, `Bn2`, `Ds3` |
+| `pca_Eb_7` | `Eb2`, `Gn2`, `Bb2`, `Db3` |
+| `pca_Eb_Maj7` | `Eb2`, `Gn2`, `Bb2`, `Dn3` |
+| `pca_Eb_m` | `Eb2`, `Gb2`, `Bb2` |
+| `pca_Eb_m9` | `Eb2`, `Gb2`, `Bb2`, `Fn3` |
+| `pca_F_Maj7` | `Fn2`, `An2`, `Cn3`, `En3` |
+| `pca_F_dim` | `Fn2`, `Gs2`, `Bn2` |
+| `pca_F_m9` | `Fn2`, `Gs2`, `Cn3`, `Gn3` |
+| `pca_F_mM7` | `Fn2`, `Gs2`, `Cn3`, `En3` |
+| `pca_Fs_9` | `Fs2`, `As2`, `Cs3`, `Gs3` |
+| `pca_Fs_Maj7` | `Fs2`, `As2`, `Cs3`, `Fn3` |
+| `pca_Fs_m` | `Fs2`, `An2`, `Cs3` |
+| `pca_Fs_m7` | `Fs2`, `An2`, `Cs3`, `En3` |
+| `pca_Fs_m9` | `Fs2`, `An2`, `Cs3`, `Gs3` |
+| `pca_Fs_mM7` | `Fs2`, `An2`, `Cs3`, `Fn3` |
+| `pca_Fs_sus4` | `Fs2`, `Bn2`, `Cs3` |
+| `pca_G_m7` | `Gn2`, `As2`, `Dn3`, `Fn3` |
+| `pca_G_m9` | `Gn2`, `As2`, `Dn3`, `An3` |
+| `pca_Gb` | `Gb2`, `Bb2`, `Db3` |
+| `pca_Gb_7` | `Gb2`, `Bb2`, `Db3`, `En3` |
+| `pca_Gb_9` | `Gb2`, `Bb2`, `Db3`, `Ab3` |
+| `pca_Gb_dim` | `Gb2`, `An2`, `Cn3` |
+| `pca_Gb_m` | `Gb2`, `An2`, `Db3` |
+| `pca_Gb_m7` | `Gb2`, `An2`, `Db3`, `En3` |
+| `pca_Gb_m9` | `Gb2`, `An2`, `Db3`, `Ab3` |
+| `pca_Gb_mM7` | `Gb2`, `An2`, `Db3`, `Fn3` |
+| `pca_Gb_sus4` | `Gb2`, `Bn2`, `Db3` |
+| `pca_Gs` | `Gs2`, `Cn3`, `Ds3` |
+| `pca_Gs_7` | `Gs2`, `Cn3`, `Ds3`, `Fs3` |
+| `pca_Gs_9` | `Gs2`, `Cn3`, `Ds3`, `As3` |
+| `pca_Gs_Maj7` | `Gs2`, `Cn3`, `Ds3`, `Gn3` |
+| `pca_Gs_dim` | `Gs2`, `Bn2`, `Dn3` |
+| `pca_Gs_m` | `Gs2`, `Bn2`, `Ds3` |
+| `pca_Gs_m7` | `Gs2`, `Bn2`, `Ds3`, `Fs3` |
+| `pca_Gs_m9` | `Gs2`, `Bn2`, `Ds3`, `As3` |
+| `pca_Gs_mM7` | `Gs2`, `Bn2`, `Ds3`, `Gn3` |
+| `pca_Gs_sus4` | `Gs2`, `Cs3`, `Ds3` |
 
 Other `pca_*` names can pass the initial JSON check, but are not guaranteed to exist in the game.
 The table is the supported reference for chord filtering; arbitrary new chords cannot be created

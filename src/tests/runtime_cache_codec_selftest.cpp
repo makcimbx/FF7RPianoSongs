@@ -589,7 +589,7 @@ int main() {
     invalid_semantics.config.title.clear();
     invalid_semantics.difficulty_profiles[0].config.title.clear();
     LoadedSong invalid_enum = source;
-    invalid_enum.chart.notes[0].monotone_note_type = 5;
+    invalid_enum.chart.notes[0].monotone_note_type = 7;
     LoadedSong invalid_absent_side = source;
     invalid_absent_side.chart.notes[1].chord_note_type = 3;
     LoadedSong invalid_source_override = source;
