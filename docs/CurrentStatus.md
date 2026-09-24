@@ -28,6 +28,12 @@
 - This is asset-level and offline Integration support, not individual in-game
   qualification of every added chord or fractional value. Camera and strength
   authoring are unchanged.
+- Exact-1.005 Development session `20260924T092820Z-912e59aedcec` installed the
+  matching ASI, collected a `Passed` loader/sidecar assessment after normal game
+  exit and was finalized `Accepted/Keep`. The user reported that the changes work
+  well. This feedback belongs to that development artifact; the collected startup
+  assessment alone does not prove individual chord, notation, input or scoring
+  behavior, and it does not transfer to 1.004 or either packaged archive.
 
 ## Integration: Simultaneous MIDI Groups And Preparation (2026-09-09)
 
@@ -122,7 +128,16 @@ the external session retains `manual-result.md`, immutable collection and rollba
 This is positive auditory/play feedback on the exact installed Development artifact, not
 complete musical, input, lifecycle, process-exit, other-build or packaged-artifact qualification.
 
-## Known Limitations / 0.2.2 Release Scope
+## Known Limitations / 0.2.3 Release Scope
+
+On 2026-09-24 the product owner explicitly authorized publication of 0.2.3 with
+separate 1.004 and 1.005 archives after independent review and complete automated
+Release validation. The owner accepts incomplete broader manual scenario coverage,
+no new 1.004 gameplay checks, no exhaustive check of individual added chords or
+fractional note-value behavior, and no in-game test of the exact packaged archives
+as version-scoped unqualified limitations. The 1.005 Development feedback above
+does not transfer to another build or artifact. This decision waives no demonstrated
+defect, failed automated check or blocking review finding.
 
 On 2026-09-09 the product owner explicitly authorized publication of 0.2.2 and
 accepted incomplete focused manual coverage (including broader long-group scenarios),
@@ -153,7 +168,7 @@ On 2026-09-07 the product owner explicitly authorized publication of 0.2.0, incl
 
 ## Latest Verification Summary
 
-Historical full-repository and focused results below belong to their recorded checkpoints. At this 0.2.2 source-preparation boundary, independent exact-checkpoint canonical Release validation has not yet run; its subsequent report must identify the actual clean commit and artifact identities. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
+Historical full-repository and focused results below belong to their recorded checkpoints. At this 0.2.3 source-preparation boundary, independent exact-checkpoint canonical Release validation has not yet run; its subsequent report must identify the actual clean commit and artifact identities. Test, hook, format, and package-document facts are emitted from current CMake and source inputs by the audit rather than copied into this document.
 
 Focused development runtime qualification has passed custom-to-custom and custom-to-native-to-custom transitions, including canonical request rebasing, the native list-return route reset, immediate custom admission, a further custom switch, and verified custom cleanup after each song. This closes that transition-specific lifecycle defect, but does not replace the remaining retry, completion, abort, and broader teardown scenarios above.
 
@@ -264,4 +279,4 @@ Maintainer evidence is indexed by `analysis/README.md` in the source repository 
 
 ## Artifact Disposition
 
-Repository builds and staged packages remain engineering artifacts until the exact 0.2.2 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Publication remains gated by clean-checkpoint Release/package validation. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.2 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.
+Repository builds and staged packages remain engineering artifacts until the exact 0.2.3 release-candidate commit passes independent Release/package validation. `package/` is generated transactionally from source, `release.json`, and `package-docs.json`; it must not contain repository-only architecture, build workflow, detailed analysis, developer tools, caches, or music examples. Do not install or launch the game as part of automated release verification. Exact packaged-artifact in-game qualification is explicitly accepted as an unqualified 0.2.3 release limitation above and is not a remaining publication gate. Validation results must name their actual clean commit and artifact identities; the version update itself is not successful qualification.

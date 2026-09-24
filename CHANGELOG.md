@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.2.3 - 2026-09-24
+
+- Expanded the exact game-derived chord inventory from 64 to all 170 assignments for
+  authored chord compositions and `ignore_sound`, including `pca_F_dim`. Replacement
+  sounds still cannot exceed the original chord's sound slots.
+- Completed the existing MIDI chord-quality mappings across all twelve roots and
+  made the additional native chords available to exact partial accompaniment.
+  Existing mappings and the fail-closed partial-match checks remain in place.
+- Added native one-third and one-sixth note values, including dotted variants, for
+  hand-authored charts and exact MIDI-duration selection. Existing named values keep
+  priority when durations coincide.
+- Generated MIDI caches rebuild automatically for the changed selection policy;
+  authored song sources, cache layout and saved scores do not need conversion.
+- The user reported successful play on a 1.005 development build. Individual new
+  chords and fractional note-value behavior were not exhaustively checked in game.
+  New 1.004 gameplay checks, exact packaged-artifact playtests and broader manual
+  scenarios are absent and explicitly accepted limitations for this release.
+
 ## 0.2.2 - 2026-09-09
 
 - Generated MIDI charts now preserve additional simultaneous notes from the selected note's
