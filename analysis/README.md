@@ -37,5 +37,6 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 - [ChordVoicingRuntimeEvidence.md](ChordVoicingRuntimeEvidence.md) records the exact-1.005 charted-chord projection seam, positional velocity/filter semantics, and pre-judgement readiness boundary. It is static evidence, not gameplay qualification or 1.004 authority.
 - [ChordVoicing1004Evidence.md](ChordVoicing1004Evidence.md) independently recovers the corresponding 1.004 calls, unique signatures, register handoff, layouts and readiness path. It authorizes the shared mechanism statically, not 1.004 gameplay or full monotone-inventory parity.
 - [AudioLifecycleEvidence-202607.md](AudioLifecycleEvidence-202607.md) is the consolidated lifecycle chronology and bounded disposition.
+- [NativeSubstitutionBoundary-20260924.md](NativeSubstitutionBoundary-20260924.md) records the source/artifact baseline and bounded investigation of a simpler preparation/reuse substitution boundary; it does not itself qualify a replacement route.
 - [AdaptiveMabfModeEvidence.md](AdaptiveMabfModeEvidence.md) records adaptive MABF mode work.
 - [NativeHcaParity-20260731.md](NativeHcaParity-20260731.md) records the bounded matching-build native structural/metadata/decode parity closure, independent decoder provenance, integrity and error measurements, and corrected slot/timing defects.

@@ -13,6 +13,101 @@
 - Ordinary post-expand count cleanup now derives its upper bound from the canonical compiled event plan rather than the number of source rows. This preserves both events of a dual row; required-action counts and stale stored totals do not grant authority. Retained-tail charts keep the existing source-row fallback unless the exact synchronous extended transaction authorizes preservation. The dedicated 1.005 five-row/seven-event Development result below supplies bounded count and score evidence, not qualification of every chart shape.
 - Explicit and MIDI alternate emission is restricted to natural C2–C6 and exact C#2–C#6. [Exact 1.005 monotone inventory](../analysis/PianoMonotoneAssignEvidence-20260905.md) proves ten alternate rows with assignment 7 and unchanged sound references, no `Cn1_2`/`Cn7_2`, and ordinary `Cn7` already assigned high C. It contains no C-flat alternate; that request remains unsupported. This narrows the existing shared emitter conservatively, not a new 1.004 capability claim; exact 1.004 monotone parity and physical-input/audio behavior remain unqualified. The pipeline identity change invalidates cached unsupported boundary assignments without changing runtime-cache layout.
 
+## Integration: Offline Portability Boundaries (2026-09-24)
+
+- Descriptor values now live separately from registry authority in
+  `src/game/song_descriptor.h`; root/profile/retained-tail rows share one
+  field-complete projection. Capabilities are supplied explicitly from
+  CMake-selected target composition through parsing, compilation, repository
+  identity and warm-cache semantic validation. The existing pure capability
+  mapping, source schema and valid artifact formats are unchanged.
+- `FF7RP_BUILD_RUNTIME=OFF` builds the pipeline, offline tool and focused tests
+  without configuring MASM, MinHook, Python/PowerShell, generated hook-address
+  dependencies or runtime release validation. Default `ON` retains those runtime
+  obligations. Commands and prerequisites are in [Build And Release](BuildAndRelease.md).
+- Release configuration built offline targets and the default ASI/affected
+  runtime targets. Nine selected OFF CTests passed: configuration isolation,
+  pipeline, descriptor builder, repository, runtime-cache codec, MIDI generator,
+  MIDI compilation, resolved renderer and cache-manifest renderer. Four selected
+  ON tests passed: pipeline, descriptor builder, repository loader and chord
+  voicing. The offline configuration regression also verifies unknown-target
+  rejection with Python discovery disabled and pwsh/MASM unavailable.
+- Existing Release MSVC dependency records confirm no registry-header dependency
+  in the descriptor-builder target's three source entries. The records for all
+  21 active first-party OFF targets (46 source entries) contain no dependencies
+  under `src/generated/`. The source-side generated tree remained present; this
+  is compiler dependency evidence, not a claim it was deleted during the build.
+- Authored and MIDI cold fixtures generated through both tool configurations
+  at identical absolute paths matched cache keys and runtime-cache/MABF bytes.
+  Both final CMake configurations selected `ff7rebirth-steam-win64-68fd6fde`;
+  policy was native 512 rows, extended disabled, generation zero. Keys were
+  `bca23d68765b10cb` (authored) and `6655babbdf475204` (MIDI). Independently
+  reconstructing the pre-refactor key algorithm from baseline commit
+  `4377739f28051c77c1e5bca9d39d9df759381e1e` with those source bytes and ordered
+  identities produced the same keys. This is baseline-formula equivalence plus
+  new OFF/ON byte parity, not execution of a pre-change binary or cross-target
+  artifact compatibility. The reusable fixture comparison is
+  `tools/check_offline_runtime_parity.ps1`; timing/log text is excluded.
+- Independent review found no concrete descriptor/capability regression. Its
+  proposed CMake timeout-list blocker was checked against the complete list and
+  withdrawn as a false positive; no speculative fix was added.
+- Audio orchestration is unchanged. The
+  [bounded substitution investigation](../analysis/NativeSubstitutionBoundary-20260924.md)
+  records a no-go gate: common first/repeated/different-song resource identity
+  remains unproved; the conditional native lifetime boundary is described below.
+  Independent offline completion does not complete the wider audio/portability change. These offline
+  changes were not installed or gameplay-qualified; prior accepted sessions
+  below apply only to their recorded artifacts.
+- In a subsequent user-launched session on the identified accepted baseline ASI,
+  ordinary read-only CE inspection and existing logs observed first custom start
+  and pause. The user confirmed Alicia sounded correctly and was silent while
+  paused. The installed mod then logged `native_route_not_proven` at retirement
+  cleanup. The source-based explanation is retained cleanup without ordinary
+  poll retry, not permanent route disablement. The controlled comparison stopped
+  at pause. After the user reported exit, later log records showed native custom
+  continuation and list return, followed by release on the separate
+  `aggregate_closed` path, `custom_absent`, `exit_cleanup_complete` and an Idle
+  route with no lease/ownership/cleanup. This sequence therefore did resolve the
+  retained cleanup. It does not qualify audible resume, repeat/song-switch
+  coverage, leak-free teardown or a replacement seam; the precise failed
+  successor-proof conjunct remains unresolved. A final destructor reservation
+  rejection is recorded but not independently diagnosed. See the same evidence
+  document for identities, log spans and source/artifact limits.
+  No debugger, memory writes, new installation or gameplay qualification of the
+  offline-refactor build occurred.
+- An offline follow-up distinguished route relinquishment from detached-bank
+  release rather than treating the two cleanup paths as interchangeable.
+  `runtime_lifecycle_selftest` and `bgm_playback_aggregate_policy_selftest` were
+  rebuilt in Release and passed their focused CTest run. Existing counterexamples
+  cover forwarded-Play recovery, route-restore authority and outstanding-request
+  release refusal; no additional lifecycle state or speculative test fixture was
+  added. This does not prove the native borrow contract or authorize deletion.
+- Static tracing subsequently established external MABF borrowing and native
+  bank reference retention by successfully initialized music requests. The
+  bank worker drains those references before registry removal. For the mapped
+  Sound/Music callback and externally owned on-memory payload, the examined
+  post-unlink tail does not read/free the payload; exact successful-token absence
+  is a conditional tracked-borrow closure, not arbitrary destructor completion.
+  Release timing remains separate because release can stop playback. This is a
+  native authority to rely on, not a reason to duplicate decoder-reader state;
+  it does not yet select a replacement preparation/reuse route. See the evidence
+  document for the callback, imported-image and source/artifact applicability.
+- The final bounded entry-path investigation ruled out owner-request-only
+  replacement: native same-key/same-sound reuse can bypass preparation, while
+  custom rows currently share a base alias. The native fallback resolves keys
+  through managed packaged-asset streaming; owner+`0x454` is request context,
+  not an owning sound map. No arbitrary custom-object binding was established.
+  A dedicated asset/lookup prototype was subsequently approved, but its offline
+  contract task remains blocked: the contextual branch reads a shared keyed
+  registry, not a supplied-object binding, and construction parameter recovery
+  exposes qualified-name recycling without establishing the new object's owning
+  reference or partial-failure restoration. No supported genuine key → initialized
+  Music/source binding was selected. See the evidence document's task 1.5 section.
+  No opt-in candidate, new package, UObject construction call, hook or production
+  audio behavior was introduced. Another unchanged pause test cannot resolve this
+  prerequisite; packaged-content provisioning would require a separate scope
+  decision rather than an implicit change to the native-only prototype.
+
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 
 - The offline chord inventory now includes all decoded assignment/config joins,
