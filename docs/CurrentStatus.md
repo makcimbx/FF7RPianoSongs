@@ -105,8 +105,21 @@
   Music/source binding was selected. See the evidence document's task 1.5 section.
   No opt-in candidate, new package, UObject construction call, hook or production
   audio behavior was introduced. Another unchanged pause test cannot resolve this
-  prerequisite; packaged-content provisioning would require a separate scope
-  decision rather than an implicit change to the native-only prototype.
+  prerequisite. The user subsequently authorized one temporary content fixture.
+- That content assessment found an existing-toolchain blocker: the local
+  ENDEditor Music/Sound XML factories ignore their input buffers and create
+  default objects, while the SQEXSEAD class shells have no native payload
+  serializer. Editor reflection confirms the factories/classes exist, not a
+  functioning importer. The normal plugin mount also differs from the native
+  `/Game/Sound/BGM/...` lookup; Alpakit's staged directory remap does not change
+  logical package identity. Read-only commandlet scripts completed, but the
+  processes exited 1 on an unrelated existing `bgm_piano_09.uasset` malformed-tag
+  error; that asset was preserved. The parent workspace's
+  `FF7R2UProj/Mods/FF7RPianoLookupFixture/` holds inspection instructions/script
+  only, not a plugin or valid Music/container. Task 1.5 remains incomplete;
+  developing payload authoring/preservation and loading-path support requires
+  an explicit scope choice. No native candidate, installation or game action
+  occurred. Details are in the same bounded substitution evidence document.
 
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 

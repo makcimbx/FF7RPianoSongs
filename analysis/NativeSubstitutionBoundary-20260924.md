@@ -649,7 +649,45 @@ genuine key/object/source, first play, pause/resume, replay and stock restoratio
 without either old rebuild caller manufacturing success. Another unchanged
 pause observation cannot establish this missing provisioning contract.
 
-The game-managed packaged-asset route remains a concrete alternative to assess,
-not proof that packaged content is necessary or that a content prototype already
-works. Adding even a diagnostic `.pak`/`.uasset` fixture would change the agreed
-native-only scope and requires a product decision. No such content was created.
+At that point the game-managed packaged-asset route remained an alternative
+requiring a scope decision, not proof that content was necessary or already
+worked. The user subsequently approved the temporary content assessment below.
+
+## Approved content fixture: existing editor support is insufficient (2026-09-25)
+
+The user authorized one temporary Music asset/container via the existing editor
+workflow, without installing it or changing the final song-folder requirement.
+Source inspection and read-only editor reflection found concrete authoring and
+loading-path gaps. This is not another native lifecycle-predicate investigation.
+
+In the parent workspace, `FF7R2UProj/Source/ENDEditor/Private/`
+`SQEXSEADMusic_Factory.cpp:12–19` advertises XML import and the genuine Music
+class. However, its entire `FactoryCreateBinary` at lines 42–50 ignores the input
+buffer, constructs a default object, computes unused paths and returns. The
+Sound factory behaves identically. Neither imports even reflected XML metadata
+or native payload. SQEXSEAD Music/Sound class implementations supply settings
+and defaults, with no SQEXSEAD source serializer; inherited SoundWave audio
+serialization is not MABF preservation evidence.
+
+Headless editor probes confirmed the loaded Sound/Music factory classes and
+their corresponding supported SQEXSEAD classes, including Music despite its
+absence from Python module enumeration. The probes created/imported/saved no
+assets. Their scripts completed, but the commandlet processes exited 1 because
+the pre-existing local `Content/Sound/BGM/bgm_piano_09.uasset` has a malformed
+package tag. That unrelated asset was preserved, not used as a template. This
+failure and the missing importer are separate; no successful cook is claimed.
+
+The native loader's `/Game/Sound/BGM/...` identity also differs from a normal
+content plugin's mount. The inspected Alpakit workflow excludes `/Game`, and its
+staged filesystem remap preserves plugin package identity rather than remapping
+it into `/Game`. Neither factory addresses that mismatch. Local cooked research
+artifacts are not demonstrated uncooked/editor-round-trip inputs.
+
+The parent task-owned area `FF7R2UProj/Mods/FF7RPianoLookupFixture/` contains only
+an inspection script and README with source anchors, reproducible command,
+output location and limits. It is not a loadable plugin; no Music asset,
+container, native constructor call, new hook or installation was produced.
+Task 1.5 remains blocked, and 1.6–1.8 remain unstarted. A demonstrated payload
+authoring/preservation route and loading identity are needed before a candidate;
+developing missing toolchain support is a material scope choice, not an excuse
+to package a class shell or silently overwrite stock content.
