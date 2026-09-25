@@ -907,3 +907,84 @@ it needs explicit scope approval and offline format validation before any write.
 Installation/runtime qualification remains a separate authorization even then.
 The bounded projection investigation is complete; no worker or automatic new
 experiment remains running on this question. Task 1.5 is still incomplete.
+
+### Direct audit after the reported historical list regression
+
+The user's reminder was checked against the retained legacy record. In
+`FullTableOverrideStatus.md:670–692`, adding visible PianoScoreInfo/PianoScore
+rows produced corrupted titles, including after a real added NameMap entry.
+Earlier key/index-array corrections made the original-row-count control usable,
+not arbitrary added rows. Separately, `CurrentPianoSongStatus.md:309–310` records
+the resident BGMList override's manual startup failure despite its corrected
+fixups and passing offline checks. Uninterpreted trailer offsets and whether the
+source row was actually valid remained unresolved. These are different failure
+families; neither is repaired by the new Music control. No table override was
+authorized or created in response to the reminder.
+
+The lead then inspected the complete key-lookup branches directly, rather than
+assuming a missing row either works or fails. In `FUN_140c925d4`, a nonzero row
+key is looked up; a missing row causes another lookup using `DAT_148feb358`, and
+the name is read from that fallback row. Its initializer `FUN_14043ff70` creates
+the FName `bgm_silence`. `FUN_140c91584` takes the same fallback when its managed
+lookup path misses the requested row. Thus a missing nonzero row does **not**
+simply pass the supplied Music name through. This static branch can explain
+silence for an unbound key, not prove the cause of every historical session.
+
+The important qualification is that finding a row does not necessarily require
+replacing the resident table. The shared lookup `FUN_14076a330` iterates three
+groups of registered DataObjects, resolves their weak object identities and asks
+each object's table interface for the key, returning the first hit. One resident
+file is therefore not the complete lookup universe. This also limits conclusions
+drawn from absent piano keys in the previously inspected resident file.
+
+A class-specific bridge `FUN_143ec9454` eventually calls `FUN_141748fb8` with
+the BGMList manager, group selector, an additional value and the object. That
+routine builds an object reference and appends a 16-byte entry to the selected
+group. The paired bridge `FUN_143ec95bc` reaches `FUN_141748d70`, which removes
+a matching entry for group 2; the other branch has different behavior and is not
+claimed to be per-object removal. Group enum meaning, callers, retention and
+thread/phase contracts are not yet qualified. These research functions were
+only decompiled, not invoked, hooked or promoted into the RVA catalog.
+
+This is a narrower next read-only question: can a separately owned DataObject
+participate through the game's existing registration/removal path, without
+rebuilding or overwriting stock tables and without the rejected multi-callback
+name-projection protocol? No new asset, registration, source format, production
+candidate or live experiment is authorized by the existence of these routines.
+The imported-image PE-field/full-hash and source/artifact caveats still apply.
+
+### Additive registration: owner and phase remain unqualified
+
+The bounded follow-up did not establish a usable registration contract. Xrefs
+to the BGMList append/remove bridges include adjacent method-table entries at
+`0x14673bc80` and `0x14673bc88`, but no identified normal dispatching owner that
+supplies the object, group and additional value. Absence of a direct code xref
+is not proof that these methods are unused: indirect dispatch remains unresolved.
+
+The reconstructed `EDataObjectType.h:5–10` labels its three values `RESIDNET`,
+`DEBUG` and `FILED_LIST`; matching strings occur in the imported image. This does
+not by itself identify the bridges' selector with that enum or qualify group 2
+for the fixture. Per-object removal was established only for the inspected group
+2 branch, not all groups. Manager lookup resolves weak references; no owning
+reference or automatic load-to-registration relationship was recovered.
+
+Local `UEndDataObjectBase` editor declarations expose a row map and serialization
+helpers, not this native registration/retention protocol. The reflected
+`UEndDataBaseDataObjectAPI` exposes queries/debug operations but no corresponding
+registration operation. These reconstructed headers do not close the native
+gap. Loading an asset must therefore not be presented as registering its rows.
+
+The additive approach remains structurally possible, not disproved, but task
+1.5 cannot pass and task 1.6 has no supported operation to implement. No separate
+BGMList asset, registration call, hook, root/GC workaround or stock-table override
+was added. The specific missing evidence is the ordinary dispatching owner and
+phase, its object retention, and matching removal. This bounded static pass is
+finished; no further background investigation is active.
+
+A possible next evidence source is one separately authorized debugger observation
+of **ordinary game-owned** BGMList registration/removal, collecting the immediate
+caller stack and arguments during normal loading/teardown. It would not load or
+register the custom fixture. Debugger attachment/breakpoints are outside the
+earlier ordinary-memory-read permission and have not been performed. Such a trace
+would identify callers to inspect, not itself qualify custom-object ownership,
+asset creation, production registration or gameplay.

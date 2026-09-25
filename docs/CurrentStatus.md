@@ -164,6 +164,16 @@
   advertises the offline controls' 09 package identity. It was left untouched;
   any candidate deployment must first resolve that collision. The evidence and
   fixture README distinguish package presence from actual runtime loading.
+- A direct lookup audit confirmed that a missing nonzero BGMList key falls back
+  to `bgm_silence`, while the manager searches multiple registered DataObjects,
+  not just the resident file. An additive object is therefore structurally
+  possible without replacing that file. The bounded follow-up found append/remove
+  method-table entries but no qualified dispatching owner, group/phase or owning
+  reference. Weak registration and asset loading alone are not a retention or
+  registration contract. Task 1.5 remains open; no DataObject asset, native call,
+  hook or table override was introduced. The static pass is finished. A possible
+  observation of normal registration callers would need separate debugger
+  authorization, not another unmodified pause test or an assumed safe invocation.
 
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 
