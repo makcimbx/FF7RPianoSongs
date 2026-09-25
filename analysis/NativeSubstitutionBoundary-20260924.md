@@ -824,3 +824,86 @@ stock overwrite or variable-size replacement occurred. Task 1.5 remains open for
 the actual native key/lookup, source acceptance, retention and stock restoration;
 task 1.6 has not started. The next bounded question is the existing native-key
 injection point for this real control, not further generic serializer recovery.
+
+## The native key comes from BGMList, not the ScoreInfo overlay
+
+The next bounded read-only pass distinguishes the selected row key from the
+sound's FName. In the imported image the existing owner-request wrapper queues
+a row key. The owner tick resolves it through `FUN_140c925d4`,
+`FUN_140c92750`/`FUN_140c9278c` and the BGM-list manager at `DAT_14905ee90`.
+The accessor wrapper stores the row at +8; derivation reads row+0x60. The sound
+resolver uses the same selected-row path. The nearby reflected layout is
+`FEndMemoryLayoutDataTableBGMList`. These are static findings, not new callable
+catalog entries or authority to mutate the manager.
+
+ScoreInfo uses a different manager (`DAT_1490635d0`). Current
+`scoreinfo_overlay.cpp:405–458,485–505` projections serve rendering or StyleSetup,
+the latter already requiring an eligible playback token. Its FName Find can
+retain the stock name when the requested name is absent. Changing that overlay
+does not itself supply the owner's initial BGMList lookup. Current base-row
+cloning and scoped base-slot getter aliasing still do not create a selectable
+custom BGMList row (`list_patch.cpp:311–330`; `selection.cpp:374–403,444–577`).
+
+The legacy prototype's row/hash-block replacement supplied more than a ScoreInfo
+field: it manufactured a BGMList row containing the new name. The retained
+silence/interrupted-note outcome and unproved restoration do not qualify that
+invasive operation. The equal-size Music control removes the need to resize an
+unknown serialized source, but not this key-binding requirement.
+
+A further bounded comparison examined a caller-local row/value projection at
+the read boundary rather than shared-table mutation or insertion. It found
+short-lived reads, but **not one sufficient selection scope**. Native Music
+ownership and temporary table-value storage are separate questions; an
+ephemeral accessor view alone does not solve the identity used across calls.
+
+Separately, a read-only installed-container preflight found that DebugTicker's
+existing container already advertises the same 09 Music package path used by
+the offline controls. This is a real namespace collision, not proof it loaded
+in the earlier session. No installed files were changed. The parent fixture
+README records the finding; a future candidate needs a verified free identity
+or separately agreed isolation, not an unrecorded overwrite/precedence test.
+Task 1.5 and the production gate remain open; no task 1.6 implementation or new
+runtime experiment follows from these static/data checks alone.
+
+### Caller-local projection: synchronous storage, distributed identity
+
+`FUN_140c92750` constructs a stack-local BGMList accessor; its initializer puts
+the row pointer at wrapper+8. The immediate key derivation and sound resolver
+copy row+0x60 as an eight-byte name, and the stream-request function copies the
+name into its queued request rather than borrowing that accessor row. A copied
+view could therefore serve these particular synchronous reads. This is not a
+claim that every accessor caller has the same lifetime contract.
+
+The identified consumers span separate calls and native owners:
+
+| Consumer in the imported image | Observed dependency |
+| --- | --- |
+| Menu preload `FUN_143999530` | ScoreInfo+0x50 → BGMList+0x60 → stream request; the menu retains its request ID, not proof of readiness. |
+| Selected-entry use `FUN_14399e25c` | Resolves and type-checks the sound through that same row chain. |
+| Owner request `FUN_140c92330` | Can derive/compare names before the forwarded owner tick scope. |
+| Owner tick `FUN_140824c64` | Re-derives names for stream acquire/release, prepared reuse and eventual sound resolution. |
+| Menu destructor `FUN_1439886cc` | Derives the name through ScoreInfo/BGMList when releasing the streamed resource. |
+
+Current tick TLS scopes only the forwarded tick (`audio_sead.cpp:13189–13208,
+13236–13238`). Selected-entry/menu projections do not make these other calls
+part of that scope. Tick-only substitution could leave preload/release using
+the stock name; preload-only substitution could leave teardown deriving a
+different name. Matching only the shared base-row key would also affect stock
+users of that key. A global mod lock would not provide exclusivity against
+native readers that do not share it.
+
+The one-hook/one-tick projection candidate is therefore rejected. Broadening it
+would require a persistent exact identity protocol across the above authorities,
+not merely short-lived row storage. No new context state machine, shared-row
+write, hook or unchecked callable was introduced to turn this into a pass.
+Static image and source/artifact applicability remain as stated above.
+
+The next architectural candidate is stable native row provisioning, so the game
+itself obtains the same key at preload, play and release. This does not establish
+a supported insertion API or a working table-package override. A diagnostic copy
+of the BGMList package with one additional row would be a material extension of
+the approved Music-only content fixture and its no-stock-override constraint;
+it needs explicit scope approval and offline format validation before any write.
+Installation/runtime qualification remains a separate authorization even then.
+The bounded projection investigation is complete; no worker or automatic new
+experiment remains running on this question. Task 1.5 is still incomplete.

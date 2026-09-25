@@ -150,6 +150,20 @@
   Only the OFF song-cache tool was rebuilt for the fixture target. No ASI/native
   behavior change, installation or gameplay occurred. The remaining binding gate
   and limits are recorded in the evidence document and parent fixture README.
+- The subsequent key-path trace distinguishes the owner's BGMList row lookup
+  from the current ScoreInfo overlay; supplying a Music package/FName does not
+  alone connect the base-slot selection to it. A scoped row/value projection was
+  assessed and rejected as a one-hook solution: individual reads copy values,
+  but menu preload, selection, owner request/ticks and destructor release derive
+  the identity in different scopes. No new cross-callback identity protocol or
+  shared-table mutation was added. Stable row provisioning remains a candidate,
+  not a supported operation; a BGMList package override would require explicit
+  scope expansion beyond the approved Music-only fixture and no-stock-override
+  constraint. The bounded investigation has stopped at that decision.
+  Read-only preflight also found the installed DebugTicker container already
+  advertises the offline controls' 09 package identity. It was left untouched;
+  any candidate deployment must first resolve that collision. The evidence and
+  fixture README distinguish package presence from actual runtime loading.
 
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 
