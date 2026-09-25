@@ -683,7 +683,7 @@ staged filesystem remap preserves plugin package identity rather than remapping
 it into `/Game`. Neither factory addresses that mismatch. Local cooked research
 artifacts are not demonstrated uncooked/editor-round-trip inputs.
 
-The parent task-owned area `FF7R2UProj/Mods/FF7RPianoLookupFixture/` contains only
+At the end of that first pass, `FF7R2UProj/Mods/FF7RPianoLookupFixture/` contained only
 an inspection script and README with source anchors, reproducible command,
 output location and limits. It is not a loadable plugin; no Music asset,
 container, native constructor call, new hook or installation was produced.
@@ -691,3 +691,81 @@ Task 1.5 remains blocked, and 1.6–1.8 remain unstarted. A demonstrated payload
 authoring/preservation route and loading identity are needed before a candidate;
 developing missing toolchain support is a material scope choice, not an excuse
 to package a class shell or silently overwrite stock content.
+
+## Preserved-package controls narrow the tooling blocker (2026-09-25)
+
+The user next authorized a bounded assessment of existing genuine Music
+serialization, rather than building an importer or polishing the old runtime
+orchestration before deciding its replacement. That assessment yielded actual
+offline controls, not merely another proposal. The parent fixture README owns
+the exact commands, artifact hashes and cleanup paths; binary game assets and
+generated containers remain untracked in task-owned `Saved/PianoLookupFixture`.
+
+### A genuine source and a working converter path
+
+The retained `PianoAudioBuilds/mary-runtime-sidecar/baseline/bgm_piano_01.uasset`
+is an extracted Zen ExportBundleData blob, not an editor `.uasset` template.
+Its report identifies the stock container, path and chunk; it is byte-identical
+to the retained PianoAudioProbe and AudioMogControl originals. Source/format
+inspection found one Music export, valid names/public identity, an embedded
+MABF and three HCA markers. Earlier AudioMog same-identity rebuilding exists,
+but its retained output has an unresolved serial-size discrepancy and does not
+establish insertion of the current descriptor's exact bytes.
+
+Pinned retoc initially failed conversion from the single pakchunk because the
+global `LoaderInitialLoadMeta` chunk was absent. Its aggregate failed count did
+not make the process return nonzero; a PTY diagnostic exposed the actual error.
+Using the installed Paks directory as input, still filtering only this one
+Music and excluding shaders, produced one legacy `.uasset`/`.uexp` pair with
+zero failed assets. The complete 11,228,128-byte opaque export matched the
+retained control, and conversion back to Zen retained it again. The regenerated
+header/chunk differed, as expected from format conversion; whole-package
+identity is not claimed. No UObject deserialization/resaving by the reconstructed
+editor or native payload importer was involved.
+
+### Distinct metadata without rewriting audio bytes
+
+The previous raw replace-all renamer also changes embedded BGM names inside
+the MABF. The new task-owned diagnostic instead modifies only three exact,
+length-prefixed package/object identity strings in the hash-bound legacy
+header, leaving the entire export unchanged. Existing retoc rebuilds the Zen
+name hashes, public export identity and container metadata. Read-only checks
+confirm `/Game/Sound/BGM/bgm_piano_09.bgm_piano_09`, all name hashes, the public
+hash, unchanged class/template/outer/super indices, and complete export equality.
+The internal stock bank/material labels are deliberately unchanged.
+
+Both converter-created containers passed `retoc verify`; this checks container
+integrity, not native loading semantics. Ten focused tests checked preservation,
+the narrow identity transformation and rejection of changed payload, bad trailer,
+wrong header, altered name hashes or public identity. The verifier is expressly
+for this reviewed single-export shape, not a general asset serializer. No
+manually guessed package-store entry or stock override was used. These artifacts
+contain stock control audio, **not** the selected descriptor's custom MABF.
+
+### Loading evidence and remaining boundary
+
+Further existing-UAT source inspection found `skipcook` staging of prepared
+cooked paths and opaque `.uexp` byte copying during IoStore assembly. It also
+found `RemapPluginContentToGame`, but only for target package names already in
+the loaded release registry; this is not general new `/Game` identity provisioning.
+The parent `Docs/06-alpakit-packaging.md` now distinguishes that conditional
+logical redirect from Alpakit's filesystem remap. UAT was not invoked. Its
+offline launch option must explicitly be `None`; omitting a copy flag alone is
+not enough to prevent a game launch in this checkout.
+
+Legacy `CurrentPianoSongStatus.md:304–305` and retained diagnostics provide a
+genuine positive `StaticLoadObject`/preload observation for an earlier minimal
+09 carrier. Later disposition at lines 136–138 reports failure to reproduce
+even that exact carrier, and preload did not produce playback. Its runtime
+association is documentation/report-supported, not hash-bound. That artifact
+used a manually built store entry and payload-renamed AudioMog audio; it is
+not the new converter-created control and does not qualify the new deployment.
+
+The blanket assumption that preserving Music needs a full importer is therefore
+removed. Still unproved are replacement of the actual serialized source record
+with the descriptor's validated MABF, native selection/stream lookup for this
+new identity, and retention/stock restoration in the candidate. The next narrow
+static check is the real serialized source/length contract, not blind marker
+replacement or another game-lifecycle model. Tasks 1.5 and the production audio
+gate remain open. No package installation, new game session, native candidate
+or production audio behavior change occurred.

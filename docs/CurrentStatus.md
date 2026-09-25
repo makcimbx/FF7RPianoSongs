@@ -115,11 +115,27 @@
   logical package identity. Read-only commandlet scripts completed, but the
   processes exited 1 on an unrelated existing `bgm_piano_09.uasset` malformed-tag
   error; that asset was preserved. The parent workspace's
-  `FF7R2UProj/Mods/FF7RPianoLookupFixture/` holds inspection instructions/script
-  only, not a plugin or valid Music/container. Task 1.5 remains incomplete;
-  developing payload authoring/preservation and loading-path support requires
-  an explicit scope choice. No native candidate, installation or game action
-  occurred. Details are in the same bounded substitution evidence document.
+  `FF7R2UProj/Mods/FF7RPianoLookupFixture/` initially held inspection only.
+  The user then authorized assessing preservation of genuine cooked Music,
+  rather than developing the missing XML importer. That follow-up produced
+  task-owned offline controls, not a loadable mod or native candidate.
+- The preserved-package control now narrows the tooling blocker: pinned retoc,
+  given the full game Paks directory for global metadata, converted the stock
+  Music to legacy header/export and back while preserving its entire opaque
+  serialized Music export. A header-only distinct-name variant also preserved
+  those exact bytes, with independently checked regenerated name/public-export
+  hashes and unchanged class/template references. Both diagnostic containers
+  passed retoc's integrity check; ten focused preservation/identity tests passed.
+  Whole Zen chunk identity is not claimed, and the variants still contain stock
+  audio. No importer repair, Editor resave, guessed package-store entry or native
+  audio implementation was needed for these controls. A later retained historic
+  new-Music load success was also found, but exact-carrier reproduction failed and
+  successful preload did not establish playback; it is not current qualification.
+  The fixture README owns the source/output hashes, reproduction commands and
+  limits. The remaining task 1.5 conditions are intended custom-payload binding,
+  native key lookup/retention and stock restoration, not blanket inability to
+  preserve Music serialization. Its serialized source record is the next bounded
+  static question. No installation or new game session occurred; 1.5 stays open.
 
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 
