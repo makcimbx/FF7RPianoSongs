@@ -134,8 +134,22 @@
   The fixture README owns the source/output hashes, reproduction commands and
   limits. The remaining task 1.5 conditions are intended custom-payload binding,
   native key lookup/retention and stock restoration, not blanket inability to
-  preserve Music serialization. Its serialized source record is the next bounded
-  static question. No installation or new game session occurred; 1.5 stays open.
+  preserve Music serialization. No installation or new game session occurred;
+  1.5 stays open.
+- The subsequent source-record check found an array-shaped prefix whose declared
+  bank stops 48 bytes before export end; the native setter/fixup/suffix contract
+  remains unproved, and MemoryMappedAsset is not Music's inherited serializer.
+  Rather than change that unknown wrapper, one diagnostic arpeggio was generated
+  at the genuine control's exact geometry through the unchanged offline pipeline.
+  Its equal-size declared bank alone replaces the original bank, preserving all
+  other export bytes, counts, properties and opaque suffix. Retoc conversion and
+  extraction verified the intended modified export and unchanged named header;
+  thirteen preservation/source-span tests plus four fixed-size tests passed.
+  This is now original generated audio, not only a renamed stock control, but
+  still not native loading/playback qualification or a variable-size importer.
+  Only the OFF song-cache tool was rebuilt for the fixture target. No ASI/native
+  behavior change, installation or gameplay occurred. The remaining binding gate
+  and limits are recorded in the evidence document and parent fixture README.
 
 ## Integration: Complete Native Chords And Fractional Note Values (2026-09-24)
 

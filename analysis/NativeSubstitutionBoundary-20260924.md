@@ -769,3 +769,58 @@ static check is the real serialized source/length contract, not blind marker
 replacement or another game-lifecycle model. Tasks 1.5 and the production audio
 gate remain open. No package installation, new game session, native candidate
 or production audio behavior change occurred.
+
+## Serialized source boundary and an equal-size control (2026-09-25)
+
+The source-reader investigation did not recover a general Music serializer.
+Native reflected inheritance is Music → SQEXSEADSound → SoundWave → SoundBase
+→ UObject; MemoryMappedAsset is a separate branch. The reconstructed local
+`MemoryMappedAsset.cpp:94–137` both resembles the measured wrapper and explicitly
+excludes sounds. It cannot establish Music's inherited serializer. The examined
+base constructor initializes the runtime source pointer to zero; post-load and
+on-memory acquisition consume it through the already cited header resolver.
+No immediate native load/fixup operation assigning that pointer was recovered.
+The imported-image applicability limits above still apply.
+
+Three actual exports nevertheless establish a useful bounded layout observation:
+original 01, original 08 and AudioMog-rebuilt 08 all have an enclosing length at
+export+0x70, relative pointer 0x21 at +0x80, and equal counts at +0x88/+0x8c.
+The pointer lands at +0x90; the enclosing length is count+16; MABF's declared
+size equals count. The declared array stops **48 bytes before the export ends**.
+Three zero words there resemble empty patch lists, but the native suffix reader
+and remaining bytes are unproved. Earlier marker-to-EOF hashes measured a larger
+span and must not be used as an independently parsed source-array length.
+
+Blindly resizing the export or replacing marker-to-EOF would therefore be
+unsupported. Instead, the approved one-song diagnostic now has a **same-size
+original-audio control**. The parent fixture synthesizes an arpeggio at the
+reviewed source's exact PCM geometry, and the existing target-selected offline
+pipeline accepts its authored chart and generates a validated audio artifact.
+No production encoder/parser/cache behavior changed. The declared bank length
+matches the original exactly; embedding replaces only that span and leaves all
+Music properties, source wrapper/counts, export length and opaque suffix intact.
+This is an experiment avoiding unknown size/fixup edits, not a recovered general
+serializer, a new user-song restriction, or proof the game accepts those bytes.
+
+The pipeline's existing MABF artifact convention includes 48 bytes after the
+declared size. The fixture does not copy those bytes over the object's suffix;
+it preserves the original suffix and checks equality to the generated **bank
+span** separately from whole-artifact identity. Section/name/index metadata stays
+unchanged as well. Whether native Music consumers accept this new bank with those
+fields is still a runtime/source-binding condition, not established by hashing.
+
+Existing retoc converted the prepared equal-length legacy pair into a named
+container. Container verification passed. Extraction and focused checks proved
+its entire header equals the earlier independently verified named-stock header
+and its entire export equals the intended bank-only modification. Thirteen
+preservation/identity/source-span tests and four fixed-size replacement tests
+passed, including rejection of resizing, unchanged stock audio, and accidental
+artifact-tail replacement of object metadata. The parent fixture README owns
+exact commands, generated identities, cleanup paths and reproducibility limits.
+
+Only the OFF song-cache tool was reconfigured/built for the fixture target; no ASI
+was built or installed in this step. No game/editor session, native invocation,
+stock overwrite or variable-size replacement occurred. Task 1.5 remains open for
+the actual native key/lookup, source acceptance, retention and stock restoration;
+task 1.6 has not started. The next bounded question is the existing native-key
+injection point for this real control, not further generic serializer recovery.
