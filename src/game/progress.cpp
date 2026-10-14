@@ -20,11 +20,6 @@
 namespace ff7r::piano::game {
 namespace {
 
-std::wstring score_text(int32_t score)
-{
-    return std::to_wstring(std::max(0, score));
-}
-
 using ScoreCalculateFn = int(__fastcall*)(void* context, void* counters);
 using ProgressLookupFn = uintptr_t(__fastcall*)(void* arg0, void* arg1, void* arg2, void* arg3);
 
@@ -201,30 +196,35 @@ std::wstring custom_scores_ini_path(HMODULE module)
 ProgressRecord load_progress(const SongDescriptor& song, const std::wstring& ini_path,
     const SongDifficultyProfile* profile)
 {
-    const std::wstring section = progress_section_name(song, profile);
-    const int high_score = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"HighScore", 0, ini_path.c_str()));
-    const int last_score = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"LastScore", high_score, ini_path.c_str()));
-    const int played = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"Played", high_score > 0 ? 1 : 0, ini_path.c_str()));
-    return {played != 0, std::max(0, high_score), std::max(0, last_score)};
+    const auto section = progress_read_section_name(song, ini_path, profile);
+    if (section) return load_progress_section(*section, ini_path);
+    const std::wstring legacy = legacy_progress_section_name(song, profile);
+    if (progress_ini_section_exists(legacy, ini_path)) {
+        static std::mutex diagnostic_mutex;
+        static std::vector<std::wstring> reported;
+        std::lock_guard<std::mutex> lock(diagnostic_mutex);
+        if (reported.size() < 64
+            && std::find(reported.begin(), reported.end(), legacy) == reported.end()) {
+            reported.push_back(legacy);
+            core::log(core::LogLevel::Info,
+                "[progress] status=legacy_score_withheld reason=ambiguous_or_unsafe_section song_id="
+                + song.id + " action=retain_old_ini_record_for_manual_recovery");
+        }
+    }
+    return {};
 }
 
 bool save_progress(const SongDescriptor& song, const ProgressRecord& progress, const std::wstring& ini_path,
     const SongDifficultyProfile* profile)
 {
-    const std::wstring section = progress_section_name(song, profile);
-    const std::wstring high_score = score_text(progress.high_score);
-    const std::wstring last_score = score_text(progress.last_score);
-    const BOOL wrote_played = WritePrivateProfileStringW(section.c_str(), L"Played", progress.played ? L"1" : L"0", ini_path.c_str());
-    const BOOL wrote_high = WritePrivateProfileStringW(section.c_str(), L"HighScore", high_score.c_str(), ini_path.c_str());
-    const BOOL wrote_last = WritePrivateProfileStringW(section.c_str(), L"LastScore", last_score.c_str(), ini_path.c_str());
-    return wrote_played != FALSE && wrote_high != FALSE && wrote_last != FALSE;
+    return save_progress_section(progress_section_name(song, profile), progress, ini_path);
 }
 
 int load_last_played_profile_index(
     const SongDescriptor& song, const std::wstring& ini_path)
 {
     std::array<wchar_t, 32> value{};
-    const std::wstring section = progress_song_section_name(song);
+    const std::wstring section = progress_preference_read_section_name(song, ini_path);
     const DWORD length = GetPrivateProfileStringW(section.c_str(),
         kLastPlayedDifficultyKey, L"", value.data(),
         static_cast<DWORD>(value.size()), ini_path.c_str());

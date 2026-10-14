@@ -50,6 +50,7 @@ and the full settings/chord reference.
 - Custom songs appear alongside the default songs.
 - The first load of new or edited songs can take longer while audio and charts are prepared.
 - For a song with several profiles, use D-pad left/right or the keyboard arrow keys in its detail view. Scores are stored separately for each actual profile.
+- Older score sections ending in `.difficulty.<number>` are retained but not imported automatically: their names can also belong to another song. New scores use separate song/profile identities; ambiguous old records require manual attribution.
 - If a song is missing, it was rejected safely. Check `End/Binaries/Win64/FF7RPianoSongs.log` for the reason.
 
 ## Settings

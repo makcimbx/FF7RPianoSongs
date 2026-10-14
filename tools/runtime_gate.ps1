@@ -997,6 +997,14 @@ function Invoke-Finalize([string]$ManifestPath) {
     if ($Disposition -eq "Keep" -and $manifest.state -ne "Collected") {
         throw "Keep requires immutable collected evidence. Use Rollback or Uninstall before collection."
     }
+    if ($Disposition -eq "Keep") {
+        if ($manifest.evidence.assessment -ne "Passed") {
+            throw "Keep requires successful collected evidence. Use Rollback for failed or incomplete observations."
+        }
+        if ((Get-Sha256 ([string]$manifest.evidence.postLogPath)) -ne [string]$manifest.evidence.postLogSha256) {
+            throw "Refusing Keep because the collected log changed."
+        }
+    }
     if (!$PSCmdlet.ShouldProcess($manifest.paths.targetAsi, "Finalize runtime gate as $Disposition")) {
         return $ManifestPath
     }

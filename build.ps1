@@ -139,8 +139,13 @@ function Write-BuildProvenance {
         (($record | ConvertTo-Json -Depth 8) + "`n"),
         [System.Text.UTF8Encoding]::new($false))
 }
-# A stale cache would silently keep the previously selected build, so configure always runs.
-$CatalogBuildArgument = if ($CatalogBuildId) { " -D FF7RP_GAME_BUILD=$CatalogBuildId" } else { "" }
+# Pass the default explicitly so a prior catalog selection cannot survive in CMakeCache.
+$Catalog = Get-Content -LiteralPath (Join-Path $Root "src/game/rva_catalog.json") -Raw | ConvertFrom-Json
+if (!$CatalogBuildId) { $CatalogBuildId = [string]$Catalog.default_build }
+if ($CatalogBuildId -notmatch '^[a-z0-9][a-z0-9._-]*$' -or $CatalogBuildId -notin @($Catalog.builds.id)) {
+    throw "Unknown catalog build: $CatalogBuildId"
+}
+$CatalogBuildArgument = " -D FF7RP_GAME_BUILD=$CatalogBuildId"
 $ConfigureCommands = @"
 cmake -S "$Root" -B "$BuildDir" -G "Visual Studio 17 2022" -A x64$CatalogBuildArgument
 if errorlevel 1 exit /b %errorlevel%

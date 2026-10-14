@@ -753,6 +753,10 @@ add_test(NAME build_provenance_selftest
     COMMAND "${FF7RP_PWSH_EXECUTABLE}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_provenance_selftest.ps1"
 )
+add_test(NAME build_catalog_selection_selftest
+    COMMAND "${FF7RP_PWSH_EXECUTABLE}" -NoProfile -File
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_catalog_selection_selftest.ps1"
+)
 add_test(NAME release_package_selftest
     COMMAND "${FF7RP_PWSH_EXECUTABLE}" -NoProfile -File
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/release_package_selftest.ps1"
@@ -807,6 +811,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     uobject_identity_selftest
     runtime_gate_selftest
     build_provenance_selftest
+    build_catalog_selection_selftest
     release_package_selftest
     tracked_binary_audit
     documentation_audit
@@ -822,7 +827,7 @@ if(NOT FF7RP_BUILD_RUNTIME)
         mabf_sidecar_loader_selftest audio_pointer_patch_runtime_selftest
         audio_play_setup_diagnostics_selftest scoreinfo_result_policy_selftest
         startup_thread_selftest uobject_identity_selftest runtime_gate_selftest
-        build_provenance_selftest release_package_selftest tracked_binary_audit documentation_audit)
+        build_provenance_selftest build_catalog_selection_selftest release_package_selftest tracked_binary_audit documentation_audit)
 endif()
 set_tests_properties(${FF7RP_BOUNDED_SELFTESTS} PROPERTIES TIMEOUT 60)
 if(FF7RP_BUILD_RUNTIME)
@@ -869,7 +874,7 @@ set_tests_properties(song_repository_selftest PROPERTIES
 get_property(FF7RP_REGISTERED_TESTS DIRECTORY PROPERTY TESTS)
 set(FF7RP_AUDIT_TESTS rva_catalog_check tracked_binary_audit documentation_audit)
 set(FF7RP_TOOLING_TESTS rva_catalog_generator_selftest runtime_gate_selftest
-    build_provenance_selftest release_package_selftest)
+    build_provenance_selftest build_catalog_selection_selftest release_package_selftest)
 foreach(test IN LISTS FF7RP_REGISTERED_TESTS)
     if(test IN_LIST FF7RP_AUDIT_TESTS)
         set_property(TEST ${test} APPEND PROPERTY LABELS audit)

@@ -72,7 +72,8 @@ ArtifactData make_artifact(const bool adaptive) {
 Fixture make_fixture(
     const std::filesystem::path& root,
     const std::string& name,
-    const ArtifactData& artifact) {
+    const ArtifactData& artifact,
+    const std::string& title = "Validator\ncontrol:\x01:end") {
     Fixture fixture;
     fixture.song.id = "validator-" + name;
     fixture.song.directory = root.string();
@@ -81,7 +82,7 @@ Fixture make_fixture(
     fixture.song.cache_key = 0x123456789abcdef0ull;
     fixture.song.chart_policy_identity = "validator-policy";
     fixture.song.config.schema = "ff7rpianosongs.song.v2";
-    fixture.song.config.title = "Validator\ncontrol:\x01:end";
+    fixture.song.config.title = title;
     fixture.song.config.bpm = 123.5;
     fixture.song.config.metronome_enabled = artifact.adaptive;
     fixture.song.audio.source_frame_count = 1;
@@ -201,6 +202,26 @@ int main() {
         if (!validator_observables_unchanged(
                 clean_fixture, clean_before, source_before, clean_fixture.manifest)) {
             std::cerr << "validator mutated song or source configuration\n";
+            return 3;
+        }
+
+        const std::string unicode_title = "Caf\xC3\xA9 \xF0\x9D\x84\x9E";
+        const Fixture unicode = make_fixture(root, "unicode", clean, unicode_title);
+        if (!expect(validate(unicode), true, "unchanged-sentinel", success_trace, "Unicode success")) {
+            return 3;
+        }
+        std::string unicode_actual = unicode.manifest;
+        const std::size_t unicode_offset = unicode_actual.find(unicode_title);
+        if (unicode_offset == std::string::npos) return 3;
+        unicode_actual[unicode_offset + 4u] = '\xAA';
+        std::string changed_title = unicode_title;
+        changed_title[4] = '\xAA';
+        if (!write_text(unicode.song.cache_manifest_path, unicode_actual) ||
+            !expect(validate(unicode), false,
+                "manifest_bytes:offset=" + std::to_string(unicode_offset + 4u) +
+                    ":actual=title=" + changed_title + ":expected=title=" + unicode_title,
+                {"mabf_read_started", "mabf_validation_started", "mabf_hash_started",
+                    "manifest_read_started", "manifest_render_started"}, "Unicode mismatch")) {
             return 3;
         }
 

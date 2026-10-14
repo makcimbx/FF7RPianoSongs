@@ -90,7 +90,7 @@ private:
         return true;
     }
 
-    bool parse_value(JsonValue* out, std::string* error) {
+    bool parse_value(JsonValue* out, std::string* error, const std::size_t depth = 0) {
         skip_ws();
         if (pos_ >= input_.size()) {
             set_error(error, "expected value");
@@ -98,11 +98,16 @@ private:
         }
 
         const char c = input_[pos_];
+        // Bound arbitrary input trees before schema validation or recursive destruction.
+        if ((c == '{' || c == '[') && depth >= 16u) {
+            set_error(error, "maximum nesting depth exceeded");
+            return false;
+        }
         if (c == '{') {
-            return parse_object(out, error);
+            return parse_object(out, error, depth + 1u);
         }
         if (c == '[') {
-            return parse_array(out, error);
+            return parse_array(out, error, depth + 1u);
         }
         if (c == '"') {
             out->type = JsonValue::Type::String;
@@ -130,7 +135,7 @@ private:
         return false;
     }
 
-    bool parse_object(JsonValue* out, std::string* error) {
+    bool parse_object(JsonValue* out, std::string* error, const std::size_t depth) {
         out->type = JsonValue::Type::Object;
         out->object.clear();
         consume('{');
@@ -151,7 +156,7 @@ private:
                 return false;
             }
             JsonValue value;
-            if (!parse_value(&value, error)) {
+            if (!parse_value(&value, error, depth)) {
                 return false;
             }
             const auto inserted = out->object.emplace(std::move(key), std::move(value));
@@ -170,7 +175,7 @@ private:
         }
     }
 
-    bool parse_array(JsonValue* out, std::string* error) {
+    bool parse_array(JsonValue* out, std::string* error, const std::size_t depth) {
         out->type = JsonValue::Type::Array;
         out->array.clear();
         consume('[');
@@ -181,7 +186,7 @@ private:
 
         while (true) {
             JsonValue value;
-            if (!parse_value(&value, error)) {
+            if (!parse_value(&value, error, depth)) {
                 return false;
             }
             out->array.push_back(std::move(value));

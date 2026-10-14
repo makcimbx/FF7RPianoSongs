@@ -55,6 +55,97 @@ ff7r::piano::game::SongDescriptor profile_fixture(
     return song;
 }
 
+int characterize_progress_section_persistence()
+{
+    using namespace ff7r::piano::game;
+    const auto multi = profile_fixture("A", 5, {1, 3});
+    const auto literal = profile_fixture("A.difficulty.3", 6, {3});
+    const auto plain = profile_fixture("Ordinary", 7, {3});
+    const auto& third = multi.profiles[1];
+    if (legacy_progress_section_name(multi, &third) != legacy_progress_section_name(literal)
+        || progress_section_name(multi, &third) == progress_section_name(literal)
+        || progress_section_name(multi, &multi.profiles[0]) == progress_section_name(multi, &third)
+        || progress_song_section_name(multi) == progress_section_name(multi, &third))
+        return fail("encoded song/profile score sections are not isolated");
+    if (progress_section_name(plain) != progress_section_name(plain, &plain.profiles[0])
+        || progress_section_name(profile_fixture("A", 5, {3})) != progress_section_name(multi, &third)
+        || progress_section_name(profile_fixture("a", 5, {3})) == progress_section_name(multi, &third))
+        return fail("persistent identity depends on profile count, root metadata, or INI case folding");
+    for (const auto* id : {L"A.difficulty.3", L"A.DIFFICULTY.3", L"A.difficulty.03", L"[A]"}) {
+        if (legacy_progress_section_unambiguous(id))
+            return fail("ambiguous or unsafe legacy section admitted");
+    }
+    if (!legacy_progress_section_unambiguous(L"Ordinary")
+        || !legacy_progress_section_unambiguous(L"A.difficulty.three"))
+        return fail("unambiguous legacy score section rejected");
+
+    wchar_t directory[MAX_PATH]{};
+    wchar_t filename[MAX_PATH]{};
+    const DWORD length = GetTempPathW(MAX_PATH, directory);
+    if (length == 0 || length >= MAX_PATH || !GetTempFileNameW(directory, L"pns", 0, filename))
+        return fail("score INI fixture creation failed");
+    struct RemoveIni {
+        const wchar_t* path;
+        ~RemoveIni() { DeleteFileW(path); }
+    } remove{filename};
+    const std::wstring path(filename);
+    const ProgressRecord old{true, 900, 700};
+    if (!save_progress_section(L"Ordinary", old, path)
+        || !save_progress_section(L"A.difficulty.3", old, path))
+        return fail("legacy score INI fixture write failed");
+    const auto ordinary_section = progress_read_section_name(plain, path);
+    if (!ordinary_section || *ordinary_section != L"Ordinary"
+        || load_progress_section(*ordinary_section, path).high_score != 900
+        || load_progress_section(*ordinary_section, path).last_score != 700)
+        return fail("unambiguous legacy scores were not preserved");
+    // Neither an empty nor a partial progressive registry proves old section ownership.
+    if (progress_read_section_name(multi, path, &third)
+        || progress_read_section_name(literal, path))
+        return fail("collided legacy record attributed automatically");
+    if (!WritePrivateProfileStringW(L"A", L"LastPlayedDifficulty", L"3", path.c_str())
+        || progress_preference_read_section_name(multi, path) != L"A"
+        || GetPrivateProfileIntW(progress_preference_read_section_name(multi, path).c_str(),
+            L"LastPlayedDifficulty", 0, path.c_str()) != 3)
+        return fail("legacy song-only profile preference was lost");
+    if (!WritePrivateProfileStringW(progress_song_section_name(multi).c_str(),
+            L"LastPlayedDifficulty", L"1", path.c_str())
+        || GetPrivateProfileIntW(progress_preference_read_section_name(multi, path).c_str(),
+            L"LastPlayedDifficulty", 0, path.c_str()) != 1
+        || GetPrivateProfileIntW(L"A", L"LastPlayedDifficulty", 0, path.c_str()) != 3
+        || progress_read_section_name(multi, path, &third))
+        return fail("new profile preference mixed with scores or changed legacy records");
+    const ProgressRecord first{true, 300, 200};
+    const ProgressRecord second{true, 600, 400};
+    if (!save_progress_section(progress_section_name(multi, &third), first, path)
+        || !save_progress_section(progress_section_name(literal), second, path)
+        || !save_progress_section(progress_section_name(plain), {true, 1000, 800}, path))
+        return fail("encoded score INI write failed");
+    const auto multi_section = progress_read_section_name(multi, path, &third);
+    const auto literal_section = progress_read_section_name(literal, path);
+    const auto new_plain_section = progress_read_section_name(plain, path);
+    if (!multi_section || !literal_section || !new_plain_section)
+        return fail("encoded score INI sections not found");
+    const auto first_read = load_progress_section(*multi_section, path);
+    const auto second_read = load_progress_section(*literal_section, path);
+    if (!first_read.played || first_read.high_score != 300 || first_read.last_score != 200
+        || !second_read.played || second_read.high_score != 600 || second_read.last_score != 400
+        || load_progress_section(*new_plain_section, path).high_score != 1000
+        || load_progress_section(L"Ordinary", path).high_score != 900
+        || load_progress_section(L"A.difficulty.3", path).high_score != 900)
+        return fail("INI roundtrip mixed identities or removed/changed old records");
+    const auto bracketed = profile_fixture("[A]", 8, {2147483647});
+    if (!save_progress_section(progress_section_name(bracketed), {true, 42, 41}, path)
+        || load_progress_section(progress_section_name(bracketed), path).high_score != 42)
+        return fail("encoded delimiters/large difficulty did not roundtrip");
+    // An explicit new unplayed record must not resurrect the higher legacy score.
+    if (!save_progress_section(progress_section_name(plain), {}, path))
+        return fail("new unplayed record write failed");
+    const auto unplayed_section = progress_read_section_name(plain, path);
+    if (!unplayed_section || load_progress_section(*unplayed_section, path).played)
+        return fail("new unplayed record fell back to old scores");
+    return 0;
+}
+
 int characterize_required_extension_outcomes()
 {
     using namespace ff7r::piano::game;
@@ -748,6 +839,7 @@ int characterize_try_playback_snapshot_contention()
 
 int main()
 {
+    if (const int result = characterize_progress_section_persistence()) return result;
     if (const int result = characterize_required_extension_outcomes()) return result;
     if (const int result = characterize_focus_bookmark()) return result;
     {
@@ -951,11 +1043,11 @@ int main()
     }
     song_registry.clear_frozen_profile();
     if (!song_registry.cycle_active_profile(-1) ||
-        current_progress_section() != L"Song2.difficulty.5") {
+        current_progress_section() != L"ff7rp:v2:song:536f6e6732:difficulty:5") {
         return fail("Lv.5 score section was not selected independently");
     }
     if (!song_registry.cycle_active_profile(1) ||
-        current_progress_section() != L"Song2.difficulty.6") {
+        current_progress_section() != L"ff7rp:v2:song:536f6e6732:difficulty:6") {
         return fail("Lv.6 score section was not separated from Lv.5");
     }
     const ff7r::piano::game::SelectionSnapshot exact_before = song_registry.selection_snapshot();
@@ -1014,10 +1106,10 @@ int main()
                 return fail("variable profile fixture did not reach Lv." + std::to_string(difficulty));
             }
         }
-        const std::wstring expected_section = profile_count == 1 ?
-            L"Variable" + std::to_wstring(profile_count) :
-            L"Variable" + std::to_wstring(profile_count) + L".difficulty." +
-                std::to_wstring(profile_count);
+        // Variable1..6 encode the terminal ASCII digit as hex 31..36.
+        const std::wstring expected_section =
+            L"ff7rp:v2:song:5661726961626c653" + std::to_wstring(profile_count)
+            + L":difficulty:" + std::to_wstring(profile_count);
         if (song_registry.cycle_active_profile(1) || !song_registry.freeze_active_profile()) {
             return fail("variable profile fixture violated selection/freeze/chart/score behavior at count " +
                 std::to_string(profile_count));
@@ -1058,7 +1150,7 @@ int main()
     if (!sparse_three.profile || sparse_three.profile->difficulty != 3 ||
         sparse_three.profile->title != L"Sparse [Lv.3]" ||
         sparse_three.profile->chart_notes.size() != 3 ||
-        current_progress_section() != L"Sparse.difficulty.3" ||
+        current_progress_section() != L"ff7rp:v2:song:537061727365:difficulty:3" ||
         !song_registry.freeze_active_profile() || song_registry.cycle_active_profile(1)) {
         return fail("non-contiguous Lv.1/Lv.3/Lv.6 selection did not preserve its actual label");
     }
@@ -1070,7 +1162,7 @@ int main()
     if (!sparse_six.profile || sparse_six.profile->difficulty != 6 ||
         sparse_six.profile->title != L"Sparse [Lv.6]" ||
         sparse_six.profile->chart_notes.size() != 6 ||
-        current_progress_section() != L"Sparse.difficulty.6") {
+        current_progress_section() != L"ff7rp:v2:song:537061727365:difficulty:6") {
         return fail("non-contiguous profile cycling compacted or relabeled Lv.6");
     }
     song_registry.clear_active_selection();

@@ -1,4 +1,5 @@
 #include "pipeline/cache.h"
+#include "pipeline/diagnostic_descriptor_hash.h"
 #include "pipeline/audio_loudness.h"
 #include "pipeline/audio_reader.h"
 #include "pipeline/chart_event_plan.h"
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <locale>
@@ -1856,7 +1858,8 @@ int test_extended_chart_diagnostic_cache_isolation(const std::filesystem::path& 
 
     const std::filesystem::path profiles_directory = root / "ExtendedAuthoredProfiles513";
     std::filesystem::create_directories(profiles_directory);
-    if (!write_silent_wav(profiles_directory / "song.wav", 1.0) ||
+    // The final authored row starts at 64 seconds (512 * 0.25 beats at 120 BPM).
+    if (!write_silent_wav(profiles_directory / "song.wav", 65.0) ||
         !write_extended_profiles_song_json(profiles_directory / "song.json")) {
         return fail("failed to create authored extended-profiles fixture");
     }
@@ -3178,8 +3181,10 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
     const std::filesystem::path bad_audio = music_root / "DBadAudio";
     std::filesystem::create_directories(bad_json);
     std::filesystem::create_directories(bad_audio);
+    const std::string deeply_nested = "{\"unknown\":" + std::string(100000u, '[') +
+        "0" + std::string(100000u, ']') + "}";
     if (!write_silent_wav(bad_json / "song.wav", 0.25) ||
-        !write_bytes(bad_json / "song.json", std::vector<std::uint8_t>{'{'}) ||
+        !write_bytes(bad_json / "song.json", std::vector<std::uint8_t>(deeply_nested.begin(), deeply_nested.end())) ||
         !write_bytes(bad_audio / "song.wav", std::vector<std::uint8_t>{0u}) ||
         !write_explicit_song_json(bad_audio / "song.json", "DBadAudio", false)) {
         return fail("failed to create bounded discovery invalid fixtures");
@@ -3189,6 +3194,7 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
     if (discovered.songs.size() != 2u || discovered.songs[0].id != "AValid" ||
         discovered.songs[1].id != "BValid" || discovered.errors.size() != 2u ||
         discovered.errors[0].code != ff7rp::pipeline::StatusCode::InvalidJson ||
+        discovered.errors[0].message.find("maximum nesting depth exceeded") == std::string::npos ||
         discovered.errors[1].code != ff7rp::pipeline::StatusCode::InvalidAudio) {
         return fail("bounded discovery did not publish successes and errors in directory order");
     }
@@ -3358,6 +3364,123 @@ int test_partial_lh_cache(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_unicode_warm_cache(const std::filesystem::path& root) {
+    const auto directory = root / "UnicodeWarm";
+    std::filesystem::create_directories(directory);
+    if (!write_silent_wav(directory / "song.wav", 1.0)) return fail("Unicode WAV write failed");
+    for (const std::string& title : {std::string("Caf\xC3\xA9"), std::string("\\uD834\\uDD1E \\u65E5\\u672C")}) {
+        if (!write_explicit_song_json(directory / "song.json", title, false))
+            return fail("Unicode JSON write failed");
+        ff7rp::pipeline::LoadedSong cold;
+        if (!ff7rp::pipeline::load_song_directory(directory.string(), &cold).ok() || cold.loaded_from_runtime_cache)
+            return fail("Unicode cold load failed");
+        const std::array<std::filesystem::path, 4> artifacts{
+            directory / "song.json", directory / ".cache" / "runtime.bin",
+            cold.cache_manifest_path, cold.cache_sidecar_path};
+        std::array<std::vector<std::uint8_t>, 4> before;
+        for (std::size_t index = 0; index < artifacts.size(); ++index) before[index] = read_binary(artifacts[index]);
+        std::vector<std::string> trace;
+        ff7rp::pipeline::LoadedSong warm;
+        if (!ff7rp::pipeline::load_song_directory(directory.string(), &warm,
+                [&](const char* stage) { trace.emplace_back(stage); }, false).ok() ||
+            !warm.loaded_from_runtime_cache || warm.config.title != cold.config.title ||
+            std::find(trace.begin(), trace.end(), "audio_decode_started") != trace.end() ||
+            std::find(trace.begin(), trace.end(), "midi_generation_started") != trace.end())
+            return fail("Unicode warm reuse failed with rebuilding disabled");
+        for (std::size_t index = 0; index < artifacts.size(); ++index)
+            if (read_binary(artifacts[index]) != before[index]) return fail("Unicode warm load changed artifact bytes");
+    }
+    return 0;
+}
+
+int test_authored_onset_bounds(const std::filesystem::path& root) {
+    struct PolicyReset {
+        ~PolicyReset() { ff7rp::pipeline::configure_chart_row_limit(false, false); }
+    } reset;
+    ff7rp::pipeline::configure_chart_row_limit(true, true);
+    for (const bool profiles : {false, true}) {
+        for (const bool extended : {false, true}) {
+            const auto directory = root / (std::string("Onsets") + (profiles ? "Profiles" : "Root") +
+                (extended ? "Tail" : "Ordinary"));
+            std::filesystem::create_directories(directory);
+            if (!write_silent_wav(directory / "song.wav", 1.0)) return fail("onset WAV write failed");
+            const auto json = [&](const double last_beat) {
+                std::ostringstream out;
+                out.imbue(std::locale::classic());
+                out << std::setprecision(17)
+                    << "{\"schema\":\"v2\",\"title\":\"Onsets\",\"bpm\":120,\"loudness_normalization\":false,";
+                if (profiles) out << "\"profiles\":[{\"difficulty\":0,\"notes\":["
+                    "{\"beat\":0,\"duration_beats\":0.01,\"pitch\":\"C4\"}]},{\"difficulty\":1,";
+                out << "\"notes\":[";
+                const std::size_t rows = extended ? 513u : 1u;
+                for (std::size_t row = 0; row < rows; ++row) {
+                    if (row != 0) out << ',';
+                    out << "{\"beat\":" << (row + 1u == rows ? last_beat : row / 1024.0)
+                        << ",\"duration_beats\":0.01,\"pitch\":\"C4\"}";
+                }
+                out << ']' << (profiles ? "}]}" : "}");
+                return out.str();
+            };
+            const auto write_json = [&](const std::string& text) {
+                return write_bytes(directory / "song.json", std::vector<std::uint8_t>(text.begin(), text.end()));
+            };
+            // An onset half a native frame past the end remains inside the existing tolerance.
+            if (!write_json(json(2.0 + 1.0 / 60.0))) return fail("valid onset JSON write failed");
+            ff7rp::pipeline::LoadedSong cold;
+            ff7rp::pipeline::LoadedSong warm;
+            if (!ff7rp::pipeline::load_song_directory(directory.string(), &cold).ok() ||
+                !ff7rp::pipeline::load_song_directory(directory.string(), &warm, {}, false).ok() ||
+                !warm.loaded_from_runtime_cache)
+                return fail("valid authored onset boundary failed cold/warm loading");
+            const auto runtime_path = directory / ".cache" / "runtime.bin";
+            const auto prior_runtime = read_binary(runtime_path);
+            const auto prior_manifest = read_binary(cold.cache_manifest_path);
+            const auto prior_mabf = read_binary(cold.cache_sidecar_path);
+            const auto prior_resolved = read_binary(directory / ".cache" / "resolved-song.json");
+            const std::string invalid_json = json(2.0 + 1.0 / 15.0);
+            if (!write_json(invalid_json)) return fail("invalid onset JSON write failed");
+            ff7rp::pipeline::LoadedSong rejected;
+            if (ff7rp::pipeline::load_song_directory(directory.string(), &rejected).code !=
+                    ff7rp::pipeline::StatusCode::InvalidChart ||
+                read_binary(runtime_path) != prior_runtime ||
+                read_binary(cold.cache_manifest_path) != prior_manifest ||
+                read_binary(cold.cache_sidecar_path) != prior_mabf ||
+                read_binary(directory / ".cache" / "resolved-song.json") != prior_resolved)
+                return fail("invalid authored onset published or replaced valid artifacts");
+
+            // Supply a source-bound, structurally valid cache with the same invalid onset.
+            ff7rp::pipeline::ParsedSongSource source;
+            if (!ff7rp::pipeline::parse_song_json_string(invalid_json, &source).ok())
+                return fail("invalid onset source did not parse");
+            auto cached = cold;
+            auto& profile = cached.difficulty_profiles[profiles ? 1u : 0u];
+            profile.config.notes = profiles ? source.authored_profiles.back().notes : source.config.notes;
+            if (!ff7rp::pipeline::compile_chart(profile.config, &profile.chart, &profile.diagnostic_chart,
+                    profile.config.notes.size()).ok()) return fail("invalid onset cache fixture did not compile");
+            if (extended) {
+                profile.config.notes.resize(ff7rp::pipeline::kMaxChartRows);
+                profile.diagnostic_chart.descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+                    cached.id, profile.config.difficulty, profile.chart, profile.diagnostic_chart);
+            }
+            cached.config = cached.difficulty_profiles.front().config;
+            cached.chart = cached.difficulty_profiles.front().chart;
+            cached.cache_key = rejected.cache_key;
+            std::vector<std::uint8_t> bytes;
+            if (!ff7rp::pipeline::encode_runtime_cache(cached, ff7rp::pipeline::kRuntimeCacheMagic,
+                    ff7rp::pipeline::kRuntimeCacheFormat, &bytes) || !write_bytes(runtime_path, bytes))
+                return fail("invalid onset cache fixture did not encode");
+            std::vector<std::string> trace;
+            if (ff7rp::pipeline::load_song_directory(directory.string(), &rejected,
+                    [&](const char* stage) { trace.emplace_back(stage); }, false).code !=
+                    ff7rp::pipeline::StatusCode::CacheMiss ||
+                std::find(trace.begin(), trace.end(), "runtime_cache_read") == trace.end() ||
+                std::find(trace.begin(), trace.end(), "runtime_semantics_rejected") == trace.end())
+                return fail("warm cache accepted an out-of-audio authored onset");
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 int main() {
@@ -3377,6 +3500,8 @@ int main() {
     if (run("bounded_discovery", [&] { return test_bounded_discovery_order_and_cache_race(root.path()); }) != 0) return 1;
     if (run("profile_comparison", test_dual_action_profile_comparison) != 0) return 1;
     if (run("authored_profiles", [&] { return test_authored_profiles(root.path()); }) != 0) return 1;
+    if (run("authored_onset_bounds", [&] { return test_authored_onset_bounds(root.path()); }) != 0) return 1;
+    if (run("unicode_warm_cache", [&] { return test_unicode_warm_cache(root.path()); }) != 0) return 1;
     if (run("chord_voicings", [&] { return test_authored_chord_voicings(root.path()); }) != 0) return 1;
     if (run("resolved_song", [&] { return test_resolved_song_output(root.path()); }) != 0) return 1;
     if (run("growth_cache_manifest", [&] { return test_growth_cache_and_manifest(root.path()); }) != 0) return 1;

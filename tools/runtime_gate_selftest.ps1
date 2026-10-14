@@ -460,6 +460,10 @@ try {
         Invoke-Gate @{ Action = "Collect"; Session = $manifestPath } | Out-Null
         $evidence = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $manifestPath) "evidence.json") -Raw | ConvertFrom-Json
         Assert-True ($evidence.assessment -ne "Passed") "$($case.Name) evidence unexpectedly passed"
+        Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Keep" } -ExpectFailure
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        Assert-True ($manifest.state -eq "Collected") "failed Keep changed the collection state"
+        Assert-True ((Get-TestHash $manifest.paths.previousAsi) -eq $fixture.oldHash) "failed Keep removed the previous ASI"
         Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Rollback" } | Out-Null
         Assert-RollbackOutcome $fixture $manifestPath
     }
@@ -748,6 +752,12 @@ try {
         '[audio_sead_sidecar] id="test-song" status=ready mabf_size=0x1') |
         Set-Content -LiteralPath $fixture.log -Encoding utf8
     Invoke-Gate @{ Action = "Collect"; Session = $manifestPath } | Out-Null
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $collectedBytes = [System.IO.File]::ReadAllBytes($manifest.evidence.postLogPath)
+    Add-Content -LiteralPath $manifest.evidence.postLogPath -Value 'changed-after-collection'
+    Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Keep" } -ExpectFailure
+    Assert-True ((Get-TestHash $manifest.paths.previousAsi) -eq $fixture.oldHash) "compromised Keep removed the previous ASI"
+    [System.IO.File]::WriteAllBytes($manifest.evidence.postLogPath, $collectedBytes)
     Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Keep" } | Out-Null
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     Assert-True ($manifest.state -eq "Accepted") "development Keep did not reach Accepted"

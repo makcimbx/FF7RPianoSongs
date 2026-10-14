@@ -72,9 +72,12 @@ bool runtime_artifacts_match(
     const Status render_status = render_cache_manifest(song, source_config, &expected_manifest);
     if (!render_status.ok()) return fail("manifest_render:" + render_status.message);
     if (actual_manifest.size() != expected_manifest.size()) return fail("manifest_size");
-    if (!std::equal(actual_manifest.begin(), actual_manifest.end(), expected_manifest.begin())) {
-        const auto mismatch = std::mismatch(
-            actual_manifest.begin(), actual_manifest.end(), expected_manifest.begin());
+    const auto mismatch = std::mismatch(
+        actual_manifest.begin(), actual_manifest.end(), expected_manifest.begin(),
+        [](const std::uint8_t actual_byte, const char expected_byte) {
+            return actual_byte == static_cast<std::uint8_t>(expected_byte);
+        });
+    if (mismatch.first != actual_manifest.end()) {
         const std::size_t offset = static_cast<std::size_t>(mismatch.first - actual_manifest.begin());
         const std::size_t actual_line_start = offset == 0 ? 0 :
             static_cast<std::size_t>(std::find(

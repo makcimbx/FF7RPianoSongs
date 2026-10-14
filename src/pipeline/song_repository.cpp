@@ -338,6 +338,16 @@ ProfileActionComparison compare_profiles(const SongConfig& previous, const SongC
     return result;
 }
 
+bool chart_onsets_within_audio(const SongConfig& config, const double duration,
+    const bool chart_from_midi) {
+    for (const Note& note : config.notes) {
+        const double seconds = note.beat * 60.0 / config.bpm;
+        if (!std::isfinite(seconds) || seconds < 0.0 || seconds > duration + 1.0 / 60.0 ||
+            (chart_from_midi && seconds + 1.0 / 60.0 < config.midi_minimum_lead_in_seconds)) return false;
+    }
+    return true;
+}
+
 bool runtime_profiles_semantically_valid(const LoadedSong& song,
     const NativeAssetCapabilities native_assets) {
     const double duration = song.audio.source_duration_seconds();
@@ -398,12 +408,10 @@ bool runtime_profiles_semantically_valid(const LoadedSong& song,
     }
 
     const auto timing_valid = [&](const SongConfig& config) {
+        if (!chart_onsets_within_audio(config, duration, song.chart_from_midi)) return false;
         std::set<std::tuple<std::uint64_t, std::uint64_t, std::string, std::string>> rows;
         for (const Note& note : config.notes) {
-            const double seconds = note.beat * 60.0 / config.bpm;
-            if (!std::isfinite(seconds) || seconds < 0.0 || seconds > duration + 1.0 / 60.0 ||
-                (song.chart_from_midi && seconds + 1.0 / 60.0 < config.midi_minimum_lead_in_seconds) ||
-                !rows.emplace(double_identity(note.beat), double_identity(note.duration_beats),
+            if (!rows.emplace(double_identity(note.beat), double_identity(note.duration_beats),
                     note.pitch, note.chord_id).second) return false;
         }
         return true;
@@ -1082,6 +1090,13 @@ Status load_song_directory(
             }
             profile.config.diagnostic_extended_chart_fixture =
                 profile.config.notes.size() > kMaxChartRows;
+            if (!chart_onsets_within_audio(profile.config, song.audio.source_duration_seconds(), false)) {
+                song.status = Status::error(StatusCode::InvalidChart,
+                    "authored profile onset is outside the source audio duration");
+                write_last_error(song.directory, song.status);
+                *out_song = std::move(song);
+                return out_song->status;
+            }
             status = compile_chart(profile.config, native_assets, &profile.chart, &profile.diagnostic_chart,
                 song.accepted_chart_input_limit);
             if (!status.ok()) {

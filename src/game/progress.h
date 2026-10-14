@@ -147,20 +147,102 @@ inline bool commit_progress_if_playback_token(
     return song_registry.commit_if_playback_token(token, commit);
 }
 
-inline std::wstring progress_section_name(
-    const SongDescriptor& song, const SongDifficultyProfile* profile = nullptr)
+inline std::wstring progress_song_section_name(const SongDescriptor& song)
 {
-    const int difficulty = profile ? profile->difficulty : song.difficulty;
-    std::wstring section(song.id.begin(), song.id.end());
-    if (song.profiles.size() > 1) {
-        section += L".difficulty." + std::to_wstring(difficulty);
+    // ':' cannot occur in a Windows folder ID; hex also avoids INI delimiters/case folding.
+    std::wstring section = L"ff7rp:v2:song:";
+    constexpr wchar_t hex[] = L"0123456789abcdef";
+    for (const unsigned char byte : song.id) {
+        section += hex[byte >> 4];
+        section += hex[byte & 15];
     }
     return section;
 }
 
-inline std::wstring progress_song_section_name(const SongDescriptor& song)
+inline std::wstring progress_section_name(
+    const SongDescriptor& song, const SongDifficultyProfile* profile = nullptr)
 {
-    return std::wstring(song.id.begin(), song.id.end());
+    const int difficulty = profile ? profile->difficulty
+        : song.profiles.size() == 1 ? song.profiles.front().difficulty : song.difficulty;
+    return progress_song_section_name(song) + L":difficulty:" + std::to_wstring(difficulty);
+}
+
+inline std::wstring legacy_progress_section_name(
+    const SongDescriptor& song, const SongDifficultyProfile* profile = nullptr)
+{
+    std::wstring section(song.id.begin(), song.id.end());
+    if (song.profiles.size() > 1) {
+        section += L".difficulty." + std::to_wstring(profile ? profile->difficulty : song.difficulty);
+    }
+    return section;
+}
+
+inline bool legacy_progress_section_literal(const std::wstring_view section)
+{
+    return !section.empty() && section.front() != L' ' && section.back() != L' '
+        && section.find_first_of(L"[]\r\n\t") == std::wstring_view::npos;
+}
+
+inline bool legacy_progress_section_unambiguous(std::wstring section)
+{
+    if (!legacy_progress_section_literal(section)) return false;
+    for (wchar_t& ch : section) {
+        if (ch >= L'A' && ch <= L'Z') ch += L'a' - L'A';
+    }
+    const auto suffix = section.rfind(L".difficulty.");
+    if (suffix == std::wstring::npos) return true;
+    const auto digits = std::wstring_view(section).substr(suffix + 12);
+    return digits.empty() || digits.find_first_not_of(L"0123456789") != std::wstring_view::npos;
+}
+
+inline bool progress_ini_section_exists(
+    const std::wstring& section, const std::wstring& ini_path)
+{
+    wchar_t keys[4]{};
+    return GetPrivateProfileStringW(section.c_str(), nullptr, L"", keys,
+        4, ini_path.c_str()) != 0;
+}
+
+inline std::optional<std::wstring> progress_read_section_name(
+    const SongDescriptor& song, const std::wstring& ini_path,
+    const SongDifficultyProfile* profile = nullptr)
+{
+    const std::wstring section = progress_section_name(song, profile);
+    if (progress_ini_section_exists(section, ini_path)) return section;
+    const std::wstring legacy = legacy_progress_section_name(song, profile);
+    // A partial catalog cannot prove historical ownership of a suffix-shaped section.
+    return legacy_progress_section_unambiguous(legacy)
+        ? std::optional<std::wstring>(legacy) : std::nullopt;
+}
+
+inline std::wstring progress_preference_read_section_name(
+    const SongDescriptor& song, const std::wstring& ini_path)
+{
+    const std::wstring section = progress_song_section_name(song);
+    const std::wstring legacy(song.id.begin(), song.id.end());
+    // The distinct preference key was always song-only, even in a collided score section.
+    return !progress_ini_section_exists(section, ini_path)
+        && legacy_progress_section_literal(legacy) ? legacy : section;
+}
+
+inline ProgressRecord load_progress_section(
+    const std::wstring& section, const std::wstring& ini_path)
+{
+    const int high_score = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"HighScore", 0, ini_path.c_str()));
+    const int last_score = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"LastScore", high_score, ini_path.c_str()));
+    const int played = static_cast<int>(GetPrivateProfileIntW(section.c_str(), L"Played", high_score > 0 ? 1 : 0, ini_path.c_str()));
+    return {played != 0, high_score < 0 ? 0 : high_score, last_score < 0 ? 0 : last_score};
+}
+
+inline bool save_progress_section(const std::wstring& section,
+    const ProgressRecord& progress, const std::wstring& ini_path)
+{
+    const std::wstring high_score = std::to_wstring(progress.high_score < 0 ? 0 : progress.high_score);
+    const std::wstring last_score = std::to_wstring(progress.last_score < 0 ? 0 : progress.last_score);
+    const BOOL wrote_played = WritePrivateProfileStringW(section.c_str(), L"Played", progress.played ? L"1" : L"0", ini_path.c_str());
+    const BOOL wrote_high = WritePrivateProfileStringW(section.c_str(), L"HighScore", high_score.c_str(), ini_path.c_str());
+    const BOOL wrote_last = WritePrivateProfileStringW(section.c_str(), L"LastScore", last_score.c_str(), ini_path.c_str());
+    return wrote_played != FALSE && wrote_high != FALSE && wrote_last != FALSE;
 }
 
 inline std::optional<int> parse_last_played_difficulty(

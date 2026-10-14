@@ -433,6 +433,27 @@ int main(int argc, char** argv)
             return fail("non-authoritative JSON input was accepted: " + std::string(invalid_json));
         }
     }
+    for (const bool arrays : {false, true}) {
+        std::string nested;
+        for (std::size_t depth = 0; depth < 100000u; ++depth) {
+            nested += arrays ? "[" : "{\"child\":";
+        }
+        nested += '0';
+        nested.append(100000u, arrays ? ']' : '}');
+        for (const char* field : {"notes", "unknown"}) {
+            const std::string deep_json =
+                "{\"schema\":\"v2\",\"title\":\"Deep\",\"bpm\":120,\"" +
+                std::string(field) + "\":" + nested + "}";
+            ff7rp::pipeline::SongConfig rejected;
+            rejected.title = "unchanged";
+            const auto deep_status = ff7rp::pipeline::parse_song_json_string(deep_json, &rejected);
+            if (deep_status.code != ff7rp::pipeline::StatusCode::InvalidJson ||
+                deep_status.message.find("maximum nesting depth exceeded") == std::string::npos ||
+                rejected.title != "unchanged") {
+                return fail("deep input was not rejected before schema descent without output mutation");
+            }
+        }
+    }
     ff7rp::pipeline::SongConfig unicode_config;
     status = ff7rp::pipeline::parse_song_json_string(
         R"json({"schema":"v2","title":"A\u00DF\uD834\uDD1E"})json", &unicode_config);
