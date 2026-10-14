@@ -3128,10 +3128,9 @@ int test_atomic_default_song_json_creation(const std::filesystem::path& root) {
     constexpr const char* kExpectedStarter =
         "{\n"
         "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
-        "  \"title\": \"AtomicSource\",\n"
-        "  \"metronome\": { \"enabled\": true, \"level\": 0.12 }\n"
+        "  \"title\": \"AtomicSource\"\n"
         "}\n";
-    if (!status.ok() || config.title != "AtomicSource" || !config.metronome_enabled ||
+    if (!status.ok() || config.title != "AtomicSource" || config.metronome_enabled ||
         read_text(song_json) != kExpectedStarter) {
         return fail("concurrent default song JSON creation did not publish one valid canonical source: " +
             status.message + ", title=" + config.title +
@@ -3155,8 +3154,7 @@ int test_atomic_default_song_json_creation(const std::filesystem::path& root) {
     constexpr std::string_view kExpectedUnicodeStarter =
         "{\n"
         "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
-        "  \"title\": \"\xC3\x89" "tude\",\n"
-        "  \"metronome\": { \"enabled\": true, \"level\": 0.12 }\n"
+        "  \"title\": \"\xC3\x89" "tude\"\n"
         "}\n";
     if (ff7rp::pipeline::render_default_song_json(std::filesystem::path(L"\u00c9tude")) !=
         kExpectedUnicodeStarter) {

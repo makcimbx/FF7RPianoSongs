@@ -57,8 +57,8 @@ The same one-file rule applies separately to each optional mode. `song.mode0.*` 
 Each audio file must be nonempty, no larger than 512 MiB, and no longer than 10 minutes when decoded.
 The mod converts supported audio to 48 kHz stereo; you do not need to supply HCA or MABF files.
 
-If `song.json` is absent, the mod creates a starter file using the folder name as the title and
-enabling the metronome at level `0.12`. You still need matching MIDI, or must add your own notes.
+If `song.json` is absent, the mod creates a starter file using the folder name as the title,
+without a `metronome` field; clicks are disabled by default. You still need matching MIDI, or must add your own notes.
 An existing file is not replaced, even if it contains errors.
 
 ## Root object
@@ -512,8 +512,8 @@ they do not shift that chart: edit its `beat` values instead.
 ## Metronome
 
 The metronome adds a beat click to the base audio mode only. Omit it for no click, or use
-`"metronome": { "enabled": true, "level": 0.12 }`. A newly auto-created starter enables it;
-that is different from omitting it in a file you write yourself.
+`"metronome": { "enabled": true, "level": 0.12 }` to enable it explicitly. A newly auto-created
+starter omits the field and leaves clicks disabled.
 
 | Field | JSON type | Status/default | Accepted value / interaction |
 | --- | --- | --- | --- |

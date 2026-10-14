@@ -149,8 +149,7 @@ std::string render_default_song_json(const std::filesystem::path& directory) {
     std::ostringstream out;
     out << "{\n"
         << "  \"schema\": \"ff7rpianosongs.song.v2\",\n"
-        << "  \"title\": \"" << escape_json_string(title_bytes) << "\",\n"
-        << "  \"metronome\": { \"enabled\": true, \"level\": 0.12 }\n"
+        << "  \"title\": \"" << escape_json_string(title_bytes) << "\"\n"
         << "}\n";
     return out.str();
 }
