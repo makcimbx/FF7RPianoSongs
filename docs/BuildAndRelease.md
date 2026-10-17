@@ -39,6 +39,47 @@ ctest --test-dir build -C Release -R '^pipeline_selftest$' --output-on-failure
 
 A test-only target does not rebuild or replace the `dist` ASI. Select `FF7RPianoSongs` when a new game-loadable artifact is needed; building still does not install it.
 
+### Native cached-audio development dependency
+
+Each song's native cohort uses the shared immutable cache under
+`%LOCALAPPDATA%/FF7RPianoSongs/native_audio`, rather than a potentially long song-folder
+path. An unavailable or unwritable cache root rejects native preparation; no game-folder
+or current-directory fallback is used. Content-addressed cohorts contain Music, BGMList,
+ScoreInfo and PianoScore packages; existing bytes are verified, not overwritten. Do not
+remove mounted files during a game session or install these generated files in Paks.
+
+The automatic native-container producer reads authenticated installed stock
+templates. After genuine native initialization, the repository worker first
+qualifies the selected build's cataloged decoder in the main executable. This
+path requires the exact image identity, function signatures and read-execute
+image mappings, the catalog-default allocator/free/diagnostic targets, null profiling
+callbacks and the reviewed stack threshold. Validation copies and rereads those facts;
+it does not establish a callback-lifetime lease or invoke the decoder during bootstrap.
+An absent or rejected executable profile falls back to the explicitly supplied
+`oo2core_9_win64.dll` companion beside the ASI. The companion's pinned hash and ABI
+are defined in `src/pipeline/oodle_decoder.cpp`; it does not search, download,
+or install a decoder. Load it once and retain copies for worker use. An already
+loaded image at the supplied companion path is rejected.
+
+When the selected build requires the companion, verify it and its destination while
+the game is closed, preserve any existing file, and retain that disposition
+alongside the runtime-gate session. Do not overwrite an unknown companion or
+assume the ASI-only installer installed it. No third-party redistribution or
+Release packaging is authorized by this development procedure.
+
+The synchronous bootstrap must authenticate the supported loader handoff and executable
+continuation outside `DllMain`, then publish the protective hooks in that scope. A late
+worker or a missed initializer cannot reconstruct that authority from live pointers.
+Repository preparation starts only after the genuine native initializer notification.
+Do not invent loader settings or retry through an unqualified startup path.
+
+Artifact production and runtime readiness are separate gates: immutable files alone
+are not mounted metadata, completed retained acquisitions, authenticated registered
+identities or verified rows. Selection requires the exact ready cohort and generation.
+The native route does not patch a stock Sound source or replay a synthetic request;
+native files, registrations and owning references remain retained until process exit,
+with no live unmount or release qualification.
+
 One ASI supports one game build. `-CatalogBuildId` selects which cataloged build identity it is
 compiled against; without it, the catalog's `default_build` is used:
 
@@ -228,6 +269,11 @@ Treat any audit failure as a release blocker. Do not edit documentation to mirro
 
 ## Stage The Package
 
+An experimental archive, including an older-build ZIP, records only its own build and
+package evidence; it does not establish gameplay qualification or a publishable release.
+Use [Current Status](CurrentStatus.md) for the reviewed artifact disposition and the
+[Release Gate](#release-gate) below for publication requirements.
+
 After a successful Release build and CTest run, stage transactionally with:
 
 ```powershell
@@ -363,7 +409,7 @@ provenance record. Experimental teardown variants and reports are not release
 artifacts.
 
 Finalize only after reviewing the evidence. `Keep` requires one immutable
-successful collection and accepts the reviewed ASI;
+collection assessed `Passed` and accepts the reviewed ASI;
 `Rollback` restores the exact prior ASI; `Uninstall` is accepted only when the
 session began without an ASI. During active Debug and Integration work, keep a
 successfully reviewed current development ASI by default. Roll back after
@@ -395,6 +441,12 @@ another non-reparse location outside the repository and game trees. A fixed
 per-executable ownership receipt and an OS-owned mutex coordinate sessions even
 when evidence roots differ. The offline adverse-path test is registered in
 CTest; it uses only temporary fake game and repository trees.
+
+Use that session's `session.json`, `evidence.json` and `log-after.log` as the source of
+installation, collection and final-disposition evidence. `Accepted` records a reviewed
+`Keep`, not a gameplay or Release pass. Older experimental logs and ZIPs do not replace
+the current artifact's evidence; interpretation and manual limits are defined in
+[In-Game Validation](InGameValidation.md#automated-session-boundary).
 
 ## Release Gate
 

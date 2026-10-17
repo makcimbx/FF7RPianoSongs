@@ -850,11 +850,14 @@ function Get-LogInspection([string]$Path, [object]$Manifest) {
     else {
         '\[audio_sead_sidecar\].*status=ready.*mabf_size=0x(?!0+\b)[0-9a-fA-F]+'
     }
+    $nativeSong = if ($Manifest.songId) { [regex]::Escape([string]$Manifest.songId) } else { '[^\r\n]+' }
+    $nativeArtifactPattern = '\[native_cache\] status=prepared id="' + $nativeSong + '"(?:\s|$)'
+    $nativeReadyPattern = '(?:^|\s)native_audio cohort=' + $nativeSong + ' generation=[0-9]+ stage=ready failure=none(?:\s|$)'
     $excerpt = [System.Collections.Generic.List[string]]::new()
     $excerptByteCounts = [System.Collections.Generic.List[int]]::new()
     $excerptUtf8Bytes = 0
     $utf8 = [System.Text.UTF8Encoding]::new($false)
-    $indices = @{ version = -1; registry = -1; route = -1; hooks = -1; initialized = -1; sidecar = -1; settled = -1 }
+    $indices = @{ version = -1; registry = -1; route = -1; hooks = -1; initialized = -1; sidecar = -1; settled = -1; nativeInstall = -1; nativeArtifact = -1; nativeReady = -1 }
     $terminal = 0
     $lineIndex = -1
     $reader = [System.IO.StreamReader]::new($Path, $true)
@@ -868,12 +871,23 @@ function Get-LogInspection([string]$Path, [object]$Manifest) {
             if ($indices.registry -lt 0 -and $line -match '\[song\] status=registry_ready count=') { $indices.registry = $lineIndex }
             if ($indices.route -lt 0 -and $line -match '\[audio_sead\] status=prepared_playsetup_route') { $indices.route = $lineIndex }
             if ($indices.hooks -lt 0 -and $line -match '\[hooks\] status=installed_release_hooks') { $indices.hooks = $lineIndex }
-            if ($indices.initialized -lt 0 -and $line -match '\[startup\] status=initialized mode=core_skeleton') { $indices.initialized = $lineIndex }
+            if ($indices.initialized -lt 0 -and $line -match '\[startup\] status=initialized mode=(?:core_skeleton|native_audio)(?:\s|$)') { $indices.initialized = $lineIndex }
             if ($indices.sidecar -lt 0 -and $line -match $sidecarPattern) { $indices.sidecar = $lineIndex }
             if ($indices.settled -lt 0 -and $line -match '\[song\] status=repository_settled\b') { $indices.settled = $lineIndex }
+            if ($indices.nativeInstall -lt 0 -and $line -match '\[native_audio\] status=barriers_installed\b') { $indices.nativeInstall = $lineIndex }
+            if ($indices.nativeArtifact -lt 0 -and $line -cmatch $nativeArtifactPattern) { $indices.nativeArtifact = $lineIndex }
+            if ($indices.nativeReady -lt 0 -and $line -cmatch $nativeReadyPattern) { $indices.nativeReady = $lineIndex }
             if ($line -match '\[startup\] status=disabled_' -or
-                $line -match '\[song\] status=repository_failed\b') { $terminal++ }
-            if ($line -notmatch '\[(startup|song|song_load|audio_sead|audio_sead_sidecar|hooks|runtime)\]') { continue }
+                $line -match '\[song\] status=repository_failed\b' -or
+                $line -match '\[native_audio\] status=unavailable\b' -or
+                $line -match '(?:^|\s)native_audio terminal failure=' -or
+                $line -match '(?:^|\s)native_audio selection_rejected\b' -or
+                $line -match '\[selection\] activation_admission status=denied\b' -or
+                $line -match '\[chart_patch\] plan status=skipped reason=selected_(?:row|provider|source)_\w+\b' -or
+                $line -match '\[extended_chart\] transaction=rejected\b' -or
+                $line -match '(?:^|\s)native_audio cohort=.* stage=failed\b') { $terminal++ }
+            if ($line -notmatch '\[(startup|song|song_load|audio_sead|audio_sead_sidecar|native_audio|native_cache|selection|chart_patch|extended_chart|hooks|runtime)\]' -and
+                $line -notmatch '(?:^|\s)native_audio\s') { continue }
 
             $sanitized = ConvertTo-SanitizedExcerptLine $line $gamePattern $repoPattern
             $lineBytes = $utf8.GetByteCount($sanitized) + 1
@@ -903,8 +917,16 @@ function Get-LogInspection([string]$Path, [object]$Manifest) {
     $orderedStartup = $legacyOrdered -or $progressiveOrdered
     $sidecarOrdered = $indices.sidecar -gt $indices.version -and
         (!$progressiveOrdered -or $indices.sidecar -gt $indices.hooks)
+    $nativeOrdered = $indices.version -ge 0 -and $indices.nativeInstall -gt $indices.version -and
+        $indices.hooks -gt $indices.nativeInstall -and $indices.initialized -gt $indices.hooks -and
+        $indices.settled -gt $indices.hooks -and $indices.nativeArtifact -gt $indices.hooks -and
+        $indices.nativeReady -gt $indices.nativeArtifact
+    # Native candidates cannot pass using unrelated legacy sidecar evidence.
+    $nativeMode = $indices.nativeInstall -ge 0
+    if ($nativeMode) { $startupOrdering = if ($nativeOrdered) { "Native" } else { "None" } }
+    $orderedStartup = if ($nativeMode) { $nativeOrdered } else { $orderedStartup }
     $assessment = if ($terminal -ne 0) { "Failed" }
-        elseif ($orderedStartup -and $sidecarOrdered) { "Passed" }
+        elseif ($orderedStartup -and ($nativeMode -or $sidecarOrdered)) { "Passed" }
         elseif ($indices.version -lt 0) { "NotObservable" }
         else { "NotObserved" }
     return [pscustomobject][ordered]@{
@@ -915,6 +937,9 @@ function Get-LogInspection([string]$Path, [object]$Manifest) {
         progressiveStartupMarkers = $progressiveOrdered
         repositorySettled = $indices.settled -ge 0
         sidecarReady = $indices.sidecar -ge 0
+        nativeStartupMarkers = $nativeOrdered
+        nativeArtifactsReady = $indices.nativeArtifact -ge 0
+        nativeRuntimeReady = $indices.nativeReady -ge 0
         terminalDisabledMarkers = $terminal
         excerpt = @($excerpt)
     }
@@ -967,6 +992,9 @@ function Invoke-Collect([string]$ManifestPath) {
         progressiveStartupMarkers = $inspection.progressiveStartupMarkers
         repositorySettled = $inspection.repositorySettled
         sidecarReady = $inspection.sidecarReady
+        nativeStartupMarkers = $inspection.nativeStartupMarkers
+        nativeArtifactsReady = $inspection.nativeArtifactsReady
+        nativeRuntimeReady = $inspection.nativeRuntimeReady
         terminalDisabledMarkers = $inspection.terminalDisabledMarkers
         executable = $manifest.executable
         installedAsiSha256 = $targetHash

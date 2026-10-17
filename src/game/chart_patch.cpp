@@ -8,6 +8,7 @@
 #include "game/extended_chart.h"
 #include "pipeline/chart_event_plan.h"
 #include "game/note_count.h"
+#include "game/native_audio_runtime.h"
 #include "game/rvas.h"
 #include "game/runtime_layouts.h"
 #include "game/runtime_context_policy.h"
@@ -168,7 +169,6 @@ std::atomic_uint64_t g_chart_audio_diagnostic_ordinal{0};
 FNameCtorFn g_chart_fname_ctor = nullptr;
 std::atomic_uintptr_t g_row_patch_wrapper{0};
 std::atomic_int g_row_patch_next_index{0};
-std::atomic_uintptr_t g_cached_pianoscore_object{0};
 bool next_chart_audio_diagnostic_value(
     std::atomic_uint64_t& counter, uint64_t& out) noexcept
 {
@@ -656,7 +656,7 @@ template <typename T>
 bool append_field_patch(uintptr_t address, const T& patched, const char* label, int32_t index, std::vector<JournalEntry>& out)
 {
     T original{};
-    if (address < 0x10000 || !core::safe_read_field(reinterpret_cast<void*>(address), 0, original)) {
+    if (address < 0x10000 || !core::safe_copy_bytes(reinterpret_cast<void*>(address), &original, sizeof(original))) {
         return false;
     }
     return append_byte_patch(address, bytes_from_value(original), bytes_from_value(patched), label, index, out);
@@ -1182,87 +1182,71 @@ bool should_cap_wrapper_count_after_expand(
         && copied_count > published_event_bound;
 }
 
-#ifndef FF7RP_CHART_PATCH_SELFTEST
-bool find_live_pianoscore_object(void*& object, ChartMemoryLayout& layout, std::string& reason)
+// The parser independently constructs its PianoScore accessor from wrapper+0
+// (ChartEventAbiGhidra.txt, 1439b366f). Typed lookup returns one 0xb0-byte row,
+// not the resident object's historical +0x480 table slice. No basename scan.
+#ifdef FF7RP_CHART_PATCH_SELFTEST
+bool (*g_test_capture_pianoscore_row)(const ff7rp::pipeline::NativeAudioArtifactSet&,
+    std::uint64_t,native_audio::NativePianoScoreRow&) noexcept=nullptr;
+#endif
+bool capture_selected_pianoscore_row(const SelectionSnapshot& selection,void* wrapper,
+    native_audio::NativePianoScoreRow& source)
 {
-    object = nullptr;
-    layout = {};
-    reason.clear();
-    if (!g_chart_fname_ctor) {
-        reason = "missing_fname_ctor";
-        return false;
-    }
-
-    const uintptr_t cached = g_cached_pianoscore_object.load(std::memory_order_relaxed);
-    if (cached) {
-        void* cached_object = reinterpret_cast<void*>(cached);
-        if (resolve_chart_layout_from_score_object(cached_object, g_chart_fname_ctor, layout, reason)) {
-            object = cached_object;
-            return true;
+    source={};std::uint64_t selected_name=0;
+    if(!selection || !selection.song->native_audio || !wrapper
+        || !core::safe_copy_bytes(wrapper,&selected_name,sizeof(selected_name)))return false;
+#ifdef FF7RP_CHART_PATCH_SELFTEST
+    return g_test_capture_pianoscore_row && g_test_capture_pianoscore_row(*selection.song->native_audio,selected_name,source);
+#else
+    return native_audio::capture_native_pianoscore_row(*selection.song->native_audio,selected_name,source);
+#endif
+}
+[[maybe_unused]] bool resolve_selected_chart_layout(const SelectionSnapshot& selection,void* wrapper,
+    native_audio::NativePianoScoreRow& source,ChartMemoryLayout& layout,std::string& reason)
+{
+    layout={};reason="selected_provider_identity";
+    if(!capture_selected_pianoscore_row(selection,wrapper,source))return false;
+    constexpr std::size_t row_size=kObservedPianoScoreRowCounts.size()*sizeof(FrozenStringEntry);
+    static_assert(row_size==0xb0);
+    std::array<FrozenStringEntry,kObservedPianoScoreRowCounts.size()> headers{};
+    if(!source.provider){reason="selected_provider_missing";return false;}
+    if(source.row<0x10000){reason="selected_row_pointer_low";return false;}
+    // Qualified 7yc1prw7 PianoScore rows include four-byte alignment.
+    // Copy scalar/header bytes; never bind aligned T&.
+    if(source.row&3u){reason="selected_row_pointer_alignment4";return false;}
+    if(source.row>UINTPTR_MAX-row_size){reason="selected_row_bounds";return false;}
+    reason="selected_row_read";
+    if(!core::safe_copy_bytes(reinterpret_cast<void*>(source.row),headers.data(),row_size))return false;
+    for(std::size_t index=0;index<headers.size();++index) {
+        const auto& header=headers[index];
+        const char* failure=header.num<0?"selected_row_count"
+            :header.max<header.num?"selected_row_capacity"
+            :header.max>kMaxPatchedChartRows*3?"selected_row_capacity_limit"
+            :header.num && !header.data?"selected_row_data_missing":nullptr;
+        if(failure) {
+            reason=std::string(failure)+" index="+std::to_string(index)
+                +" count="+std::to_string(header.num)+" capacity="+std::to_string(header.max);
+            return false;
         }
-        g_cached_pianoscore_object.store(0, std::memory_order_relaxed);
     }
-
-    GUObjectArrayView view{};
-    if (!read_chart_guobject_array(view)) {
-        reason = "guobjectarray_unavailable";
-        return false;
-    }
-
-    FNameValue piano_score_name{};
-    if (!construct_fname_find(g_chart_fname_ctor, L"PianoScore", piano_score_name)) {
-        reason = "pianoscore_fname_missing";
-        return false;
-    }
-
-    int name_matches = 0;
-    int layout_matches = 0;
-    std::string last_layout_reason;
-    for (int32_t index = 0; index < view.num_elements; ++index) {
-        void* candidate = nullptr;
-        if (!read_chart_uobject_item_object(view, index, candidate)) {
-            continue;
-        }
-        FNameValue object_name{};
-        if (!core::safe_read_field(candidate, runtime_layouts::UObject::name, object_name)
-            || object_name.comparison_id != piano_score_name.comparison_id) {
-            continue;
-        }
-        ++name_matches;
-        ChartMemoryLayout candidate_layout{};
-        std::string candidate_reason;
-        if (resolve_chart_layout_from_score_object(candidate, g_chart_fname_ctor, candidate_layout, candidate_reason)) {
-            ++layout_matches;
-            object = candidate;
-            layout = candidate_layout;
-            g_cached_pianoscore_object.store(reinterpret_cast<uintptr_t>(candidate), std::memory_order_relaxed);
-            static std::atomic_int s_logs{0};
-            const int log_index = s_logs.fetch_add(1, std::memory_order_relaxed);
-            if (log_index < 8) {
-                std::ostringstream out;
-                out << "[chart_patch] pianoscore_object status=found"
-                    << " object=0x" << std::hex << reinterpret_cast<uintptr_t>(candidate)
-                    << " chart_base=0x" << candidate_layout.chart_base
-                    << " field=0x" << candidate_layout.score_field_offset
-                    << std::dec
-                    << " object_index=" << index
-                    << " name_matches=" << name_matches
-                    << " layout_reason=" << candidate_reason;
-                core::log(core::LogLevel::Info, out.str());
-            }
-            return true;
-        }
-        last_layout_reason = candidate_reason;
-    }
-
-    std::ostringstream out_reason;
-    out_reason << "pianoscore_layout_missing name_matches=" << name_matches
-        << " layout_matches=" << layout_matches
-        << " last=" << last_layout_reason;
-    reason = out_reason.str();
-    return false;
+    if(headers[kTimeStrHeaderIndex].num==0){reason="selected_row_time_empty";return false;}
+    // Pair the copied row with a fresh authenticated provider/name observation.
+    native_audio::NativePianoScoreRow fresh;
+    decltype(headers) reread{};
+    reason="selected_provider_recapture";
+    if(!capture_selected_pianoscore_row(selection,wrapper,fresh))return false;
+    reason="selected_provider_drift";
+    if(fresh.provider!=source.provider || fresh.row!=source.row || fresh.selected_name!=source.selected_name)return false;
+    if(fresh.cohort_generation!=source.cohort_generation){reason="selected_source_generation_drift";return false;}
+    reason="selected_row_reread";
+    if(!core::safe_copy_bytes(reinterpret_cast<void*>(source.row),reread.data(),row_size))return false;
+    if(std::memcmp(headers.data(),reread.data(),row_size)!=0){reason="selected_row_header_mismatch";return false;}
+    layout.chart_base=source.row;layout.chart_size=row_size;layout.row_header_base=0;
+    layout.time_header_index=kTimeStrHeaderIndex;layout.monotone_id_header_index=kMonotoneIdHeaderIndex;
+    reason="selected_provider_row";return true;
 }
 
+#ifndef FF7RP_CHART_PATCH_SELFTEST
 bool selection_chart_rows(
     const SelectionSnapshot& selection, std::vector<DescriptorChartRow>& rows)
 {
@@ -2105,10 +2089,10 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     const SongDifficultyProfile* const profile = selection.profile;
     log_extended_chart_source_boundary(rows);
 
-    void* score_object = nullptr;
+    native_audio::NativePianoScoreRow source;
     ChartMemoryLayout layout{};
     std::string layout_reason;
-    const bool layout_ok = find_live_pianoscore_object(score_object, layout, layout_reason);
+    const bool layout_ok = resolve_selected_chart_layout(selection,wrapper,source,layout,layout_reason);
     ChartNameResolver resolver{};
     resolver.resolve_monotone_id = [](const std::string& monotone_id, uint64_t& packed_name) {
         return resolve_monotone_id_fname(g_chart_fname_ctor, monotone_id, packed_name);
@@ -2138,7 +2122,10 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
                 out << "[chart_patch] plan status=skipped reason=" << reason
                     << " song_id=" << (song ? song->id : "<none>")
                     << " difficulty=" << (profile ? profile->difficulty : 0)
-                    << " layout_ok=" << (layout_ok ? 1 : 0);
+                    << " layout_ok=" << (layout_ok ? 1 : 0)
+                    << " cohort_generation=" << source.cohort_generation
+                    << " selected_name=0x" << std::hex << source.selected_name
+                    << " provider=0x" << source.provider << " row=0x" << source.row;
                 core::log(core::LogLevel::Error, out.str());
             });
         }
@@ -2211,9 +2198,33 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
             return ChartExpandPreparationOutcome::NativePristine;
         }
     }
+    native_audio::NativePianoScoreRow current_source;
+    if(!capture_selected_pianoscore_row(selection,wrapper,current_source)
+        || current_source.provider!=source.provider || current_source.row!=source.row
+        || current_source.selected_name!=source.selected_name
+        || current_source.cohort_generation!=source.cohort_generation) {
+        static std::atomic_uint rejected_targets{0};
+        if(rejected_targets.fetch_add(1,std::memory_order_relaxed)<64) {
+            std::ostringstream out;out << "[chart_patch] target status=rejected predicate=selected_provider_changed"
+                << " song_id=" << song->id << " selection_generation=" << selection.generation
+                << " expected_name=0x" << std::hex << source.selected_name
+                << " expected_provider=0x" << source.provider << " expected_row=0x" << source.row
+                << " current_name=0x" << current_source.selected_name << " current_provider=0x" << current_source.provider
+                << " current_row=0x" << current_source.row;core::log(core::LogLevel::Error,out.str());
+        }
+        admission={};return ChartExpandPreparationOutcome::NativePristine;
+    }
+    static std::atomic_uint target_logs{0};
+    if(target_logs.fetch_add(1,std::memory_order_relaxed)<64) {
+        std::ostringstream out;out << "[chart_patch] target status=authenticated song_id=" << song->id
+            << " selection_generation=" << selection.generation
+            << " cohort_generation=" << source.cohort_generation << " selected_name=0x" << std::hex << source.selected_name
+            << " provider=0x" << source.provider << " row=0x" << source.row
+            << " descriptor_rows=" << std::dec << rows.size();core::log(core::LogLevel::Info,out.str());
+    }
     const PlannedChartWriteResult write_result
         = apply_planned_descriptor_chart_patch(
-        reinterpret_cast<uintptr_t>(score_object), layout.chart_base,
+        source.provider, layout.chart_base,
         selection, admission_lease, std::move(planned));
     bool applied = write_result == PlannedChartWriteResult::Applied;
     (void)admission_coordinator.finish_chart_write(applied);
@@ -2507,7 +2518,6 @@ core::HookShutdownResult shutdown_chart_patch()
         g_chart_fname_ctor = nullptr;
         g_row_patch_wrapper.store(0, std::memory_order_relaxed);
         g_row_patch_next_index.store(0, std::memory_order_relaxed);
-        g_cached_pianoscore_object.store(0, std::memory_order_relaxed);
         release_uobject_identity_chart_consumer();
     });
 }

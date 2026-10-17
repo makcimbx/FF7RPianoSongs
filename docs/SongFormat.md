@@ -587,6 +587,19 @@ and combo settings may be recalculated for the edited chart.
 Do not edit `.cache` directly or include it when sharing a song. The export is recreated on a
 successful load if possible; inability to write it does not stop an otherwise valid song loading.
 
+### Native cached-audio development path
+
+Song inputs and settings do not change. The native-audio candidate automatically builds
+immutable per-song cohorts in `%LOCALAPPDATA%/FF7RPianoSongs/native_audio`; these are generated cache,
+not files to install manually in the game's Paks directory or include with a song.
+Source changes produce a separate content identity. Keep the containers untouched while
+the game is running, because mounted files, registrations and native owning references
+are retained until process exit. Prepared files alone do not mean a song is ready:
+selection requires its authenticated native identities and registered rows, not a stock
+Sound source patch or replayed request. This is not a claim of audible playback validation.
+The embedded decoder is preferred; a qualified companion is a fallback rather than a new
+song-author setting. See the [player guide](../README.md) for installation and limitations.
+
 ## Failure behavior
 
 | Symptom | What to check |

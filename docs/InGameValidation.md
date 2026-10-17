@@ -14,7 +14,7 @@ Use this matrix only for focused manual qualification on a supported executable.
 
 From a repository checkout, use the exact `Prepare`, `Collect`, `Status`,
 `Finalize`, and `Recover` commands in the repository-only
-`docs/BuildAndRelease.md` transactional runtime-gate section.
+[Build And Release](BuildAndRelease.md#transactional-runtime-gate) section.
 `Prepare` installs only the reviewed ASI after two fail-closed process gates and
 removes the archived pre-launch log from the live path so stale evidence cannot
 be attributed to the new session.
@@ -25,9 +25,8 @@ outside Git; copy only a bounded sanitized excerpt into `analysis/` when the
 evidence is worth retaining.
 
 The runtime gate does not request live ASI teardown. Same-process teardown,
-unload, and reload are unsupported after two formally successful shutdown
-reports were followed by user-visible Fatal Errors. This is not a release
-scenario or release requirement. Keep the ASI attached for the process lifetime;
+unload, and reload are unsupported and are not a qualification scenario. Keep the ASI,
+mounted cohort files and retained native owners in place for the process lifetime;
 the human tester exits the game normally before collection or replacement.
 
 After successful Debug or Integration evidence, keep the reviewed current
@@ -37,14 +36,46 @@ explicit rollback request. `Keep` is an artifact disposition, not a Release
 claim, and does not require rerunning the full Release pipeline. Do not leave a
 runtime-gate session unfinalized after its evidence has been reviewed.
 
-Installation success is not mechanic evidence. A `Passed` loader-sidecar
-assessment proves only the ordered startup markers and one nonempty
-`status=ready` sidecar marker selected by the session. Collection is immutable;
-run another prepared session rather than overwriting its log evidence.
-`NotObservable` means the
-mod did not reach the first startup marker; `NotObserved` means the run did not
-reach the complete selected boundary. Older or unrelated product failures must
-be recorded separately rather than attributed to the current change.
+Installation success is not mechanic evidence. For the current native cached-audio
+route, `startupOrdering=Native` requires ordered startup/barrier/hook/initialization
+markers, repository settlement, the selected song's generated-artifact marker and the
+backend's actual `stage=ready failure=none`. Terminal failure markers make the assessment
+`Failed`. `Passed` establishes only this observed log boundary, not audible playback,
+list/chart correctness or complete lifecycle behavior. A missed qualified bootstrap or
+initializer is unavailable, not permission for late mounting or Sound source patching.
+
+The tool retains older `Legacy`/`Progressive` sidecar assessment support and the
+`loader-valid-sidecar` scenario name for compatibility; those are not current native
+readiness instructions. `NotObservable` means no first startup marker; `NotObserved`
+means the selected boundary was incomplete. Collection is immutable: use another
+prepared session, not overwritten logs. Record older or unrelated failures separately.
+
+## Focused Native Audio Integration Run
+
+Use one prepared session after the native adapter's affected tests and safety
+review pass. Preserve the previous ASI and check the decoder/bootstrap requirements in
+[Build And Release](BuildAndRelease.md#native-cached-audio-development-dependency).
+The authenticated executable decoder is preferred; the qualified companion is only a
+fallback, not mandatory separate setup for an admitted embedded profile. The tester
+launches the game normally; there is no timed human-input window or automated input.
+
+In one continuous piano session:
+
+1. Confirm native cohort readiness for the selected song, then start it and
+   pause/resume immediately, then again later. Input before readiness must remain
+   recoverable; do not prescribe a wait duration or substitute a stock route as a pass.
+2. Retry it, return to the list, and activate it again with another available
+   profile. Check the chart, duration, progress and score identity as well as audio.
+3. Switch to a different custom song and then a stock song. Confirm no old audio,
+   chart or profile survives. Reopen the list and select the first custom song again.
+4. Exit the game normally, then collect the exact installed artifact's log.
+
+Readiness alone is not a gameplay pass. Record actual heard audio, synchronization
+and each transition; any stop condition ends the run without trying another route.
+Per-play chart/profile retirement does not release the backend's retained native
+acquisitions, registrations or files. No source replacement, synthetic request replay,
+live release or unmount is part of this procedure. This bounded integration run is not
+the full Release matrix, and qualification does not carry to another executable build.
 
 ## Scenario Matrix
 
@@ -56,9 +87,9 @@ Run only the row or bounded sequence that exercises the changed mechanic during 
 | Discovery and rejection | Open the piano list with valid and intentionally invalid song folders. | Every valid descriptor appears once; invalid input is absent with an actionable log reason. |
 | List and navigation | Move between native and custom rows, enter/leave details, and reopen the list. | Ordering, title, focus, and native rows remain stable with no stale custom identity. |
 | Selected-profile list metadata and return focus | Select different profiles, including labels 0/1/3/6/7 and a large label, and charts below/above 512 actions; play or abort one, return, and repeat while catalog preparation or republishing occurs. Include stock rows. | Displayed counts match the complete selected profile rather than its native prefix. Difficulty icons equal the selected label capped at six; zero shows none, and the title retains the exact label. Return focus resolves the last played song/profile by stable identity in the current list, not an obsolete row index, without overriding subsequent deliberate navigation. Missing songs and early input remain recoverable without prescribed waits. |
-| Single focus registration and subsequent custom admission | Play a custom song, return to its bookmarked list position, immediately confirm a different custom song, and repeat. Include same-index reopening and immediate profile input. | Open's original focus-registration call is intercepted once, not followed by a second restore call. Confirmed selection survives Close; the second and later activations publish the selected custom chart and audio rather than vanilla fallback. Correlate `focus_interception` outcome/original entry count/Ready with reservation preservation and subsequent `custom_prepared`/`audio_published`. A restored highlight or loader-only Passed result does not qualify this scenario. |
+| Single focus registration and subsequent custom admission | Play a custom song, return to its bookmarked list position, immediately confirm a different custom song, and repeat. Include same-index reopening and immediate profile input. | Open's original focus-registration call is intercepted once, not followed by a second restore call. Confirmed selection survives Close; subsequent activations use the selected ready native cohort and custom chart rather than vanilla fallback. Correlate `focus_interception` and reservation/chart publication diagnostics with actual selected identity and heard audio; `custom_prepared`/`audio_published` alone are not playback proof. A restored highlight or runtime-gate Passed result does not qualify this scenario. |
 | Result rank rendering | Obtain a star rank and a letter rank, then inspect results and reopen the song details. | Ranks use the native presentation. Rank thresholds, computed score and persisted song/profile identity remain consistent. |
-| Negative page selection guard | With Find the Flame profile 3/difficulty 4/238 notes present, repeatedly enter/leave its details and move immediately among native and custom rows so list rebuilds include both immediate selection and a transient no-selection state; then reopen the list. | Native `-1` no-selection transitions do not fault in the selected visibility setter, no page/list entry is substituted, and subsequent nonnegative selections retain normal focus and visibility. Any `unexpected_negative_bypassed` marker is retained for analysis. No tester delay is required. |
+| Negative page selection guard | With a valid custom profile present, repeatedly enter/leave its details and move immediately among native and custom rows so list rebuilds include both immediate selection and a transient no-selection state; then reopen the list. | Native `-1` no-selection transitions do not fault in the selected visibility setter, no page/list entry is substituted, and subsequent nonnegative selections retain normal focus and visibility. Any `unexpected_negative_bypassed` marker is retained for analysis. No tester delay is required. |
 | Difficulty selection | Cycle all visible profiles with deliberate single controller D-pad clicks and keyboard arrows, including release followed immediately by a second press; start one, finish or abort, and reopen. | Each physical D-pad press changes exactly one profile even when multiple input providers overlap, held/repeated reports do not retrigger, keyboard behavior remains unchanged, actual labels remain sparse, selected metadata/chart match, selection locks during play, and per-level score identity remains separate. |
 | Explicit chart | Play an explicit-note song through prompts and completion. | Prompt timing, pitch/chord identity, progress, score, and completion agree with the authored chart. |
 | Ordinary dual-event count | Play an ungrouped five-row chart with two dual rows (seven events), placing a dual row at the end. Finish, return to the list, and immediately activate a different song. | All seven events, including both sides of the final row, remain playable. Capture post-expand native count, not just the descriptor's planned count. Completion and subsequent activation succeed without a required wait. |
@@ -67,13 +98,13 @@ Run only the row or bounded sequence that exercises the changed mechanic during 
 | MIDI chart | Play representative low/high generated profiles. | Profiles are recognizable source-backed reductions; no impossible row, tail prompt, or label compaction appears. |
 | Audio first play | Start a song from a cold cache. | Audio begins once, remains synchronized, and no native track leaks underneath. |
 | Pause and resume | Pause during playback and resume repeatedly. | Audio/chart state pauses and resumes together without restart, drift, or automatic stop transition. |
-| Retry and completion | Retry from gameplay, complete normally, and return to menus. | Prior resources stop once; retry starts cleanly; completion releases ownership without replay or leak. |
-| Abort and song switch | Abort mid-song, select another custom song, then a native song. | No old audio, chart, selection, callback, or score identity survives the transition. |
-| Post-play retained-substrate reuse | Play two custom songs in sequence, return to the piano list after cleanup, then immediately activate another custom song without an artificial delay. | If the retained canonical request remains exactly unchanged at native state 4, the list-return reset qualifies once and the next reservation/admission succeeds. A changed request still requires its authenticated rebase. Cleanup denial such as `native_route_not_proven` remains fail-closed, and no qualification step stops/sets/plays native audio or releases canonical ownership. |
+| Retry and completion | Retry from gameplay, complete normally, and return to menus. | The game's native playback stops/restarts correctly; chart/profile admission retires without replay or stale active identity. Backend native owners and files remain retained until process exit. |
+| Abort and song switch | Abort mid-song, select another custom song, then a native song. | No stale audio, chart, selection, callback, or score identity becomes active after the transition. |
+| Retained cohort reuse | Play two custom songs in sequence, return to the piano list, then immediately reactivate a ready custom song without an artificial delay. | The exact retained cohort remains ready without remounting, reacquiring or re-registering it. A fresh per-play chart/profile reservation succeeds without old-song leakage; failed identity/readiness checks stay fail-closed. No live native release, unmount, source patch or replay is attempted. |
 | Cache warm load | Reopen the same song without changing inputs. | Valid cache is reused and behavior matches the cold build. |
 | Cache invalidation | Change one semantic input or request one rebuild. | Stale cache is rejected/rebuilt atomically; failed generation leaves no publishable partial descriptor. |
 | Progressive catalog readiness | Observe startup cache checking/rebuild text before entering the piano menu; then open immediately while cache work continues, close, and reopen during active playback/cleanup contention and again after repository preparation settles. Exercise both an already nonempty active custom catalog and the initial vanilla/empty-custom catalog. | Throughout Loading, including any background native menu lifecycle, the overlay shows processed/total and ready counts and distinguishes ordinary validation from actual typed rebuild work. It never exposes active/current-menu counts, count transitions, adoption/deferred state, or reopen guidance. Each quiescent reopen still exposes the complete ready lexical prefix; a recoverable authoritative `Blocked` open forwards once and remains usable without waiting. Ready shows one bounded `Piano songs ready` notice and hides on schedule regardless of pending/aligned adoption or delayed first Canvas. Existing list/audio/registry ownership remains unchanged on `Blocked`; `TerminalFailure` alone remains suppressed. No tester delay, polling, deferred input, or automatic replay is required. |
-| Teardown | Leave piano content, return to title where safe, and exit normally. | No crash, hang, delayed callback fault, or leaked playback occurs. |
+| Normal process exit | Leave piano content, return to title where safe, and exit normally. | No crash, hang, delayed callback fault, or audio continuing past its expected stop occurs. This does not test live ASI unload or release of process-retained cohorts. |
 
 ## Evidence To Capture
 
@@ -81,13 +112,22 @@ Run only the row or bounded sequence that exercises the changed mechanic during 
 - Scenario name, song/profile, starting state, actions, expected result, and observed result.
 - Relevant bounded log excerpts with secrets or personal paths removed.
 - Whether the cache was cold, warm, invalidated, or rebuilt.
+- The selected cohort/generation, decoder source, native readiness or first-failure
+  reason, and which transitions were actually exercised. File preparation, retained
+  object completion and row verification are separate from hearing correct playback.
 - A clear statement of what was not tested.
 
-Store dated runtime evidence under `analysis/` and summarize only the current disposition in [Current Status](CurrentStatus.md).
+Keep the complete runtime-gate session and immutable collected log under the configured
+evidence root (by default `%LOCALAPPDATA%/FF7RPianoSongs/runtime-gates`). `Accepted`
+means the reviewed artifact was kept, not that this matrix passed. Keep only useful
+dated sanitized excerpts or source links under `analysis/`; summarize the current
+artifact disposition and remaining gameplay gaps in [Current Status](CurrentStatus.md).
+Experimental ZIPs and older backend diagnostics do not transfer qualification to the
+current source, artifact or executable build.
 
 ## Stop Conditions
 
-Stop immediately and restore the prior artifact after any crash, hang, repeated native assertion, pointer/identity guard failure, unexpected owner generation, audio continuing after stop, chart/audio divergence, native list corruption, score identity corruption, or package rollback failure. Do not continue gathering evidence from a compromised session.
+Stop the scenario immediately after any crash, hang, repeated native assertion, pointer/identity guard failure, unexpected owner generation, audio continuing after stop, chart/audio divergence, native list corruption, score identity corruption, or package rollback failure. Do not continue gathering evidence from a compromised session. Keep the loaded ASI and native backing files intact until process exit; collect evidence and use the runtime gate to restore the prior artifact only after the game is closed. Do not attempt live teardown or unmount as recovery.
 
 Do not reinterpret a fail-closed rejection as a partial pass. Do not broaden a focused run after a stop condition.
 

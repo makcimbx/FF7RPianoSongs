@@ -355,13 +355,16 @@ public:
         return active_;
     }
 
-    void restore()
+    bool restore()
     {
         if (!active_) {
-            return;
+            return true;
         }
-        (void)core::safe_write_field(context_, runtime_layouts::PianoMusicList::selected_index, original_index_);
+        int32_t restored=-1;
+        const bool exact=core::safe_write_field(context_, runtime_layouts::PianoMusicList::selected_index, original_index_)
+            && read_selected_index(context_,restored) && restored==original_index_;
         active_ = false;
+        return exact;
     }
 
 private:
@@ -452,6 +455,14 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     if (!callback) {
         return g_original_selected_entry_getter(context, out_entry);
     }
+    const auto forward_original = [&]() {
+        const auto result = g_original_selected_entry_getter(context, out_entry);
+        std::uint64_t stock_name=0;
+        if(result==reinterpret_cast<uintptr_t>(out_entry) && out_entry
+            && core::safe_copy_bytes(out_entry,&stock_name,sizeof(stock_name)))
+            native_audio::observe_native_stock_selected_name(stock_name);
+        return result;
+    };
 
     int32_t selected_index = -1;
     if (!read_selected_index(context, selected_index)) {
@@ -461,7 +472,7 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
                 prior_selection.generation, prior_selection.generation);
         }
         clear_active_selection();
-        return g_original_selected_entry_getter(context, out_entry);
+        return forward_original();
     }
 
     const SelectionSnapshot descriptor = descriptor_for_visible_index(selected_index);
@@ -486,7 +497,7 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
                 prior_selection.generation, prior_selection.generation);
         }
         clear_active_selection();
-        return g_original_selected_entry_getter(context, out_entry);
+        return forward_original();
     }
 
     PianoListArrayView list{};
@@ -514,7 +525,9 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     }
     bool log_rejected_handoff = false;
     const char* rejected_handoff_reason = nullptr;
-    if (!activation_getter || !handoff) {
+    const bool handoff_available=static_cast<bool>(handoff)
+        || handoff.result==SelectionActivationHandoffResult::AlreadyConfirmed;
+    if (!activation_getter || !handoff_available) {
         const bool rejected_pending
             = revoke_selection_audio_activation_if_pending();
         log_rejected_handoff = rejected_pending || activation_getter;
@@ -526,7 +539,7 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     uint64_t published_handoff_generation = 0;
     SelectionActivationHandoffResult handoff_result
         = SelectionActivationHandoffResult::NoPendingReservation;
-    if (handoff) {
+    if (handoff_available) {
         const bool alias_exact = selection_alias_exact(
             context, context_identity, selected_index, base_slot);
         SelectionSnapshot published_selection;
@@ -554,7 +567,8 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     }
 
     ScopedSelectedIndexAlias alias(context, base_slot);
-    if (!alias.apply()) {
+    const bool alias_applied=alias.apply();
+    if (!alias_applied) {
         if (handoff && handoff_published) {
             revoke_selection_audio_activation();
             const SelectionSnapshot rejected_selection
@@ -564,7 +578,7 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
                 rejected_selection.generation);
             if (rejected_selection) latch_activation_denial(rejected_selection);
         }
-        return g_original_selected_entry_getter(context, out_entry);
+        if(!activation_getter)return forward_original();
     }
     if (handoff && handoff_published) {
         const SelectionSnapshot published_selection
@@ -574,7 +588,32 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
             handoff.prior_selection_generation,
             published_selection.generation);
     }
-    return g_original_selected_entry_getter(context, out_entry);
+    auto result=forward_original();
+    const bool alias_restored=alias.restore();
+    if(!alias_restored)block_custom_audio_route_for_unresolved_chart_mutation();
+    if(activation_getter) {
+        const auto current=registry().selection_snapshot();
+        std::uint64_t selected_name=0;
+        const bool local_output=result==reinterpret_cast<uintptr_t>(out_entry)
+            && out_entry==reinterpret_cast<std::uint8_t*>(_AddressOfReturnAddress())+0x30;
+        const bool qualified=handoff_published && alias_applied && alias_restored && local_output
+            && current.generation==published_handoff_generation && current.song==descriptor.song
+            && current.storage==descriptor.storage
+            && selection_alias_exact(context,context_identity,selected_index,base_slot)
+            && selected_native_audio_name(current,selected_name);
+        // Never return the borrowed stock cue after custom activation failed.
+        // Only the caller-local output is changed, never a list/owner/request.
+        if(!qualified)selected_name=0;
+        std::uint64_t written_name=0;
+        const bool written=local_output && core::safe_write_field(out_entry,0,selected_name)
+            && core::safe_copy_bytes(out_entry,&written_name,sizeof(written_name)) && written_name==selected_name;
+        if(!written || !qualified) {
+            revoke_selection_audio_activation();latch_activation_denial(current);
+            block_custom_audio_route_for_unresolved_chart_mutation();
+            if(!written)result=0;
+        }
+    }
+    return result;
 }
 
 bool __fastcall action_state_query_detour(void* action_ref)
@@ -601,12 +640,16 @@ bool __fastcall action_state_query_detour(void* action_ref)
         [&]() {
             const SelectionSnapshot selection = registry().selection_snapshot();
             if (!selection || !selection.song) return true;
+            std::uint64_t native_name=0;
+            if(!selected_native_audio_name(selection,native_name))return false;
             if (activation_denied_for(selection)) return false;
 
             SelectionActivationListContext list_context;
+            SelectionActivationReservationDiagnostic reservation_diagnostic;
+            reservation_diagnostic.selection_generation=selection.generation;
             const bool reserved
                 = snapshot_activation_list_context(selection, list_context)
-                && reserve_selection_audio_activation(selection, list_context);
+                && reserve_selection_audio_activation(selection, list_context,&reservation_diagnostic);
             const bool result = selection_activation_query_result({
                 true, true, true, false, reserved,
             });
@@ -623,7 +666,13 @@ bool __fastcall action_state_query_detour(void* action_ref)
                     << " selection_generation=" << selection.generation
                     << " return_rva=0x" << std::hex
                     << rva::ActionStateQueryPrimaryReturn << std::dec
-                    << " native_result=1 original_calls=1";
+                    << " native_result=1 original_calls=1"
+                    << " predicate=" << selection_activation_reservation_failure_name(reservation_diagnostic.failure);
+                if(reservation_diagnostic.failure!=SelectionActivationReservationFailure::ListContextSnapshot) {
+                    out << " menu_generation=" << reservation_diagnostic.menu_generation
+                        << " reservation_generation=" << reservation_diagnostic.reservation_generation
+                        << " reservation_state=" << static_cast<unsigned>(reservation_diagnostic.state);
+                }
                 core::log(result ? core::LogLevel::Info : core::LogLevel::Error,
                     out.str());
             }

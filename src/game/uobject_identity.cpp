@@ -299,6 +299,12 @@ locator::UObjectLiveHandle core_handle(const UObjectLiveHandle& handle) noexcept
 
 } // namespace
 
+bool capture_current_uobject_identity_access(locator::UObjectIdentityAccess& access) noexcept
+{
+    access = {};
+    try { return identity_access(access); } catch (...) { return false; }
+}
+
 void initialize_uobject_identity(HMODULE exe_module)
 {
     bool expected = false;

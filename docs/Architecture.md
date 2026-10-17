@@ -6,11 +6,17 @@
 song folder
   -> pipeline discovery and strict parsing
   -> audio decode/normalization/HCA/MABF cache + explicit or MIDI chart profiles
-  -> immutable SongDescriptor registry
+  -> authenticated native templates + immutable per-song IoStore cohort
+  -> owned SongDescriptor/native token prefix
+  -> qualified mount/acquisition/registration and Ready state
+  -> game-thread catalog adoption
   -> game hooks and descriptor-backed list/selection/chart/audio integration
 ```
 
-The offline pipeline completes validation before a descriptor is visible to runtime code. Runtime consumers do not parse user files or infer missing cache state.
+The offline pipeline validates source files and artifacts before offering a
+descriptor. Native readiness is a separate game-thread state: prepared files or
+an owning descriptor do not authorize selection. Runtime callbacks never parse
+user files, rebuild caches or infer missing admission state.
 
 ## Module Ownership
 
@@ -20,6 +26,76 @@ The offline pipeline completes validation before a descriptor is visible to runt
 - `src/game/` owns executable-version gating, addresses, hook installation, native object identity, UI/list/selection/chart integration, and audio lifecycle interaction.
 - `src/generated/<build-id>/` holds one derived source tree per supported game build, and a build selects exactly one of them. Generated files are outputs, not a second hand-edited source of truth.
 - `src/tests/` owns offline validation and release-audit enforcement; tests do not establish in-game proof.
+
+## Native Cached Audio
+
+### Offline Artifacts
+
+The pipeline authenticates the selected source-template/profile, projects the
+generated audio and logical cue duration into Music, and emits a genuine
+PackageStore container with separate Music, BGMList, PianoScoreInfo and PianoScore
+packages. Generated names preserve the native BGM acquisition path and the
+Music export/internal-cue/resource relationship. The score name is shared by
+ScoreInfo and chart lookup; changing only the BGM cue does not provide a chart.
+
+Artifacts are content-addressed and immutable. Validation rederives their bytes,
+package identities and metadata; an existing corrupt or partial cohort is rejected,
+not overwritten under a potentially retained native reader. A descriptor retains
+the immutable artifact set, authenticated source-row name and prepared runtime
+token. The pipeline owns no game-memory address or native reference.
+
+The repository worker qualifies the executable's decoder/default callbacks, or
+loads the explicitly authenticated companion. Decoder availability is not engine
+ownership, a callback-replacement lease or native audio readiness. Native cache
+paths and dependency handling are documented in [Build And Release](BuildAndRelease.md).
+
+### Startup And Admission
+
+The synchronous ASI export authenticates a supported early loader/executable
+continuation and its source-specific state. It publishes protective hooks before
+returning to that continuation. DllMain does not start asynchronous initialization.
+Unsupported or missed origins remain unavailable; later pointer snapshots cannot
+reconstruct continuity. Exact per-build code/data contracts belong in the catalog
+and indexed bootstrap evidence, not duplicated RVAs here.
+
+Early publication performs no game constructors or worker startup. The ordinary
+hooks-published and genuine normal native-initializer signals meet in a once-only
+latch; only then do overlay, title input and repository services start. A missing
+window is Pending, not permission to repeat constructors or create another poller.
+
+The native runtime captures the initializer's persistent owner, subscription,
+dispatcher, PackageStore and generation. Replacement/destruction/shutdown invalidates
+that authority before native storage disappears. On the qualified original updater
+return, bounded stock-provider readiness precedes mount/acquisition/registration.
+Valid empty startup state waits without side effects; malformed state fails.
+
+All selected native manager operations participate in exclusion. Queue/repository/
+audio locks are not held across mount or loader waits. Before each native mutation,
+the whole cohort's owners, identities, registry/map/backing/code and expected
+state are revalidated. Metadata serial-zero observations are not weak handles;
+only a candidate's own returned bridge may establish its positive registry serial.
+Unknown names, partial native mutation or uncertain completion are terminal and
+retained: no retry, guessed repair, registration withdrawal or automatic unmount.
+
+### Selection, Charts And Retention
+
+Only Ready tokens may enter catalog adoption and activation. The existing selected
+entry hook forwards the original once and supplies the genuine registered name to
+its qualified caller; it does not rewrite owner requests, stock rows or Sound sources.
+Profile/chart authority remains generation-bound to the same registry storage.
+
+Chart projection resolves the exact retained PianoScore row for the selected full
+FName. Provider/name/generation and bounded headers are recaptured before the
+reversible journal is applied. The parser therefore consumes the projected song,
+not a cached first-basename carrier. Extended validation accepts either the exact
+precommit selection guard or its genuine current playback successor; consumed,
+revoked and cleanup-only authority cannot be fabricated into a new guard.
+
+Files, native acquisitions and registered backing are retained to process exit.
+The small `audio_sead` adapter owns readiness and chart/selection handoff—not
+Sound-source patches, PlaySetup replay or Set/Play/Stop reconstruction. The
+historical filename `audio_sidecar_runtime` now owns immutable prepared native
+token prefixes, not a synthetic MABF allocation handed to SQEXSEAD.
 
 ## Address Ownership
 
@@ -218,9 +294,21 @@ compatibility is claimed across different game targets.
   this is song-level concurrency, not a limit on all process threads or a guarantee
   of proportional speedup. Decoding and chart preparation can increase simultaneous
   memory and CPU demand.
-- Release hooks install against an explicit empty custom catalog. Discovery exposes stable non-owning views of each newly contiguous lexical settlement delta only for the synchronous callback lifetime. Startup admits descriptors once and offers every increased fully validated prefix. If the unchanged final prefix follows a recoverable publication rejection, it receives exactly one final publication retry from the retained immutable descriptor/sidecar candidate without source I/O, sidecar reconstruction, or allocation; invalid-only settlement does not republish an already accepted descriptor identity. Each admitted song owns one immutable shared sidecar node linked to the prior prefix, so snapshots are O(1), prior MABF data is never reread or reallocated, and aggregate sidecar preparation is O(N).
+- Release hooks install against an explicit empty custom catalog. Discovery exposes
+  non-owning settlement views only for the synchronous callback lifetime. Startup
+  admits each descriptor once and enqueues its prepared native token before
+  offering the immutable prefix. Prefix snapshots share prior nodes. A recoverable
+  final publication rejection permits one retry of that exact retained candidate,
+  not repeated source processing or native acquisition. Invalid-only settlement
+  does not republish an unchanged identity.
 - Progressive composition centralizes the already-enforced piano-list bound of 128 total rows (five vanilla plus at most 123 custom rows). This is an existing runtime safety bound, not a new recovered layout or address claim; exceeding it fails composition while retaining any earlier accepted catalog.
-- Pending catalogs are adopted only by the game thread at the exact pre-open boundary after callback, menu, selection, playback, list, audio, and registry quiescence are revalidated. List tuple, owner, sidecar, and registry publication is one failure-atomic transaction; an already open list or playback retains its previous catalog identity. Registry state generation guards the quiescent transaction and mutable selection/profile/playback state, while a separate monotonic catalog revision plus immutable storage identity owns list coherence and changes only when storage is replaced.
+- Pending catalogs are adopted only at the game-thread pre-open boundary after
+  all native tokens are Ready and callback/menu/selection/playback/list/audio/
+  registry quiescence is revalidated. Pending or Failed native audio cannot
+  publish a new tuple. List tuple, owning native-token prefix and registry swap
+  form one failure-atomic transaction; an open list/playback retains its prior
+  catalog. Mutable state generation and immutable catalog revision/storage
+  identity remain distinct authorities.
 - Exact menu-open admission is evaluated before catalog adoption. Unrelated calls and recoverable callback-admission failure forward the native original exactly once without product bookkeeping or mutation; authoritative terminal failure takes precedence and remains suppressed because an unverified native tuple rollback makes forwarding unsafe. For admitted callbacks, the authoritative adoption result governs catalog behavior: `Adopted`, `NoPending`, and recoverable `Blocked` all forward exactly once. `Blocked` retains the pending catalog and opens the unchanged active catalog (including the initial vanilla/empty-custom state) without waiting, polling, replay, deferred input, or catalog mutation. A later quiescent open may adopt that pending catalog.
 
 ## Lifecycle Invariants
@@ -249,16 +337,23 @@ compatibility is claimed across different game targets.
   the original emission loop. Persistent caches, chord inputs, scoring events,
   and free-play remain unchanged. Nested ineligible callbacks shadow outer
   projection authority; current binding identity is rechecked before projection.
-- The runtime sidecar catalog retains its registry snapshot for the catalog lifetime. Admission proves exact catalog storage, song, profile, and profile index before chart or audio mutation.
-- Production PlaySetup, Set, Play, and Stop forwarding execute through one wiring authority that owns exact argument tuples, exact-once dispatch, callback/TLS restoration, lifecycle leasing, and the recursive operation boundary. Route and borrower decisions remain in the audio coordinator.
-- Audio shutdown is an explicit fail-closed phase transaction. Cleanup readiness is the only failure that reopens admission; disable, drain, aggregate rollback, restore/release, or publication failure retains authority and cannot publish successful state clearing.
-- Native audio state transitions are requested through verified native paths; arbitrary owner-memory replay is not a supported recovery strategy.
-- A retained canonical substrate may qualify the one-use list-return reset lineage either through the authenticated changed-request rebase or through exact unchanged-request continuity. The unchanged path requires the same live controller, slot, BGM, sound pointer and UObject identity, state 4, clear aggregate/cleanup/quarantine ownership, and the exact lease-cleared canonical-relinquishment successor (`proof generation N` to idle unowned `reset generation N+1`); changed requests still require a valid authenticated reset lease and lifecycle lineage. Both paths also require lifecycle admission, canonical-only token ownership, and unchanged bridge/source/list-exit identity. Qualification commits only reset route/lease/lifecycle lineage and one revocation epoch; it does not release ownership, reset route state, clear failure latches, free tokens/backing, or invoke native audio operations.
+- The native-token catalog retains its owning registry snapshot. Admission proves
+  exact storage, song, profile and index before chart publication.
+- Pause, resume and native playback transitions use the game's selected resource.
+  The adapter supplies no source substitution, forced playback restart or
+  owner-memory recovery path.
+- Shutdown first closes new admission. Protective lifetime/manager hooks and
+  borrowed GU/ScoreInfo services remain installed while native work, notification,
+  selection validation or original-entry forwarding is active or uncertain.
+  Incomplete shutdown is nonblocking and retains module/trampolines; disabling
+  protection first or forcing a timed drain is not successful cleanup.
 - Install rollback is serialized against callbacks. Process detach does not perform blocking hook teardown under the loader lock.
 - The piano-page negative-selection guard owns exactly the selected weak-resolver CALL declared by the RVA catalog. It installs while callback admission is closed through an exact-signature, target-decoded, protection-restoring rel32 transaction. Negative native no-index values bypass weak resolution and selected visibility mutation at the cataloged continuation; nonnegative values tail-call the original resolver unchanged. The process-lifetime relay is retained whenever a live or uncertain instruction may reference it and is not subject to live teardown.
 - Disabled trampoline ownership can remain for process lifetime when delayed pre-entry callbacks may still reach originals.
 - Runtime ownership is process-bound and attach-only. Live same-process ASI teardown, unload, or reload is unsupported; normal shutdown relies on process exit rather than attempting to retire hooks, callbacks, native objects, or SQEXSEAD state while the host remains alive.
-- Audio resources are released and reacquired through validated native operations before replacement; same-pointer shortcuts cannot be assumed to rebuild state.
+- Returning to the list relinquishes chart/profile authority through its exact
+  generation-bound transaction; it does not claim native resource release,
+  registration rollback or container unmount.
 
 ## Runtime Observability
 

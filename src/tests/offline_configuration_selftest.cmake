@@ -19,6 +19,7 @@ endif()
 
 file(READ "${FF7RP_TEST_BINARY_DIR}/known/CMakeFiles/TargetDirectories.txt" _targets)
 if(NOT _targets MATCHES "/song_cache_tool\\.dir" OR
+    NOT _targets MATCHES "/native_music_export_selftest\\.dir" OR
     _targets MATCHES "/(FF7RPianoSongs|check_rva_catalog|release_audit_tool|minhook)\\.dir")
     message(FATAL_ERROR "Offline target graph contains runtime dependencies or omits tools: ${_targets}")
 endif()

@@ -24,13 +24,266 @@
     }
   ],
   "addresses": [
+{"id":"native_oodle_default_allocate","cpp_symbol":"NativeOodleDefaultAllocate","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x01cc17c0","signature":{"bytes":"48 89 5c 24 08 57 48 83 ec 20 48 63 da 48 8b f9 ff 15 a2 6c 8a 03","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Exact default aligned allocator target: Win64 size RCX/alignment EDX; GetProcessHeap/HeapAlloc, original pointer at aligned-8. Complete imported body matches canonical disk; unique complete prefix. Authentication reference, not a new call path."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01c04b00","signature":{"bytes":"48 89 5c 24 08 57 48 83 ec 20 48 63 da 48 8b f9 ff 15 8a e9 b0 03","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit ff7rebirth_.exe-1.004 default GetProcessHeap/HeapAlloc target and unique complete imported prefix; canonical imported PE correlated. No older disk SHA or runtime validation."}]}}},
+{"id":"native_oodle_default_free","cpp_symbol":"NativeOodleDefaultFree","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x01cc1820","signature":{"bytes":"40 53 48 83 ec 20 48 8b d9 ff 15 49 6c 8a 03 3e 3e 3e 4c 8b 43 f8 33 d2 48 8b c8 48 83 c4 20 5b 48 ff 25 29 6c 8a 03","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Win64 allocation RCX; GetProcessHeap then HeapFree on *(allocation-8). Complete 39-byte function matches canonical disk and is unique; identity reference only."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01c04b60","signature":{"bytes":"40 53 48 83 ec 20 48 8b d9 ff 15 31 e9 b0 03 3e 3e 3e 4c 8b 43 f8 33 d2 48 8b c8 48 83 c4 20 5b 48 ff 25 11 e9 b0 03","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit older paired process-heap free implementation, complete unique imported 39-byte body. No older disk or decoder execution proof."}]}}},
+{"id":"native_oodle_default_diagnostic","cpp_symbol":"NativeOodleDefaultDiagnostic","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x01cc1860","signature":{"bytes":"83 f9 02 7d 67 4c 89 4c 24 20 b8 38 10 00 00 e8 0c a3 4a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Default variadic diagnostic: level ECX, source RDX, line R8D, format R9/stack values; level<2 formats local 4096-byte buffer and OutputDebugStringA. Body matches disk, prefix unique. Authenticate target only; do not synthesize a diagnostic call."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01c04ba0","signature":{"bytes":"83 f9 02 7d 67 4c 89 4c 24 20 b8 38 10 00 00 e8 7c a3 4a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit older diagnostic slot target independently decompiled: bounded local formatting via 141c4a0c0 and OutputDebugStringA; unique complete imported prefix. No older disk or runtime proof."}]}}},
+{"id":"native_oodle_allocate_slot","cpp_symbol":"NativeOodleAllocateSlot","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06c91be0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Writable qword callback slot, default EXE+NativeOodleDefaultAllocate; state creator indirect call corroborates use. Read and authenticate current value, not address alone."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06e5ebe0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit old imported qword defaults to 141c04b00, reached by null-scratch state creation; no old disk proof."}]}}},
+{"id":"native_oodle_free_slot","cpp_symbol":"NativeOodleFreeSlot","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06c91be8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Writable qword default EXE+NativeOodleDefaultFree; decoder frees owned state through this slot before returning. Current value must match paired default."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06e5ebe8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit old imported qword defaults to 141c04b60; actual decoder owned-state free consumer corroborated. No old disk proof."}]}}},
+{"id":"native_oodle_diagnostic_slot","cpp_symbol":"NativeOodleDiagnosticSlot","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06c91bf8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Writable qword default EXE+NativeOodleDefaultDiagnostic; native decoder diagnostics use this slot, not engine-owned logger receiver."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06e5ebf8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Independently read old diagnostic qword 141c04ba0 and decompiled target/decoder consumers; no old disk or lifetime proof for replacement callbacks."}]}}},
+{"id":"native_oodle_profile_begin_slot","cpp_symbol":"NativeOodleProfileBeginSlot","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06fa3fa8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Optional profiling begin qword, image/BSS default null; native decoder reads/calls when nonnull. Default authentication requires current null, not inferred from disk zero."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x07170878","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit older decoder begin-profile consumer and imported zero qword; require live null for default-only profile. No old disk proof."}]}}},
+{"id":"native_oodle_profile_end_slot","cpp_symbol":"NativeOodleProfileEndSlot","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06fa3fb0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Optional profiling end qword, image/BSS default null; decoder calls with begin token on exit. Default authentication requires current null."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x07170880","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit older decoder end-profile consumer and imported zero qword, independently identified rather than delta derived. No old disk proof."}]}}},
+{"id":"native_oodle_stack_threshold","cpp_symbol":"NativeOodleStackThreshold","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06c91ca8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Writable signed i32 default 32768; null-scratch decoder uses stack only for requiredBytes<threshold, otherwise state allocator. Exact imported/disk value and consumer corroborated."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06e5eca8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Explicit old decoder threshold consumer and imported i32 0x8000. Require reviewed value; no old disk or execution proof."}]}}},
+{"id":"native_oodle_decompress","cpp_symbol":"NativeOodleDecompress","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_decoder.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x01cc0700","signature":{"bytes":"3e 40 55 53 56 57 41 54 41 55 41 56 41 57 48 81 ec f8 00 00 00 48 8d 6c 24 60","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioGameDecoder-20261017.json","detail":"Full decoder and ordinary engine wrapper match authenticated supported disk; fourteen-argument callback contract. No native invocation or playback qualification."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01c03a40","signature":{"bytes":"3e 40 55 53 56 57 41 54 41 55 41 56 41 57 48 81 ec f8 00 00 00 48 8d 6c 24 60","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Exact older imported static contract; no older disk equality or gameplay qualification."}]}}},
+{"id":"native_bootstrap_io_pool","cpp_symbol":"NativeBootstrapIoPool","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09104da0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Exact older imported static contract; no older disk equality or gameplay qualification."}]}}},
+{"id":"native_bootstrap_srw_header","cpp_symbol":"NativeBootstrapSrwHeader","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216b4d8","signature":{"bytes":"40 53 48 83 ec 20 48 8b d9 48 8d 0d 50 6b e7 04 ff 15 6a d3 3f 03","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020ae888","signature":{"bytes":"40 53 48 83 ec 20 48 8b d9 48 8d 0d 70 00 10 05 ff 15 c2 4f 66 03","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_guard_call","cpp_symbol":"NativeBootstrapSrwGuardCall","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x019daa59","signature":{"bytes":"48 8d 0d 34 57 7b 07 e8 73 0a 79 00","mask":"xxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01921e7d","signature":{"bytes":"48 8d 0d 30 1f a3 07 e8 ff c9 78 00 83 3d 24 1f a3 07 ff 75 11 e8 d5 6e b1 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_malloc_secondary","cpp_symbol":"NativeBootstrapSrwMallocSecondary","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x024bb500","signature":{"bytes":"e8 2b f5 51 ff 48 8b 0d d4 50 a8 06","mask":"xxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x028987ca","signature":{"bytes":"e8 85 96 08 ff 48 8b 0d 4a 46 87 06 44 8b c6 48 8b d3 48 8b 01 ff 50 10 90 e9 ad 6d fa fd","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_pool_secondary","cpp_symbol":"NativeBootstrapSrwPoolSecondary","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x024d20b0","signature":{"bytes":"48 8d 0d 49 1b c0 06 e8 0c 0e d5 ff c6 05 35 e9 a5 06 01 e9 a1 99 6a fe","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0289a72a","signature":{"bytes":"48 8d 0d 4f 00 a0 06 e8 ae a1 bb ff c6 05 ab 2b 86 06 01 e9 03 0d 02 fe","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_pool_call","cpp_symbol":"NativeBootstrapSrwPoolCall","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x02222f05","signature":{"bytes":"e8 72 ac f4 ff 8d 56 04 b9 00 00 04 00 e8 59 95 4c ff","mask":"xxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x02454921","signature":{"bytes":"e8 06 c6 c5 ff 8d 56 04 b9 00 00 04 00 e8 a1 7e 23 ff","mask":"xxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_block_call","cpp_symbol":"NativeBootstrapSrwBlockCall","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x00b523b3","signature":{"bytes":"48 8b f1 0f 83 90 02 00 00 e8 87 96 02 00 4c 8b f0","mask":"xxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x00882870","signature":{"bytes":"e8 af 8b 03 00 4c 8b f8 83 fb 01 0f 85 31 01 00 00","mask":"xxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_name_call","cpp_symbol":"NativeBootstrapSrwNameCall","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x00b51900","signature":{"bytes":"48 8b cb c5 f9 7f 44 24 20 e8 52 0a 00 00","mask":"xxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x008823c8","signature":{"bytes":"c5 f8 10 44 24 20 45 8b ca 44 8b c5 48 8b cb c5 f9 7f 44 24 20 e8 2e 04 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_first_name","cpp_symbol":"NativeBootstrapSrwFirstName","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x00352bb0","signature":{"bytes":"41 b8 01 00 00 00 48 8d 15 cb 02 7c 05 48 8d 0d 3c f7 bf 06 e9 fb eb 7f 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x00352bb0","signature":{"bytes":"41 b8 01 00 00 00 48 8d 15 f3 5a 95 05 48 8d 0d bc c1 dc 06 e9 cf f6 52 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_initterm_call","cpp_symbol":"NativeBootstrapSrwInittermCall","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216bf99","signature":{"bytes":"48 8d 15 88 8a 47 03 48 8d 0d b1 e0 3f 03 e8 ea 1c 00 00","mask":"xxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af349","signature":{"bytes":"48 8d 15 58 01 6e 03 48 8d 0d e9 5c 66 03 e8 ea 1c 00 00","mask":"xxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_reserve_code","cpp_symbol":"NativeBootstrapSrwReserveCode","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x016ec470","signature":{"bytes":"b8 28 00 00 00 e8 06 f7 a7 00 48 2b e0 45 33 db 4c 8b d1 4c 39 1d 1e 87 b8 07 0f 85 5c bd 02 01 49 8b ca 48 83 c4 28 e9 c8 35 0b ff","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0168c7d4","signature":{"bytes":"b8 28 00 00 00 e8 52 27 a2 00 48 2b e0 45 33 db 4c 8b d1 4c 39 1d 02 c1 da 07 0f 85 70 3b 41 01 49 8b ca 48 83 c4 28 e9 bc 2c 1b ff","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_malloc_code","cpp_symbol":"NativeBootstrapSrwMallocCode","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0079fa7c","signature":{"bytes":"48 8b 3d 5d 0b 7a 08 8b f2 48 8b d9 48 85 ff 0f 84 6f ba d1 01","mask":"xxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0083f4d4","signature":{"bytes":"48 8b 3d 45 d9 8c 08 8b f2 48 8b d9 48 85 ff 0f 84 e1 92 05 02","mask":"xxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_name_destination","cpp_symbol":"NativeBootstrapSrwNameDestination","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x00b517f9","signature":{"bytes":"41 8b e8 48 8b d9 45 8b d6","mask":"xxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x008822cd","signature":{"bytes":"41 8b e8 48 8b d9 45 8b d6","mask":"xxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_initterm_thunk","cpp_symbol":"NativeBootstrapSrwInittermThunk","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216dc96","signature":{"bytes":"ff 25 24 bf 3f 03","mask":"xxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020b1046","signature":{"bytes":"ff 25 5c 3b 66 03","mask":"xxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_guard","cpp_symbol":"NativeBootstrapSrwGuard","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x09190194","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09353db4","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_gmalloc","cpp_symbol":"NativeBootstrapSrwGmalloc","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f405e0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0910ce20","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_pool_complete","cpp_symbol":"NativeBootstrapSrwPoolComplete","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f309f8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x090fd2e8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_reserve","cpp_symbol":"NativeBootstrapSrwReserve","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x09274ba8","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x094388f0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_lock","cpp_symbol":"NativeBootstrapSrwLock","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06fe2038","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x071ae908","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_output","cpp_symbol":"NativeBootstrapSrwOutput","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06f52300","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0711ed80","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_pool","cpp_symbol":"NativeBootstrapSrwPool","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x090d3c00","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0929a780","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_init_begin","cpp_symbol":"NativeBootstrapSrwInitBegin","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0556a058","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05715040","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_init_end","cpp_symbol":"NativeBootstrapSrwInitEnd","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x055e4a28","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0578f4a8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_init_iat","cpp_symbol":"NativeBootstrapSrwInitIat","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x05569bc0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05714ba8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_init_name","cpp_symbol":"NativeBootstrapSrwInitName","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06c904ac","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Exact first FName allocator SRW source only; no callable or hook authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06e5ce26","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_crt_setup","cpp_symbol":"NativeBootstrapSrwCrtSetup","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216bf14","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Authenticated initializer-table target only; never called."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af2c4","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+{"id":"native_bootstrap_srw_atexit","cpp_symbol":"NativeBootstrapSrwAtexit","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x00363d3c","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioFirstSrwTrigger-20261017.json","detail":"Authenticated initializer-table target only; never called."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0036372c","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_cookie","cpp_symbol":"NativeBootstrapCookie","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216c76c","signature":{"bytes":"48 89 5c 24 18 55 48 8b ec 48 83 ec 30 48 8b 05 80 00 c7 04 48 bb 32 a2 df 2d 99 2b 00 00 48 3b c3 75 77","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Exact cookie entry and skip window; current time-API frame plus AEP parent required, never callable bootstrap authority."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020afb1c","signature":{"bytes":"48 89 5c 24 18 55 48 8b ec 48 83 ec 30 48 8b 05 d0 9c ef 04 48 bb 32 a2 df 2d 99 2b 00 00 48 3b c3 75 77","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crt","cpp_symbol":"NativeBootstrapCrt","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216bf30","signature":{"bytes":"48 89 5c 24 08 57 48 83 ec 30 b9 01 00 00 00 e8 4c f6 ff ff 84 c0 0f 84 30 01 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Exact CRT startup entry; state 1 is never accepted."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af2e0","signature":{"bytes":"48 89 5c 24 08 57 48 83 ec 30 b9 01 00 00 00 e8 4c f6 ff ff 84 c0 0f 84 30 01 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crt_complete","cpp_symbol":"NativeBootstrapCrtComplete","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216bfac","signature":{"bytes":"c7 05 8a 60 e7 04 02 00 00 00 eb 08 40 b7 01 40 88 7c 24 20 8a cb e8 29 f7 ff ff","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"State 2 publication and startup-lock release; paired with exact show-window source."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af35c","signature":{"bytes":"c7 05 aa f5 0f 05 02 00 00 00 eb 08 40 b7 01 40 88 7c 24 20 8a cb e8 29 f7 ff ff","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_show","cpp_symbol":"NativeBootstrapShow","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216c660","signature":{"bytes":"48 81 ec 98 00 00 00 33 d2 48 8d 4c 24 20 44 8d 42 68 e8 05 15 00 00 48 8d 4c 24 20 ff 15 ee c0 3f 03 f6 44 24 5c 01 b8 0a 00 00 00 66 0f 45 44 24 60 48 81 c4 98 00 00 00 c3","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Complete GetStartupInfoW helper, exact imported call and current return required."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020afa10","signature":{"bytes":"48 81 ec 98 00 00 00 33 d2 48 8d 4c 24 20 44 8d 42 68 e8 05 15 00 00 48 8d 4c 24 20 ff 15 26 3d 66 03 f6 44 24 5c 01 b8 0a 00 00 00 66 0f 45 44 24 60 48 81 c4 98 00 00 00 c3","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_show_to_winmain","cpp_symbol":"NativeBootstrapShowToWinmain","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216c015","signature":{"bytes":"e8 46 06 00 00 0f b7 d8 e8 6e 1c 00 00 44 8b cb 4c 8b c0 33 d2 48 8d 0d cf 3f e9 fd e8 fa d4 67 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Exact CRT show-window and future WinMain direct call edges."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af3c5","signature":{"bytes":"e8 46 06 00 00 0f b7 d8 e8 6e 1c 00 00 44 8b cb 4c 8b c0 33 d2 48 8d 0d 1f 0c f5 fd e8 62 e7 aa 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_winmain","cpp_symbol":"NativeBootstrapWinmain","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x027e9530","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 70 10 48 89 78 18 4c 89 60 20 41 55 41 56 41 57 b8 30 00 00 00 e8 2d 26 98 ff 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Future WinMain entry corroboration, not a supported current source."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x02b5db48","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 70 10 48 89 78 18 4c 89 60 20 41 55 41 56 41 57 b8 30 00 00 00 e8 c5 13 55 ff 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_hinstance_store","cpp_symbol":"NativeBootstrapHinstanceStore","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x027e9556","signature":{"bytes":"48 8b d9 48 8d 0d 8c 94 ff ff ff 15 4a 06 d8 02 48 89 1d 73 f9 75 06","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"HINSTANCE publication before engine entry."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x02b5db6e","signature":{"bytes":"48 8b d9 48 8d 0d 58 93 ff ff ff 15 82 6f bb 02 48 89 1d 4b 7b 5b 06","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_cookie_time","cpp_symbol":"NativeBootstrapCookieTime","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216c79b","signature":{"bytes":"ff 15 a7 bd 3f 03","mask":"xxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"GetSystemTimeAsFileTime IAT call; supported matching UAL wrapper only."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020afb4b","signature":{"bytes":"ff 15 1f 3a 66 03 48 8b 45 10 48 89 45 f0 ff 15 89 3c 66 03 8b c0 48 31 45 f0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_task_publish","cpp_symbol":"NativeBootstrapTaskPublish","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x043d5918","signature":{"bytes":"8b 9e 5c 05 00 00 ff c3 48 89 35 29 28 b6 04 3b d8 0f 8d 57 01 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"TaskGraph singleton publication precedes worker creation."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x04663700","signature":{"bytes":"8b 9e 5c 05 00 00 ff c3 48 89 35 51 12 aa 04 3b d8 0f 8d 57 01 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_task_call","cpp_symbol":"NativeBootstrapTaskCall","kind":"call_site","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x027e7239","signature":{"bytes":"48 85 c0 74 08 48 8b c8 e8 5a e4 be 01","mask":"xxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Post-WinMain TaskGraph constructor call."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x02b5b79a","signature":{"bytes":"48 85 c0 74 08 48 8b c8 e8 e1 7c b0 01","mask":"xxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_entry","cpp_symbol":"NativeBootstrapCrashEntry","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x04487c1c","signature":{"bytes":"b8 28 00 00 00 e8 5a 3f ce fd 48 2b e0 48 83 c4 28 e9 a2 9a 34 fe","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Known constructor crash worker, not a selected-operation executor on its normal inactive path."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0470e638","signature":{"bytes":"b8 28 00 00 00 e8 ee 08 9a fd 48 2b e0 48 83 c4 28 e9 be a8 43 fe","mask":"xxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_cookie_value","cpp_symbol":"NativeBootstrapCookieValue","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06ddc800","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Entropy branch requires original cookie sentinel; no source when preseeded."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06fa9800","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_hinstance","cpp_symbol":"NativeBootstrapHinstance","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f48ee0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Must remain null before WinMain."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x091156d0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_task_graph","cpp_symbol":"NativeBootstrapTaskGraph","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f38150","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Must remain null; publication precedes TaskGraph workers."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09104960","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_pool","cpp_symbol":"NativeBootstrapPool","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f38598","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Ordinary thread pool must remain null."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09104da8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_background_pool","cpp_symbol":"NativeBootstrapBackgroundPool","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x08f38590","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Background thread pool must remain null."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09104d98","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_gu_serial","cpp_symbol":"NativeBootstrapGuSerial","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0871ec50","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"0 pre-CRT, 1000 after completed native empty-header constructor."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x088eb5d0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_stop","cpp_symbol":"NativeBootstrapCrashStop","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06eff320","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Crash-worker stop request must remain zero."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070cc0b0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_process","cpp_symbol":"NativeBootstrapCrashProcess","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06eff358","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"No active crash-report process."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070cc0e8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_result","cpp_symbol":"NativeBootstrapCrashResult","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x09274b78","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"No handled crash-report completion."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x094388d0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_complete","cpp_symbol":"NativeBootstrapCrashComplete","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06f12858","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"0 pre-CRT, exactly 1 on completed normal crash-worker constructor path."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070df5e8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_worker","cpp_symbol":"NativeBootstrapCrashWorker","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06eff318","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Opaque worker handle, zero pre-CRT or nonzero/not-minus-one post-CRT; never dereferenced."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070cc0a8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_request","cpp_symbol":"NativeBootstrapCrashRequest","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06eff328","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Opaque request event, source-specific shape only; never queried or waited."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070cc0b8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_bootstrap_crash_event","cpp_symbol":"NativeBootstrapCrashEvent","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06eff330","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/NativeAudioBootstrapProfile-20261016.json","detail":"Opaque completion event, source-specific shape only; never queried or waited."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x070cc0c0","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_audio_exe_entry","cpp_symbol":"NativeAudioExeEntry","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"optional_hook","status":"research","hook_owner":"native_audio_runtime","hook_spec":{"name":"native_audio_exe_entry","order":41,"required_for_release_startup":false},"consumers":["src/game/native_audio_runtime.cpp","src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0216c0a4","signature":{"bytes":"48 83 ec 28 e8 bf 06 00 00 48 83 c4 28 e9 7a fe ff ff","mask":"xxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_exact_build_contract","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Canonical external registry_startup_layout.json ordinary_exe_entry: actual PE AEP reaches CRT startup, int(void) original body forwarded once. Entry event must follow all native backend protective hooks; never retain callback drain accounting across the long-lived original. Other builds have no qualified cold-origin contract."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x020af454","signature":{"bytes":"48 83 ec 28 e8 bf 06 00 00 48 83 c4 28 e9 7a fe ff ff","mask":"xxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_audio_crt_state","cpp_symbol":"NativeAudioCrtState","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_runtime.cpp","src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06fe2040","signature":null,"evidence":[{"type":"retained_exact_build_contract","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Canonical external registry_startup_layout.json: four-byte CRT state must remain zero before install, after protective hooks and at actual AEP observation. Nonzero is missed startup, never late admission."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x071ae910","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {"id":"native_audio_initial_gu_header","cpp_symbol":"NativeAudioInitialGuHeader","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"hook_spec":null,"consumers":["src/game/native_audio_runtime.cpp","src/game/native_audio_bootstrap.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0871eb28","signature":null,"evidence":[{"type":"retained_exact_build_contract","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Canonical external registry_startup_layout.json: qualified 48-byte pre-CRT GU header must be zero, together with all three 48-byte manager headers and null shared name map. This is startup evidence, not a separate serial counter or post-initialization locator."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x088eb4a8","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json","detail":"Explicit older Ghidra imported bytes/PE/pdata and calls; older disk equality not claimed. Runtime must authenticate canonical executable file identity."}]}}},
+    {
+      "id": "native_audio_updater_return", "cpp_symbol": "NativeAudioUpdaterReturn", "kind": "call_site", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "call_site"}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {"rva":"0x010a5fc6","signature":{"bytes":"c5 f8 28 74 24 20 48 83 c4 30 5b e9 02 00 00 00","mask":"xxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004 at 0x140000000; imported PE timestamp/image/checksum match canonical 68fd6fde. Caller1410a5fc1 targets1410a6020. Imported bytes only; no older disk SHA/runtime validation or backend authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x0136fbda", "signature": {"bytes": "c5 f8 28 74 24 20 48 83 c4 30 5b e9 02 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Qualified updater caller return after ordinary updater call; exact disk bytes independently rechecked. Only compare active hook return address, never invoke this call site."}]}}
+    },
+    {
+      "id": "package_store_owner_global", "cpp_symbol": "PackageStoreOwnerGlobal", "kind": "global", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp", "src/game/native_audio_runtime.cpp", "src/game/native_audio_bootstrap.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09243b30","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Factory1447595ac publishes L+8; shutdown1447b0e20 clears. No older disk SHA/runtime validation or ownership lease."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x0907beb0", "signature": null, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Factory publishes owner+8. Persistent current pointer, not a lease. BSS slot, independently correlated factory/shutdown references."}]}}
+    },
+    {
+      "id": "package_store_generation", "cpp_symbol": "PackageStoreGeneration", "kind": "global", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp", "src/game/native_audio_bootstrap.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09187048","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Factory1447595ac atomically increments DWORD after replacement. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x091d9170", "signature": null, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Factory atomically increments DWORD after replacing global owner; never refresh a captured native generation."}]}}
+    },
+    {
+      "id": "package_store_owner_vtable", "cpp_symbol": "PackageStoreOwnerVtable", "kind": "global", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05ec3468","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Constructor144753ff8/destructor1447556f8 install primary table. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x05d232e0", "signature": null, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Owner primary vtable, installed by constructor/destructor. First entries disk-correlated; not construction authority."}]}}
+    },
+    {
+      "id": "package_store_owner_interface_vtable", "cpp_symbol": "PackageStoreOwnerInterfaceVtable", "kind": "global", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05ec3498","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Owner+8 secondary table; slot20 points1409af2b8. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x05d23310", "signature": null, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Secondary vtable at owner+8, the actual global published interface."}]}}
+    },
+    {
+      "id": "package_store_subscription_vtable", "cpp_symbol": "PackageStoreSubscriptionVtable", "kind": "global", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05794ff8","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Binder144753a68 installs closure: id10/receiver18/callback20, event impl598. No older disk SHA/runtime validation or lease."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x057a17b0", "signature": null, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Persistent closure installed by binder: subscription id+16, receiver+24, callback+32. Event list lives at dispatcher.impl+1432. RSP+8 was only subscription-output storage."}]}}
+    },
+    {
+      "id": "package_store_mount_callback", "cpp_symbol": "PackageStoreMountCallback", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "signature_only", "status": "research", "hook_owner": null, "hook_spec": null, "consumers": ["src/game/native_audio_mount.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0475b514","signature":{"bytes":"b8 38 00 00 00 e8 12 3a 95 fd 48 2b e0 48 89 54 24 20 48 8d 54 24 20","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Binder144753a68 stores callback to14475a3c0; exact unique complete instruction window. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x044d5dcc", "signature": {"bytes": "b8 38 00 00 00 e8 aa 5d c9 fd 48 2b e0 48 89 54", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Exact persistent PackageStore closure callback; compare only, never invoke directly. Binder places this address at closure+32."}]}}
+    },
+    {
+      "id": "package_store_factory", "cpp_symbol": "PackageStoreFactory", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "package_store_factory", "order": 30, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x047595ac","signature":{"bytes":"40 53 b8 20 00 00 00 e8 78 59 95 fd 48 2b e0","mask":"xxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Publishes interface L+8/destroys replaced owner/increments generation. No older disk SHA/runtime validation or replay authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x044d3d4c", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 28 7e c9 fd 48 2b e0", "mask": "xxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(void) factory. Entry invalidates captured owner before any replacement/destruction; serialized against native mount work. Original performs real initialization, never replay."}]}}
+    },
+    {
+      "id": "package_store_shutdown", "cpp_symbol": "PackageStoreShutdown", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "package_store_shutdown", "order": 31, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x047b0e20","signature":{"bytes":"b8 28 00 00 00 e8 06 e1 8f fd 48 2b e0 48 8b 0d fc 2c a9 04","mask":"xxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Interface virtual10, clear global, destructor flag1; invalidate at entry. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x04539fdc", "signature": {"bytes": "b8 28 00 00 00 e8 9a 1b c3 fd 48 2b e0 48 8b 0d c0 1e b4 04 48 85 c9 74 27", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(void) shutdown clears and destroys published owner. Invalidate on entry, before the original."}]}}
+    },
+    {
+      "id": "package_store_destructor", "cpp_symbol": "PackageStoreDestructor", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "package_store_destructor", "order": 32, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x047556f8","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 23 98 95 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Concrete owner destructor destroys PackageStore L+2a8 via144755a78. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x044cfc98", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 d3 be c9 fd", "mask": "xxxxxxxxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(owner pointer) concrete destructor, not scalar deleting thunk. Entry invalidates captured owner before teardown; nested under factory/shutdown must bypass recursive lifetime fence."}]}}
+    },
+    {
+      "id": "native_audio_updater", "cpp_symbol": "NativeAudioUpdater", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "native_audio_updater", "order": 40, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x010a6020","signature":{"bytes":"48 89 5c 24 20 55 56 57 41 54 41 55 41 56 41 57 48 8b ec b8 40 00 00 00 e8 f3 8e 00 01 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Receiver+8 critical section released before normal return to010a5fc6. No older disk SHA/runtime validation or thread authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x0136fc34", "signature": {"bytes": "48 89 5c 24 20 55 56 57 41 54 41 55 41 56 41 57 48 8b ec b8 40 00 00 00 e8 2f bf df 00 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}, "evidence": [{"type": "static_disk_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(receiver pointer). Invoke queued work only after original normal return, known receiver+8 critical section released. Caller return 0x0136fbda. No parent-return dispatch or borrowed receiver retention."}]}}
+    },
+    {
+      "id": "dataobject_manager_lookup", "cpp_symbol": "DataObjectManagerLookup", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_manager_lookup", "order": 34, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x008bd0c0","signature":{"bytes":"48 89 5c 24 10 4c 89 4c 24 20 4c 89 44 24 18 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 40 00 00 00 e8 47 1e 7f 01 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Actual older mode0/1 virtual slots2b0/2b8 differ from1.005. No older disk SHA/runtime validation or profile portability."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x0076a330", "signature": {"bytes": "48 89 5c 24 08 4c 89 4c 24 20 4c 89 44 24 18 55", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Borrowed row(manager,uint64 packed key,association output,backing byte output). Shared C++ foreign-entry barrier; nested native calls inherit admission."}]}}
+    },
+    {
+      "id": "dataobject_manager_append", "cpp_symbol": "DataObjectManagerAppend", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_manager_append", "order": 35, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01705fa0","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 7b 8f 9a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Weak construction1419058b4; count published before growth1407e2988 and16-byte entry. No older disk SHA/runtime validation or mutation authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x01748fb8", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(manager,uint8 group,uint64 association,object). Shared C++ foreign-entry barrier only; backend invokes class-specific bridges instead."}]}}
+    },
+    {
+      "id": "dataobject_manager_remove", "cpp_symbol": "DataObjectManagerRemove", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_manager_remove", "order": 36, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0170628c","signature":{"bytes":"48 89 5c 24 08 48 89 6c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 8a 8c 9a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Group2 selective weak removal; other groups clear14168c290. No older disk SHA/runtime validation or removal authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x01748d70", "signature": {"bytes": "48 89 5c 24 08 48 89 6c 24 10 48 89 74 24 18 57", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(manager,uint8 group,opaque third integer/pointer register,object). Third argument is passed through, never interpreted. No backend removal authority."}]}}
+    },
+    {
+      "id": "dataobject_manager_reset", "cpp_symbol": "DataObjectManagerReset", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_manager_reset", "order": 37, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x01706d28","signature":{"bytes":"48 89 5c 24 08 57 b8 20 00 00 00 e8 f8 81 9a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Loops three manager headers through manager+30 via14168c290. No reset authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x01749ba8", "signature": {"bytes": "48 89 5c 24 08 57 b8 20 00 00 00 e8 c8 1f a2 00", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "void(manager). Foreign reset invalidates native bindings before original clears groups. Never an owned backend operation."}]}}
+    },
+    {
+      "id": "dataobject_name_helper", "cpp_symbol": "DataObjectNameHelper", "kind": "function", "subsystem": "native_cached_resource", "requirement": "research", "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research", "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_name_helper", "order": 38, "required_for_release_startup": false}, "consumers": ["src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0170602c","signature":{"bytes":"48 89 54 24 10 53 b8 30 00 00 00 e8 f4 8e 9a 00 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Full packed-name match returns AL0 without checking value; miss mutates through14176beac. Not a read-only query."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x01749044", "signature": {"bytes": "48 89 54 24 10 53 b8 30 00 00 00 e8 2c 2b a2 00", "mask": "xxxxxxxxxxxxxxxx"}, "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "uint64(map,uint64 name,manager), only AL semantic. Shared barrier includes unknown supplied manager. Never invoke as query or permit owned insertion."}]}}
+    },
+    {"id":"streamable_manager_vtable","cpp_symbol":"StreamableManagerVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp","src/game/native_audio_runtime.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x06bfa8e8","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.145193f90 installs table;142dcf77c embeds manager58. No older disk SHA/runtime or full handle-profile validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06a60a00","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Parent music_load_layout.json: expected service+88 embedded streamable manager vtable. Handle+152 must name this same embedded manager; observation is not ownership."}]}}},
+    {"id":"dataobject_name_map","cpp_symbol":"DataObjectNameMap","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp","src/game/native_audio_runtime.cpp","src/game/native_audio_bootstrap.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0939bd78","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Three class bridges reference shared map;14170602c full-name matching. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x091d85a0","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Shared full packed-FName to direct manager map pointer global; parent scoreinfo_binding_layout.json and pianoscore_binding_layout.json. Header80, key/value/next entry stride24; not a native invocation API."}]}}},
+    {"id":"bgmlist_object_vtable","cpp_symbol":"BgmListObjectVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp","src/game/native_audio_runtime.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x068afce0","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.14415450c installs table; append/remove slots280/288, NOT newer288/290. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0673b9f8","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"BGMList instance vtable from parent bgm_registration_layout.json; exact 1.005 only."}]}}},
+    {"id":"scoreinfo_object_vtable","cpp_symbol":"ScoreInfoObjectVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp","src/game/native_audio_runtime.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0691c2a0","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.1444ad0f8 installs table; older slots280/288/2b0/2b8. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x067a4eb8","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"PianoScoreInfo instance vtable from parent scoreinfo_binding_layout.json."}]}}},
+    {"id":"pianoscore_object_vtable","cpp_symbol":"PianoScoreObjectVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp","src/game/native_audio_runtime.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0690f808","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.14445bfbc installs table; older slots280/288/2b0/2b8. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x067973a8","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"PianoScore instance vtable from parent pianoscore_binding_layout.json."}]}}},
+    {"id":"scoreinfo_backing_vtable","cpp_symbol":"ScoreInfoBackingVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0691bf30","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.1444ad0f8 constructs backing at instance58/control60. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x067a47f0","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 backing vtable from parent scoreinfo_binding_layout.json."}]}}},
+    {"id":"scoreinfo_interface_vtable","cpp_symbol":"ScoreInfoInterfaceVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x068fbdf0","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Backing+58 interface, slot28 targets1443b6bb0. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x067845e0","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 interface vtable, backing+88 lookup slot40; parent scoreinfo_binding_layout.json."}]}}},
+    {"id":"pianoscore_backing_vtable","cpp_symbol":"PianoScoreBackingVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0690d718","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.14445bfbc constructs backing at instance58/control60. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x06795ea0","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 backing vtable from parent pianoscore_binding_layout.json."}]}}},
+    {"id":"pianoscore_interface_vtable","cpp_symbol":"PianoScoreInterfaceVtable","kind":"global","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x068b8538","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. Backing+58 interface, slot28 targets1441a06f8. No older disk SHA/runtime validation."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x067448a0","signature":null,"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 interface vtable, backing+88 lookup slot40; parent pianoscore_binding_layout.json."}]}}},
+    {"id":"scoreinfo_typed_lookup","cpp_symbol":"ScoreInfoTypedLookup","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x043b6bb0","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 55 41 56 41 57 b8 20 00 00 00 e8 5d 83 cf fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. RCX interface/RDX packed name/RAX borrowed row; stride78. No older disk SHA/runtime validation or direct invocation authority."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0412670c","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 55 41 56 41 57 b8 20 00 00 00 e8 51 54 04 fe 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 interface slot40 identity only; exact entry bytes from parent scoreinfo_binding_layout.json. No direct invocation authority."}]}}},
+    {"id":"pianoscore_typed_lookup","cpp_symbol":"PianoScoreTypedLookup","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"signature_only","status":"research","hook_owner":null,"consumers":["src/game/native_audio_bindings.cpp"],"hook_spec":null,"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x041a06f8","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 55 41 56 41 57 b8 20 00 00 00 e8 15 e8 f0 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only. RCX interface/RDX packed name/RAX borrowed row; strideb0. No older disk SHA/runtime validation or direct invocation authority."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x03f0deac","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 68 10 48 89 70 18 48 89 78 20 41 55 41 56 41 57 b8 20 00 00 00 e8 b1 dc 25 fe 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_binding_layout","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"Mode1 interface slot40 identity only; exact entry bytes from parent pianoscore_binding_layout.json. No direct invocation authority."}]}}},
+    {
+      "id": "io_dispatcher_mount", "cpp_symbol": "IoDispatcherMount",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "callable", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x046c70b8","signature":{"bytes":"40 53 b8 30 00 00 00 e8 6c 7e 9e fd 48 2b e0 48 8b 44 24 60 48 8b da","mask":"xxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Ordinary144db8004 uses dispatcher14923a150; thin wrapper forwards dispatcher+8. No backend enablement."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x04440120",
+        "signature": {"bytes": "40 53 b8 30 00 00 00 e8 54 ba d2 fd 48 2b e0 48 8b 44 24 60 48 8b da 48 8b 49 08 48 89 44 24 20 e8 0b 00 00 00 48 8b c3 48 83 c4 30 5b c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "RCX dispatcher; RDX caller-owned status; R8 environment; R9 encryption ID; stack argument encryption key. RAX equals status output, not success; status u32+0 is result."}]
+      }}
+    },
+    {
+      "id": "package_store_full_initialize", "cpp_symbol": "PackageStoreFullInitialize",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research",
+      "hook_owner": "native_audio_runtime", "hook_spec": {"name": "package_store_full_initialize", "order": 33, "required_for_release_startup": false}, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0475a300","signature":{"bytes":"48 89 5c 24 10 57 b8 40 00 00 00 e8 20 4c 95 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Owner288/PackageStore2a8; enumerate1446c4538, Header14475a3c0, binder144753a68. Borrowed stack output is not persistent ownership."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x044d4d90", "signature": {"bytes": "48 89 5c 24 10 57 b8 40 00 00 00 e8 e0 6d c9 fd 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Historical cold-probe boundary; owner+648 dispatcher and owner+680 embedded PackageStore. Cold mount occurs at original full initializer return, caller return RVA 0x01996142. Nonzero subscription is copied from borrowed entry RSP+8 on that return, NOT a persistent owner field or lease. That probe alone did not qualify retained subscription/owner lifetime or later updater mounting. Never retain that stack address, replay initialization or infer late-mount authority from equal dispatcher pointers."}, {"type": "static_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Later static factory/binder/event research identifies the persistent current owner, generation and exact live notification closure. native_audio_runtime captures only after this original initializer returns normally, then requires the current lifetime fence, unchanged generation and subscription plus qualified updater normal-return/manager exclusion before one mount. No initializer replay, refresh after invalidation or general engine lifetime guarantee."}]
+      }}
+    },
+    {
+      "id": "package_store_enclosing_request", "cpp_symbol": "PackageStoreEnclosingRequest",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x009af2b8","signature":{"bytes":"48 89 5c 24 18 55 56 57 41 54 41 55 41 56 41 57 48 8d 6c 24 f9 b8 00 01 00 00 e8 59 fc 6f 01 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Receiver L+8/latch2e; CALL14475a300 at1409af316, return009af31b. No direct invocation authority."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x019960f8", "signature": {"bytes": "48 8b c4 48 89 58 18 48 89 50 10 48 89 48 08 55 56 57 41 54 41 55 41 56 41 57 48 8d 68 c1 b8 d0 00 00 00 e8 60 5a 7d 00 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Enclosing request return boundary only; initializer owner+8 is request receiver. Preserve original output and result; no guessed direct invocation."}]
+      }}
+    },
+    {
+      "id": "single_soft_path_request", "cpp_symbol": "SingleSoftPathRequest",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "callable", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x009b1740","signature":{"bytes":"48 8b c4 48 89 58 08 48 89 70 10 48 89 78 18 55 41 56 41 57 48 8d 68 c1 b8 90 00 00 00 e8 ce d7 6f 01 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Eight positions; consumed debug/delegate, copied24-byte path, manage-active/start-stalled0, RAX output pointer. Full older handle/completion profile remains unavailable."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x011f2484", "signature": {"bytes": "48 8b c4 48 89 58 08 48 89 70 10 48 89 78 18 55 41 56 41 57 48 8d 68 c1 b8 90 00 00 00 e8 da 96 f7 00 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Eight arguments: manager, independent output pair, 24-byte soft path, delegate, int priority, zero, zero, debug string. Order follows music_load_probe.js acquire call, not the layout's stale unused_zero_arguments annotation. RAX equals output pair, not handle. Pair is handle/control; retain independent owning reference through process exit. Completion may be pending and alone is not acceptance."}]
+      }}
+    },
+    {"id":"bgmlist_append_bridge","cpp_symbol":"BgmListAppendBridge","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["tools/test_native_cached_resource_catalog.py","src/game/native_audio_runtime.cpp","src/game/native_audio_bindings.cpp"],"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0415bf0c","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 0f 30 f5 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Older instance slot280, manager149226cc0; first-name reset hazard persists. No newer slot/profile reuse or mutation authority."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x03ec9454","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 17 27 2a fe 48 2b e0 48 8b f9 49 8b d8 48 8b 0d 27 f1 30 05 40 8a f2","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_exact_build_contract","path":"tools/test_native_cached_resource_catalog.py","detail":"Three arguments: authenticated class object, uint8 group, uint64 packed association. Additive group 2 only after capacity reservation and exclusive admission; native result is not a success contract."}]}}},
+    {"id":"scoreinfo_append_bridge","cpp_symbol":"ScoreInfoAppendBridge","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["tools/test_native_cached_resource_catalog.py","src/game/native_audio_runtime.cpp","src/game/native_audio_bindings.cpp"],"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x044b74d0","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 4b 7a bf fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Older instance slot280, manager14922b450; distinct class bridge, first-name reset hazard. No backend enablement."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x04227c64","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 07 3f f4 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_exact_build_contract","path":"tools/test_native_cached_resource_catalog.py","detail":"Three arguments: authenticated PianoScoreInfo object, uint8 group, uint64 packed association. Class-specific additive group 2 only; not interchangeable with BGMList or PianoScore bridge. No success return contract."}]}}},
+    {"id":"pianoscore_append_bridge","cpp_symbol":"PianoScoreAppendBridge","kind":"function","subsystem":"native_cached_resource","requirement":"research","validation":{"policy":"signature"},"install_policy":"callable","status":"research","hook_owner":null,"hook_spec":null,"consumers":["tools/test_native_cached_resource_catalog.py","src/game/native_audio_runtime.cpp","src/game/native_audio_bindings.cpp"],"builds":{"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x044ab5b8","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 63 39 c0 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Older instance slot280, manager14922b400; distinct class bridge, first-name reset hazard. No backend enablement."}]},"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x0421bc98","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 30 00 00 00 e8 d3 fe f4 fd 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"retained_exact_build_contract","path":"tools/test_native_cached_resource_catalog.py","detail":"Three arguments: authenticated PianoScore object, uint8 group, uint64 packed association. Class-specific additive group 2 only; not interchangeable with other bridges. No success return contract."}]}}},
+    {
+      "id": "dataobject_group_reserve", "cpp_symbol": "DataObjectGroupReserve",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "optional_hook", "status": "research",
+      "hook_owner": "native_audio_runtime", "hook_spec": {"name": "dataobject_group_reserve", "order": 39, "required_for_release_startup": false}, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x007e2988","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 93 c5 8c 01 48 2b e0","mask":"xxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. Preserves count; publishes capacity before14083be10 reallocate, pointer unchecked. No recoverable failure or reserve authority."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x007b3514", "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 57 86 9b 01 48 2b e0 48 63 79 08 8d 50 e4", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "One argument: exact group array header. Verify unchanged count and spare capacity before append; no success return contract. Native OOM is not recoverable or rollback-safe."}]
+      }}
+    },
+    {
+      "id": "bgmlist_accessor", "cpp_symbol": "BgmListAccessor",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "callable", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0134904c","signature":{"bytes":"40 53 b8 20 00 00 00 e8 d8 5e d6 00 48 2b e0 33 c0","mask":"xxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. RCX out32/RDX packed name/RAX out; forwarder141349088 to manager149226cc0. Older BGM resource consumer reads row50, not newer60; profile remains unavailable."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00c92750", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 24 94 4d 01 48 2b e0 33 c0 48 8b d9 48 89 41 08 88 41 18 48 89 44 24 30 48 89 41 10 48 8d 05 2d a6 97 04 48 89 01 e8 09 00 00 00 48 8b c3 48 83 c4 20 5b c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Exactly two semantic arguments: RCX writable zeroed 32-byte accessor, RDX uint64 packed FName by value. RAX equals output including miss; row+8, association+16, opaque backing byte+24; require nonnull row. Borrowed facts do not retain provider."}]
+      }}
+    },
+    {
+      "id": "pianoscore_accessor", "cpp_symbol": "PianoScoreAccessor",
+      "kind": "function", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "signature"}, "install_policy": "callable", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x03c30524","signature":{"bytes":"40 53 b8 20 00 00 00 e8 00 ea 47 fe 48 2b e0 33 c0","mask":"xxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation, not disk SHA/runtime proof. RCX out32/RDX packed name/RAX out; forwarder14445de9c to manager14922b400; row8/association10/opaque byte18. Borrowed result, no row ownership."}]},"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x039863d8", "signature": {"bytes": "40 53 b8 20 00 00 00 e8 9c 57 7e fe 48 2b e0 33 c0 48 8b d9 48 89 41 08 88 41 18 48 89 44 24 30 48 89 41 10 48 8d 05 ed a3 ca 02 48 89 01 e8 75 81 84 00 48 8b c3 48 83 c4 20 5b c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Exactly two semantic arguments: RCX writable zeroed 32-byte accessor, RDX uint64 packed FName by value. RAX equals output including miss; no semantic R8/R9 inputs. Require nonnull row; no PianoScore row-field reads qualified. Forwarder is not this ABI."}]
+      }}
+    },
+    {
+      "id": "io_dispatcher_global", "cpp_symbol": "IoDispatcherGlobal",
+      "kind": "global", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_mount.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0923a150","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.144db8004 loads dispatcher pointer, implementation+8. No older disk SHA/runtime validation or lease."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x090724d0", "signature": null,
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Dispatcher pointer global; implementation at dispatcher+8; observation is not a lease."}]}}
+    },
+    {
+      "id": "streamable_service_global", "cpp_symbol": "StreamableServiceGlobal",
+      "kind": "global", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_bindings.cpp", "src/game/native_audio_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x090fd850","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.141212f40 dereferences service pointer then adds58 for request1409b1740. No older disk SHA/runtime validation or lifetime guarantee."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x08f30f60", "signature": null,
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Service pointer global; embedded streamable manager+88, expected vtable RVA 0x06a60a00; validate service lifetime before use."}]}}
+    },
+    {
+      "id": "bgmlist_registry", "cpp_symbol": "BgmListRegistry",
+      "kind": "global", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_bindings.cpp", "src/game/native_audio_runtime.cpp", "src/game/native_audio_bootstrap.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x09226cc0","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.14415bf0c/141349088 use direct BGM manager, three16-byte headers. No older disk SHA/runtime validation or mutation authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x0905ee90", "signature": null,
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Direct BGMList registry manager, not a pointer global; three 16-byte group headers."}]}}
+    },
+    {
+      "id": "scoreinfo_registry", "cpp_symbol": "ScoreInfoRegistry",
+      "kind": "global", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_bindings.cpp", "src/game/native_audio_runtime.cpp", "src/game/native_audio_bootstrap.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0922b450","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.1444b74d0/1444aef68 use direct ScoreInfo manager. No older disk SHA/runtime validation or mutation authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x090635d0", "signature": null,
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Direct PianoScoreInfo registry manager; not interchangeable with PianoScore manager."}]}}
+    },
+    {
+      "id": "pianoscore_registry", "cpp_symbol": "PianoScoreRegistry",
+      "kind": "global", "subsystem": "native_cached_resource", "requirement": "research",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only", "status": "research",
+      "hook_owner": null, "hook_spec": null, "consumers": ["tools/test_native_cached_resource_catalog.py", "src/game/native_audio_bindings.cpp", "src/game/native_audio_runtime.cpp", "src/game/native_audio_bootstrap.cpp"],
+      "builds": {"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x0922b400","signature":null,"evidence":[{"type":"static_import_correlated","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"Explicit ff7rebirth_.exe-1.004; canonical 68fd6fde imported PE correlation only.1444ab5b8/14445de9c use direct PianoScore manager. No older disk SHA/runtime validation or mutation authority."}]},"ff7rebirth-steam-win64-6a16ced2": {"rva": "0x09063580", "signature": null,
+        "evidence": [{"type": "retained_exact_build_contract", "path": "tools/test_native_cached_resource_catalog.py", "detail": "Direct PianoScore registry manager; group membership is not provider retention or exclusive mutation authority."}]}}
+    },
     {
       "id": "piano_chord_callback", "cpp_symbol": "PianoChordCallback",
       "kind": "function", "subsystem": "chord_voicing", "requirement": "optional",
       "validation": {"policy": "signature"}, "install_policy": "optional_hook",
       "status": "production", "hook_owner": "chord_voicing",
       "consumers": ["src/game/chord_voicing.cpp"],
-      "hook_spec": {"name": "piano_chord_callback", "order": 39, "required_for_release_startup": false},
+      "hook_spec": {"name": "piano_chord_callback", "order": 27, "required_for_release_startup": false},
       "builds": {"ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x039b263c",
         "signature": {"bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 48 8b ec b8 80 00 00 00 e8 22 95 7b fe 48 2b e0 41 80 78 4a 02 4d 8b f8", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
@@ -47,7 +300,7 @@
       "validation": {"policy": "signature"}, "install_policy": "optional_hook",
       "status": "production", "hook_owner": "chord_voicing",
       "consumers": ["src/game/chord_voicing.cpp"],
-      "hook_spec": {"name": "piano_chord_cached_copy", "order": 40, "required_for_release_startup": false},
+      "hook_spec": {"name": "piano_chord_cached_copy", "order": 28, "required_for_release_startup": false},
       "builds": {"ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x039893c4",
         "signature": {"bytes": "48 89 5c 24 08 57 b8 30 00 00 00 e8 ac 27 7e fe 48 2b e0 48 8b 02 48 8b da 48 89 01 48 8b f9 48 8b 42 08 48 89 41 08 48 8b 42 10 48 83 c2 18", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
@@ -137,7 +390,7 @@
       ],
       "hook_spec": {
         "name": "piano_menu_list_open",
-        "order": 32,
+        "order": 20,
         "required_for_release_startup": true
       },
       "builds": {
@@ -188,7 +441,7 @@
       ],
       "hook_spec": {
         "name": "piano_menu_list_cancel_close",
-        "order": 33,
+        "order": 21,
         "required_for_release_startup": true
       },
       "builds": {
@@ -239,7 +492,7 @@
       ],
       "hook_spec": {
         "name": "piano_menu_state5_exit",
-        "order": 34,
+        "order": 22,
         "required_for_release_startup": true
       },
       "builds": {
@@ -290,7 +543,7 @@
       ],
       "hook_spec": {
         "name": "piano_menu_controller_destructor",
-        "order": 35,
+        "order": 23,
         "required_for_release_startup": true
       },
       "builds": {
@@ -691,7 +944,7 @@
       ],
       "hook_spec": {
         "name": "action_state_query",
-        "order": 31,
+        "order": 19,
         "required_for_release_startup": true
       },
       "builds": {
@@ -835,6 +1088,11 @@
             "mask": "xxxxxxxxxxxx"
           },
           "evidence": [
+            {
+              "type": "retained_exact_build_contract",
+              "path": "tools/test_native_cached_resource_catalog.py",
+              "detail": "Piano pair accessor constructor: exactly two semantic arguments, RCX zeroed writable 32-byte accessor and RDX uint64 packed FName by value. RAX equals output including miss; no semantic R8/R9 inputs. Row+8, association+16, opaque backing byte+24; ScoreInfo BGM FName is row+80. Existing scoreinfo_overlay owns this hook; use its original trampoline under qualified dispatch, never a second detour or the different-return forwarder. Retained full constructor bytes are in the focused fixture. This contract is 1.005-only."
+            },
             {
               "type": "migration_record",
               "path": "src/game/hook_specs.cpp",
@@ -1504,21 +1762,15 @@
       "cpp_symbol": "SeadPlaySetup",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "production",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "sqexsead_play_setup",
-        "order": 18,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249a44",
@@ -1555,21 +1807,15 @@
       "cpp_symbol": "BgmSlotStop",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "production",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_slot_stop",
-        "order": 19,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x012499c0",
@@ -1606,21 +1852,15 @@
       "cpp_symbol": "BgmPlaybackTransfer",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "diagnostic",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_playback_transfer",
-        "order": 30,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x012496ac",
@@ -1661,18 +1901,13 @@
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
+      "install_policy": "callable",
       "status": "production",
-      "hook_owner": "audio_sead",
+      "hook_owner": null,
       "consumers": [
-        "src/game/audio_sead.cpp",
         "src/game/audio_production_wiring.cpp"
       ],
-      "hook_spec": {
-        "name": "bgm_slot_set",
-        "order": 20,
-        "required_for_release_startup": false
-      },
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249ce0",
@@ -1709,21 +1944,15 @@
       "cpp_symbol": "BgmSlotPlay",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "production",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_slot_play",
-        "order": 21,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249dd8",
@@ -1767,14 +1996,8 @@
       "install_policy": "signature_only",
       "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_prepare",
-        "order": 22,
-        "required_for_release_startup": false
-      },
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x0124848c",
@@ -1811,21 +2034,15 @@
       "cpp_symbol": "BgmControllerLookup",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "callable",
-      "status": "production",
+      "install_policy": "signature_only",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_controller_lookup",
-        "order": 23,
-        "required_for_release_startup": false
-      },
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x01249c84",
@@ -1866,17 +2083,11 @@
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "diagnostic",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_manager_pause",
-        "order": 24,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a78014",
@@ -1917,17 +2128,11 @@
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "diagnostic",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_slot_pause_transition",
-        "order": 25,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a78078",
@@ -1968,17 +2173,11 @@
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "diagnostic",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "bgm_slot_resume_transition",
-        "order": 26,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x02a77658",
@@ -2019,17 +2218,11 @@
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "diagnostic",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "piano_audio_state_tick",
-        "order": 27,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x00824c64",
@@ -2066,21 +2259,15 @@
       "cpp_symbol": "PianoAdaptiveJudgment",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
-      "install_policy": "optional_hook",
-      "status": "production",
-      "hook_owner": "audio_sead",
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
-      "hook_spec": {
-        "name": "piano_adaptive_judgment",
-        "order": 28,
-        "required_for_release_startup": false
-      },
+      "install_policy": "signature_only",
+      "status": "research",
+      "hook_owner": null,
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
+      "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039a896c",
@@ -2129,7 +2316,7 @@
       ],
       "hook_spec": {
         "name": "progress_lookup",
-        "order": 29,
+        "order": 18,
         "required_for_release_startup": true
       },
       "builds": {
@@ -2168,16 +2355,14 @@
       "cpp_symbol": "BgmSlotSetup",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
       "install_policy": "callable",
-      "status": "diagnostic",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2215,16 +2400,14 @@
       "cpp_symbol": "PianoAudioRequest",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "release",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
       "install_policy": "callable",
-      "status": "production",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2262,16 +2445,14 @@
       "cpp_symbol": "BgmControllerKeyGlobal",
       "kind": "global",
       "subsystem": "audio",
-      "requirement": "release",
+      "requirement": "research",
       "validation": {
         "policy": "data_reference"
       },
       "install_policy": "data_only",
-      "status": "production",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2303,16 +2484,14 @@
       "cpp_symbol": "PianoAudioGlobal",
       "kind": "global",
       "subsystem": "audio",
-      "requirement": "release",
+      "requirement": "research",
       "validation": {
         "policy": "data_reference"
       },
       "install_policy": "data_only",
-      "status": "production",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2353,10 +2532,9 @@
       "hook_owner": null,
       "consumers": [
         "src/game/title.cpp",
-        "src/game/audio_sead.cpp",
         "src/game/chart_patch.cpp",
-        "src/game/scoreinfo_overlay.cpp",
-        "src/game/extended_chart.cpp"
+        "src/game/extended_chart.cpp",
+        "src/game/native_audio_runtime.cpp"
       ],
       "hook_spec": null,
       "builds": {
@@ -2396,9 +2574,7 @@
       "install_policy": "signature_only",
       "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2443,9 +2619,7 @@
       "install_policy": "signature_only",
       "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2483,16 +2657,14 @@
       "cpp_symbol": "SeadDescriptorBuild",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "release",
+      "requirement": "research",
       "validation": {
         "policy": "build_identity"
       },
       "install_policy": "callable",
-      "status": "production",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2524,16 +2696,14 @@
       "cpp_symbol": "SeadOnMemoryBankKindLookup",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
       "install_policy": "callable",
-      "status": "diagnostic",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2571,16 +2741,14 @@
       "cpp_symbol": "SeadOnMemoryBankRelease",
       "kind": "function",
       "subsystem": "audio",
-      "requirement": "optional",
+      "requirement": "research",
       "validation": {
         "policy": "signature"
       },
       "install_policy": "callable",
-      "status": "production",
+      "status": "research",
       "hook_owner": null,
-      "consumers": [
-        "src/game/audio_sead.cpp"
-      ],
+      "consumers": ["tools/test_native_cached_resource_catalog.py"],
       "hook_spec": null,
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
@@ -2797,7 +2965,7 @@
       "status": "research",
       "hook_owner": "note_count",
       "consumers": ["src/game/extended_chart.cpp"],
-      "hook_spec": { "name": "piano_event_vector_reserve", "order": 38, "required_for_release_startup": false },
+      "hook_spec": { "name": "piano_event_vector_reserve", "order": 26, "required_for_release_startup": false },
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": { "rva": "0x02ad3ef4", "signature": { "bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 20 00 00 00 e8 6d 7c 69 ff 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/Playable513ReserveEvidence.md", "detail": "Exact verified 1.005 reserve helper entry and ABI." }] },
         "ff7rebirth-steam-win64-68fd6fde": { "rva": "0x02e2af84", "signature": { "bytes": "48 89 5c 24 10 48 89 4c 24 08 55 56 57 41 54 41 55 41 56 41 57 b8 20 00 00 00 e8 8d 3f 28 ff", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "evidence": [{ "type": "ghidra_static_analysis", "path": "analysis/PlayableExtended1004Evidence.md", "detail": "Exact verified 1.004 reserve helper entry, ABI, and unique signature." }] }
@@ -3540,7 +3708,7 @@
       ],
       "hook_spec": {
         "name": "game_viewport_client_post_render",
-        "order": 36,
+        "order": 24,
         "required_for_release_startup": false
       },
       "builds": {
@@ -3732,7 +3900,7 @@
       ],
       "hook_spec": {
         "name": "piano_page_selected_resolve_call",
-        "order": 37,
+        "order": 25,
         "required_for_release_startup": true
       },
       "builds": {
@@ -3965,7 +4133,7 @@
       "status": "production",
       "hook_owner": "menu_session",
       "consumers": ["src/game/menu_session_authority.cpp"],
-      "hook_spec": { "name": "piano_list_restore_selection", "order": 41, "required_for_release_startup": true },
+      "hook_spec": { "name": "piano_list_restore_selection", "order": 29, "required_for_release_startup": true },
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {
           "rva": "0x039b0ff0",

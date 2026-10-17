@@ -89,7 +89,7 @@ public:
         publish_state_();
     }
 
-    bool admit_descriptor(const game::SongDescriptor& descriptor) const noexcept
+    bool admit_descriptor(game::SongDescriptor& descriptor) const noexcept
     {
         try {
             return !callbacks_.on_descriptor_admission

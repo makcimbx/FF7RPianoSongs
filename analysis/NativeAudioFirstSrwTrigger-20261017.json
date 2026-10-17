@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "scope": "One supported EXE startup SRW-exclusive source; static candidate, not identification of the observed EXE frames and not an active bootstrap profile change",
+  "status": "qualified_static_source_pending_observed_unwind_match",
+  "build_id": "ff7rebirth-steam-win64-6a16ced2",
+  "identity_reference": "src/game/rva_catalog.json builds.ff7rebirth-steam-win64-6a16ced2",
+  "provenance": {
+    "ghidra_program_selector": "ff7rebirth_.exe-1.005",
+    "preferred_image_base": "0x140000000",
+    "disk_path": "D:/SteamLibrary/steamapps/common/FINAL FANTASY VII REBIRTH/End/Binaries/Win64/ff7rebirth_.exe",
+    "disk_sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc",
+    "imported_bytes_compared_with_disk": true,
+    "loader_evidence_reference": "analysis/NativeAudioLoaderHandoff-20261016.json",
+    "loader_handoff_supplied_by_separate_research": "UAL return 0x0001eead belongs to CustomAcquireSRWLockExclusive; its original acquisition has not forwarded during synchronous InitializeASI. This file does not repeat or extend the loader decoding.",
+    "prior_bootstrap_reference": "analysis/NativeAudioBootstrapProfile-20261016.json",
+    "runtime_operations": false
+  },
+  "source": {
+    "name": "first_fname_allocator_thread_static_guard",
+    "description": "The first native C++ FName initializer constructs Neutral00. NamePool construction requests its first name block, reaches absent GMalloc, and calls the allocator thread-static guard. The guard is suspended before forwarding AcquireSRWLockExclusive, before setting its input guard to -1 and before constructing GMalloc.",
+    "crt_state": 1,
+    "crt_callback_table": {
+      "start_rva": "0x0556a058",
+      "end_rva_exclusive": "0x055e4a28",
+      "prefix": [
+        {"slot_rva": "0x0556a058", "target_rva": null},
+        {"slot_rva": "0x0556a060", "target_rva": "0x0216bf14", "effect": "CRT exception-filter/new-mode initialization; inspected, no selected native operation or game worker startup"},
+        {"slot_rva": "0x0556a068", "target_rva": "0x00363d3c", "effect": "Registers an exit callback by tail-jumping to atexit; does not execute that callback"},
+        {"slot_rva": "0x0556a070", "target_rva": "0x00352bb0", "effect": "FName construction, find/add mode 1, text Neutral00, destination module+0x06f52300; tail-jumps to 0x00b517c4"}
+      ],
+      "native_init_call_rva": "0x0216bfa7",
+      "native_init_return_rva": "0x0216bfac",
+      "native_init_thunk_rva": "0x0216dc96",
+      "qualification": "The tail-jumped initializer has no independent stack frame. Require the reconstructed FName constructor destination register as well as the exact enclosing initializer-table continuation; a generic _initterm frame is insufficient."
+    },
+    "api": {
+      "name": "KERNEL32.dll!AcquireSRWLockExclusive",
+      "iat_rva": "0x05568858",
+      "call_rva": "0x0216b4e8",
+      "return_rva": "0x0216b4ee",
+      "lock_rva": "0x06fe2038",
+      "function_rva": "0x0216b4d8",
+      "meaning": "EXE thread-static initialization guard; not a DataObject/NamePool shard lock. The CALL is pending inside UAL, so this acquisition has not occurred. Other lock absence is not implied."
+    },
+    "required_exe_unwind_pcs_inner_to_outer": [
+      "0x0216b4ee",
+      "0x019daa65",
+      "0x024bb505",
+      "0x02222f17",
+      "0x024d20bc",
+      "0x00b523c1",
+      "0x00b5190e",
+      "0x0216bfac"
+    ],
+    "external_unwind_gap": "No wildcard: exactly one authenticated _initterm callback frame is permitted between EXE return 0x00b5190e and EXE return 0x0216bfac, according to crt_callback_frame_contract. Actual system CRT frames have not been captured by this research.",
+    "required_reconstructed_nonvolatile_registers": [
+      {"frame_pc_rva": "0x0216b4ee", "register": "RBX", "equals_module_plus_rva": "0x09190194", "meaning": "Input static guard saved before SRW acquisition"},
+      {"frame_pc_rva": "0x02222f17", "register": "RDI", "equals_module_plus_rva": "0x090d3c00", "meaning": "NamePool being constructed"},
+      {"frame_pc_rva": "0x00b5190e", "register": "RBX", "equals_module_plus_rva": "0x06f52300", "meaning": "Exact first FName initializer destination, not any FName call during CRT state 1"}
+    ],
+    "tail_call_relations": [
+      {"site_rva": "0x00352bc4", "target_rva": "0x00b517c4", "meaning": "First FName initializer"},
+      {"site_rva": "0x016ec497", "target_rva": "0x0079fa64", "meaning": "Normal reserve-absent name-block allocation; no allocator-wrapper frame remains"}
+    ],
+    "direct_call_relations": [
+      {"call_rva": "0x019daa60", "target_rva": "0x0216b4d8", "return_rva": "0x019daa65"},
+      {"call_rva": "0x024bb500", "target_rva": "0x019daa30", "return_rva": "0x024bb505"},
+      {"call_rva": "0x02222f12", "target_rva": "0x016ec470", "return_rva": "0x02222f17"},
+      {"call_rva": "0x024d20b7", "target_rva": "0x02222ec8", "return_rva": "0x024d20bc"},
+      {"call_rva": "0x00b523bc", "target_rva": "0x00b7ba48", "return_rva": "0x00b523c1"},
+      {"call_rva": "0x00b51909", "target_rva": "0x00b52360", "return_rva": "0x00b5190e"}
+    ]
+  },
+  "crt_callback_frame_contract": {
+    "scope": "Static callback semantics for the current on-disk System32 CRT fixture, not an observed loaded module or stack; no OS-version-wide RVA whitelist",
+    "exe_import": {
+      "descriptor_name": "api-ms-win-crt-runtime-l1-1-0.dll",
+      "name": "_initterm",
+      "iat_rva": "0x05569bc0",
+      "import_by_name_rva": "0x06c904ac",
+      "thunk_rva": "0x0216dc96",
+      "thunk_bytes": "ff2524bf3f03",
+      "call_rva": "0x0216bfa7",
+      "return_rva": "0x0216bfac",
+      "semantics": "EXE CALL reaches a JMP through its _initterm IAT. The thunk is not an additional live callback frame. API-set descriptor identity is not proof of the resolved implementation module."
+    },
+    "current_os_disk_fixture": {
+      "path": "C:/Windows/System32/ucrtbase.dll",
+      "file_version": "10.0.26100.9444",
+      "sha256": "5c52e3a303baaac0e0af8bd9b96134993da34bc9d834a31ef37e1d2cdc7fe192",
+      "file_size": 1377512,
+      "machine": "0x8664",
+      "timestamp": "0x2bbefd73",
+      "size_of_image": "0x0014c000",
+      "checksum": "0x00152ee3",
+      "preferred_image_base": "0x180000000",
+      "export_name": "_initterm",
+      "export_rva": "0x000707a0",
+      "export_is_forwarder": false,
+      "runtime_function": {
+        "begin_rva": "0x000707a0",
+        "end_rva_exclusive": "0x000707d8",
+        "unwind_rva": "0x0011bc3c",
+        "unwind_bytes": "010f04000f3406000f320b70",
+        "version": 1,
+        "flags": 0,
+        "size_of_prolog": 15,
+        "count_of_unwind_slots": 4,
+        "chaininfo": false,
+        "effects": ["SAVE_NONVOL RBX at current RSP+0x30", "ALLOC_SMALL 0x20", "PUSH_NONVOL RDI"]
+      },
+      "code_windows": [
+        {"rva": "0x000707a0", "bytes": "483bca742b48895c2408574883ec20488bfa488bd9488b034885c075144883c308483bdf75ef488b5c24304883c4205fc3e83a780800ebe5", "unique_in_executable_sections": true},
+        {"rva": "0x000f8010", "bytes": "e98b56ffff", "unique_in_executable_sections": true},
+        {"rva": "0x000ed6a0", "bytes": "ff2502050100", "unique_in_executable_sections": true},
+        {"rva": "0x000ed6c0", "bytes": "ffe0", "unique_in_executable_sections": false}
+      ],
+      "callback_loop": {
+        "begin_argument": "RCX",
+        "end_argument": "RDX",
+        "cursor_register": "RBX",
+        "end_register": "RDI",
+        "entry_stride": 8,
+        "load_callback_rva": "0x000707b5",
+        "load_callback_bytes": "488b03",
+        "null_callback_skipped": true,
+        "callback_call_rva": "0x000707d1",
+        "callback_call_bytes": "e83a780800",
+        "callback_return_rva": "0x000707d6",
+        "after_callback_bytes": "ebe5",
+        "after_callback_target_rva": "0x000707bd",
+        "cursor_advance_bytes": "4883c308",
+        "callback_target_register": "RAX",
+        "meaning": "Loads RAX from the current table slot, skips null, calls the dispatch thunk, advances the cursor only after the callback returns. At the suspended callback return PC, RBX still identifies the active slot and RDI the original end."
+      },
+      "dispatch_tail_chain": {
+        "direct_thunk_rva": "0x000f8010",
+        "direct_thunk_target_rva": "0x000ed6a0",
+        "indirect_tail_pointer_rva": "0x000fdba8",
+        "load_config_guard_dispatch_pointer_field_offset": "0x78",
+        "on_disk_pointer_preferred_value": "0x1800ed6c0",
+        "on_disk_target_rva": "0x000ed6c0",
+        "on_disk_target_bytes": "ffe0",
+        "tail_semantics": "CALL 0xf8010 -> JMP 0xed6a0 -> JMP [guard-dispatch cell] -> on-disk default JMP RAX -> callback. No dispatch stub pushes a return address; only _initterm+0x36 remains below the callback. The first thunk has no .pdata; the latter two have zero-operation unwind records, not additional live callback frames.",
+        "tail_runtime_functions": [
+          {"begin_rva": "0x000f8010", "runtime_function": null},
+          {"begin_rva": "0x000ed6a0", "end_rva_exclusive": "0x000ed6a6", "unwind_rva": "0x001243b0", "unwind_bytes": "01000000", "chaininfo": false},
+          {"begin_rva": "0x000ed6c0", "end_rva_exclusive": "0x000ed6c2", "unwind_rva": "0x00124a18", "unwind_bytes": "01000000", "chaininfo": false}
+        ],
+        "os_cfg_override": "Windows may replace the guard-dispatch pointer. The disk default is not a live-value assertion. The minimally supported strict implementation may require the relocated default pointer and matching JMP RAX bytes. A different current target requires separate authenticated tail-dispatch semantics, otherwise reject; do not accept arbitrary ntdll/System32 frames. No such override target was inspected live or qualified here.",
+        "mitigation_flags_not_authority": "EXE DllCharacteristics=0x8160 and this CRT=0x4160 were read from disk. They do not authenticate current process mitigation policy or current guard pointer."
+      }
+    },
+    "minimum_authentication_algorithm": [
+      "Keep all existing exact UAL handoff, primary-thread, EXE frame/register, code and cold-state predicates. This section replaces only the former external CRT gap.",
+      "Parse the authenticated EXE import descriptor/name and exact thunk; read its current _initterm IAT value without invoking it. Resolve the actual mapped-image owner from trusted current module/mapping information, not basename or a guessed address. Require the corresponding authenticated System32 ucrtbase file and its named non-forwarded _initterm export. Current IAT must equal that export VA; IAT/GetProcAddress equality alone does not finish authentication.",
+      "Authenticate the actual module's file identity and PE/export/exception metadata against its backing disk file. This artifact qualifies only the supplied CRT fixture. A different CRT file requires equivalent reviewed callback/unwind semantics, not reuse of these fixture RVAs by OS-version guess.",
+      "Compare the relevant loaded function, dispatch-tail and unwind bytes with their on-disk counterparts after applying legitimate relocation handling where needed. Derive the primary runtime-function identity from the named export and PE exception directory; require the recorded no-CHAININFO unwind semantics in this fixture. Reject hooks, mismatching code, forwarders or incomplete exception metadata; never skip a frame to recover the expected sequence.",
+      "For the minimal default-dispatch case, require the current load-config guard-dispatch cell to point to this module's relocated disk-default JMP RAX target and verify the tail bytes. Reject an unqualified runtime override. This check is not a request to invoke CFG or any callback.",
+      "Native-unwind the FName constructor using the already required EXE records. The immediately following frame must be the authenticated _initterm primary function at the exact decoded callback return (fixture RVA 0x707d6), not any PC in that function or any frame in the same module.",
+      "At that reconstructed CRT callback frame require RBX=EXE+0x0556a070 and RDI=EXE+0x055e4a28; copy the current qword at RBX and require EXE+0x00352bb0, with the pinned initializer-table prefix/code unchanged. Preserve the existing FName constructor RBX=EXE+0x06f52300 and NamePool/static-guard register witnesses. These are current reconstructed registers and bounded reads, not historical table membership alone.",
+      "Unwind exactly this one CRT callback frame using its authenticated unwind record. The next PC must be EXE+0x0216bfac in the authenticated CRT startup function. Do not expect a frame for the EXE import thunk, the tail-jumped initializer or the CFG dispatch stubs; do not scan past extra frames.",
+      "Reread code/import/dispatch/table witnesses and the source baseline before returning from synchronous bootstrap. Persist only immutable evidence; no borrowed stack pointers, callback ownership or native lifetime lease results from this check."
+    ],
+    "reject": [
+      "Unknown or merely same-directory system frames between the two exact EXE continuations",
+      "_initterm_e, a different export/function, a generic PC inside _initterm, or a callback return with the wrong current cursor/end/target",
+      "Different OS CRT build accepted solely by matching export name or IAT value",
+      "Unqualified runtime guard override, changed dispatch tail, code/unwind mismatch, or unexpected CHAININFO/extra frame",
+      "Assuming current loaded CRT identity, current guard value or actual observed continuation from this disk-only fixture"
+    ],
+    "observed_stack_frames": false,
+    "runtime_module_or_pointer_read_performed": false
+  },
+  "source_specific_baseline": {
+    "all_reads_current_same_synchronous_startup_thread": true,
+    "fields": [
+      {"rva": "0x06fe2040", "width": 4, "equals": 1, "meaning": "CRT constructors in progress, not arbitrary CRT-state-1 authorization"},
+      {"rva": "0x09190194", "width": 4, "equals": 0, "meaning": "GMalloc static guard not yet claimed"},
+      {"rva": "0x08f405e0", "width": 8, "equals": 0, "meaning": "GMalloc not published"},
+      {"rva": "0x08f309f8", "width": 1, "equals": 0, "meaning": "NamePool constructor has not returned"},
+      {"rva": "0x09274ba8", "width": 8, "equals": 0, "meaning": "Reserve allocator path not active"},
+      {"rva": "0x06fe2038", "width": 8, "equals": 0, "meaning": "Target thread-static SRW lock image-zero before original acquisition"},
+      {"rva": "0x06f52300", "width": 8, "equals": 0, "meaning": "First FName output not published"}
+    ],
+    "existing_profile_fields_to_reuse_with_source_specific_values": {
+      "native_audio_initial_gu_header": "All first 48 bytes image-zero; NOT the initialized-empty post-CRT shape",
+      "serial_rva_0x0871ec50": 0,
+      "package_store_owner_global": 0,
+      "package_store_generation": 0,
+      "dataobject_name_map": 0,
+      "bgmlist_registry": "Three 16-byte headers image-zero",
+      "scoreinfo_registry": "Three 16-byte headers image-zero",
+      "pianoscore_registry": "Three 16-byte headers image-zero",
+      "winmain_hinstance": 0,
+      "taskgraph_and_both_worker_pools": 0,
+      "crash_initializer_complete": 0,
+      "crash_worker_handle_events_report_process_and_report_result": 0
+    },
+    "why_no_prior_selected_operation_is_in_flight_on_normal_path": "At this exact first FName constructor the primary thread is suspended inside NamePool's first allocation, after only SRW initialization/memset in that constructor. GU/BGM CRT callbacks and the crash worker constructor occur at later table slots; engine TaskGraph/pools/loader occur after WinMain. Earlier inspected CRT table callbacks do not dispatch selected game operations. This is an exact path argument plus state corroboration, not zero pointers alone or a survey of arbitrary plugins.",
+    "partially_initialized_state_intentionally_allowed": "Only this NamePool first-allocation state. Do not require fully initialized NamePool or GU here; that would rule out this source. Do not accept partially initialized GU or arbitrary static guards."
+  },
+  "lock_and_execution_constraints": [
+    "The CRT startup lock is still held by the original thread while _initterm executes. Do not recursively initialize the EXE CRT, run native game constructors, use game GMalloc/FName/UObject services, or wait for engine workers during bootstrap.",
+    "Only authenticate/hash and synchronously install protective hooks using the ASI's independent facilities; no game-function invocation at this source.",
+    "UAL's exact synchronous InitializeASI handoff/outside-LoaderLock contract must independently pass. No async ASI worker may race this installation.",
+    "Publish all owned protective hooks and reread the complete source baseline before returning to UAL/original AcquireSRWLockExclusive. Do not save borrowed frame/argument pointers or infer a native lease.",
+    "This source does not grant later mount/acquisition/registration authority. Existing owner/subscription/generation/updater/barrier gates remain unchanged."
+  ],
+  "code_windows": [
+    {"rva": "0x0216b4d8", "bytes": "40534883ec20488bd9488d0d506be704ff156ad33f03"},
+    {"rva": "0x019daa59", "bytes": "488d0d34577b07e8730a7900"},
+    {"rva": "0x024bb500", "bytes": "e82bf551ff488b0dd450a806"},
+    {"rva": "0x024d20b0", "bytes": "488d0d491bc006e80c0ed5ffc60535e9a50601e9a1996afe"},
+    {"rva": "0x02222f05", "bytes": "e872acf4ff8d5604b900000400e859954cff"},
+    {"rva": "0x00b523b3", "bytes": "488bf10f8390020000e8879602004c8bf0"},
+    {"rva": "0x00b51900", "bytes": "488bcbc5f97f442420e8520a0000"},
+    {"rva": "0x00352bb0", "bytes": "41b801000000488d15cb027c05488d0d3cf7bf06e9fbeb7f00"},
+    {"rva": "0x0216bf99", "bytes": "488d15888a4703488d0db1e03f03e8ea1c0000"},
+    {"rva": "0x016ec470", "bytes": "b828000000e806f7a700482be04533db4c8bd14c391d1e87b8070f855cbd0201498bca4883c428e9c8350bff"},
+    {"rva": "0x0079fa7c", "bytes": "488b3d5d0b7a088bf2488bd94885ff0f846fbad101"},
+    {"rva": "0x00b517f9", "bytes": "418be8488bd9458bd6"}
+  ],
+  "code_window_policy": "Exact supported-disk and explicitly selected imported-program bytes; complete instructions. Uniqueness is recorded by validation only, not presumed for small register-witness windows. None is a request to hook the functions.",
+  "runtime_functions": [
+    {"begin": "0x0216b4d8", "end_exclusive": "0x0216b553", "unwind": "0x06b82804"},
+    {"begin": "0x019daa30", "end_exclusive": "0x019daa84", "unwind": "0x06aead94"},
+    {"begin": "0x024bb500", "end_exclusive": "0x024bb530", "unwind": "0x06aed8e0", "chained_to": ["0x0079fa64", "0x0079fb63", "0x06aead5c"]},
+    {"begin": "0x02222ec8", "end_exclusive": "0x02225854", "unwind": "0x06b2355c"},
+    {"begin": "0x024d20b0", "end_exclusive": "0x024d20c8", "unwind": "0x06b124e4", "chained_to": ["0x00b7ba48", "0x00b7ba6e", "0x06aead94"]},
+    {"begin": "0x00b52360", "end_exclusive": "0x00b5268b", "unwind": "0x06b10864"},
+    {"begin": "0x00b517c4", "end_exclusive": "0x00b519e4", "unwind": "0x06b107ec"},
+    {"begin": "0x0216bf30", "end_exclusive": "0x0216c0a1", "unwind": "0x06be9c34"}
+  ],
+  "reject": [
+    "No actual EXE continuation frames captured, or SRW wrapper match without the entire required EXE chain and register witnesses",
+    "Different _Init_thread_header caller, footer/abort path, FName shard lock, arbitrary constructor callback, or a post-WinMain SRW call",
+    "Unexpected intervening EXE/foreign callback frame, incomplete unwind, incorrect CHAININFO handling, or register witness unavailable",
+    "Guard already -1/initialized, nonnull GMalloc, completed NamePool, reserve allocation path, initialized/partial GU, worker/owner/name-map/registry baseline mismatch",
+    "Prior selected hook activity, asynchronous bootstrap worker, incomplete/conflicting hook publication, drift or initialization fault",
+    "Assuming this statically qualified candidate is the observed UAL first source merely because the API name matches"
+  ],
+  "other_sources": {
+    "existing_cookie_and_pre_winmain_sources": "Unchanged; retain their independent exact profiles",
+    "generic_crt_state_1": "Still rejected",
+    "external_vcrt_ptd_source_without_this_exe_chain": "Not qualified by this artifact",
+    "older_build": "Unavailable"
+  },
+  "validation": {
+    "disk_identity_matches_canonical_current_build": true,
+    "complete_instruction_windows": 12,
+    "all_code_windows_unique_in_executable_sections": true,
+    "direct_call_relations_checked": 6,
+    "tail_call_relations_checked": 2,
+    "pdata_records_checked": 8,
+    "chained_unwind_records_checked": 2,
+    "crt_table_prefix_and_image_baselines_checked": true,
+    "observed_exe_callsite": false,
+    "profile_or_runtime_modified": false,
+    "native_calls_performed": false,
+    "actual_next_exe_frames": "Await the separately owned extraction of the already requested continuation frames; do not request a piano action or label this candidate actual before matching them"
+  }
+}

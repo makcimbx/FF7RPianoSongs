@@ -1,0 +1,223 @@
+{
+  "scope": "Static evidence for one authenticated Ultimate ASI Loader export handoff; not a loader-lock detector or runtime qualification",
+  "currentLoaderDiskSHA": "22fda9c71eaae02460f311bf3441638340ab591586d78f1de213c4819dcb883c",
+  "loader": {
+    "installed_basename": "xinput1_3.dll",
+    "bytes": 3615648,
+    "file_description": "Ultimate ASI Loader",
+    "file_version": "9.7.2",
+    "original_filename": "Ultimate-ASI-Loader-x64.dll",
+    "official_release": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/releases/tag/v9.7.2",
+    "release_asset": "Ultimate-ASI-Loader_x64.zip",
+    "release_archive_sha256": "1c1f9ebf3996df4a4bcf9be0785b9de8f934ef6497f73145602488fc7d8c2909",
+    "archive_member": "dinput8.dll",
+    "archive_member_byte_identical_to_installed_file": true,
+    "source_commit": "ab722befd52581a34449b603926cfab476e66b05",
+    "pe_identity_from_disk": {
+      "machine": "0x8664",
+      "optional_header_magic": "0x020b",
+      "timestamp": "0x6a1ee839",
+      "size_of_image": "0x0012a000",
+      "checksum": "0x0037d79f",
+      "entry_point_rva": "0x0004e850",
+      "preferred_image_base": "0x180000000"
+    }
+  },
+  "export_handoff": {
+    "source_function": "FindFiles (source/disassembly correlation, not a binary debug symbol)",
+    "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L852-L933",
+    "export_name": "InitializeASI",
+    "export_name_rva": "0x0008b050",
+    "export_signature": "void(void)",
+    "window_rva": "0x0002166a",
+    "window_expected": "488d15df990600488bceff15361a06004885c07402ffd04183e7fd44897c2430",
+    "window_bytes": 32,
+    "instructions": [
+      {"rva": "0x0002166a", "bytes": "488d15df990600", "meaning": "RDX = address of InitializeASI string"},
+      {"rva": "0x00021671", "bytes": "488bce", "meaning": "RCX = successful plugin module handle retained in RSI"},
+      {"rva": "0x00021674", "bytes": "ff15361a0600", "meaning": "CALL imported GetProcAddress, IAT RVA 0x000830b0"},
+      {"rva": "0x0002167a", "bytes": "4885c0", "meaning": "TEST returned export pointer"},
+      {"rva": "0x0002167d", "bytes": "7402", "meaning": "Skip missing export to RVA 0x00021681"},
+      {"rva": "0x0002167f", "bytes": "ffd0", "meaning": "CALL RAX, synchronous plugin InitializeASI"},
+      {"rva": "0x00021681", "bytes": "4183e7fd", "meaning": "First continuation instruction after export return"},
+      {"rva": "0x00021685", "bytes": "44897c2430", "meaning": "Following complete continuation instruction"}
+    ],
+    "call_rva": "0x0002167f",
+    "return_rva": "0x00021681",
+    "runtime_function": {
+      "begin_rva": "0x00020ea0",
+      "end_rva_exclusive": "0x000217cb",
+      "unwind_info_rva": "0x0009f794",
+      "pdata_record": "a00e0200cb17020094f70900",
+      "entry_window": "40555356574154415541564157488dac24d8feffff4881ec28020000"
+    },
+    "load_order": {
+      "source_loadlib": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1381-L1384",
+      "source_order": "LoadLib/LoadLibraryW returns after plugin DllMain; FindFiles then resolves and directly calls InitializeASI",
+      "binary_load_helper_call_rva": "0x0002118b",
+      "binary_load_helper_return_rva": "0x00021190",
+      "binary_load_helper_rva": "0x0004d3d0",
+      "binary_loadlibraryw_import_call_rva": "0x0004d48e",
+      "binary_loadlibraryw_iat_rva": "0x00083238",
+      "successful_handle_branch_to_export_lookup_rva": "0x000211ad"
+    }
+  },
+  "normal_deferred_stack": {
+    "scope": "Static return-PC and CALL-edge contract for the exact authenticated loader; no live stack was inspected",
+    "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1120-L1379",
+    "load_everything_is_inlined": true,
+    "deferred_helper": {
+      "source_function": "LoadPluginsAndRestoreIAT",
+      "runtime_function": {
+        "begin_rva": "0x00030f40",
+        "end_rva_exclusive": "0x000330e6",
+        "unwind_info_rva": "0x0009fa64",
+        "pdata_record": "400f0300e630030064fa0900"
+      },
+      "window_rva": "0x0003308c",
+      "window_bytes": 38,
+      "window_expected": "33c0f0440fb1253d0b0800750ae88247ffffe8ddd6ffff488b8d500600004833cce8beab0100",
+      "loaded_plugins_once_guard_rva": "0x0003308e",
+      "original_library_call_rva": "0x00033099",
+      "original_library_target_rva": "0x00027820",
+      "load_plugins_call_rva": "0x0003309e",
+      "load_plugins_call_expected": "e8ddd6ffff",
+      "load_plugins_target_rva": "0x00030780",
+      "retained_return_rva": "0x000330a3",
+      "return_semantics": "Ordinary CALL, not a tail jump. Return PC 0x330a3 remains saved while LoadPlugins, FindFiles and the plugin InitializeASI run. Only after they return does this helper execute its cookie check/epilogue and return to the API detour.",
+      "source_mapping_checks": "Helper begins by calling LoadOriginalLibrary at 0x30f82, then tests g_bExePatched and validates the original caller module; its final inlined LoadEverything has the same LoadedPluginsYet atomic guard and LoadOriginalLibrary/LoadPlugins calls as the source."
+    },
+    "load_plugins": {
+      "runtime_function": {
+        "begin_rva": "0x00030780",
+        "end_rva_exclusive": "0x00030f3b",
+        "unwind_info_rva": "0x0009f938",
+        "pdata_record": "800703003b0f030038f90900"
+      },
+      "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L980-L1118",
+      "direct_find_files_edge": {
+        "window_rva": "0x00030acc",
+        "window_bytes": 19,
+        "window_expected": "488d8d50020000e8c803ffff4c8d85b0010000",
+        "call_rva": "0x00030ad3",
+        "call_expected": "e8c803ffff",
+        "target_rva": "0x00020ea0",
+        "return_rva": "0x00030ad8"
+      },
+      "find_plugins_edges": [
+        {"call_rva": "0x00030b87", "call_expected": "e8440cffff", "target_rva": "0x000217d0", "return_rva": "0x00030b8c"},
+        {"call_rva": "0x00030c47", "call_expected": "e8840bffff", "target_rva": "0x000217d0", "return_rva": "0x00030c4c"},
+        {"call_rva": "0x00030d33", "call_expected": "e8980affff", "target_rva": "0x000217d0", "return_rva": "0x00030d38"}
+      ]
+    },
+    "find_plugins": {
+      "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L941-L978",
+      "runtime_function": {
+        "begin_rva": "0x000217d0",
+        "end_rva_exclusive": "0x00021c8b",
+        "unwind_info_rva": "0x0009f848",
+        "pdata_record": "d01702008b1c020048f80900"
+      },
+      "find_files_edges": [
+        {"call_rva": "0x00021b5f", "call_expected": "e83cf3ffff", "target_rva": "0x00020ea0", "return_rva": "0x00021b64"},
+        {"call_rva": "0x00021c3f", "call_expected": "e85cf2ffff", "target_rva": "0x00020ea0", "return_rva": "0x00021c44"}
+      ]
+    },
+    "qualified_api_detour_edges": [
+      {
+        "source_function": "CustomGetStartupInfoW",
+        "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1392-L1396",
+        "runtime_function": {"begin_rva": "0x0001fa40", "end_rva_exclusive": "0x0001fa7c", "unwind_info_rva": "0x0009c120", "pdata_record": "40fa01007cfa010020c10900"},
+        "window_rva": "0x0001fa49",
+        "window_bytes": 51,
+        "window_expected": "48c74424280f000000488b4c2438488d0502bb0600488d5424204889442420e8d3140100488bcb4883c4305b48ff2554370600",
+        "call_rva": "0x0001fa68",
+        "call_expected": "e8d3140100",
+        "target_rva": "0x00030f40",
+        "return_rva": "0x0001fa6d",
+        "original_api_tail_jump_rva": "0x0001fa75",
+        "original_api_iat_rva": "0x000831d0"
+      },
+      {
+        "source_function": "CustomGetSystemTimeAsFileTime",
+        "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1484-L1488",
+        "runtime_function": {"begin_rva": "0x0001fac0", "end_rva_exclusive": "0x0001fafc", "unwind_info_rva": "0x0009c120", "pdata_record": "c0fa0100fcfa010020c10900"},
+        "window_rva": "0x0001fac9",
+        "window_bytes": 51,
+        "window_expected": "48c744242817000000488b4c2438488d05e2bb0600488d5424204889442420e853140100488bcb4883c4305b48ff25e4360600",
+        "call_rva": "0x0001fae8",
+        "call_expected": "e853140100",
+        "target_rva": "0x00030f40",
+        "return_rva": "0x0001faed",
+        "original_api_tail_jump_rva": "0x0001faf5",
+        "original_api_iat_rva": "0x000831e0"
+      },
+      {
+        "source_function": "CustomAcquireSRWLockExclusive",
+        "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1508-L1512",
+        "api_replacement_map_source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L4250",
+        "source_expression": "void WINAPI CustomAcquireSRWLockExclusive(PSRWLOCK SRWLock) { LoadPluginsAndRestoreIAT((uintptr_t)_ReturnAddress(), L\"AcquireSRWLockExclusive\"); return AcquireSRWLockExclusive(SRWLock); }",
+        "runtime_function": {"begin_rva": "0x0001ee80", "end_rva_exclusive": "0x0001eebc", "unwind_info_rva": "0x0009c120", "pdata_record": "80ee0100bcee010020c10900"},
+        "window_rva": "0x0001ee89",
+        "window_bytes": 51,
+        "window_expected": "48c744242817000000488b4c2438488d05bac80600488d5424204889442420e893200100488bcb4883c4305b48ff25c4420600",
+        "call_rva": "0x0001eea8",
+        "call_expected": "e893200100",
+        "target_rva": "0x00030f40",
+        "return_rva": "0x0001eead",
+        "api_name_rva": "0x0008b758",
+        "api_name_utf16": "AcquireSRWLockExclusive",
+        "original_api_tail_jump_rva": "0x0001eeb5",
+        "original_api_iat_rva": "0x00083180",
+        "original_api_import": {"dll": "KERNEL32.dll", "name": "AcquireSRWLockExclusive"},
+        "instruction_relationship": "The prologue preserves original RCX/SRWLock in RBX. The window loads the executable caller return from [RSP+0x38], constructs the 23-character API-name view and CALLs LoadPluginsAndRestoreIAT. Return PC 0x1eead remains saved throughout its synchronous plugin enumeration. Only afterward does MOV RCX,RBX restore the original argument and the tail JMP forward to the original API.",
+        "independent_identification": "The RIP-relative UTF16 API name and independently parsed PE import both identify AcquireSRWLockExclusive. Sharing unwind-info RVA 0x9c120 with other short wrappers does not make their CALL/return addresses or import targets interchangeable.",
+        "qualification_scope": "Additional exact UAL deferred-wrapper edge only. Require the existing ordered FindFiles/LoadPlugins/0x330a3 frames and the separately qualified same-primary-thread executable continuation; do not accept 0x1eead alone or replace the executable predicate with an API-name test.",
+        "direct_dllmain_route": "The direct Init -> inlined LoadEverything -> LoadPlugins edge remains return 0x27006, not 0x330a3; identifying this wrapper does not change that rejection. An arbitrary caller under another DllMain could still invoke this API, so the independent executable continuation requirement remains essential.",
+        "timing_limit": "This is a generic exclusive SRW-lock acquisition trigger, not GetCurrentThreadId or GetSystemTimeAsFileTime. Its source and wrapper bytes do not distinguish early CRT from later engine use. The requested original SRW acquisition has not yet been forwarded while InitializeASI runs, but other already-held locks and loader-lock state are not established. The actual EXE continuation is intentionally left to separate native research."
+      }
+    ],
+    "unsupported_direct_init_edge": {
+      "source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L5250-L5267",
+      "runtime_function": {"begin_rva": "0x000261e0", "end_rva_exclusive": "0x0002747b", "unwind_info_rva": "0x000a3398", "pdata_record": "e06102007b74020098330a00"},
+      "window_rva": "0x00026fe7",
+      "window_bytes": 36,
+      "window_expected": "33c0b901000000f00fb10ddecb08000f855e030000e81f080000e87a970000e94f030000",
+      "call_rva": "0x00027001",
+      "call_expected": "e87a970000",
+      "target_rva": "0x00030780",
+      "return_rva": "0x00027006",
+      "distinction": "The direct DllMain -> Init -> inlined LoadEverything route calls LoadPlugins here, leaving 0x27006, not 0x330a3, as its caller continuation. It does not enter LoadPluginsAndRestoreIAT to enumerate plugins. The common FindFiles export return cannot distinguish these routes, but the actual LoadPlugins caller frame does."
+    },
+    "ordered_unwind_contract": {
+      "method": "Actual unwind ControlPc values normalized to the authenticated loader base, with .pdata/CALL-edge validation; never raw stack-word scanning or a function-name-only match",
+      "first_loader_frame": "0x00021681 must be the nearest loader frame after the own plugin InitializeASI frames. A plugin DllMain calling its own export while LoadLibrary is active is not this completed-LoadLibrary handoff.",
+      "direct_root_path_innermost_to_outermost": ["0x00021681", "0x00030ad8", "0x000330a3", "one qualified_api_detour_edges.return_rva", "independently qualified executable startup continuation"],
+      "directory_path_innermost_to_outermost": ["0x00021681", "one find_plugins.find_files_edges.return_rva", "one load_plugins.find_plugins_edges.return_rva", "0x000330a3", "one qualified_api_detour_edges.return_rva", "independently qualified executable startup continuation"],
+      "no_invented_frame": "LoadEverything has no separate retained frame in this image; its guard and calls are inlined into the deferred helper and direct Init branch.",
+      "reject": "Reject a missing/unwind-failed/ambiguous/extra loader frame, the direct Init return 0x27006, an unqualified API wrapper or executable continuation, a different thread/host/image, or an export target other than the authenticated own InitializeASI. Do not skip unknown frames to find a convenient anchor.",
+      "boundary_limit": "The exact ordered UAL edges distinguish its direct DllMain enumeration route. They do not universally detect another DLL's loader-lock context; the separately qualified native executable startup chain and primary thread remain mandatory. No live chain or outside-loader-lock state was observed here."
+    }
+  },
+  "context_boundary": {
+    "defaults_source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L5187-L5267",
+    "deferred_route_source": "https://github.com/ThirteenAG/Ultimate-ASI-Loader/blob/ab722befd52581a34449b603926cfab476e66b05/source/dllmain.cpp#L1120-L1191",
+    "defaults": {"DontLoadFromDllMain": true, "ForceEntryPointHook": false, "LoadFromAPI": ""},
+    "normal_route": "Init/HookIAT defers plugin enumeration to a qualifying intercepted API; LoadPluginsAndRestoreIAT restores IAT and synchronously enters LoadEverything/LoadPlugins/FindFiles",
+    "same_export_return_site_reachable_from_dllmain": true,
+    "dllmain_route": "If both DontLoadFromDllMain and ForceEntryPointHook are false, DllMain -> Init -> LoadEverything -> LoadPlugins -> FindFiles uses this identical CALL/return while still inside loader initialization",
+    "explicit_active_dllmain_flag_found": false,
+    "g_bExePatched_is_not_loader_lock_state": "Static bool initialized false at line 1132 and assigned PatchModule(hExe) at line 5081; it describes executable IAT patching, not active DllMain execution",
+    "safe_context_requirement": "This exact handoff must additionally belong to the independently qualified executable primary-thread startup continuation and normal deferred loader route. Handoff return RVA alone is insufficient; an unsupported or ambiguous host/caller must fail closed.",
+    "plugin_dllmain": "Keep DLL_PROCESS_ATTACH minimal. Do not perform full initialization or wait for an initialization worker under loader lock.",
+    "synchronous_export": "For an independently authenticated normal outside-DllMain startup handoff only, InitializeASI can run validation and hook publication synchronously before returning to that exact executable continuation. This record does not itself qualify that continuation or grant native authority."
+  },
+  "limits": [
+    "Disk PE fields and release matching were measured statically; no loaded module, stack, thread or loader-lock state was observed.",
+    "Exact file SHA, loaded image identity, current live instruction windows and own export target must all be qualified by any future consumer; this shared callsite invokes other ASI plugins too.",
+    "LoadLibraryW returning does not prove the enclosing caller is outside a different DllMain or DLL notification.",
+    "No runtime local active-DllMain boolean was identified; no undocumented loader-lock query or universal detector is proposed.",
+    "No claim of pre-AEP timing follows from this loader callsite. Executable continuation and source-specific baseline qualification are separate evidence.",
+    "No source/config edits, module replacement, game execution, loader calls or process control were performed."
+  ]
+}

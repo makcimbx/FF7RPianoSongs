@@ -28,6 +28,11 @@ bool prepare_audio_catalog_from_prefix(
     std::shared_ptr<const SongRegistryStorage> storage,
     std::shared_ptr<const PreparedAudioPrefix> prefix,
     PreparedAudioCatalog& prepared) noexcept;
+using AudioCatalogReadiness = audio_sead_detail::AudioCatalogReadiness;
+AudioCatalogReadiness prepared_audio_catalog_readiness(const PreparedAudioCatalog&) noexcept;
+// Checks the adopted immutable cohort and its fresh native identity, not merely
+// symbol presence. Used before reservation and before each selected-name return.
+bool selected_native_audio_name(const SelectionSnapshot&, std::uint64_t&) noexcept;
 std::shared_ptr<PreparedAudioCatalogCommit> begin_prepared_audio_catalog_commit(
     PreparedAudioCatalog& prepared, uint64_t expected_catalog_revision,
     const AudioProductionCatalogScope& callback_scope) noexcept;
@@ -89,9 +94,20 @@ struct SelectionActivationHandoff final {
     }
 };
 
+enum class SelectionActivationReservationFailure {
+    None, NativeSelection, ListContextSnapshot, ListContext, ActiveAdmission, MenuNotReady,
+    MenuContext, MenuGeneration, NativeListBinding, ReservationDrift, ReservationState
+};
+struct SelectionActivationReservationDiagnostic {
+    SelectionActivationReservationFailure failure=SelectionActivationReservationFailure::ListContextSnapshot;
+    std::uint64_t selection_generation=0,menu_generation=0,reservation_generation=0;
+    SelectionActivationReservationState state=SelectionActivationReservationState::Empty;
+};
+const char* selection_activation_reservation_failure_name(SelectionActivationReservationFailure) noexcept;
 bool reserve_selection_audio_activation(
     const SelectionSnapshot& selection,
-    const SelectionActivationListContext& list_context) noexcept;
+    const SelectionActivationListContext& list_context,
+    SelectionActivationReservationDiagnostic* diagnostic=nullptr) noexcept;
 SelectionActivationHandoff prepare_selection_audio_activation_handoff(
     const SelectionSnapshot& selection,
     const SelectionActivationListContext& list_context) noexcept;
@@ -220,8 +236,25 @@ bool capture_selection_audio_admission_diagnostic(
 bool capture_selection_audio_admission_authority(
     const SelectionAudioAdmission& admission,
     SelectionAudioAdmissionAuthority& out) noexcept;
+enum class SelectionAudioAuthorityFailure : std::uint8_t {
+    None, NotExact, Disabled, ActiveToken, ActiveSelection, Activation,
+    RouteEpoch, PreparationOrdinal, SelectionGuard, CurrentSelection,
+    PlaybackSelection, PlaybackToken, PlaybackChartFailed
+};
+struct SelectionAudioAuthorityDiagnostic final {
+    SelectionAudioAuthorityFailure failure = SelectionAudioAuthorityFailure::None;
+    bool committed = false;
+    std::uint64_t expected_selection = 0, observed_selection = 0;
+    std::uint64_t expected_activation = 0, observed_activation = 0;
+    std::uint64_t expected_route_epoch = 0, expected_preparation = 0;
+    CustomContextToken expected_token{}, observed_token{};
+};
+const char* selection_audio_authority_failure_name(SelectionAudioAuthorityFailure) noexcept;
+// The exact owner transfers from selection guard to playback at commit;
+// cleanup-only authority is never sufficient for native expansion.
 bool selection_audio_admission_authority_matches(
-    const SelectionAudioAdmissionAuthority& authority) noexcept;
+    const SelectionAudioAdmissionAuthority& authority,
+    SelectionAudioAuthorityDiagnostic* diagnostic = nullptr) noexcept;
 bool selection_audio_admission_cancellation_complete(
     const SelectionSnapshot& selection,
     const AudioRouteLeaseIdentity& lease) noexcept;

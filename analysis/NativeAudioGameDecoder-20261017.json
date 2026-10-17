@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "purpose": "Current-version regression preparation for the same single-ASI embedded game decoder used by the older-build candidate. Static evidence only; no decoder, game or loader execution.",
+  "canonical_symbol": {"id":"native_oodle_decompress","cpp_symbol":"NativeOodleDecompress","kind":"function","install_policy":"callable","hook_owner":null},
+  "catalog_reference": {
+    "path":"src/game/rva_catalog.json",
+    "sha256_at_read":"002dac609cde9424a55337162049a2e7ddfb11de3004e742715ece5672fa8132",
+    "disposition":"Catalog/generated output belong to another worker. No catalog promotion performed here. Preserve existing older entry and callable/non-hook policy."
+  },
+  "builds": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "game_version":"1.005",
+      "preferred_base":"0x140000000",
+      "rva":"0x01cc0700",
+      "signature":{"bytes":"3e 40 55 53 56 57 41 54 41 55 41 56 41 57 48 81 ec f8 00 00 00 48 8d 6c 24 60","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+      "signature_contract":"26 bytes, complete entry instructions including the existing segment/REX prefixes. Exactly one occurrence in authenticated disk executable sections at this RVA; not assumed from the older identical prefix.",
+      "pdata":{"begin":"0x01cc0700","end":"0x01cc0ddf","unwind":"0x06b90258","unwind_first16":"19330b651a6315011f000ef00ce00ad0"},
+      "identity": {
+        "canonical_record":"src/game/rva_catalog.json:builds[ff7rebirth-steam-win64-6a16ced2]",
+        "file_size":124317952,
+        "sha256":"752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc",
+        "pe_timestamp":"0x6a16ced2","size_of_image":"0x099d9000","checksum":"0x0769ea6e",
+        "authenticated_disk_path":"D:/SteamLibrary/steamapps/common/FINAL FANTASY VII REBIRTH/End/Binaries/Win64/ff7rebirth_.exe"
+      },
+      "ghidra": {
+        "explicit_selector":"ff7rebirth_.exe-1.005","internal_name":"ff7rebirth_.exe-9457d4","program_path":"/ff7rebirth_.exe-1.005","image_base":"0x140000000",
+        "imported_pe_header":"0x140000210 / 112 bytes; timestamp/image size/checksum match canonical current build",
+        "whole_import_file_sha256_available":false
+      },
+      "semantic_identification": {
+        "diagnostic_va":"0x1457dcef8","diagnostic":"oo2::OodleLZ_Decompress",
+        "diagnostic_xrefs":["0x141cc0787","0x141cc0a40"],
+        "ordinary_engine_consumer":"0x140b238c0",
+        "proof":"Followed the actual diagnostic references to the implementation and its only recovered direct engine consumer, then inspected the native compressed-block wrapper and decoder. This is executable-contained code, not an imported DLL thunk or delta-derived counterpart."
+      },
+      "disk_import_comparisons": [
+        {"rva":"0x01cc0700","bytes":1759,"sha256":"2971eb786d392edb9795104ac214a8e9b383fe06b05fc65eb2434eb3d71f65c9","scope":"Complete recovered decoder body; exact imported/disk equality"},
+        {"rva":"0x00b238c0","bytes":876,"sha256":"9f02689f0079d62947cd0a3db8d379892d6dd583386f9430c66b6bb616a9dd9c","scope":"Complete ordinary engine wrapper; exact imported/disk equality"}
+      ],
+      "ordinary_engine_caller": {
+        "rva":"0x00b238c0","pdata_end":"0x00b23c2c","unwind":"0x06b0ee04","unwind_first16":"01270b002734260027011e001af018e0",
+        "entry_abi":"Win64: receiver RCX, output buffer RDX, in/out signed 32-bit decoded-length pointer R8, compressed input R9, signed 32-bit compressed length at entry RSP+0x28. This receiver ABI is NOT the decoder ABI.",
+        "helpers":{"compressor_probe_thunk":"0x01cc16e0","required_scratch":"0x01cbfdc0"},
+        "paths":"Tries two receiver-owned scratch pointers at +0xc0/+0xc8 under corresponding TryEnterCriticalSection locks. The pooled path uses scratch capacity at receiver+0x68 and releases the lock after decoding. Otherwise allocates temporary scratch through the game allocator, decodes and frees it.",
+        "calls": [
+          {"path":"temporary allocated scratch","setup":"0x00b239d6","call":"0x00b23a1e","return":"0x00b23a23","call_bytes":"e8ddcc1901"},
+          {"path":"receiver-owned scratch","setup":"0x00b23b05","call":"0x00b23b56","return":"0x00b23b5b","call_bytes":"e8a5cb1901"}
+        ],
+        "caller_argument_proof":"Both calls explicitly supply options 1,1,0; zero dictionary/progress/user fields; scratch pointer/size; phase 3. Caller stack offsets +0x20,+0x28,+0x30 are the three 32-bit options, +0x38..+0x50 are four zero pointer/size fields, +0x58 scratch pointer, +0x60 scratch size, +0x68 phase. RCX/RDX/R8/R9 hold compressed pointer/length/output/expected length.",
+        "result":"At 0x00b23bfb the wrapper tests the low 32-bit decoded count; positive result is written to its caller's in/out length and returns true, otherwise false. The independent pipeline must keep its stronger exact requested-size check."
+      }
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "game_version":"1.004","preferred_base":"0x140000000","rva":"0x01c03a40",
+      "signature":{"bytes":"3e 40 55 53 56 57 41 54 41 55 41 56 41 57 48 81 ec f8 00 00 00 48 8d 6c 24 60","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+      "pdata":{"begin":"0x01c03a40","end":"0x01c0411f","unwind":"0x06d200e8"},
+      "evidence_path":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json",
+      "evidence_sha256_at_read":"16a7d617db4d425ae8435ae9aa47303245f199c45a4fd4466e24d3d989ec885c",
+      "explicit_ghidra_selector":"ff7rebirth_.exe-1.004",
+      "ordinary_engine_consumer":"0x00a492c0","decoder_calls":["0x00a4941e","0x00a49556"],
+      "provenance_limit":"Previously recovered diagnostic/engine caller, unique imported entry and imported PE identity. No retained old disk binary or whole-import SHA authentication; no new older decoder execution in this task."
+    }
+  },
+  "shared_decoder_contract": {
+    "abi":"Win64 x64, pointer-sized decoded-count return. RCX const u8* compressed; RDX signed pointer-sized compressedBytes; R8 u8* output; R9 signed pointer-sized requestedRawBytes. Arguments 5..14 occupy eight-byte stack slots at entry RSP+0x28 through +0x70; 32-bit option/phase operands use the low DWORD.",
+    "arguments_5_through_14":["i32 fuzzSafe","i32 checkCRC option","i32 verbosity","dictionaryBase pointer","pointer-sized dictionarySize","progress callback pointer","callbackUser pointer","scratch pointer","pointer-sized scratchBytes","i32 threadPhase"],
+    "qualified_options":[1,1,0,0,0,0,0,"scratch-or-null","scratchBytes-or-zero",3],
+    "enum_limit":"The raw native option values are proved by callers. No additional enum values or optional callback implementation are authorized by this evidence.",
+    "pipeline_reference":"src/pipeline/oodle_decoder.h:detail::OodleDecompressFunction and src/pipeline/oodle_decoder.cpp:decode_oodle_block already use the 14 positions with null scratch/size zero and these option values.",
+    "null_scratch":"Current decoder computes requirements via 0x01cbe8c0. With null scratch and a small requirement it creates aligned stack storage; otherwise it passes the null/no-scratch path into state creation 0x01cbe7c0. Too-small supplied scratch is explicitly rejected. The caller need not synthesize a compression receiver or borrow its scratch/locks.",
+    "bounds_and_result":"Only bounded immutable independent IoStore blocks under the existing pipeline 64-KiB limit; nonzero valid input/output lengths. Publish output only if the pointer-sized decoded count equals requestedRawBytes exactly. Zero, mismatch, malformed/truncated input or uncertain native failure stops decoding without a fabricated success.",
+    "native_dependencies":"Optional profiling callbacks at current globals 0x146fa3fa8/0x146fa3fb0, diagnostic/free pointers 0x146c91bf8/0x146c91be8 and native decoder allocation/state machinery remain game-owned dependencies; these addresses are explanatory research facts, not additional callbacks to invoke.",
+    "execution_boundary":"Authenticate actual main executable identity, mapping and entry code before binding through from_verified_function. Keep executable mapped through use. Dedicated repository/producer worker only after native allocator/decoder initialization; not DllMain, bootstrap first-allocator SRW context, game hook callback or while holding game/resource locks. This is not an arbitrary startup/reentrancy guarantee.",
+    "ownership":"from_verified_function acquires no executable lease and authenticates nothing. No separate Oodle DLL search/load/download, no redistribution and no native SQEX registration are needed for this executable-contained implementation.",
+    "next_runtime_check":"Run the current-build producer scenario through this exact game-bound decoder on a known genuine compressed block and compare decoded size/bytes; malformed-block behavior separately. Static equality is not a successful decoded-block or playback test."
+  },
+  "dependency_followup": {
+    "scope":"Static current-build null-scratch allocation/state/free path; matching older default allocation/free functions inspected independently. No decoder execution, shutdown execution or live-process memory reads.",
+    "result":"The inspected default decoder uses library-owned per-call state and the Windows process heap, not GMalloc, a UObject, PackageStore, or the engine compression receiver's pooled scratch. No concrete normal engine-owner teardown dependency was found on this default path. This is a bounded default-callback profile, not permission to accept arbitrary installed allocator/profiling callbacks.",
+    "current_build_defaults": {
+      "allocator_pointer_rva":"0x06c91be0", "allocator_function_rva":"0x01cc17c0",
+      "free_pointer_rva":"0x06c91be8", "free_function_rva":"0x01cc1820",
+      "diagnostic_pointer_rva":"0x06c91bf8", "diagnostic_function_rva":"0x01cc1860",
+      "profiling_begin_pointer_rva":"0x06fa3fa8", "profiling_end_pointer_rva":"0x06fa3fb0", "profiling_default":"Both null in imported/image initial state; do not assume their live values from this fact.",
+      "stack_threshold_rva":"0x06c91ca8", "stack_threshold_bytes":32768,
+      "storage":"These pointer/threshold slots are writable .data (section characteristics 0xc0000040), not immutable-code evidence. Admission must distinguish the inspected defaults from custom callbacks; a read is not a callback-lifetime lease."
+    },
+    "null_scratch_and_state": {
+      "required_size_function_rva":"0x01cbe8c0", "state_create_function_rva":"0x01cbe7c0",
+      "path":"Decoder computes required bytes. With null scratch it uses aligned dynamic stack storage only when required bytes are strictly below the threshold. Otherwise it passes null scratch to state creation; that calls the allocator pointer with required bytes and alignment 16, initializes state, and sets state+0x2c to 1 (owned allocation). The decoder tests that ownership marker and invokes the free pointer before returning; stack/supplied scratch is not freed as an owned allocation.",
+      "size_examples":"For requested raw length 65536, native compressor IDs selected by mask 0x3b00 require 184520 bytes for IDs 9/11 and 250056 for the other selected IDs, from min(rawBytes,0x20000), the 0xd000 term and 0xa8 base. These exceed the default 32768 threshold and reach heap allocation. IDs/geometry are the native numeric branches, not guessed compressor-name enums; other formats may take the small-state or unsupported-legacy branch.",
+      "allocator":"0x01cc17c0 calls GetProcessHeap then HeapAlloc(heap,0,requested+7+alignment), returns the aligned address, and stores the original allocation pointer at aligned-8. It does not consult GMalloc or retain a heap handle/engine owner.",
+      "free":"0x01cc1820 calls GetProcessHeap then tail-calls HeapFree(heap,0,*(allocation-8)). Each call frees its own state through the paired callback; no global state-buffer pool was found on this path.",
+      "failure":"Allocation-null/OOM and malformed-data behavior remain native failure boundaries; no recoverable exception or allocation-success guarantee is added. Keep exact decoded-size validation and existing input/output bounds."
+    },
+    "other_dependencies": {
+      "initialization":"0x01cc19b0 checks library init DWORD at 0x06fa3fa0, calls 0x01d089e0(2), then sets it to 1. The inspected initializer computes CPU feature flags via CPUID/XGETBV and OODLE_SAFE_MODE, storing flags at 0x06fa4040; it creates no UObject, worker, heap owner or teardown registration. Only the initialization read/set references were recovered for the init DWORD; this is not an all-indirect-writer proof or a new concurrent-first-initialization guarantee.",
+      "diagnostics":"Default 0x01cc1860 formats into a bounded local 4096-byte buffer through 0x01d06d80 and calls OutputDebugStringA. It does not call the game's logger or hold a game-owned diagnostic receiver in the inspected body. The formatting helper's entire CRT shutdown lifetime was not separately audited; ordinary process/CRT termination remains outside the permitted work lifetime.",
+      "legacy":"Optional legacy codec-vtable callbacks in the decoder are a separate branch. Missing legacy support is rejected; do not broaden this default profile to custom legacy/plugin/progress/profiling callbacks.",
+      "normal_shutdown":"No default allocator/free/state dependency tied to PackageStore destruction or engine compression-receiver destruction was recovered. Windows process-heap ownership differs from engine GMalloc ownership: this path neither creates nor destroys that heap. Therefore the previously suspected ordinary owner-teardown race is not established for this default profile. Do not infer that a repository worker may outlive process/CRT termination, ASI code, or its own input/output buffers."
+    },
+    "minimal_integration_boundary": {
+      "admit":"On the already-qualified initialized dedicated repository worker, authenticate the two default allocation/free targets and default diagnostic target in the exact EXE, require null profiling callbacks and the reviewed threshold, and retain the existing executable/code/ABI and exact-size checks. Reject changed/custom callbacks rather than claiming their owner lifetime. Pointer rereads detect drift only; no arbitrary concurrent callback replacement is authorized.",
+      "lifetime":"No new Oodle shutdown hook or engine scratch owner is justified by this selected default path. Close repository work admission and keep its code/buffers alive through admitted calls under the existing product worker shutdown policy. If integration deliberately chooses the stronger stop-at-engine-teardown policy, reuse the existing native runtime invalidation fence instead of adding a framework: native_audio_runtime.cpp InvalidationFence publishes sticky invalidation before acquiring g_lifetime exclusively, and factory/shutdown/destructor hooks enter it before their originals. Only a real shared admission held across a block would fence those originals; reading status once or retaining a function pointer would not.",
+      "not_required":"Do not construct a fake FCompression receiver, borrow its scratch or lock, invoke game allocator methods, register SQEX state, or add another hook merely because ordinary engine decoding used a pooled wrapper.",
+      "next_check":"Current-build regression must actually decode the known compressed block through the existing null-scratch tuple and compare all output bytes. Static allocation/lifetime evidence is not that execution test."
+    },
+    "older_build_confirmation": {
+      "program":"ff7rebirth_.exe-1.004", "allocator_pointer_rva":"0x06e5ebe0", "free_pointer_rva":"0x06e5ebe8",
+      "allocator_function_rva":"0x01c04b00", "free_function_rva":"0x01c04b60",
+      "evidence":"Independently read imported pointer values and decompiled both exact old targets: GetProcessHeap/HeapAlloc aligned allocation with original pointer at aligned-8; GetProcessHeap/HeapFree paired release. No older disk hash or decoder execution validation added. Current size/CPU helper addresses are not reused as older addresses."
+    },
+    "current_disk_import_correlations": [
+      {"rva":"0x01cc17c0","bytes":87,"imported_fnv32":"124127c4","disk_sha256":"3a80531db3d3d7957ba673b88fa7159c63e817c92699ece34df062467d35ae72"},
+      {"rva":"0x01cc1820","bytes":39,"imported_fnv32":"b30edecd","disk_sha256":"e7972c2997c277003c05a2b62dd2a75b8b6cb0e11e72cc3176491f1b653ddd23"},
+      {"rva":"0x01cc1860","bytes":109,"imported_fnv32":"816f2e29","disk_sha256":"38ea8f7801650edd565228db97ca5fce6c186d6f39b7d63a7a258eb723b5bfff"},
+      {"rva":"0x01cc19b0","bytes":42,"imported_fnv32":"8ad99ca1","disk_sha256":"e2db0c09cbf0ebd481912b3e6a1f31d6e5aa278e37671988f41bd444ada73f39"},
+      {"rva":"0x01cbe7c0","bytes":250,"imported_fnv32":"3d3021aa","disk_sha256":"f6d8ef4a7c539a7a9b320dae38237c98a997b1f8f5de6aff3214730d59f985c5"},
+      {"rva":"0x01cbe8c0","bytes":274,"imported_fnv32":"8e027d78","disk_sha256":"f0d31b28067dbc5d38ec4cba6879b1eb8cfb798c3bab30a42066dab21854756e"},
+      {"rva":"0x01d089e0","bytes":475,"imported_fnv32":"e34d5872","disk_sha256":"cb1d37ec019f1a7157e3ff0916b94d383144cc25179f283593a16efb7e331ca1"}
+    ],
+    "validation":"Each selected complete imported body fingerprint matched authenticated current disk bytes; default callback slots and threshold matched imported/disk data. PE imports independently identify GetProcessHeap, HeapAlloc, HeapFree, OutputDebugStringA. Initial diagnostic script passed the seven body comparisons then rejected a raw-file read of zero-filled BSS; corrected section-aware read confirmed the zero initial profiling region. No native decoder or shutdown executed."
+  },
+  "default_dependency_catalog_contract": {
+    "purpose":"Explicitly requested promotion of minimal default-callback authentication references for both supported builds. No hooks, decoder execution or new shutdown framework. Addresses are not default-value/lifetime proof by themselves.",
+    "consumer":"src/game/native_audio_decoder.cpp",
+    "functions": {
+      "native_oodle_default_allocate":{"cpp_symbol":"NativeOodleDefaultAllocate","current_rva":"0x01cc17c0","older_rva":"0x01c04b00","current_signature":"48895c2408574883ec204863da488bf9ff15a26c8a03","older_signature":"48895c2408574883ec204863da488bf9ff158ae9b003","slot_id":"native_oodle_allocate_slot","abi":"Win64 void* allocate(pointer-sized bytes, signed i32 alignment); identity-only dependency reference for the decoder, not a separate pipeline invocation."},
+      "native_oodle_default_free":{"cpp_symbol":"NativeOodleDefaultFree","current_rva":"0x01cc1820","older_rva":"0x01c04b60","current_signature":"40534883ec20488bd9ff15496c8a033e3e3e4c8b43f833d2488bc84883c4205b48ff25296c8a03","older_signature":"40534883ec20488bd9ff1531e9b0033e3e3e4c8b43f833d2488bc84883c4205b48ff2511e9b003","slot_id":"native_oodle_free_slot","abi":"Win64 void free(void* alignedAllocation); paired process-heap base stored at allocation-8."},
+      "native_oodle_default_diagnostic":{"cpp_symbol":"NativeOodleDefaultDiagnostic","current_rva":"0x01cc1860","older_rva":"0x01c04ba0","current_signature":"83f9027d674c894c2420b838100000e80ca34a00482be0","older_signature":"83f9027d674c894c2420b838100000e87ca34a00482be0","slot_id":"native_oodle_diagnostic_slot","abi":"Default variadic diagnostic level ECX/source RDX/line R8D/format R9; only authenticate its code, never synthesize diagnostic calls."}
+    },
+    "data": {
+      "native_oodle_allocate_slot":{"cpp_symbol":"NativeOodleAllocateSlot","current_rva":"0x06c91be0","older_rva":"0x06e5ebe0","width":8,"expected_target_id":"native_oodle_default_allocate"},
+      "native_oodle_free_slot":{"cpp_symbol":"NativeOodleFreeSlot","current_rva":"0x06c91be8","older_rva":"0x06e5ebe8","width":8,"expected_target_id":"native_oodle_default_free"},
+      "native_oodle_diagnostic_slot":{"cpp_symbol":"NativeOodleDiagnosticSlot","current_rva":"0x06c91bf8","older_rva":"0x06e5ebf8","width":8,"expected_target_id":"native_oodle_default_diagnostic"},
+      "native_oodle_profile_begin_slot":{"cpp_symbol":"NativeOodleProfileBeginSlot","current_rva":"0x06fa3fa8","older_rva":"0x07170878","width":8,"expected_value":0},
+      "native_oodle_profile_end_slot":{"cpp_symbol":"NativeOodleProfileEndSlot","current_rva":"0x06fa3fb0","older_rva":"0x07170880","width":8,"expected_value":0},
+      "native_oodle_stack_threshold":{"cpp_symbol":"NativeOodleStackThreshold","current_rva":"0x06c91ca8","older_rva":"0x06e5eca8","width":4,"expected_value":32768}
+    },
+    "older_missing_facts_closed": {
+      "diagnostic":"Explicit ff7rebirth_.exe-1.004 decoder reads/calls 146e5ebf8, whose imported qword is 141c04ba0. Target independently decompiled: level<2, local 4096-byte formatting via 141c4a0c0, OutputDebugStringA.",
+      "profiling":"Same explicit older decoder reads begin 147170878 before body and end 147170880 on exit; imported 16-byte span is all zero. These are optional pointers, not function RVAs or runtime-null proof.",
+      "threshold":"Same explicit older decoder compares required size against signed DWORD 146e5eca8; imported value 00800000 is 32768. Not derived by a build delta.",
+      "full_helper_import_fingerprints":[{"rva":"0x01c04b00","bytes":87,"fnv32":"7669b668"},{"rva":"0x01c04b60","bytes":39,"fnv32":"536f7e61"},{"rva":"0x01c04ba0","bytes":109,"fnv32":"c739d5b5"}],
+      "identity_limit":"Explicit older program and already-correlated canonical 68fd6fde imported PE. No old whole-file disk/hash validation or native execution is added."
+    },
+    "signature_validation":"All six exact function windows were independently read from their explicit build's imported program and searched there, each returning exactly the intended entry. All end at complete instructions; free signatures cover the full 39-byte function. Current windows/default slots/zero-filled profiling data/threshold are independently matched to the canonical installed 1.005 disk; older is imported-only. Non-hook policies and source-specific consumer are intentional; absence of adapter references is a generator integration failure, not permission to weaken consumer validation.",
+    "value_policy":"Allocate/free/diagnostic current qword must equal actual EXE base plus the corresponding per-build target RVA, whose mapping/code must authenticate; profiling qwords must be null and signed threshold 32768. Initial image/imported values are not a runtime snapshot, atomicity guarantee or callback lease. No arbitrary replacement callbacks admitted.",
+    "promotion_checks": {
+      "catalog_sha256_after_additions":"dcba8a94cff548d11ceed5ae8139f847bbfed9c5d8e7572fb4611b6db76b7a69",
+      "added_symbols":9,
+      "added_build_entries":18,
+      "exact_function_signatures":6,
+      "independent_imported_signature_searches":"PASS: one exact entry per signature in its explicitly selected build program.",
+      "current_disk_recheck":"PASS: canonical full SHA/PE fields, three full-body fingerprints, exact signature bytes and six data-default relationships including zero-filled image tails.",
+      "instruction_decode":"PASS: all six exact windows fully decode at independently established function starts.",
+      "focused_catalog_regression":"python -B tools/test_native_cached_resource_catalog.py: PASS 7 tests.",
+      "official_generation":"Both python -B tools/generate_rva_catalog.py --write and --check FAILED consumer validation: all nine newly declared native_audio_decoder.cpp consumers are not yet referenced by that stable adapter. No generated outputs were written; no validator bypass/render-only claim.",
+      "next_integration":"Lead implements the nine real references in the existing decoder adapter, then reruns official --write/--check. Do not add fake references or weaken consumer validation. No runtime/source edits in this promotion.",
+      "deferred":"Older whole-file disk authentication, current default callback runtime snapshots, decoded-block regression, shutdown and gameplay were not executed."
+    }
+  },
+  "validation": {
+    "explicit_current_ghidra_program_confirmed":true,
+    "current_disk_canonical_sha_and_pe_fields_matched":true,
+    "current_decoder_and_engine_wrapper_full_imported_bodies_equal_disk":true,
+    "entry_signature_complete_instructions_and_unique_in_disk_executable_sections":true,
+    "caller_direct_calls_target_decoder":true,
+    "native_decoder_executed":false,
+    "game_or_ual_initialized":false,
+    "writes":"Only this isolated analysis artifact. No catalog/generated/adapter/pipeline changes.",
+    "window_note":"Exploratory window 0x00b23b08 began inside an instruction and is not used as a contract. The recorded pooled setup starts at proven instruction boundary 0x00b23b05."
+  }
+}

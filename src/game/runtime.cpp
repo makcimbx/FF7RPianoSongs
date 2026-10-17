@@ -6,6 +6,8 @@
 #include "game/chord_voicing.h"
 #include "game/piano_page_selection_guard.h"
 #include "game/uobject_identity.h"
+#include "game/native_audio_runtime.h"
+#include "game/scoreinfo_overlay.h"
 
 #include <vector>
 
@@ -35,7 +37,7 @@ core::HookCallbackGate& non_audio_hook_gate()
     return g_non_audio_hook_gate;
 }
 
-bool install_release_hooks(HMODULE exe_module)
+bool install_release_hooks(HMODULE exe_module, void (*native_initialized)() noexcept)
 {
     g_non_audio_hook_gate.close();
     HookInstallContext context{exe_module};
@@ -43,7 +45,19 @@ bool install_release_hooks(HMODULE exe_module)
         return false;
     }
     initialize_uobject_identity(exe_module);
-    const bool ok = install_menu_session_hooks(context)
+    // Capture real initialization before repository work or other game hooks.
+    const bool native_audio_ok = native_audio::install_native_audio_runtime(exe_module,
+        {&capture_current_uobject_identity_access, &query_original_scoreinfo_accessor,
+            native_initialized});
+    if (!native_audio_ok) {
+        core::log(core::LogLevel::Error,
+            "[native_audio] status=unavailable custom_admission=denied stock_playback=unchanged");
+    } else {
+        core::log(core::LogLevel::Info,
+            "[native_audio] status=barriers_installed readiness=not_published");
+    }
+    const bool ok = native_audio_ok
+        && install_menu_session_hooks(context)
         && install_list_patch_hooks(context)
         && install_selection_hooks(context)
         && install_scoreinfo_overlay_hooks(context)
@@ -70,6 +84,12 @@ bool install_release_hooks(HMODULE exe_module)
 bool shutdown_release_hooks()
 {
     const bool audio_ok = shutdown_audio_sead();
+    const bool native_audio_ok = native_audio::shutdown_native_audio_runtime();
+    if (!audio_ok || !native_audio_ok) {
+        // Native callbacks still borrow the original ScoreInfo/GU services.
+        core::log(core::LogLevel::Error, "[hooks] shutdown status=deferred services=retained");
+        return false;
+    }
     std::vector<core::HookShutdownResult> results;
     const auto collect = [&](const char* module, const core::HookShutdownResult& result) {
         (void)log_shutdown_result(module, result);
@@ -94,7 +114,7 @@ bool shutdown_release_hooks()
     collect("list", list_result);
     const auto menu_result = shutdown_menu_session();
     collect("menu_session", menu_result);
-    const bool identity_consumers_torn_down = audio_ok
+    const bool identity_consumers_torn_down = audio_ok && native_audio_ok
         && duration_result.ok()
         && note_count_result.ok()
         && selection_result.ok()
@@ -102,7 +122,7 @@ bool shutdown_release_hooks()
     if (identity_consumers_torn_down) {
         clear_uobject_identity();
     }
-    const bool ok = audio_ok && core::aggregate_shutdown_results(results);
+    const bool ok = audio_ok && native_audio_ok && core::aggregate_shutdown_results(results);
     core::log(ok ? core::LogLevel::Debug : core::LogLevel::Error,
         ok ? "[hooks] shutdown status=ok" : "[hooks] shutdown status=failed cleanup=retained");
     return ok;

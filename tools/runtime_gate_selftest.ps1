@@ -433,6 +433,65 @@ try {
     Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Rollback" } | Out-Null
     Assert-RollbackOutcome $fixture $manifestPath
 
+    # Native collection proves preparation/readiness, not audible playback.
+    $mainSource = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $PSScriptRoot) 'src/main.cpp') -Raw
+    Assert-True ($mainSource.Contains('"[native_cache] status=prepared id=\"" + descriptor.id + "\""')) "native fixture does not match the production artifact marker"
+    Assert-True ($mainSource.Contains('"[startup] status=initialized mode=native_audio"')) "native fixture does not match the deferred completion marker"
+    $nativeLines = @(
+        '[startup] product=FF7RPianoSongs version=test',
+        '[native_audio] status=barriers_installed readiness=not_published',
+        '[hooks] status=installed_release_hooks',
+        '[startup] status=initialized mode=native_audio',
+        '[native_cache] status=prepared id="test-song"',
+        '[song] status=repository_settled valid_count=1',
+        'native_audio cohort=test-song generation=9 stage=ready failure=none binding=none retention=process_exit rollback=none')
+    foreach ($nativeCase in @(
+        [pscustomobject]@{ Name="native-ready"; Lines=$nativeLines; Pass=$true },
+        [pscustomobject]@{ Name="native-no-runtime"; Lines=$nativeLines[0..5]; Pass=$false },
+        [pscustomobject]@{ Name="native-wrong-cohort"; Lines=@($nativeLines | ForEach-Object { $_ -replace 'cohort=test-song ', 'cohort=another-song ' }); Pass=$false },
+        [pscustomobject]@{ Name="native-wrong-case"; Lines=@($nativeLines | ForEach-Object { $_ -creplace 'test-song', 'TEST-SONG' }); Pass=$false },
+        [pscustomobject]@{ Name="native-wrong-artifact"; Lines=@($nativeLines | ForEach-Object { $_ -replace 'id="test-song"', 'id="another-song"' }); Pass=$false },
+        [pscustomobject]@{ Name="native-reordered"; Lines=@($nativeLines[0],$nativeLines[1],$nativeLines[2],$nativeLines[3],$nativeLines[6],$nativeLines[4],$nativeLines[5]); Pass=$false },
+        [pscustomobject]@{ Name="native-terminal"; Lines=@($nativeLines) + 'native_audio terminal failure=shutdown'; Pass=$false },
+        [pscustomobject]@{ Name="native-selection-rejected"; Lines=@($nativeLines) + 'native_audio selection_rejected generation=9 failure=bindings'; Pass=$false },
+        [pscustomobject]@{ Name="native-activation-denied"; Lines=@($nativeLines) + '[selection] activation_admission status=denied song_id=test-song selection_generation=65 return_rva=0x399f3f9 native_result=1 original_calls=1'; Pass=$false },
+        [pscustomobject]@{ Name="native-chart-row-rejected"; Lines=@($nativeLines) + '[chart_patch] plan status=skipped reason=selected_row_headers song_id=test-song difficulty=5 layout_ok=0 cohort_generation=2 selected_name=0x64bd20 provider=0x7febc3030e00 row=0x7ff3633d2dac'; Pass=$false },
+        [pscustomobject]@{ Name="native-chart-row-bounds"; Lines=@($nativeLines) + '[chart_patch] plan status=skipped reason=selected_row_bounds song_id=test-song'; Pass=$false },
+        [pscustomobject]@{ Name="native-chart-provider-drift"; Lines=@($nativeLines) + '[chart_patch] plan status=skipped reason=selected_provider_drift song_id=test-song'; Pass=$false },
+        [pscustomobject]@{ Name="native-chart-source-generation"; Lines=@($nativeLines) + '[chart_patch] plan status=skipped reason=selected_source_generation_drift song_id=test-song'; Pass=$false },
+        [pscustomobject]@{ Name="native-extended-chart-rejected"; Lines=@($nativeLines) + '[extended_chart] transaction=rejected phase=begin reason=selection_admission_mismatch target_count=0'; Pass=$false },
+        [pscustomobject]@{ Name="native-not-initialized"; Lines=@($nativeLines | ForEach-Object { $_ -replace 'status=initialized mode=native_audio', 'status=awaiting_native_initializer workers=not_started' }); Pass=$false },
+        [pscustomobject]@{ Name="native-completion-failed"; Lines=@($nativeLines) + '[startup] status=disabled_title_input_service_failed'; Pass=$false },
+        [pscustomobject]@{ Name="native-no-legacy-fallback"; Lines=@($nativeLines[0..5]) + @('[audio_sead] status=prepared_playsetup_route','[audio_sead_sidecar] id="test-song" status=ready mabf_size=0x1'); Pass=$false }
+    )) {
+        $fixture = New-Fixture (Join-Path $temp $nativeCase.Name)
+        $manifestPath = Prepare-Development $fixture
+        $nativeCase.Lines | Set-Content -LiteralPath $fixture.log -Encoding utf8
+        Invoke-Gate @{ Action = "Collect"; Session = $manifestPath } | Out-Null
+        $evidence = Get-Content -LiteralPath (Join-Path (Split-Path -Parent $manifestPath) "evidence.json") -Raw | ConvertFrom-Json
+        Assert-True (($evidence.assessment -eq "Passed") -eq $nativeCase.Pass) "unexpected native assessment: $($nativeCase.Name)"
+        if ($nativeCase.Pass) {
+            Assert-True ($evidence.startupOrdering -eq "Native" -and $evidence.nativeStartupMarkers -and
+                $evidence.nativeArtifactsReady -and $evidence.nativeRuntimeReady -and !$evidence.sidecarReady) "native readiness was mislabeled as sidecar playback"
+            Assert-True ((Get-Content -LiteralPath $evidence.excerptPath -Raw) -match 'native_audio cohort=test-song') "native backend facts missing from excerpt"
+            Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Keep" } | Out-Null
+            Assert-Sentinels $fixture
+        } else {
+            if ($nativeCase.Name -eq 'native-activation-denied') {
+                Assert-True ((Get-Content -LiteralPath $evidence.excerptPath -Raw) -match '\[selection\] activation_admission status=denied') 'activation rejection missing from collected excerpt'
+            }
+            if ($nativeCase.Name -like 'native-chart-*') {
+                Assert-True ((Get-Content -LiteralPath $evidence.excerptPath -Raw) -match '\[chart_patch\] plan status=skipped reason=selected_(?:row|provider|source)_') 'chart rejection missing from collected excerpt'
+            }
+            if ($nativeCase.Name -eq 'native-extended-chart-rejected') {
+                Assert-True ((Get-Content -LiteralPath $evidence.excerptPath -Raw) -match '\[extended_chart\] transaction=rejected') 'extended chart rejection missing from collected excerpt'
+            }
+            Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Keep" } -ExpectFailure
+            Invoke-Gate @{ Action = "Finalize"; Session = $manifestPath; Disposition = "Rollback" } | Out-Null
+            Assert-RollbackOutcome $fixture $manifestPath
+        }
+    }
+
     foreach ($case in @(
         [pscustomobject]@{ Name="progressive-missing-sidecar"; Lines=@(
             '[startup] product=FF7RPianoSongs version=test','[audio_sead] status=prepared_playsetup_route',

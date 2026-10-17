@@ -377,6 +377,12 @@ CatalogAdoptionResult try_adopt_pending_catalog_before_menu_open(
         report.first_failure = "list_row_resolve";
         return blocked();
     }
+    const auto audio_readiness = prepared_audio_catalog_readiness(pending->audio);
+    if (audio_readiness != AudioCatalogReadiness::Ready) {
+        report.first_failure = audio_readiness == AudioCatalogReadiness::Pending
+            ? "native_audio_pending" : "native_audio_failed";
+        return blocked();
+    }
 
     auto callback_exclusive = non_audio_hook_gate().try_suspend_exclusive(callback);
     if (!callback_exclusive) {

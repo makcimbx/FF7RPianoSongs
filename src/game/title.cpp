@@ -65,7 +65,8 @@ HWND g_game_window = nullptr;
 WNDPROC g_previous_window_proc = nullptr;
 std::atomic<void*> g_last_title_population_context{nullptr};
 
-bool install_difficulty_window_hook();
+enum class DifficultyWindowAttachment { Pending, Attached, Failed };
+DifficultyWindowAttachment install_difficulty_window_hook();
 void apply_detail_title(void* context, const char* source);
 
 using PianoDetailUpdateFn = void(__fastcall*)(void* context);
@@ -85,11 +86,22 @@ PlayerInputInputKeyFn g_original_player_input_key = nullptr;
 std::mutex g_title_text_mutex;
 OwnedTitleText g_live_title;
 HMODULE g_exe_module = nullptr;
+enum class TitleInputServiceState { Uninstalled, HooksPublished, Starting, Active, Failed, Stopped };
+std::atomic<TitleInputServiceState> g_input_service_state{TitleInputServiceState::Uninstalled};
+std::mutex g_input_service_mutex;
+bool g_raw_input_registration_attempted=false;
+#ifdef FF7RP_TITLE_INPUT_SERVICE_SELFTEST
+bool (*g_test_install_title_hook)(const char*,void**)=nullptr;
+FNameCtorFn g_test_fname_ctor=nullptr;
+#endif
 
 using FStringView = runtime_layouts::FString;
 
 bool install_named_hook(const HookInstallContext& context, const char* name, core::RawRvaHook& hook, void* detour, void** original)
 {
+#ifdef FF7RP_TITLE_INPUT_SERVICE_SELFTEST
+    if(g_test_install_title_hook)return g_test_install_title_hook(name,original);
+#endif
     const HookSpec* spec = find_hook_spec(name);
     if (!spec) {
         std::ostringstream out;
@@ -115,12 +127,16 @@ bool install_named_hook(const HookInstallContext& context, const char* name, cor
 bool construct_fname_id(const wchar_t* text, uint32_t& comparison_id)
 {
     comparison_id = 0;
-    if (!g_exe_module || !text) {
+    if (!g_exe_module || !text
+        || g_input_service_state.load(std::memory_order_acquire)!=TitleInputServiceState::Starting) {
         return false;
     }
     FNameValue name{};
-    const auto fname_ctor = reinterpret_cast<FNameCtorFn>(
+    auto fname_ctor = reinterpret_cast<FNameCtorFn>(
         reinterpret_cast<uintptr_t>(g_exe_module) + rva::FNameCtor);
+#ifdef FF7RP_TITLE_INPUT_SERVICE_SELFTEST
+    if(g_test_fname_ctor)fname_ctor=g_test_fname_ctor;
+#endif
     __try {
         fname_ctor(&name, text, 0);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -227,9 +243,10 @@ bool __fastcall player_input_key_detour(void* player_input, const void* key, int
         return g_original_player_input_key
             ? g_original_player_input_key(player_input, key, event_type, amount, gamepad) : false;
     }
-    if ((event_type == 0 || event_type == 1 || event_type == 2) && key) {
+    if (g_input_service_state.load(std::memory_order_acquire)==TitleInputServiceState::Active
+        && (event_type == 0 || event_type == 1 || event_type == 2) && key) {
         FNameValue key_name{};
-        if (core::safe_copy_bytes(key, &key_name, sizeof(key_name))) {
+        if (core::safe_copy_bytes(key, &key_name, sizeof(key_name)) && key_name.comparison_id!=0) {
             const uint32_t comparison_id = key_name.comparison_id;
             if (comparison_id == g_native_dpad_left_name.load(std::memory_order_acquire)) {
                 g_difficulty_event_providers.update_player_input(true, event_type);
@@ -389,21 +406,12 @@ void poll_dynamic_difficulty_input_impl()
 DWORD WINAPI difficulty_input_thread_main(void*)
 {
     core::log(core::LogLevel::Info, "[title] difficulty_input status=poller_started interval_ms=16");
-    uint32_t window_retry_ticks = 0;
-    uint32_t native_name_retry_ticks = 0;
     while (g_difficulty_input_thread_running.load(std::memory_order_acquire)) {
         run_difficulty_input_poller_iteration(
             non_audio_hook_gate(),
             [&] {
-                if (!g_game_window && (window_retry_ticks++ % 60) == 0) {
-                    (void)install_difficulty_window_hook();
-                }
-                if ((!g_native_dpad_left_name.load(std::memory_order_acquire)
-                        || !g_native_dpad_right_name.load(std::memory_order_acquire))
-                    && (native_name_retry_ticks++ % 60) == 0) {
-                    (void)resolve_native_dpad_names();
-                }
-                poll_dynamic_difficulty_input_impl();
+                if(g_input_service_state.load(std::memory_order_acquire)==TitleInputServiceState::Active)
+                    poll_dynamic_difficulty_input_impl();
             },
             [] { Sleep(16); });
     }
@@ -513,6 +521,9 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
         return g_previous_window_proc ? CallWindowProcW(g_previous_window_proc, window, message, wparam, lparam)
                                       : DefWindowProcW(window, message, wparam, lparam);
     }
+    if(g_input_service_state.load(std::memory_order_acquire)!=TitleInputServiceState::Active)
+        return g_previous_window_proc ? CallWindowProcW(g_previous_window_proc,window,message,wparam,lparam)
+            : DefWindowProcW(window,message,wparam,lparam);
     if (message == WM_INPUT) {
         update_raw_hid_dpad(lparam);
     } else if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) {
@@ -548,20 +559,20 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
     return CallWindowProcW(g_previous_window_proc, window, message, wparam, lparam);
 }
 
-bool install_difficulty_window_hook()
+DifficultyWindowAttachment install_difficulty_window_hook()
 {
     HWND window = nullptr;
     EnumWindows(find_game_window, reinterpret_cast<LPARAM>(&window));
     if (!window) {
         core::log(core::LogLevel::Debug,
             "[title] difficulty_profile ui_refresh=window_not_found status=pending");
-        return false;
+        return DifficultyWindowAttachment::Pending;
     }
     SetLastError(ERROR_SUCCESS);
     const LONG_PTR previous = SetWindowLongPtrW(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(difficulty_window_proc));
     if (!previous && GetLastError() != ERROR_SUCCESS) {
         core::log(core::LogLevel::Error, "[title] difficulty_profile ui_refresh=window_hook_failed");
-        return false;
+        return DifficultyWindowAttachment::Failed;
     }
     g_game_window = window;
     g_previous_window_proc = reinterpret_cast<WNDPROC>(previous);
@@ -569,19 +580,26 @@ bool install_difficulty_window_hook()
         {0x01, 0x04, RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, window}, // Generic Desktop / Joystick
         {0x01, 0x05, RIDEV_INPUTSINK | RIDEV_DEVNOTIFY, window}, // Generic Desktop / Gamepad
     };
+    g_raw_input_registration_attempted=true;
     if (!RegisterRawInputDevices(raw_devices, static_cast<UINT>(std::size(raw_devices)), sizeof(RAWINPUTDEVICE))) {
         core::log(core::LogLevel::Error,
             "[title] difficulty_input status=raw_input_registration_failed error=" + std::to_string(GetLastError()));
+        return DifficultyWindowAttachment::Failed;
     } else {
         core::log(core::LogLevel::Info,
             "[title] difficulty_input status=raw_input_registered usages=joystick,gamepad");
     }
     core::log(core::LogLevel::Info, "[title] difficulty_profile ui_refresh=window_hook_ready");
-    return true;
+    return DifficultyWindowAttachment::Attached;
 }
 
 bool uninstall_difficulty_window_hook()
 {
+    if(g_raw_input_registration_attempted) {
+        const RAWINPUTDEVICE devices[]={{0x01,0x04,RIDEV_REMOVE,nullptr},{0x01,0x05,RIDEV_REMOVE,nullptr}};
+        if(!RegisterRawInputDevices(devices,static_cast<UINT>(std::size(devices)),sizeof(RAWINPUTDEVICE)))return false;
+        g_raw_input_registration_attempted=false;
+    }
     if (g_game_window && g_previous_window_proc) {
         if (reinterpret_cast<WNDPROC>(GetWindowLongPtrW(g_game_window, GWLP_WNDPROC)) != difficulty_window_proc) {
             return false;
@@ -1005,7 +1023,16 @@ ProfileListCallbacks make_profile_list_callbacks()
         return refreshed;
     };
     callbacks.post_refresh = [](std::uint64_t ticket) {
-        if (!g_game_window) (void)install_difficulty_window_hook();
+        std::unique_lock service_lock(g_input_service_mutex,std::try_to_lock);
+        if(!service_lock.owns_lock()
+            || g_input_service_state.load()!=TitleInputServiceState::Active)return false;
+        if(!g_game_window && install_difficulty_window_hook()==DifficultyWindowAttachment::Failed) {
+            auto expected=TitleInputServiceState::Active;
+            (void)g_input_service_state.compare_exchange_strong(expected,TitleInputServiceState::Failed);
+            g_difficulty_input_thread_running.store(false,std::memory_order_release);
+            return false;
+        }
+        if(g_input_service_state.load()!=TitleInputServiceState::Active)return false;
         const bool posted = g_game_window && PostMessageW(g_game_window,
             kDifficultyUiRefreshMessage, static_cast<WPARAM>(ticket), 0);
         if (!posted) core::log(core::LogLevel::Error,
@@ -1096,6 +1123,8 @@ int pending_title_resolver_tokens()
 
 bool install_title_hooks(const HookInstallContext& context)
 {
+    std::lock_guard service_lock(g_input_service_mutex);
+    if(!context.exe_module || g_input_service_state.load()!=TitleInputServiceState::Uninstalled)return false;
     g_exe_module = context.exe_module;
     const bool ok = install_named_hook(context, "piano_detail_update", g_detail_update_hook,
                         reinterpret_cast<void*>(&detail_update_detour), reinterpret_cast<void**>(&g_original_detail_update))
@@ -1110,12 +1139,11 @@ bool install_title_hooks(const HookInstallContext& context)
         if (!converter_ok) {
             core::log(core::LogLevel::Error, "[title] converter status=disabled reason=install_failed");
         }
-        (void)resolve_native_dpad_names();
         native_input_ok = install_named_hook(context, "player_input_input_key", g_player_input_key_hook,
             reinterpret_cast<void*>(&player_input_key_detour), reinterpret_cast<void**>(&g_original_player_input_key));
         std::ostringstream input_out;
         input_out << "[title] difficulty_input status="
-            << (native_input_ok ? "native_player_input_ready" : "native_player_input_disabled");
+            << (native_input_ok ? "native_player_input_hook_published" : "native_player_input_disabled");
         if (native_input_ok) {
             input_out << " rva=0x" << std::hex << rva::PlayerInputInputKey;
         } else {
@@ -1130,12 +1158,41 @@ bool install_title_hooks(const HookInstallContext& context)
         << " detail_title_helper=" << (resolve_set_string_text_helper() ? "available" : "disabled")
         << " custom_songs=" << registry().custom_count();
     core::log(ok ? core::LogLevel::Info : core::LogLevel::Error, out.str());
-    (void)install_difficulty_window_hook();
-    return ok && start_difficulty_input_thread();
+    auto expected=TitleInputServiceState::Uninstalled;
+    const bool published=g_input_service_state.compare_exchange_strong(expected,
+        ok?TitleInputServiceState::HooksPublished:TitleInputServiceState::Failed);
+    return ok && published;
+}
+
+bool start_title_input_service(HMODULE exe_module) noexcept
+{
+    std::lock_guard service_lock(g_input_service_mutex);
+    if(!exe_module || exe_module!=g_exe_module)return false;
+    auto expected=TitleInputServiceState::HooksPublished;
+    if(!g_input_service_state.compare_exchange_strong(expected,TitleInputServiceState::Starting))
+        return expected==TitleInputServiceState::Active;
+    try {
+        if(resolve_native_dpad_names() && g_input_service_state.load()==TitleInputServiceState::Starting
+            && install_difficulty_window_hook()!=DifficultyWindowAttachment::Failed
+            && g_input_service_state.load()==TitleInputServiceState::Starting
+            && start_difficulty_input_thread()) {
+            expected=TitleInputServiceState::Starting;
+            if(g_input_service_state.compare_exchange_strong(expected,TitleInputServiceState::Active))return true;
+        }
+    }catch(...){}
+    expected=TitleInputServiceState::Starting;
+    (void)g_input_service_state.compare_exchange_strong(expected,TitleInputServiceState::Failed);
+    // Failed or stopped startup cannot be retried. Keep any failed cleanup
+    // ownership for shutdown rather than publishing a partial input service.
+    if(stop_difficulty_input_thread())(void)uninstall_difficulty_window_hook();
+    return false;
 }
 
 core::HookShutdownResult shutdown_title()
 {
+    g_input_service_state.store(TitleInputServiceState::Stopped,std::memory_order_release);
+    std::unique_lock service_lock(g_input_service_mutex,std::try_to_lock);
+    if(!service_lock.owns_lock())return {};
     profile_list_coordinator().shutdown();
     return core::shutdown_gated_hooks(non_audio_hook_gate(), {
         core::teardown_operation(g_player_input_key_hook),

@@ -46,6 +46,7 @@ struct Fixture {
     bool selection_contended = false;
     bool list_contended = false;
     bool audio_idle = true;
+    game::AudioCatalogReadiness audio_readiness = game::AudioCatalogReadiness::Ready;
     bool audio_base_stale = false;
     bool registry_base_stale = false;
     bool terminal = false;
@@ -197,6 +198,11 @@ std::shared_ptr<PreparedPianoListCatalog> prepare_piano_list_catalog_republish(
     out->registry_generation = candidate_catalog.generation;
     out->republish = true;
     return out;
+}
+
+AudioCatalogReadiness prepared_audio_catalog_readiness(const PreparedAudioCatalog&) noexcept
+{
+    return f.audio_readiness;
 }
 
 bool prepare_audio_catalog_from_prefix(
@@ -423,6 +429,16 @@ int main()
     ok &= require(game::offer_prepared_pending_catalog(first_pending)
             && readiness.snapshot().available_on_reopen_song_count == 1,
         "focused initial-prefix readiness reset failed");
+
+    for (const auto state : {game::AudioCatalogReadiness::Pending, game::AudioCatalogReadiness::Failed}) {
+        f.audio_readiness = state;
+        ok &= require(attempt() == game::CatalogAdoptionResult::Blocked
+                && f.trace_count == 0 && !f.owner
+                && f.tuple.count == Fixture::native_count
+                && game::registry().registry_snapshot().storage == old_registry.storage,
+            "unready native audio published list or owning identities");
+    }
+    f.audio_readiness = game::AudioCatalogReadiness::Ready;
 
     bool pending_locked = false;
     bool release_pending = false;

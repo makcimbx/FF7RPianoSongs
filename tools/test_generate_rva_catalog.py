@@ -212,13 +212,23 @@ class MultiBuildCatalogTests(unittest.TestCase):
         catalog["builds"].append({**source_build, "id": new_build_id})
         source_build_id = source_build["id"]
         for entry in catalog["addresses"]:
-            if entry["id"] in omit_ids:
+            if entry["id"] in omit_ids or source_build_id not in entry["builds"]:
                 continue
             entry["builds"][new_build_id] = copy.deepcopy(entry["builds"][source_build_id])
         # Locators admit no absence, so a new build must always carry its own derivation.
         for locator in catalog["locators"]:
             locator["builds"][new_build_id] = copy.deepcopy(locator["builds"][source_build_id])
         return catalog
+
+    def test_new_build_preserves_source_absence(self) -> None:
+        catalog = self.raw()
+        source_build_id = catalog["builds"][0]["id"]
+        source_absent = next(entry for entry in catalog["addresses"]
+                             if source_build_id not in entry["builds"])
+        new_build_id = "ff7rebirth-steam-win64-55555555"
+        self.add_second_build(catalog, new_build_id)
+        self.assertNotIn(new_build_id, source_absent["builds"])
+        self.load(catalog)
 
     def test_release_entry_missing_from_a_build_is_rejected(self) -> None:
         catalog = self.raw()

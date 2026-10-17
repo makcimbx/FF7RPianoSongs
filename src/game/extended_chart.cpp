@@ -970,6 +970,7 @@ bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     const SelectionAudioAdmissionAuthority& authority,
     void* wrapper, void* chart_row, uintptr_t caller_rva) noexcept {
     int32_t diagnostic_target_count = 0;
+    SelectionAudioAuthorityDiagnostic admission_facts;
     const auto* diagnostic_profile = authority.selection.profile;
     const bool report_rejection = extended_chart_begin_rejection_relevant(
         g_transaction.active, transaction.active || authority.exact,
@@ -987,6 +988,22 @@ bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
             std::ostringstream out;
             out << "[extended_chart] transaction=rejected phase=begin reason=" << reason
                 << " target_count=" << diagnostic_target_count;
+            if(admission_facts.failure!=SelectionAudioAuthorityFailure::None) {
+                out << " predicate=" << selection_audio_authority_failure_name(admission_facts.failure)
+                    << " committed=" << admission_facts.committed
+                    << " selection_expected=" << admission_facts.expected_selection
+                    << " selection_observed=" << admission_facts.observed_selection
+                    << " activation_expected=" << admission_facts.expected_activation
+                    << " activation_observed=" << admission_facts.observed_activation
+                    << " route_epoch_expected=" << admission_facts.expected_route_epoch
+                    << " preparation_expected=" << admission_facts.expected_preparation
+                    << " route_expected=" << admission_facts.expected_token.route_generation
+                    << " route_observed=" << admission_facts.observed_token.route_generation
+                    << " lease_expected=" << admission_facts.expected_token.lease_generation
+                    << " lease_observed=" << admission_facts.observed_token.lease_generation
+                    << " song_key_expected=" << admission_facts.expected_token.song_key
+                    << " song_key_observed=" << admission_facts.observed_token.song_key;
+            }
             if (tail_index != (std::numeric_limits<std::size_t>::max)())
                 out << " tail_index=" << tail_index;
             core::log(core::LogLevel::Error, out.str());
@@ -1006,7 +1023,8 @@ bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
     if (caller_rva != rva::PersistentChartExpandCaller) return reject("caller_mismatch");
     if (!wrapper || !chart_row) return reject("native_argument_missing");
     const SelectionSnapshot& selection = authority.selection;
-    if (!selection_audio_admission_authority_matches(authority))
+    // Copies paired facts under synchronization; reject formats after release.
+    if (!selection_audio_admission_authority_matches(authority, &admission_facts))
         return reject("selection_admission_mismatch");
     if (!selection.song || !selection.profile) return reject("selection_missing");
     diagnostic_target_count = static_cast<int32_t>(selection.profile->native_event_count);

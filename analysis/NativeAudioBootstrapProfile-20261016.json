@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "purpose": "Reviewed static preparation for synchronous native-audio bootstrap on the original EXE startup thread. This file is evidence/profile data, not an authorization token, native lease, hook installation or runtime qualification.",
+  "mode": "Debug; no gameplay, process, loader or runtime changes performed by this investigation",
+  "supported_build": {
+    "catalog_path": "src/game/rva_catalog.json",
+    "catalog_sha256_at_read": "8641eed871c8ec6bf29ace3ecc69745c5d8e0fff168d8262c04fb7bd9dd2bcb5",
+    "build_id": "ff7rebirth-steam-win64-6a16ced2",
+    "game_version": "1.005",
+    "preferred_image_base": "0x140000000",
+    "pe_timestamp": "0x6a16ced2",
+    "size_of_image": "0x099d9000",
+    "pe_checksum": "0x0769ea6e",
+    "file_size": 124317952,
+    "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc",
+    "identity_rule": "Authenticate the actual loaded executable against the canonical catalog record before accepting any source or installing game hooks. A matching profile/build string is insufficient.",
+    "older_build": "Unavailable: no older-build bootstrap/API-chain/initialized-state profile is supplied or implied by older address promotion."
+  },
+  "provenance": {
+    "ghidra_program_selector": "ff7rebirth_.exe-1.005",
+    "ghidra_internal_program_name": "ff7rebirth_.exe-9457d4",
+    "ghidra_access": "Existing instance; explicit program on read-only decompile/disassembly/imported-memory requests; no switching, persistence, debugger operations or restart",
+    "disk_path_inspected": "D:/SteamLibrary/steamapps/common/FINAL FANTASY VII REBIRTH/End/Binaries/Win64/ff7rebirth_.exe",
+    "disk_identity": "Full SHA256 and canonical PE identity matched; PE sections/imports/exception directory parsed read-only",
+    "code_windows": "Every code_windows byte string was independently checked against the supported disk; complete instructions decoded and executable-section occurrence counts checked. Entry and contextual signature windows below are unique. Isolated CALL encodings need not be unique; use their unique containing window and exact RVA.",
+    "imported_disk_checks": [
+      {"rva": "0x0216c76c", "bytes": 175, "fnv1a32": "3968086c", "meaning": "Complete cookie helper"},
+      {"rva": "0x0216c660", "bytes": 58, "fnv1a32": "7d5562c7", "meaning": "Complete show-window helper"},
+      {"rva": "0x0216bf30", "bytes": 369, "fnv1a32": "3047e050", "meaning": "CRT startup body span; exception-directory range is recorded separately"},
+      {"rva": "0x0216c015", "bytes": 33, "fnv1a32": "e4b40c04", "meaning": "Show-window and later WinMain direct CALLs"},
+      {"rva": "0x027e9530", "bytes": 38, "fnv1a32": "9ea37f2a", "meaning": "WinMain entry"},
+      {"rva": "0x01a05954", "bytes": 227, "fnv1a32": "e0c45867", "meaning": "GU header native initialization"},
+      {"rva": "0x00657760", "bytes": 482, "fnv1a32": "10822ca7", "meaning": "Constructor-started crash monitor initialization"},
+      {"rva": "0x027d16d4", "bytes": 223, "fnv1a32": "1277c2d7", "meaning": "Crash monitor worker body"},
+      {"rva": "0x043d5918", "bytes": 23, "fnv1a32": "15e393dd", "meaning": "TaskGraph publication before thread-creation loop"},
+      {"rva": "0x027e7239", "bytes": 13, "fnv1a32": "2531b818", "meaning": "Post-WinMain TaskGraph construction call"}
+    ],
+    "fingerprint_limit": "FNV is a comparison fingerprint, not executable authentication. Whole imported-program SHA is unavailable; disk SHA is authenticated.",
+    "related_evidence": [
+      "analysis/NativeCachedAudioEvidence-20261016.md",
+      "Workspace Tools/Frida/cache_mount_layout.json and cache_mount_trace.js: earlier initializer-local subscription witness, not persistent ownership",
+      "Workspace Tools/Frida/registry_startup_layout.json and startup_trace.py: original AEP source/child-gating evidence, not automatic proof for this alternate source"
+    ],
+    "loader_contract_external_review": {
+      "project": "ThirteenAG/Ultimate-ASI-Loader",
+      "source_commit": "ab722befd52581a34449b603926cfab476e66b05",
+      "path": "source/dllmain.cpp",
+      "dependency": "Lead's separate exact-release review establishes synchronous InitializeASI after LoadLibrary returns, before the original intercepted API continues, outside LoaderLock. This profile does not independently authenticate an installed loader or change its configuration."
+    }
+  },
+  "code_window_encoding": "All bytes are exact hexadecimal, with an implicit x mask for every byte; no wildcard or version-delta substitutions. IAT slot RVAs/import names describe the supported file's import contract. UAL may intentionally interpose those slots; this profile does not require their current values to point directly at unhooked KERNEL32 exports.",
+  "code_windows": {
+    "exe_entry": {
+      "catalog_id": "native_audio_exe_entry",
+      "rva": "0x0216c0a4",
+      "bytes": "4883ec28e8bf0600004883c428e97afeffff",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "cookie_entry_and_skip": {
+      "rva": "0x0216c76c",
+      "bytes": "48895c241855488bec4883ec30488b058000c70448bb32a2df2d992b0000483bc37577",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "crt_entry": {
+      "rva": "0x0216bf30",
+      "bytes": "48895c2408574883ec30b901000000e84cf6ffff84c00f8430010000",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "crt_initializers_complete_and_unlock": {
+      "rva": "0x0216bfac",
+      "bytes": "c7058a60e70402000000eb0840b70140887c24208acbe829f7ffff",
+      "complete_instructions": true,
+      "executable_occurrences": 1,
+      "meaning": "First-initialization branch stores CRT state 2; common path calls startup-lock release at 0216bfc2, return 0216bfc7. Not a supported state-1 entry source."
+    },
+    "show_window_helper": {
+      "rva": "0x0216c660",
+      "bytes": "4881ec9800000033d2488d4c2420448d4268e805150000488d4c2420ff15eec03f03f644245c01b80a000000660f454424604881c498000000c3",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "crt_show_window_to_winmain": {
+      "rva": "0x0216c015",
+      "bytes": "e8460600000fb7d8e86e1c0000448bcb4c8bc033d2488d0dcf3fe9fde8fad46700",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "winmain_entry": {
+      "rva": "0x027e9530",
+      "bytes": "488bc44889580848897010488978184c896020415541564157b830000000e82d2698ff482be0",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "winmain_hinstance_publication": {
+      "rva": "0x027e9556",
+      "bytes": "488bd9488d0d8c94ffffff154a06d80248891d73f97506",
+      "complete_instructions": true,
+      "executable_occurrences": 1,
+      "meaning": "Saves incoming HINSTANCE, installs invalid-parameter handler, then writes HINSTANCE slot at 027e9566; no inference from an address label."
+    },
+    "cookie_time_call": {"rva": "0x0216c79b", "bytes": "ff15a7bd3f03", "complete_instructions": true, "executable_occurrences": 1},
+    "cookie_tid_call": {"rva": "0x0216c7a9", "bytes": "ff1531c03f03", "complete_instructions": true, "executable_occurrences": 1},
+    "cookie_pid_call": {"rva": "0x0216c7b5", "bytes": "ff1595c13f03", "complete_instructions": true, "executable_occurrences": 1},
+    "cookie_qpc_call": {"rva": "0x0216c7c5", "bytes": "ff15d5bf3f03", "complete_instructions": true, "executable_occurrences": 1},
+    "show_startup_info_call": {"rva": "0x0216c67c", "bytes": "ff15eec03f03", "complete_instructions": true, "executable_occurrences": 1},
+    "task_graph_publish": {
+      "rva": "0x043d5918",
+      "bytes": "8b9e5c050000ffc34889352928b6043bd80f8d57010000",
+      "complete_instructions": true,
+      "executable_occurrences": 1,
+      "meaning": "Constructor publishes singleton at 043d5920 before creating TaskGraph workers."
+    },
+    "engine_task_graph_call": {
+      "rva": "0x027e7239",
+      "bytes": "4885c07408488bc8e85ae4be01",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    },
+    "crash_monitor_thread_entry": {
+      "rva": "0x04487c1c",
+      "bytes": "b828000000e85a3fcefd482be04883c428e9a29a34fe",
+      "complete_instructions": true,
+      "executable_occurrences": 1
+    }
+  },
+  "unwind_functions": {
+    "exe_entry": {"begin_rva": "0x0216c0a4", "end_rva_exclusive": "0x0216c0b6", "unwind_info_rva": "0x06b827b8"},
+    "cookie": {"begin_rva": "0x0216c76c", "end_rva_exclusive": "0x0216c81b", "unwind_info_rva": "0x06be9c8c"},
+    "crt": {"begin_rva": "0x0216bf30", "end_rva_exclusive": "0x0216c0a1", "unwind_info_rva": "0x06be9c34"},
+    "show_window": {"begin_rva": "0x0216c660", "end_rva_exclusive": "0x0216c69a", "unwind_info_rva": "0x06b8fe80"},
+    "winmain": {"begin_rva": "0x027e9530", "end_rva_exclusive": "0x027e9a9f", "unwind_info_rva": "0x06bec9c8"},
+    "crash_monitor_initializer": {"begin_rva": "0x00657760", "end_rva_exclusive": "0x00657942", "unwind_info_rva": "0x06af2e80"},
+    "crash_monitor_entry": {"begin_rva": "0x04487c1c", "end_rva_exclusive": "0x04487c32", "unwind_info_rva": "0x06aead94"},
+    "crash_monitor_body": {"begin_rva": "0x027d16d4", "end_rva_exclusive": "0x027d17b3", "unwind_info_rva": "0x06b717bc"},
+    "task_graph_constructor": {"begin_rva": "0x043d56a0", "end_rva_exclusive": "0x043d5aaa", "unwind_info_rva": "0x06af4240"},
+    "gu_initializer": {"begin_rva": "0x01a05954", "end_rva_exclusive": "0x01a05a37", "unwind_info_rva": "0x06aead94"}
+  },
+  "direct_call_consistency": [
+    {"window": "exe_entry", "call_rva": "0x0216c0a8", "encoding": "e8bf060000", "target_rva": "0x0216c76c", "return_rva": "0x0216c0ad"},
+    {"window": "crt_show_window_to_winmain", "call_rva": "0x0216c015", "encoding": "e846060000", "target_rva": "0x0216c660", "return_rva": "0x0216c01a"},
+    {"window": "crt_show_window_to_winmain", "call_rva": "0x0216c031", "encoding": "e8fad46700", "target_rva": "0x027e9530", "return_rva": "0x0216c036"},
+    {"window": "engine_task_graph_call", "call_rva": "0x027e7241", "encoding": "e85ae4be01", "target_rva": "0x043d56a0", "return_rva": "0x027e7246"}
+  ],
+  "import_call_consistency": [
+    {"window": "cookie_time_call", "api": "GetSystemTimeAsFileTime", "dll": "KERNEL32.dll", "iat_rva": "0x05568548", "return_rva": "0x0216c7a1", "source": "cookie_api_pre_crt"},
+    {"window": "cookie_tid_call", "api": "GetCurrentThreadId", "dll": "KERNEL32.dll", "iat_rva": "0x055687e0", "return_rva": "0x0216c7af", "source": "cookie_api_pre_crt"},
+    {"window": "cookie_pid_call", "api": "GetCurrentProcessId", "dll": "KERNEL32.dll", "iat_rva": "0x05568950", "return_rva": "0x0216c7bb", "source": "cookie_api_pre_crt"},
+    {"window": "cookie_qpc_call", "api": "QueryPerformanceCounter", "dll": "KERNEL32.dll", "iat_rva": "0x055687a0", "return_rva": "0x0216c7cb", "source": "cookie_api_pre_crt"},
+    {"window": "show_startup_info_call", "api": "GetStartupInfoW", "dll": "KERNEL32.dll", "iat_rva": "0x05568770", "return_rva": "0x0216c682", "source": "show_window_api_pre_winmain"}
+  ],
+  "source_authentication": {
+    "input": "Current synchronous InitializeASI thread's native unwind results, authenticated loaded EXE and exact code/import/exception-directory matches. A caller boolean, copied historical stack, configured expected PC or merely seeing an API name is not an input proof.",
+    "frame_rule": "Use actual native unwind metadata and current return PCs to identify consecutive EXE frames, allowing authenticated intervening loader/system frames. Do not scan raw stack for these integers or retain frame/output/STARTUPINFO pointers. Reject failed, ambiguous, recursive, mismatched-image or unexpected EXE-frame chains.",
+    "thread_rule": "Execute bootstrap synchronously on this original startup continuation; copy only numeric thread/source/frame facts. Never move initialization to an RPC/worker/runOnThread context. If an earlier trusted startup-thread witness exists it must agree; a missed AEP event is not invented.",
+    "cookie_api_pre_crt": {
+      "current_exe_return_pc": ["0x0216c7a1", "0x0216c7af", "0x0216c7bb", "0x0216c7cb"],
+      "current_exe_unwind_function": "cookie",
+      "parent_exe_return_pc": "0x0216c0ad",
+      "parent_exe_unwind_function": "exe_entry",
+      "baseline": "pre_crt_image",
+      "required_windows": ["exe_entry", "cookie_entry_and_skip", "crt_entry"],
+      "extra_predicate": {"rva": "0x06ddc800", "type": "u64", "equals_hex": "0x00002b992ddfa232", "meaning": "This helper's entropy branch is executing; preseeded-cookie skip supplies no source event."},
+      "control_flow": "AEP tail-jumps to CRT only after cookie helper returns. All four entropy API calls are skipped when the cookie was already seeded; this source is conditional."
+    },
+    "show_window_api_pre_winmain": {
+      "current_exe_return_pc": "0x0216c682",
+      "current_exe_unwind_function": "show_window",
+      "parent_exe_return_pc": "0x0216c01a",
+      "parent_exe_unwind_function": "crt",
+      "baseline": "post_crt_initialized_empty",
+      "required_windows": ["show_window_helper", "show_startup_info_call", "crt_entry", "crt_initializers_complete_and_unlock", "crt_show_window_to_winmain", "winmain_entry", "winmain_hinstance_publication"],
+      "control_flow": "Normal CRT path has completed initializer tables and TLS handling, released its startup lock, and calls GetStartupInfoW unconditionally through this helper. WinMain CALL has not executed. Completed synchronous CRT work is not an in-flight operation. This is a distinct pre-engine origin, not a fabricated pre-AEP observation."
+    },
+    "existing_aep_source": "The cataloged actual AEP observer remains a separate existing supported source with its own tests. This profile does not replace it or imply it fired."
+  },
+  "global_witnesses": {
+    "crt_state": {"catalog_id": "native_audio_crt_state", "type": "u32", "role": "Must be exactly 0 or 2 according to authenticated source, never an arbitrary nonzero readiness test"},
+    "winmain_hinstance": {"rva": "0x08f48ee0", "type": "u64", "expected": 0, "write_window": "winmain_hinstance_publication", "role": "Incoming WinMain HINSTANCE is published here before ordinary engine entry"},
+    "task_graph": {"rva": "0x08f38150", "type": "u64", "expected": 0, "write_window": "task_graph_publish", "role": "Singleton publication precedes TaskGraph worker creation"},
+    "ordinary_thread_pool": {"rva": "0x08f38598", "type": "u64", "expected": 0, "role": "Published in recovered engine initialization after TaskGraph construction"},
+    "background_thread_pool": {"rva": "0x08f38590", "type": "u64", "expected": 0, "role": "Published alongside ordinary pool after TaskGraph construction"},
+    "package_store_owner": {"catalog_id": "package_store_owner_global", "type": "u64", "expected": 0, "role": "Persistent loader-interface slot must still be null; not a captured PackageStore receiver"},
+    "package_store_generation": {"catalog_id": "package_store_generation", "type": "u32", "expected": 0},
+    "shared_name_map": {"catalog_id": "dataobject_name_map", "type": "u64", "expected": 0},
+    "three_managers": {
+      "catalog_ids": ["bgmlist_registry", "scoreinfo_registry", "pianoscore_registry"],
+      "address_semantics": "Direct manager objects, not pointer slots",
+      "read_bytes_each": 48,
+      "expected_hex_each": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "scope": "Three 16-byte group headers only. No row/backing reads, ownership inference or native getters."
+    }
+  },
+  "gu_header": {
+    "catalog_id": "native_audio_initial_gu_header",
+    "read_bytes": 48,
+    "catalog_locator_id": "guobject_array",
+    "locator_relation": "The cataloged initial header is the selected build's actual native initializer return base. If GUObjectArray was independently resolved, require equality. Do not substitute a rel32 locator's raw count-field target or an unvalidated candidate adjustment, or require a live object scan at this empty stage.",
+    "initializer_rva": "0x01a05954",
+    "initializer_return": "Address of the header, corroborated by native return and field stores",
+    "fields": [
+      {"offset": "0x00", "type": "i32", "meaning": "Native non-GC boundary field", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x04", "type": "i32", "meaning": "Last disregard-for-GC pool index", "pre_crt": 0, "post_crt": -1},
+      {"offset": "0x08", "type": "i32", "meaning": "Pool maximum", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x0c", "type": "u8", "meaning": "Native pool-open phase byte", "pre_crt": 0, "post_crt": 1},
+      {"offset": "0x0d", "bytes": 3, "meaning": "Reserved image-zero bytes; strict supported shape only", "expected_hex": "000000"},
+      {"offset": "0x10", "type": "u64", "meaning": "Chunk table pointer", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x18", "type": "u64", "meaning": "Additional native storage field; no speculative pointer ownership/type", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x20", "type": "i32", "meaning": "Maximum elements", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x24", "type": "i32", "meaning": "Number of elements", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x28", "type": "i32", "meaning": "Maximum chunks", "pre_crt": 0, "post_crt": 0},
+      {"offset": "0x2c", "type": "i32", "meaning": "Number of chunks", "pre_crt": 0, "post_crt": 0}
+    ],
+    "serial_counter": {"rva": "0x0871ec50", "type": "u32", "pre_crt": 0, "post_crt": 1000, "proof": "Same selected native initializer assigns 1000; not an unknown counter inferred from a live object"},
+    "distinction": "Image-zero and initialized-empty are different complete profiles. Never accept a mixture, partially written constructor shape, nonzero element count, arbitrary serial value, or use zero counts alone as quiescence."
+  },
+  "constructor_worker": {
+    "crt_table_slot_rva": "0x055caba8",
+    "slot_disk_and_imported_hex": "6077654001000000",
+    "initializer_rva": "0x00657760",
+    "create_thread_call_rva": "0x00657820",
+    "thread_entry_window": "crash_monitor_thread_entry",
+    "worker_body_rva": "0x027d16d4",
+    "context_rva": "0x06eff310",
+    "normal_path": "Waits for crash-report events or monitors report process; recovered normal loop has no selected DataObject manager operation. This real pre-WinMain thread is accounted for, not incorrectly claimed absent.",
+    "fields": {
+      "stop_request": {"rva": "0x06eff320", "context_offset": "0x10", "type": "u32", "expected_both_sources": 0},
+      "report_process": {"rva": "0x06eff358", "context_offset": "0x48", "type": "u64", "expected_both_sources": 0},
+      "report_exit_result": {"rva": "0x09274b78", "type": "u64", "expected_both_sources": 0, "proof": "Worker writes exit code OR 0x100000000 when report process completion is handled"},
+      "initializer_complete": {"rva": "0x06f12858", "type": "u8", "pre_crt": 0, "post_crt": 1, "proof": "Final normal initializer store; also gates its vectored exception path, not a lease"},
+      "worker_handle": {"rva": "0x06eff318", "type": "opaque_handle_u64", "pre_crt": 0, "post_crt": "nonzero_and_not_minus_one; do not dereference"},
+      "request_event": {"rva": "0x06eff328", "context_offset": "0x18", "type": "opaque_handle_u64", "pre_crt": 0, "post_crt": "nonzero_and_not_minus_one; do not dereference"},
+      "completion_event": {"rva": "0x06eff330", "context_offset": "0x20", "type": "opaque_handle_u64", "pre_crt": 0, "post_crt": "nonzero_and_not_minus_one; do not dereference"}
+    },
+    "error_path_limit": "Native event kernel state is not observable by these raw reads; do not query/wait/reset events as part of this proof. Supported profile is normal non-exception startup. An observed fault/error/unwind failure, active report process/result/stop request, failed constructor or incompatible source state rejects bootstrap. No claim that raw fields diagnose every possible crash race.",
+    "survey_limit": "Actual CRT tables/direct and tail-call relationships and selected worker bodies were inspected. The bounded survey is not all-engine/foreign-DLL proof. Relevant TaskGraph/pool/loading startup paths are separately anchored after WinMain."
+  },
+  "selected_synchronous_initializers": {
+    "bgm_manager": {
+      "crt_table_slot_rva": "0x055c21e0",
+      "initializer_rva": "0x005e6640",
+      "constructor_rva": "0x019db1a4",
+      "receiver_catalog_id": "bgmlist_registry",
+      "meaning": "Actual EXE initializer-table entry constructs the direct manager and registers its exit callback; this synchronous initialization is complete at the supported post-CRT source."
+    },
+    "gu_header": {
+      "crt_table_slot_rva": "0x055cba30",
+      "initializer_rva": "0x00660e00",
+      "constructor_rva": "0x01a05954",
+      "receiver_catalog_id": "native_audio_initial_gu_header",
+      "meaning": "Actual EXE initializer-table entry invokes the native header constructor and registers its exit callback. Do not require the image-zero shape after this constructor completed."
+    },
+    "evidence_limit": "These selected entries, the actual crash-worker constructor and the post-WinMain engine-worker chain support the normal source profile. No state-1 callback is accepted merely because it belongs to an initializer table."
+  },
+  "baselines": {
+    "pre_crt_image": {
+      "crt_state": 0,
+      "gu_header_hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "gu_serial_counter": 0,
+      "crash_monitor_state": "pre_crt",
+      "other_globals": "All global_witnesses expected values; all three manager header spans zero"
+    },
+    "post_crt_initialized_empty": {
+      "crt_state": 2,
+      "gu_header_hex": "00000000ffffffff00000000010000000000000000000000000000000000000000000000000000000000000000000000",
+      "gu_serial_counter": 1000,
+      "crash_monitor_state": "post_crt",
+      "other_globals": "All global_witnesses expected values; all three manager header spans zero",
+      "ordering_proof": "Show-window helper runs after synchronous EXE initializer/TLS completion and CRT lock release, before WinMain. Known constructor crash worker is not a normal selected-operation executor; TaskGraph singleton publication precedes its workers and occurs in engine preinit reached from WinMain."
+    }
+  },
+  "rejected_sources": [
+    {
+      "source": "crt_state_1_c_preinit_or_initterm_callback",
+      "status": "not_qualified_by_this_bounded_profile",
+      "reason": "A _initterm/C-preinit frame and GU zero or initialized-empty shape do not identify the suspended current callback. It could still be inside an initializer/native helper, allocator or selected operation; no exact originating callback/API path excluding those active frames was qualified. Completed earlier work is not the objection. A partially executed GU/manager initializer is explicitly invalid. No _initterm caller-return windows are offered as accepted-source evidence."
+    },
+    {"source": "api_name_only_or_arbitrary_crt_callback", "reason": "An API name, CRT state, historical PC list or caller boolean does not authenticate the required current native chain"},
+    {"source": "late_engine_or_already_running_game", "reason": "No retrofit counting, sleeping, sampled zero depth or empty pointer observation accounts for already-entered selected work"},
+    {"source": "loaderlock_or_dllmain_worker_or_rpc", "reason": "This profile depends on separately reviewed synchronous export invocation outside LoaderLock on the held original startup continuation"},
+    {"source": "older_build", "reason": "Unavailable; do not reuse current-build constants/signatures/structure states"}
+  ],
+  "publication_and_rejection_contract": {
+    "sequence": [
+      "Capture and authenticate the current source/thread/unwind chain inside synchronous InitializeASI; do not rely on an asynchronous DllMain-started worker",
+      "Authenticate loaded EXE hash/PE, all required code/CALL/import/exception metadata and complete source-specific baseline",
+      "Suppress bootstrap self-recursion; install every selected protective hook from one owned initialization transaction, without executing original selected native operations",
+      "Publish hooks and prove each owned installation; capture the same full baseline again before returning to UAL/original API",
+      "Reject source/thread/code/baseline drift, incomplete installation, unexpected frames, partial initializer shape, earlier backend fault or conflicting ownership; no late retry",
+      "Only after both checks and full publication copy an immutable startup-origin record (source enum, thread, executable/code identities and observed baseline); discard unwind/frame/argument addresses",
+      "Return preserving original loader/API flow and arguments/results. Keep required listeners continuous into normal initialization; do not count self-suppressed native callbacks as observed work."
+    ],
+    "failure_disposition": "Fail closed for the native cached backend on this startup; normal game continuation may proceed. No spin, thread suspension, sampled wait-for-quiescence, loader configuration change, forced cookie/API call or late re-arm is authorized.",
+    "later_authority": "This origin is neither a persistent PackageStore pointer nor mount/admission authorization. Existing initializer completion, persistent owner/global/generation/subscription checks, native teardown invalidation, original-updater thread/local-unlock gates, all selected operation barriers and process-retained files/owners remain required.",
+    "no_lease": "Copied zero/initialized-empty spans and two rereads corroborate control flow; they are not an independently acquired native reference, serialization lock or universal quiescence proof.",
+    "UAL_first_trigger_limit": "Do not promise every default-loader first API trigger matches. A first unsupported state-1 callback may load the ASI without supplying either supported source; this profile supplies no retry or modified UAL behavior. Cookie may be preseeded. The unconditional show-window call is usable only when synchronous export invocation actually occurs on its authenticated chain."
+  },
+  "offline_validation": {
+    "result": "PASS",
+    "checks": [
+      "Canonical disk SHA256, file size, PE timestamp, image size and checksum",
+      "All 16 code windows equal disk, decode to complete instructions and occur exactly once in executable sections",
+      "All four direct CALL target/return relations and five imported API slot/name/return relations",
+      "All ten recorded exception-directory/unwind records",
+      "All ten imported-memory versus disk span fingerprints",
+      "Both exact 48-byte GU baseline encodings agree with their typed fields",
+      "Catalog symbol/locator references and image-zero global slots; corrected crash-constructor table RVA"
+    ],
+    "runtime_result": "Not performed: no live/process/native execution, loader configuration, installation or bootstrap test."
+  },
+  "affected_catalog_ids_if_later_migrated": {
+    "existing_references_only": ["native_audio_exe_entry", "native_audio_crt_state", "native_audio_initial_gu_header", "package_store_owner_global", "package_store_generation", "dataobject_name_map", "bgmlist_registry", "scoreinfo_registry", "pianoscore_registry"],
+    "new_research_anchors": "All other RVAs here remain analysis-only. No catalog IDs, runtime adapters, loader, main or hook ownership changed."
+  }
+}

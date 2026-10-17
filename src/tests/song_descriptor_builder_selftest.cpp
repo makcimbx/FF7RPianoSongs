@@ -4,6 +4,7 @@
 #include "pipeline/pipeline_limits.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chord_voicing.h"
+#include "pipeline/native_audio_artifacts.h"
 #include "tests/target_native_assets.h"
 
 #include <array>
@@ -106,7 +107,8 @@ bool descriptor_equal(const SongDescriptor& left, const SongDescriptor& right)
         left.score_thresholds != right.score_thresholds ||
         left.mode_change_combo_counts != right.mode_change_combo_counts ||
         left.chart_notes.size() != right.chart_notes.size() ||
-        left.sidecar_path != right.sidecar_path || left.profiles.size() != right.profiles.size() ||
+        left.sidecar_path != right.sidecar_path || left.native_audio != right.native_audio ||
+        left.profiles.size() != right.profiles.size() ||
         left.default_profile_index != right.default_profile_index) {
         return false;
     }
@@ -311,6 +313,21 @@ int main()
     const SongDescriptor actual = ff7r::piano::build_song_descriptor(full, 17);
     if (!descriptor_equal(actual, expected)) {
         return fail("field-complete descriptor golden mismatch");
+    }
+
+    {
+        auto artifacts = std::make_shared<ff7rp::pipeline::NativeAudioArtifactSet>();
+        artifacts->identity = "immutable-native-cache";
+        std::weak_ptr<const ff7rp::pipeline::NativeAudioArtifactSet> lifetime = artifacts;
+        LoadedSong native_song = full_fixture();
+        native_song.native_audio = artifacts;
+        const auto native_descriptor = ff7r::piano::build_song_descriptor(native_song, 17);
+        if (native_descriptor.native_audio != artifacts)
+            return fail("native artifacts lost their prepared ownership during projection");
+        native_song.native_audio.reset();
+        artifacts.reset();
+        if (lifetime.expired() || native_descriptor.native_audio->identity != "immutable-native-cache")
+            return fail("descriptor did not retain native artifacts after source release");
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);

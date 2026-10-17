@@ -88,6 +88,41 @@ BOOL WINAPI fake_close_handle(const HANDLE handle)
     return fixture.close_result;
 }
 
+struct InlineStartupFixture {
+    std::atomic<bool> claimed{false};
+    DWORD thread = GetCurrentThreadId();
+    unsigned calls = 0;
+};
+
+DWORD WINAPI inline_worker(LPVOID context)
+{
+    auto& fixture = *static_cast<InlineStartupFixture*>(context);
+    ++fixture.calls;
+    require(GetCurrentThreadId() == fixture.thread, "inline startup changed the callback thread");
+    require(fixture.claimed.load(std::memory_order_acquire), "inline callback ran before claiming startup");
+    require(!ff7r::piano::core::run_startup_once(fixture.claimed, inline_worker, context),
+        "reentrant inline startup ran twice");
+    require(ff7r::piano::core::start_thread_once(fixture.claimed, test_worker, nullptr,
+        fake_create_thread, fake_close_handle) == StartupThreadResult::AlreadyClaimed,
+        "async startup raced the inline claim");
+    return 0;
+}
+
+void test_inline_startup_finishes_once_before_return()
+{
+    ThreadAdapterFixture adapters;
+    g_fixture = &adapters;
+    InlineStartupFixture fixture;
+    require(ff7r::piano::core::run_startup_once(fixture.claimed, inline_worker, &fixture),
+        "inline startup did not execute");
+    require(fixture.calls == 1 && fixture.claimed.load(std::memory_order_acquire),
+        "inline startup returned before completion or lost its claim");
+    require(!ff7r::piano::core::run_startup_once(fixture.claimed, inline_worker, &fixture),
+        "repeated inline startup executed");
+    require(adapters.create_calls == 0 && adapters.close_calls == 0,
+        "inline startup called thread adapters");
+}
+
 void test_create_failure_reopens_gate_and_retry_succeeds()
 {
     ThreadAdapterFixture fixture;
@@ -294,6 +329,7 @@ void test_fail_closed_boundary_captures_all_exceptions()
 
 int main()
 {
+    test_inline_startup_finishes_once_before_return();
     test_create_failure_reopens_gate_and_retry_succeeds();
     test_already_claimed_skips_adapters();
     test_blocked_create_failure_reopens_gate_and_retry_succeeds();

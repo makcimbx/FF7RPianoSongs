@@ -1,5 +1,11 @@
 # Native Substitution Boundary Investigation (2026-09-24)
 
+**Historical investigation:** conclusions below describe their dated source and
+artifact boundaries. The later [native integration record](NativeAudioIntegration-20261017.md)
+supersedes the missing-working-binding status, not the retained ABI/ownership
+evidence or its limitations. Current implementation status is in
+[Current Status](../docs/CurrentStatus.md).
+
 ## Scope and disposition
 
 Bounded Debug evidence for the Integration change
@@ -14,8 +20,8 @@ authorized by a proven seam.
 - Investigation source: clean native repository commit
   `4377739f28051c77c1e5bca9d39d9df759381e1e`, before this change's independent
   descriptor/capability/build edits. Parent planning files are not native inputs.
-- Latest accepted development artifact recorded in
-  [Current Status](../docs/CurrentStatus.md#integration-complete-native-chords-and-fractional-note-values-2026-09-24):
+- Accepted development artifact at the investigation baseline, summarized in
+  [earlier milestones](DevelopmentMilestones-202609.md#chords-and-note-values):
   session `20260924T092820Z-912e59aedcec`, ASI SHA-256
   `c714c628089122e238c0ba20d140eeec53b06c79ea7c2ffb45840ea1664a992b`.
   Its retained session identifies production-input-set SHA-256
@@ -46,7 +52,7 @@ drift but does not transfer all gameplay claims across artifacts.
 
 ## Repeated-selection evidence, not a resurrected old blocker
 
-The complete [Current Status](../docs/CurrentStatus.md) chronology matters:
+The historical repeated-selection chronology matters:
 
 1. `20260907T085725Z-ef9b9fc8976c` failed: subsequent selections lost custom
    authority after duplicate native focus registration. It was rolled back.
@@ -988,3 +994,33 @@ register the custom fixture. Debugger attachment/breakpoints are outside the
 earlier ordinary-memory-read permission and have not been performed. Such a trace
 would identify callers to inspect, not itself qualify custom-object ownership,
 asset creation, production registration or gameplay.
+
+### Authorized Frida observation: menu/reload cycle (2026-10-14)
+
+A separately authorized Debug experiment observed the BGMList append/remove
+bridges during the user-reported song-list → main-menu → save-load → song-list
+cycle. The executable matched the catalog's exact 1.005 identity. Both bridge
+bodies were correlated between Ghidra and that disk executable; live entry
+signatures and the adjacent method-table pointers matched before installation.
+No current-product hook owned either site. Observation used two temporary
+on-entry listeners, a bounded event queue and fixed-size volatile reads, without
+altering arguments, invoking native functions or registering a custom object.
+
+- Both bridges recorded **zero calls** in this cycle. This does not establish
+  that the generic implementations were unused, nor identify initial registration
+  timing. Do not repeat this cycle expecting it to recover an ordinary caller.
+- Before and after, the manager had one entry in group 0 and no entries in groups
+  1 or 2. The entry's weak pair was index `38595`, serial `30682`, matching the
+  loaded resident `/Game/DataObject/Resident/BGMList` from the earlier inventory.
+  Post-cycle item/identity checks resolved that pair successfully. The second
+  qword remained `0x740`; its meaning and the selector's enum mapping are unproved.
+- Both entry signatures were restored, the temporary script unloaded, and detach
+  acknowledged as `application-requested`. A subsequent read-only preflight again
+  matched both signatures; the game window responded. No ASI was replaced.
+
+Raw observer scripts, site manifest, pre/post snapshots and cleanup result were
+retained under `%LOCALAPPDATA%/Temp/opencode/frida-bgmlist-*`. Disposable-process
+tests checked unchanged native results, capture limits and restored code; they
+do not qualify game concurrency or custom-object ownership. Task 1.5 remains
+open: capturing an initial registration caller needs a different observation
+window and/or a qualified lower-level seam, not assumed success at these bridges.

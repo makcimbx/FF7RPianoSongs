@@ -8,13 +8,20 @@
 #include "game/catalog_adoption.h"
 #include "game/runtime.h"
 #include "game/startup_cache_overlay.h"
+#include "game/title.h"
 #include "startup/music_repository_loader.h"
+#include "startup/native_audio_preparation.h"
+#include "startup/native_audio_startup_latch.h"
+#include "game/native_audio_bootstrap.h"
+#include "game/native_audio_decoder.h"
 #include "startup/startup_cache_progress.h"
 #include "release_identity.generated.h"
 
 #include <windows.h>
 
 #include <atomic>
+#include <filesystem>
+#include <intrin.h>
 #include <sstream>
 #include <string>
 
@@ -26,6 +33,8 @@ namespace game = ff7r::piano::game;
 HMODULE g_module = nullptr;
 std::atomic<bool> g_started{false};
 std::atomic<bool> g_repository_started{false};
+std::atomic<bool> g_completion_started{false};
+ff7r::piano::startup::NativeAudioStartupLatch g_native_startup;
 ff7r::piano::startup::StartupCacheProgress g_startup_cache_progress;
 std::wstring g_dll_dir;
 
@@ -46,17 +55,57 @@ void catalog_readiness_changed(void* context, const game::CatalogReadinessEvent 
     }
 }
 
-DWORD WINAPI repository_worker(LPVOID) noexcept
+DWORD repository_worker_body()
 {
+    ff7rp::pipeline::OodleDecoder native_decoder;
+    std::filesystem::path native_cache_root;
+    const DWORD appdata_units = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
+    if (appdata_units && appdata_units <= 32768) {
+        std::wstring appdata(appdata_units, L'\0');
+        const DWORD copied = GetEnvironmentVariableW(L"LOCALAPPDATA", appdata.data(), appdata_units);
+        if (copied && copied < appdata_units) {
+            appdata.resize(copied);
+            native_cache_root = std::filesystem::path(appdata) / L"FF7RPianoSongs" / L"native_audio";
+        }
+    }
+    auto decoder_status = game::prepare_game_oodle_decoder(GetModuleHandleW(nullptr), native_decoder);
+    if (decoder_status.ok())
+        core::log(core::LogLevel::Info, "[native_cache] status=decoder_ready source=verified_executable");
+    else {
+        core::log(core::LogLevel::Info, "[native_cache] status=game_decoder_unavailable build=" +
+            std::string(core::generated::kBuildId) + " reason=" + decoder_status.message);
+        decoder_status = ff7rp::pipeline::OodleDecoder::load(
+            std::filesystem::path(g_dll_dir) / L"oo2core_9_win64.dll", &native_decoder);
+        if (decoder_status.ok())
+            core::log(core::LogLevel::Info, "[native_cache] status=decoder_ready source=authenticated_companion");
+    }
+    if (!decoder_status.ok())
+        core::log(core::LogLevel::Info, "[native_cache] status=decoder_unavailable native_artifacts=unavailable error=" +
+            decoder_status.message);
+    const auto source_paks = std::filesystem::path(core::module_path(GetModuleHandleW(nullptr)))
+        .parent_path().parent_path().parent_path() / L"Content" / L"Paks";
     game::ProgressiveAudioCatalogBuilder audio_builder;
     game::RejectedPendingCatalogRetry rejected;
     ff7r::piano::startup::ProgressiveRepositoryCallbacks callbacks;
-    callbacks.on_descriptor_admission = [&audio_builder](const game::SongDescriptor& descriptor) {
+    callbacks.on_descriptor_admission = [&](game::SongDescriptor& descriptor) {
+        if (native_decoder.available()) {
+            const auto status = ff7r::piano::startup::prepare_native_audio_descriptor(
+                descriptor, core::generated::kBuildId, source_paks, native_decoder, native_cache_root);
+            if (!status.ok())
+                core::log(core::LogLevel::Error, "[native_cache] status=not_prepared song=" + descriptor.id +
+                    " native_artifacts=unavailable error=" + status.message);
+            else
+                core::log(core::LogLevel::Info, "[native_cache] status=prepared id=\"" + descriptor.id + "\"");
+        }
         return static_cast<bool>(audio_builder.append(descriptor));
     };
     callbacks.on_catalog = [&](ff7r::piano::startup::MusicRepositoryPlan plan, bool) {
         rejected.begin_new_offer();
         auto prefix = audio_builder.snapshot();
+        if (!prefix || !game::audio_sead_detail::enqueue_prepared_audio_prefix(*prefix)) {
+            core::log(core::LogLevel::Error, "[native_audio_catalog] status=enqueue_rejected publication=unchanged");
+            return false;
+        }
         auto candidate = game::prepare_pending_catalog(
             std::move(plan.descriptors), prefix);
         if (!candidate) return false;
@@ -79,6 +128,64 @@ DWORD WINAPI repository_worker(LPVOID) noexcept
     return 0;
 }
 
+DWORD WINAPI repository_worker(LPVOID) noexcept
+{
+    return core::invoke_fail_closed<DWORD>(
+        [] { return repository_worker_body(); },
+        [](const core::FailClosedException) {
+            g_startup_cache_progress.failed();
+            core::log(core::LogLevel::Error,
+                "[native_cache] status=repository_exception accepted_catalog=retained");
+        },
+        0);
+}
+
+DWORD WINAPI complete_startup(LPVOID) noexcept
+{
+    return core::invoke_fail_closed<DWORD>(
+        [] {
+            (void)game::install_startup_cache_overlay(GetModuleHandleW(nullptr),
+                g_startup_cache_progress);
+            if (!game::start_title_input_service(GetModuleHandleW(nullptr))) {
+                g_startup_cache_progress.failed();
+                core::log(core::LogLevel::Error, "[startup] status=disabled_title_input_service_failed");
+                return DWORD{0};
+            }
+            if (core::start_thread_once(g_repository_started, repository_worker,
+                    nullptr, CreateThread, CloseHandle) != core::StartupThreadResult::Started) {
+                g_startup_cache_progress.failed();
+                core::log(core::LogLevel::Error,
+                    "[startup] status=repository_service_start_failed initial_catalog=empty_recoverable");
+                return DWORD{0};
+            }
+            core::log(core::LogLevel::Info, "[startup] status=initialized mode=native_audio");
+            return DWORD{0};
+        },
+        [](core::FailClosedException) {
+            g_startup_cache_progress.failed();
+            core::log(core::LogLevel::Error, "[startup] status=disabled_completion_exception");
+        },
+        DWORD{0});
+}
+
+void start_completed_startup() noexcept
+{
+    if (core::start_thread_once(g_completion_started, complete_startup, nullptr,
+            CreateThread, CloseHandle) == core::StartupThreadResult::CreateFailed) {
+        g_startup_cache_progress.failed();
+        try {
+            core::log(core::LogLevel::Error, "[startup] status=completion_service_start_failed");
+        } catch (...) {
+            // Diagnostics must not terminate the original initializer on resource exhaustion.
+        }
+    }
+}
+
+void native_initialized() noexcept
+{
+    if (g_native_startup.native_initialized()) start_completed_startup();
+}
+
 DWORD startup_worker_body()
 {
     using namespace ff7r::piano;
@@ -96,6 +203,71 @@ DWORD startup_worker_body()
         std::string("[startup] product=") + std::string(generated::kProduct) +
         " version=" + std::string(generated::kVersion) +
         " platform=" + std::string(generated::kPlatform));
+    {
+        const auto bootstrap = game::native_audio::native_audio_bootstrap_status();
+        constexpr const char* failures[] = {"none", "reused", "arguments", "build", "files",
+            "image", "export", "frames", "unwind", "code", "baseline", "thread", "scope",
+            "publication", "exception"};
+        const auto failure = static_cast<unsigned>(bootstrap.failure);
+        std::ostringstream out;
+        out << "[native_audio] status=bootstrap_context source="
+            << (bootstrap.source == game::native_audio::BootstrapSource::Cookie ? "cookie" :
+                bootstrap.source == game::native_audio::BootstrapSource::PreWinMain ? "pre_winmain" :
+                bootstrap.source == game::native_audio::BootstrapSource::FirstSrw ? "first_srw" : "none")
+            << " failure=" << (failure < sizeof(failures) / sizeof(*failures) ? failures[failure] : "unknown")
+            << " thread=" << bootstrap.thread << " frames=" << bootstrap.frames
+            << " callback_invoked=" << bootstrap.callback_invoked
+            << " barriers_published=" << bootstrap.barriers_published
+            << " failed_frame=" << bootstrap.failed_frame
+            << " observed_return_rva=0x" << std::hex << bootstrap.observed_return_rva
+            << " expected_return_rva=0x" << bootstrap.expected_return_rva
+            << " image_module="
+            << (bootstrap.image.module == game::native_audio::BootstrapImageModule::Executable ? "executable" :
+                bootstrap.image.module == game::native_audio::BootstrapImageModule::Loader ? "loader" :
+                bootstrap.image.module == game::native_audio::BootstrapImageModule::OwnAsi ? "asi" :
+                bootstrap.image.module == game::native_audio::BootstrapImageModule::Crt ? "crt" : "none")
+            << " image_stage=" << static_cast<unsigned>(bootstrap.image.stage)
+            << " image_field=" << bootstrap.image.field
+            << " image_offset=0x" << bootstrap.image.offset << " image_index=" << std::dec << bootstrap.image.index
+            << " image_expected=0x" << std::hex << bootstrap.image.expected
+            << " image_observed=0x" << bootstrap.image.observed;
+        core::log(core::LogLevel::Info, out.str());
+        if (std::string_view(bootstrap.frame.predicate) != "none") {
+            const auto& frame = bootstrap.frame;
+            std::ostringstream detail;
+            detail << "[native_audio] status=bootstrap_frame predicate=" << frame.predicate
+                << " index=" << frame.index << " export_count=" << frame.export_count
+                << " chain_depth=" << frame.chain_depth << " byte_offset=" << frame.byte_offset
+                << " expected_module=0x" << std::hex << frame.expected_module
+                << " observed_module=0x" << frame.observed_module
+                << " supplied_caller_return_rva=0x" << frame.supplied_caller_return_rva
+                << " expected_byte=0x" << frame.expected_byte << " observed_byte=0x" << frame.observed_byte
+                << " expected_register=0x" << frame.expected_register
+                << " observed_register=0x" << frame.observed_register;
+            const auto record = [&](const char* name, const game::native_audio::BootstrapFunctionRecord& value) {
+                detail << ' ' << name << "_begin=0x" << value.begin
+                    << ' ' << name << "_end=0x" << value.end << ' ' << name << "_unwind=0x" << value.unwind;
+            };
+            record("expected", frame.expected);
+            record("observed", frame.observed);
+            record("export_entry", frame.export_entry);
+            record("export_primary", frame.export_primary);
+            record("last_own", frame.last_own);
+            record("last_own_primary", frame.last_own_primary);
+            detail << " following_count=" << std::dec << frame.following_count;
+            for (std::size_t i = 0; i < frame.following_count && i < frame.following.size(); ++i) {
+                const auto& following = frame.following[i];
+                const auto name = "following" + std::to_string(i);
+                detail << ' ' << name << "_module="
+                    << (following.module == game::native_audio::BootstrapFrameModule::Executable ? "executable" :
+                        following.module == game::native_audio::BootstrapFrameModule::Loader ? "loader" :
+                        following.module == game::native_audio::BootstrapFrameModule::OwnAsi ? "asi" : "unknown")
+                    << ' ' << name << "_return_rva=0x" << std::hex << following.return_rva;
+                record(name.c_str(), following.function);
+            }
+            core::log(core::LogLevel::Info, detail.str());
+        }
+    }
     if (!config.enabled) {
         core::log(core::LogLevel::Info, "[startup] status=disabled_by_config");
         return 0;
@@ -125,31 +297,26 @@ DWORD startup_worker_body()
     if (!minhook_ready) {
         core::log(core::LogLevel::Info,
             "[startup_overlay] status=disabled_minhook_unavailable error=" + error);
-    } else {
-        (void)game::install_startup_cache_overlay(exe, g_startup_cache_progress);
     }
 
     if (!minhook_ready) {
         error.clear();
         minhook_ready = core::initialize_hooks(error);
         if (!minhook_ready) {
+            g_startup_cache_progress.failed();
             core::log(core::LogLevel::Error,
                 "[startup] status=disabled_minhook_error error=" + error);
             return 0;
         }
     }
 
-    if (!game::install_release_hooks(exe)) {
+    if (!game::install_release_hooks(exe, native_initialized)) {
+        g_startup_cache_progress.failed();
         core::log(core::LogLevel::Error, "[startup] status=disabled_hook_install_failed");
         return 0;
     }
-    if (core::start_thread_once(g_repository_started, repository_worker,
-            nullptr, CreateThread, CloseHandle) != core::StartupThreadResult::Started) {
-        core::log(core::LogLevel::Error,
-            "[startup] status=repository_service_start_failed initial_catalog=empty_recoverable");
-    }
-
-    core::log(core::LogLevel::Info, "[startup] status=initialized mode=core_skeleton");
+    core::log(core::LogLevel::Info, "[startup] status=awaiting_native_initializer workers=not_started");
+    if (g_native_startup.hooks_installed()) start_completed_startup();
     return 0;
 }
 
@@ -158,6 +325,7 @@ DWORD WINAPI worker_thread(LPVOID) noexcept
     return core::invoke_fail_closed<DWORD>(
         [] { return startup_worker_body(); },
         [](const core::FailClosedException exception) {
+            g_startup_cache_progress.failed();
             core::log(core::LogLevel::Error,
                 exception == core::FailClosedException::Standard
                     ? "[startup] status=disabled_unexpected_exception"
@@ -166,10 +334,19 @@ DWORD WINAPI worker_thread(LPVOID) noexcept
         0);
 }
 
+void initialize_inline() noexcept
+{
+    (void)core::run_startup_once(g_started, worker_thread, nullptr);
+}
+
 } // namespace
 
 extern "C" __declspec(dllexport) void InitializeASI()
 {
+    if (g_started.load(std::memory_order_acquire)) return;
+    if (game::native_audio::try_synchronous_native_audio_startup(
+            GetModuleHandleW(nullptr), g_module, reinterpret_cast<std::uintptr_t>(_ReturnAddress()),
+            initialize_inline)) return;
     core::start_thread_once(g_started, worker_thread, nullptr, CreateThread, CloseHandle);
 }
 
@@ -183,7 +360,6 @@ BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
     if (reason == DLL_PROCESS_ATTACH) {
         g_module = module;
         DisableThreadLibraryCalls(module);
-        InitializeASI();
     }
     return TRUE;
 }

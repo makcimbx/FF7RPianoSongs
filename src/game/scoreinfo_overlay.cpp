@@ -42,11 +42,10 @@ T read_row_field(const std::array<uint8_t, ScoreInfoOverlayRow::kRowSize>& row, 
     return fallback;
 }
 
-using Mode48GenericHelperFn = uintptr_t(__fastcall*)(void* arg0, void* arg1, void* arg2, void* arg3);
-using FNameCtorFn = void*(__fastcall*)(FNameValue* out_name, const wchar_t* text, int32_t find_type);
+using ScoreInfoAccessorFn = native_audio::NativeAccessor*(__fastcall*)(native_audio::NativeAccessor*,std::uint64_t);
 
 core::RawRvaHook g_scoreinfo_hook;
-Mode48GenericHelperFn g_original_scoreinfo_resolver = nullptr;
+ScoreInfoAccessorFn g_original_scoreinfo_resolver = nullptr;
 uintptr_t g_module_base = 0;
 std::size_t g_module_size = 0;
 ScoreInfoPublicationEpoch g_overlay_epoch;
@@ -88,23 +87,6 @@ uintptr_t to_rva(void* caller_address)
     return g_module_size != 0 && caller >= g_module_base
         && caller - g_module_base < g_module_size
         ? caller - g_module_base : 0;
-}
-
-bool construct_fname_find(const wchar_t* text, FNameValue& out)
-{
-    if (!g_module_base || !text || !*text) {
-        return false;
-    }
-    auto* ctor = reinterpret_cast<FNameCtorFn>(g_module_base + rva::FNameCtor);
-    __try {
-        out = {};
-        ctor(&out, text, 0);
-        return out.comparison_id != 0;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER) {
-        out = {};
-        return false;
-    }
 }
 
 struct ScoreInfoResultDiagnostic {
@@ -402,8 +384,9 @@ void prepare_scoreinfo_control_flow_diagnostic(
     diagnostic.caller_in_image = facts.caller_in_image;
 }
 
-uintptr_t __fastcall scoreinfo_resolver_detour(void* arg0, void* arg1, void* arg2, void* arg3)
+uintptr_t __fastcall scoreinfo_resolver_detour(void* arg0, std::uint64_t packed_name)
 {
+    void* const arg1=reinterpret_cast<void*>(packed_name);
     auto callback = non_audio_hook_gate().try_enter();
     ScoreInfoResolverRecursionScope recursion(g_scoreinfo_resolver_depth);
     void* caller = _ReturnAddress();
@@ -412,7 +395,8 @@ uintptr_t __fastcall scoreinfo_resolver_detour(void* arg0, void* arg1, void* arg
         scoreinfo_result_catalog_role_from_rva(call_rva);
     const ScoreInfoResultCaller result_caller = scoreinfo_result_caller_for_catalog_role(
         catalog_role, g_scoreinfo_piano_detail_update_depth != 0);
-    const uintptr_t result = g_original_scoreinfo_resolver ? g_original_scoreinfo_resolver(arg0, arg1, arg2, arg3) : 0;
+    const uintptr_t result = g_original_scoreinfo_resolver ? reinterpret_cast<uintptr_t>(
+        g_original_scoreinfo_resolver(static_cast<native_audio::NativeAccessor*>(arg0),packed_name)) : 0;
     const RenderSnapshot menu_before = registry().render_snapshot();
     if (scoreinfo_menu_detail_overlay_candidate(catalog_role,
             static_cast<bool>(callback), recursion.outermost(), arg0 != nullptr,
@@ -697,6 +681,13 @@ void copy_owned_fields(ScoreInfoOverlayRow& target, const ScoreInfoOverlayRow& s
 
 } // namespace
 
+native_audio::NativeAccessor* query_original_scoreinfo_accessor(
+    native_audio::NativeAccessor* output, std::uint64_t name) noexcept
+{
+    const auto original = g_original_scoreinfo_resolver;
+    return original && output ? original(output, name) : nullptr;
+}
+
 ScoreInfoPianoDetailUpdateScope::ScoreInfoPianoDetailUpdateScope() noexcept
 {
     ++g_scoreinfo_piano_detail_update_depth;
@@ -767,8 +758,8 @@ ScoreInfoOverlayRow make_scoreinfo_overlay_row(
     const void* source_row, size_t source_size)
 {
     ScoreInfoOverlayRow overlay;
-    if (source_row && source_size > 0) {
-        core::safe_copy_bytes(source_row, overlay.row.data(), std::min(overlay.row.size(), source_size));
+    if (source_row && source_size >= kScoreInfoBgmNameOffset + sizeof(FNameValue)
+        && core::safe_copy_bytes(source_row, overlay.row.data(), std::min(overlay.row.size(), source_size))) {
         overlay.camera_min = read_row_field<float>(overlay.row, kScoreInfoCameraMinOffset, overlay.camera_min);
         overlay.camera_max = read_row_field<float>(overlay.row, kScoreInfoCameraMaxOffset, overlay.camera_max);
         overlay.camera_rate = read_row_field<float>(overlay.row, kScoreInfoCameraRateOffset, overlay.camera_rate);
@@ -776,16 +767,12 @@ ScoreInfoOverlayRow make_scoreinfo_overlay_row(
             read_row_field<float>(overlay.row, kScoreInfoBpmOffset, overlay.bpm));
         overlay.streaming_frame = read_row_field<uint32_t>(overlay.row, kScoreInfoStreamingFrameOffset, overlay.streaming_frame);
         overlay.difficulty = read_row_field<int32_t>(overlay.row, kScoreInfoDifficultyOffset, overlay.difficulty);
-        overlay.bgm_name = scoreinfo_source_bgm_name(source_row, source_size);
+        overlay.bgm_name = read_row_field<FNameValue>(overlay.row, kScoreInfoBgmNameOffset);
     }
     overlay.mode_change_counts = profile ? profile->mode_change_combo_counts : song.mode_change_combo_counts;
     overlay.score_thresholds = scoreinfo_thresholds_for_descriptor(song, profile);
     overlay.title = profile ? profile->title : song.title;
     overlay.difficulty = native_scoreinfo_difficulty(profile ? profile->difficulty : song.difficulty);
-    FNameValue bgm09{};
-    if (construct_fname_find(L"bgm_piano_09", bgm09)) {
-        overlay.bgm_name = bgm09;
-    }
     overlay.refresh_references();
     return overlay;
 }

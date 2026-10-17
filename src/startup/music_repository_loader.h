@@ -46,8 +46,9 @@ struct ProgressiveRepositoryState {
 struct ProgressiveRepositoryCallbacks {
     std::function<void(const ProgressiveRepositoryState&)> on_state;
     // Synchronous loader-thread admission. The descriptor is appended only if
-    // its independently owned immutable audio sidecar node was prepared.
-    std::function<bool(const game::SongDescriptor&)> on_descriptor_admission;
+    // its independently owned immutable audio artifacts were prepared. The
+    // callback may attach their ownership before the descriptor is published.
+    std::function<bool(game::SongDescriptor&)> on_descriptor_admission;
     // Called on the loader worker with a fully composed immutable candidate.
     // Runtime code may prepare native-free sidecars here but must not touch UObjects.
     // Returns true only after the complete candidate has been accepted for

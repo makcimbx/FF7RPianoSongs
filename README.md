@@ -10,10 +10,20 @@ FF7RPianoSongs adds user-authored piano songs to Final Fantasy VII Rebirth.
 This is an unofficial community project and is not affiliated with or endorsed
 by Square Enix.
 
+**Development source tree:** native cached-audio integration has changed since the
+published version above. Current 1.005 Development playback has bounded positive
+testing; the experimental 1.004 build still awaits gameplay testing. These source
+changes are not a new qualified public release.
+
 ## Requirements
 
 - Final Fantasy VII Rebirth on Windows x64. Each download supports one game build and the game version is part of its file name, so pick the download that matches your installed game. A download built for a different game version refuses to run rather than guessing.
 - An x64 ASI loader. The recommended setup is [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader), which provides the proxy that loads `.asi` files. Download its `xinput1_3-x64.zip` build and put `xinput1_3.dll` in `End/Binaries/Win64/`. The loader selects its behaviour from its own filename and upstream ships a separate build per supported name, so use that build rather than renaming another one. Without an ASI loader, `FF7RPianoSongs.asi` will not load. If a compatible x64 ASI loader is already installed, keep it and do not add a second proxy DLL.
+- The development native backend validates specific loader/Windows startup
+  profiles as well as the game build. An unqualified profile refuses startup;
+  arbitrary ASI loaders are not interchangeable. Its bootstrap requires the
+  authenticated `xinput1_3.dll` beside the ASI. No shared loader INI changes are
+  required.
 
 ## Install
 
@@ -27,7 +37,7 @@ Expected layout:
 
 ```text
 End/Binaries/Win64/
-  xinput1_3.dll                    (ASI loader proxy; another proxy name works too)
+  xinput1_3.dll                    (qualified ASI loader proxy)
   FF7RPianoSongs.asi
   FF7RPianoSongs.ini
   FF7RPianoSongs.log              (generated)
@@ -49,6 +59,8 @@ and the full settings/chord reference.
 
 - Custom songs appear alongside the default songs.
 - The first load of new or edited songs can take longer while audio and charts are prepared.
+- Native audio containers are generated automatically. Do not install generated
+  pak files manually; prepared songs appear only after native admission succeeds.
 - For a song with several profiles, use D-pad left/right or the keyboard arrow keys in its detail view. Scores are stored separately for each actual profile.
 - Older score sections ending in `.difficulty.<number>` are retained but not imported automatically: their names can also belong to another song. New scores use separate song/profile identities; ambiguous old records require manual attribution.
 - If a song is missing, it was rejected safely. Check `End/Binaries/Win64/FF7RPianoSongs.log` for the reason.
@@ -76,11 +88,19 @@ or copy `.cache/` data between machines or mod versions. To edit an automaticall
 follow [Editing a resolved song](docs/SongFormat.md#resolved-song-convenience-output), rather than
 editing cache files directly.
 
+The native backend also owns immutable generated containers under
+`%LOCALAPPDATA%/FF7RPianoSongs/native_audio/`. They are separate from the song's
+authoring files and need no manual installation. Do not edit or delete them while
+the game is running. Source changes produce separate content identities.
+
 ## Update, Roll Back, or Remove
 
 - **Update:** exit the game, replace the ASI, compare the new INI with yours, and keep your `Music/` folders. Delete caches only when the changelog asks for it. After the game itself updates, take the download for the new game version.
 - **Roll back:** with the game stopped, restore the previous ASI and matching INI, then delete generated song caches.
 - **Remove:** with the game stopped, delete `FF7RPianoSongs.asi`. Optionally remove its INI, log, score INI, and only the custom song folders you no longer want. Do not remove the ASI loader if another mod uses it.
+- Generated `native_audio/` containers may be removed after the game is fully
+  closed. Do not remove other files in the product's LocalAppData directory as
+  cache cleanup; they can contain retained diagnostics and rollback evidence.
 
 ## Troubleshooting
 
@@ -89,6 +109,9 @@ editing cache files directly.
 - Confirm Ultimate ASI Loader or another compatible x64 ASI loader is installed. A working layout normally includes a proxy DLL such as `End/Binaries/Win64/xinput1_3.dll`.
 - Confirm `FF7RPianoSongs.asi` is directly in `End/Binaries/Win64/` and `General.Enabled` is nonzero.
 - Check `FF7RPianoSongs.log`. If this download does not match your game version, the mod will not run; the log shows the mismatch. Install the matching download, or wait for one to be published.
+- A native-bootstrap rejection is not a slow cache build. Keep the first named
+  failure in the log and report it; do not change global loader settings or
+  repeatedly launch in an attempt to bypass the guard.
 
 **A song is missing or changed after an edit**
 
@@ -97,6 +120,9 @@ editing cache files directly.
   JSON notes. Optional mode recordings must have exactly the same decoded duration as the main audio.
 - Exit the game before editing files or deleting that song's `.cache/`, then retry.
 - Temporarily set `General.LogLevel=debug`, reproduce once, then restore `info`.
+- `prepared` and native `ready` log entries establish artifact/runtime admission,
+  not correct notes or every playback transition. Report a wrong chart, denied
+  activation or failed song switch even when the cache finished successfully.
 
 **Some MIDI notes have no playable input**
 
@@ -130,6 +156,8 @@ Logs may contain song names and local paths. Remove private data and copyrighted
   1.004 gameplay checks or in-game checks of the exact packaged archives. These and
   incomplete broader manual scenarios are accepted release limitations; development
   results do not qualify another build or the packaged artifacts.
+- The replacement native backend retains its containers and acquired objects to
+  process exit. This does not qualify resource release, unmount or live unloading.
 
 ## Reference
 

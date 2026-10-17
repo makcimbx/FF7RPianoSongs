@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <array>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,6 +11,8 @@
 #include "note_value.h"
 
 namespace ff7rp::pipeline {
+
+struct NativeAudioArtifactSet;
 
 enum class AudioSourceRole : std::uint8_t {
     Base = 0,
@@ -313,6 +316,7 @@ struct LoadedSong {
     std::uint64_t cache_key = 0;
     std::string cache_manifest_path;
     std::string cache_sidecar_path;
+    std::shared_ptr<const NativeAudioArtifactSet> native_audio;
     MabfArtifactMetadata mabf_metadata;
     std::uint64_t manifest_digest = 0;
     Status status;

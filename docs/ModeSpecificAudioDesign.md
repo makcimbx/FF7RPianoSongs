@@ -75,10 +75,11 @@ container metadata.
 
 ## Runtime Boundary
 
-No game hook, RVA, registry, selection, profile, or lifecycle change is
-required. Runtime continues to load one validated `song.mabf.bin`, publish one
-descriptor duration, and hand the complete MABF allocation to SQEXSEAD. The
-game keeps selecting Mode0, Mode1, or Mode2 through its native adaptive tier.
+Role resolution does not introduce another runtime mode-selection mechanism.
+The validated MABF becomes the bank of the generated native Music package; the
+game selects Mode0, Mode1 or Mode2 through its ordinary adaptive tier. Runtime
+consumers use the admitted native cohort, not a synthetic sidecar allocation or
+per-mode source-pointer replacement. See [Architecture](Architecture.md#native-cached-audio).
 
 ## Implementation Ownership And Qualification
 
@@ -95,8 +96,12 @@ Focused tests cover one-file compatibility, each override independently,
 all three distinct sources, mixed source formats, ambiguous role rejection,
 duration mismatch rejection, direct fallback, Mode0-only metronome placement,
 cache invalidation, deterministic MABF output, and unchanged runtime descriptor
-shape. Focused 1.005 Development qualification traversed Mode0 to Mode1 to
+shape. Historical 1.005 sidecar-backend Development qualification traversed Mode0 to Mode1 to
 Mode2 with three distinct authored sources and confirmed the expected audible
 source, Mode0-only metronome, and preserved synchronization. Warm-cache reuse,
 independent override-removal fallback, and broader mixed-codec corpus behavior
 remain separate qualification scopes.
+
+That historical traversal does not qualify the replacement native-container
+backend or another build. Current native runtime evidence and remaining manual
+scope are summarized in [Current Status](CurrentStatus.md).

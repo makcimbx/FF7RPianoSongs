@@ -21,6 +21,9 @@ enum class StartupThreadResult {
     CreateFailed,
 };
 
+// Worker is non-null/noexcept; the caller establishes an outside-loader-lock context.
+bool run_startup_once(std::atomic<bool>& claimed, LPTHREAD_START_ROUTINE worker, LPVOID context) noexcept;
+
 // Preconditions: worker, create_thread, and close_handle are non-null. The
 // production caller guarantees these inputs, so this seam does not recheck them.
 StartupThreadResult start_thread_once(

@@ -12,6 +12,10 @@
 #include <string>
 
 namespace ff7r::piano::game {
+namespace native_audio { struct NativeAccessor; }
+// Backend is stopped/drained before this hook's trampoline is cleared.
+native_audio::NativeAccessor* query_original_scoreinfo_accessor(
+    native_audio::NativeAccessor*, std::uint64_t) noexcept;
 
 class ScoreInfoPublicationEpoch {
 public:
@@ -143,6 +147,8 @@ inline constexpr bool scoreinfo_menu_detail_overlay_candidate(
         && scoped_descriptor_present;
 }
 
+// Preserve the authenticated source cue verbatim; unavailable/invalid cues
+// produce an unpublishable row, never a synthesized or stock fallback.
 ScoreInfoOverlayRow make_scoreinfo_overlay_row(
     const SongDescriptor& song, const SongDifficultyProfile* profile,
     const void* source_row = nullptr, size_t source_size = 0);

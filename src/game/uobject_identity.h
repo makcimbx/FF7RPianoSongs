@@ -9,6 +9,10 @@
 #include <cstdint>
 
 namespace ff7r::piano::game {
+namespace uobject_locator_core { struct UObjectIdentityAccess; }
+// Existing locator authority only; borrowed access is invalid after service clear.
+bool capture_current_uobject_identity_access(
+    uobject_locator_core::UObjectIdentityAccess&) noexcept;
 
 using UObjectLiveHandleCaptureResult =
     uobject_locator_core::UObjectLiveHandleCaptureResult;

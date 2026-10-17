@@ -10,7 +10,12 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 
 ## Game Builds
 
-- [RebirthBuild1004RvaEvidence-20260808.md](RebirthBuild1004RvaEvidence-20260808.md) records how every catalog address for game build `1.004` was derived, the measured signature-uniqueness results, and the two build-specific dispositions: the positively established absence of `progress_lookup_display_caller_1` and the retained `probable` grade for `select_index_helper`.
+- [RebirthBuild1004RvaEvidence-20260808.md](RebirthBuild1004RvaEvidence-20260808.md) records the original 1.004 catalog recovery, measured signature uniqueness and build-specific dispositions. Later native-audio additions have separate imported-program profiles below; this August record is not evidence for every subsequent catalog entry.
+
+## Development History
+
+- [NativeAudioIntegration-20261017.md](NativeAudioIntegration-20261017.md) summarizes the replacement backend's failed and accepted Development scenarios with their limits; current disposition remains in Current Status.
+- [DevelopmentMilestones-202609.md](DevelopmentMilestones-202609.md) retains earlier feature milestones and version-scoped release decisions without treating old status entries as current requirements.
 
 ## Architecture
 
@@ -32,10 +37,27 @@ Files in this directory are dated engineering evidence, not user contracts. Dura
 - [MidiDifficultyCalibration-v38-20260714.md](MidiDifficultyCalibration-v38-20260714.md) preserves authored-route calibration, generated fixture diagnostics, and performance observations.
 - [ProductionCacheOptimization-v38-20260715.md](ProductionCacheOptimization-v38-20260715.md) records the cache optimizer investigation.
 
-## Audio
+## Native Cached Audio
 
+- [NativeCachedAudioEvidence-20261016.md](NativeCachedAudioEvidence-20261016.md) records the controlled native-container/registered-row selection and start/pause/resume result, its process-exit retention contract, and the boundary between that evidence and an implemented ASI replacement.
+- [NativeMusicExportProfile-20261016.md](NativeMusicExportProfile-20261016.md) identifies the supported shipping unversioned timing properties and variable-size mapped-bank wrapper; it is a bounded serialization profile, not a general Music serializer or playback qualification.
+- [NativeAudioLoaderHandoff-20261016.json](NativeAudioLoaderHandoff-20261016.json) pins the supported loader's synchronous export and distinct deferred-route unwind anchors; the export call alone does not establish an outside-DllMain origin.
+- [NativeAudioBootstrapProfile-20261016.json](NativeAudioBootstrapProfile-20261016.json) distinguishes supported pre-CRT and pre-engine continuations and their baselines; static evidence does not establish an observed startup or later native mutation authority.
+- [NativeAudioFirstSrwTrigger-20261017.json](NativeAudioFirstSrwTrigger-20261017.json) qualifies the exact first allocator callback chain and its pre-allocator restrictions, not generic CRT initialization.
+- [NativeAudioBootstrapProfile-OlderBuild-20261017.json](NativeAudioBootstrapProfile-OlderBuild-20261017.json) records the independently recovered older startup chains and built-in decoder ABI; imported-program correlation is not observed older gameplay.
+- [NativeAudioAssetProfile-OlderBuild-20261017.json](NativeAudioAssetProfile-OlderBuild-20261017.json) records older frozen rows and the different inherited Music property schema, including the correction of the earlier BGM resource-field interpretation.
+- [NativeCachedAudioOffsets-OlderBuild-20261016.json](NativeCachedAudioOffsets-OlderBuild-20261016.json) retains the imported-program address handoff and its corrected structural interpretation, not older disk/gameplay qualification.
+- [NativeAudioGameDecoder-20261017.json](NativeAudioGameDecoder-20261017.json) records both executable decoders, ordinary caller ABI and bounded default-callback/lifetime evidence; static profiles alone do not authenticate a running callback.
+- [NativeAudioCrtRetpoline-20261017.json](NativeAudioCrtRetpoline-20261017.json) describes one metadata-declared Windows dispatch rewrite and authenticated system-image template; it neither allows arbitrary system trampolines nor identifies the prior game's unrecorded mismatch.
 - [ChordVoicingRuntimeEvidence.md](ChordVoicingRuntimeEvidence.md) records the exact-1.005 charted-chord projection seam, positional velocity/filter semantics, and pre-judgement readiness boundary. It is static evidence, not gameplay qualification or 1.004 authority.
 - [ChordVoicing1004Evidence.md](ChordVoicing1004Evidence.md) independently recovers the corresponding 1.004 calls, unique signatures, register handoff, layouts and readiness path. It authorizes the shared mechanism statically, not 1.004 gameplay or full monotone-inventory parity.
+
+## Historical Audio And Format Evidence
+
+The source-patching/borrower backend below has been replaced. Its past successes,
+failures and ABI observations remain artifact-bound evidence, not instructions to
+reintroduce PlaySetup replay or qualification of the native-container backend.
+
 - [AudioLifecycleEvidence-202607.md](AudioLifecycleEvidence-202607.md) is the consolidated lifecycle chronology and bounded disposition.
 - [NativeSubstitutionBoundary-20260924.md](NativeSubstitutionBoundary-20260924.md) records the source/artifact baseline and bounded investigation of a simpler preparation/reuse substitution boundary; it does not itself qualify a replacement route.
 - [AdaptiveMabfModeEvidence.md](AdaptiveMabfModeEvidence.md) records adaptive MABF mode work.

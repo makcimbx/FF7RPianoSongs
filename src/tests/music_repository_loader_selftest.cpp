@@ -1,4 +1,5 @@
 #include "startup/music_repository_loader.h"
+#include "pipeline/native_audio_artifacts.h"
 
 #include "core/logging.h"
 #include "pipeline/song_repository_detail.h"
@@ -453,7 +454,10 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
         std::vector<std::string> admitted_ids;
         bool admitted_rows_unresolved = true;
         ff7r::piano::startup::ProgressiveRepositoryCallbacks callbacks;
-        callbacks.on_descriptor_admission = [&](const ff7r::piano::game::SongDescriptor& descriptor) {
+        callbacks.on_descriptor_admission = [&](ff7r::piano::game::SongDescriptor& descriptor) {
+            auto artifacts = std::make_shared<ff7rp::pipeline::NativeAudioArtifactSet>();
+            artifacts->identity = descriptor.id;
+            descriptor.native_audio = std::move(artifacts);
             if (descriptor.id == "bravo") return false;
             admitted_rows_unresolved = admitted_rows_unresolved
                 && descriptor.visible_index
@@ -462,6 +466,10 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
             return true;
         };
         callbacks.on_catalog = [&](MusicRepositoryPlan offered, bool) {
+            for (const auto& descriptor : offered.descriptors) {
+                if (!descriptor.native_audio || descriptor.native_audio->identity != descriptor.id
+                    || descriptor.id == "bravo") return false;
+            }
             offered_counts.push_back(offered.descriptors.size());
             return true;
         };

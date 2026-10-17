@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "mode": "Debug",
+  "scope": "Static asset-serialization contracts only; independent of bootstrap/Oodle work",
+  "outcome": "Closed the target StoreEntry/Zen archive gap: independently recovered request-to-task-to-UObject serialization, registered Dev-Framework37 selection, package flag projection and StoreEntry-controlled export-end alignment. Implementation-ready bounded converted-current Music profile explicitly selects nonstreaming/channel fields and emits40 suffix bytes with StoreEntry alignment exponent0 and exact serial extent160+N+40; do not copy the donor's final8 bytes as a Sound field. Frozen BGM/ScoreInfo/PianoScore layouts remain132/120/176; BGM resource+0x60, prior+0x50 observation was FinishSectionName. This is static imported1.004 serialization proof, not executed asset validation, codec acceptance or older playback. Current source hashes remain current, not fabricated older receipts.",
+  "executable": {
+    "catalog_build_id": "ff7rebirth-steam-win64-68fd6fde",
+    "catalog_version": "1.004",
+    "program_selector": "ff7rebirth_.exe-1.004",
+    "program_name": "ff7rebirth_.exe",
+    "image_base": "0x140000000",
+    "language": "x86:LE:64:default",
+    "compiler": "windows",
+    "imported_pe_header_va": "0x140000220",
+    "imported_timestamp": "0x68fd6fde",
+    "imported_size_of_image": "0x09bad000",
+    "imported_checksum": "0x07877c99",
+    "catalog_file_size": 126263624,
+    "catalog_sha256": "76bd4d539878a8759433f1cd7c7b47d5e3abda0ef41572a664d2d606a9f09dc8",
+    "authentication": "Timestamp/image-size/checksum independently reread from the explicitly selected imported program. Catalog whole-file hash/size are reference identity, NOT independently checked disk/import hashes. Older whole disk executable not located. Ghidra executable_path names the current installation and does not authenticate the older import."
+  },
+  "authority": {
+    "new_evidence": "Read-only Ghidra memory, xrefs and decompilation, always explicit older program selector",
+    "prior_record": "analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json supplies migration context, not independent proof of this asset contract",
+    "consumers_read": ["src/pipeline/native_audio_cohort.cpp", "src/pipeline/native_music_export.cpp", "src/pipeline/native_zen_package.cpp", "src/pipeline/native_audio_cache.cpp", "analysis/NativeMusicExportProfile-20261016.md"],
+    "no_actions": ["No production/catalog/generated edits", "No live attachment, process control, game launch, UAL initialization, game-native invocation or install", "No Git operations or subdelegation"],
+    "script_limitation": "Inline read-only Ghidra script request was refused because server scripts are disabled; no configuration change or retry through arbitrary execution was made. All recovery used ordinary read/decompile tools.",
+    "address_claim_policy": "All VAs below are static imported-program locations, RVA=VA-0x140000000, not runtime pointers or invocation authority. Windows x64 argument assignments below describe call-site semantics only. Row/image pointers are borrowed from owning UObject/backing; native owners and mounted files must outlive consumers. No new release/unmount/recovery contract follows. Reproduce by explicit program selection, PE-field check, and the listed xref/descriptor/byte windows; stop on mismatch."
+  },
+  "affected_catalog_ids": ["dataobject_manager_lookup", "bgmlist_object_vtable", "scoreinfo_object_vtable", "pianoscore_object_vtable", "scoreinfo_backing_vtable", "scoreinfo_interface_vtable", "pianoscore_backing_vtable", "pianoscore_interface_vtable", "scoreinfo_typed_lookup", "pianoscore_typed_lookup", "bgmlist_accessor", "pianoscore_accessor", "bgmlist_registry", "scoreinfo_registry", "pianoscore_registry", "bgm_prepare"],
+  "canonical_carriers": {
+    "provenance": "Names and chunk IDs are existing source-consumer identities, NOT proof that old installed chunks were extracted or are equal to current hashes. Chunk IDs identify canonical package/index/type, not content version. A source receipt still needs exact container/chunk bytes and executable identity.",
+    "entries": [
+      {"role":"Music", "package":"/Game/Sound/BGM/bgm_piano_01", "object":"bgm_piano_01", "class":"/Script/SQEXSEAD.SQEXSEADMusic", "chunk_id_hex":"80bd4180ba7f81e100000002", "current_container_hint":"pakchunk8-WindowsNoEditor.utoc", "current_source_sha256":"707fcad468b95724d09031fdfe83c2103c1e7a7aa1330822e8bc973992f53559", "old_source_sha256":null},
+      {"role":"BGMList", "package":"/Game/DataObject/Resident/BGMList", "object":"BGMList", "class":"/Script/EndDataObject.EndDataObjectBGMList", "chunk_id_hex":"7a8041d31d691a3d00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"6d7ce8582def003fe46e76b653b0e9f0294e25eff7ac9bb8dcb77d98976d580e", "old_source_sha256":null},
+      {"role":"ScoreInfo", "package":"/Game/DataObject/Resident/PianoScoreInfo", "object":"PianoScoreInfo", "class":"/Script/EndDataObject.EndDataObjectPianoScoreInfo", "chunk_id_hex":"773d97220ebde22600000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"b7184b8520c1eae265dd30ba5c6f4f072ec0b160516d7770caca9f22f96f5dad", "old_source_sha256":null},
+      {"role":"PianoScore", "package":"/Game/DataObject/Resident/PianoScore", "object":"PianoScore", "class":"/Script/EndDataObject.EndDataObjectPianoScore", "chunk_id_hex":"ed313fea776e3add00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"a2dc74150a2d50f8f2e33e35c898fe64a370dc06a3ee0714c817ffa0aebfeffa", "old_source_sha256":null}
+    ]
+  },
+  "frozen_dataobjects": {
+    "direct_binding_proof": {
+      "serialize_va":"0x141783858",
+      "load_reader_va":"0x1408d8d04",
+      "mode1_binder_va":"0x141783900",
+      "mode1_binder_hex":"488b4138488b5158488942604883c04848894268b001c3",
+      "semantics":"Binder RCX UObject: root=[this+0x38], backing=[this+0x58], backing+0x60=root, backing+0x68=root+0x48, AL=1. Serialize loads image, invokes virtual+0x2a0 and writes returned byte to UObject+0x54. Interface getter at virtual+0x2b8 returns backing+0x58. Hence interface+8=root, interface+0x10=root+0x48. Typed lookup resolves values and indexes row directly. No property-name translation occurs on this mode1 route.",
+      "other_representation":"Virtual+0x2a8 BGM converter 0x144159f84 DOES translate member names/tags to a distinct mutable/native row (BGMName destination+0x0c). That is not evidence for translating arbitrary frozen bytes on the mode1 route. Never mix the mutable layout with the frozen row offsets below."
+    },
+    "root_layout": {
+      "size":88,
+      "alignment":8,
+      "fields":[["KeyToIndex",0,56],["Members",56,16],["Values",72,16]],
+      "member_entry":[["FMemoryImageName",0,8],["type_byte",8,1],["padding",9,3]],
+      "member_entry_stride":12,
+      "map_entry_stride":20,
+      "map_entry_fields":[["name",0,8],["row_index",8,4],["next",12,4],["bucket",16,4]],
+      "array_headers":[["map_entries",0],["occupancy_bits",16],["hash_buckets",40],["members",56],["values",72]],
+      "relative_pointer":"If low bit is one, target=address_of_pointer_word+(signed_word>>1); otherwise native pointer. Producer must retain tagged-relative, nonnegative, bounded targets. Array header word+8 count, word+12 capacity. Hash allocator header uses capacity/reserved zero in supported source.",
+      "sparse_map":"Root+32 free-list=-1, +36 free-count=0 for supported fully occupied source; occupancy count equals key/value count. Validate every row index, bucket/link, occupancy bit and reachability as existing frozen() does, not just the row stride.",
+      "descriptors":"BGM mapped descriptor 0x14415d8a8, members/values 0x144158864; ScoreInfo mapped descriptor 0x1444b8ae0, members/values 0x1444b30d0. Both register root size0x58 and member offsets0x38/0x48."
+    },
+    "wrapper": {
+      "reader":"0x1408d8d04",
+      "fields":"signed i32 image_size; u32 version; if version high16 nonzero: u16 alignment and u16 padding_length, then skip padding_length; exactly image_size bytes; fixup stream follows",
+      "version":"Reader compares serialized version against virtual+0x270 return OR 0x10000; DataObject vtable+0x270 points to zero-return leaf0x140d8a5b0, so supported version0x10000",
+      "loaded_storage":"Object+0x38 receives allocated/copied or archive-mapped image; +0x31 marks loaded image and +0x30 records archive mapping bit. Allocation ownership and mapping lifetime must remain with the native owner. Version mismatch clears image.",
+      "current_source_body":"Existing source's 0x100 reflected prefix at0, zero GUID u16 at4, image_size at6, version at10, alignment at14, padding at16, image start32 is a source-byte profile, not recovered old asset bytes. The native reader starts at the image_size field, not the export beginning.",
+      "alignment":"Image begins after serialized padding; preserve complete source prefix or recompute the padding for the new archive position. A row stride132 must not be rounded to136.",
+      "fixup_reader":"0x1408d9ec0",
+      "fixup_counts_order":["vtable_groups","script_name_groups","memory_image_name_groups"],
+      "memory_image_name_group":"Archive FName resolves to full packed comparison/number, then u32 patch_count and patch_count u32 image-relative offsets; writes eight-byte name at each offset. Group count is root-independent. Zero placeholders and four-byte alignment are supported producer restrictions, not a reason to require eight-byte row alignment.",
+      "script_name_group":"Writes a different 12-byte representation (comparison twice then number); must stay rejected by current bounded producer, not confused with eight-byte FMemoryImageName fixups.",
+      "source_only_tails":"Current producer pins zero tails BGM0/ScoreInfo12/PianoScore8. Older binary establishes image/fixup semantics, not the actual old carrier's emitted trailing bytes. No old-tail byte-equality claim."
+    },
+    "type_dictionary": {
+      "2":"uint8; array element uint8 when field name ends _Array",
+      "6":"uint32; array element uint32 when field name ends _Array",
+      "7":"int32; array element int32 when field name ends _Array",
+      "9":"float32",
+      "10":"FMemoryImageString (16 bytes), or array of strings if _Array",
+      "11":"FMemoryImageName (8 bytes, alignment4), or array of names if _Array",
+      "arrays":"Frozen TArray header16: tagged relative pointer,count,capacity; element type determined by property/tag, not a uniform16-byte element. Name element8 align4; byte1; int/float4; string16 align8.",
+      "type_evidence":"Name descriptor0x143cd7138 size8 align4; unsigned byte0x142ea2cf0 size1; unsigned int0x142e2fea0 size4; signed int0x142ea2e30 size4; string0x14470ae14 size16 align8; member0x144051ab0 size12 align4."
+    },
+    "BGMList": {
+      "row_descriptor_va":"0x14415d470",
+      "ordered_member_table_va":"0x1441565dc",
+      "lookup_va":"0x14164f848",
+      "lookup_interface_vtable":"0x1468af7f0",
+      "stride":132,
+      "alignment":4,
+      "resource_field":"BGMName",
+      "resource_offset":96,
+      "row_fields_name_tag_offset_width":[
+        ["SectionName00",11,0,8],["ModeBGM",11,8,8],["SkipSectionName",11,16,8],["RestartSectionName",11,24,8],
+        ["SectionName02",11,32,8],["SectionName03",11,40,8],["SectionName04",11,48,8],["SectionName05",11,56,8],
+        ["SectionName06",11,64,8],["SectionName07",11,72,8],["FinishSectionName",11,80,8],["BattleBGMName",11,88,8],
+        ["BGMName",11,96,8],["UniqueIndex",7,104,4],["FadeOutTime",9,108,4],["OverrideFadeOutTime",9,112,4],
+        ["OneShotPlayTime",9,116,4],["FadeInTime",9,120,4],["IsHighPriorityLoad",2,124,1],["CrossFade",2,125,1],
+        ["OneShot",2,126,1],["IgnoreVehicleRequest",2,127,1],["EnablePrevFinishSection",2,128,1],["PauseRestart",2,129,1]
+      ],
+      "padding":[[130,2]],
+      "property_spelling_check":"Initializer0x144159278 independently registers L\"IgnoreVehicleRequest\" at0x7f, matching ASCII IgnoreVehicleRequest in the serialized ordered table0x1441565dc.",
+      "correction_to_prior_handoff":"0x141348ac8 reads row+0x50, which the generated layout and ordered table identify as FinishSectionName, not BGMName. Its control flow handles previous finish/pause state. Therefore prior structure_differences 'BGMList row resource key older0x50' is disproved for frozen mode1. Do not move the producer resource fixup to0x50.",
+      "compatibility":"Old frozen row layout and the current producer's132-byte BGM geometry/resource+0x60 agree. This is structural code evidence, not authentication of current source hash as an older stock asset."
+    },
+    "ScoreInfo": {
+      "row_descriptor_va":"0x1444b8654",
+      "ordered_member_table_va":"0x1444b1488",
+      "lookup_va":"0x1443b6bb0",
+      "stride":120,
+      "alignment":8,
+      "bgm_field_native_spelling":"BgmName",
+      "bgm_field_offset":80,
+      "fname_case":"Native FName comparison is case insensitive; retained current donor uses BGMName. Do not invent a second property or duplicate fixup. A byte-oriented source validator must explicitly bind its known cooked spelling to this exact field.",
+      "row_fields_name_tag_offset_width":[
+        ["ScoreStoryFlag_Array",11,0,16],["ScoreStateTrigger_Array",11,16,16],["ModeChangeComboCount_Array",6,32,16],
+        ["Score_Array",7,48,16],["MenuTextID",10,64,16],["BgmName",11,80,8],
+        ["CameraPlayMinTime",9,88,4],["CameraPlayMaxTime",9,92,4],["CameraSwitchRate",9,96,4],["Bpm",9,100,4],
+        ["StreamingFrame",6,104,4],["Difficulty",7,108,4],["DefaultSpeedIndex",2,112,1],["MinSpeedIndex",2,113,1],["UniqueIndex",2,114,1]
+      ],
+      "padding":[[115,5]],
+      "evidence":"Descriptor chain1444b2fe4 ->1444b355c ->1444b3734 ->1444b390c ->1444b3ae4 ->1444b4240 ->1444b4418 gives exact offsets/types. BgmName initializer1444b3734 writes offset0x50 and name type getter143cd7138. Bpm UTF16 literal at1468e08c0 independently read."
+    },
+    "PianoScore": {
+      "row_descriptor_va":"0x1444ac060",
+      "ordered_member_table_va":"0x14448a560",
+      "lookup_va":"0x1441a06f8",
+      "stride":176,
+      "alignment":8,
+      "row_fields_name_tag_offset_width":[
+        ["TimeStr_Array",10,0,16],["IgnoreSound_Array",11,16,16],["MonotoneID_Array",11,32,16],["ChordID_Array",11,48,16],
+        ["ChordNoteType_Array",2,64,16],["ChordDotType_Array",2,80,16],["MonotoneNoteType_Array",2,96,16],
+        ["MonotoneDotType_Array",2,112,16],["Strength_Array",2,128,16],["CameraSwitchTiming_Array",2,144,16],["GroupIndex_Array",2,160,16]
+      ],
+      "evidence":"Descriptor1444ac060 plus initializer chain1444a8740 ->1444a8da0 ->1444a8f78 ->1444a914c ->1444a9238; ordered table14448a560 independently corroborates fields/tags. A chart must preserve each field's actual element type and all relative string/name-array payloads, not only eleven row headers."
+    }
+  },
+  "music": {
+    "class_chain":[
+      {"class":"SQEXSEADMusic","getter":"0x142b41a58","constructed_getter":"0x142ddd620","class_params":"0x145c4d190","properties":"0x146102c40","property_parameter_count":6,"top_level_count":2},
+      {"class":"SQEXSEADSound","getter":"0x142b3ff5c","class_params":"0x145c4d140","properties":"0x1461028e0","property_parameter_count":20,"top_level_count":18},
+      {"class":"SoundWave","getter":"0x142b40578","class_params":"0x146075890","properties":"0x146527e20","property_parameter_count":31,"top_level_count":25},
+      {"class":"SoundBase","getter":"0x142b418d8","class_params":"0x1460746d0","properties":"0x146525eb0","property_parameter_count":28,"top_level_count":22}
+    ],
+    "recovery":"Read generated property pointer arrays and each FPropertyParams record (name+0, flags+16, generation flags+24, dimension+32, offset+36; bool records have their special setter layout). Exclude map key/value, array/set inner and enum underlying descriptors from top-level properties. Class construction1447a9c10 passes props/count to1447a8264; that walks from list end and1447a82c4 decrements pointer before constructing/prepending, including recursive inner-property handling. This recovers generated property order, not editor headers or float scanning. Schema below is derived-before-super as the retained shipping profile; no current-build property added by assumption.",
+    "schema_names_by_index":[
+      "SectionNameIndexTable","ModeNameIndexTable","bForcedIgnore","bUseKohrogiAttenuation","ReferenceBank","SoundIndex",
+      "bOverrideStopFadeTime","StopFadeTime","bIsUISound","PauseFadeTime","bIgnoreListenerDynamicAudibleRangeMagnification",
+      "bNoSEAD3DForcePlayOnLoopSound","bIgnoreAudioVolumeAttenuation","bEnableSEADTracingOcclusion","SEADOcclusionTraceChannel",
+      "SoundNameIndexTable","SoundNameAliasSetting","bStreamingAsset_PlatformPS5","bStreamingAsset_PlatformXSX","EndCustomType",
+      "CompressionQuality","StreamingPriority","SampleRateQuality","SoundGroup","bLooping","bStreaming","bSeekableStreaming",
+      "LoadingBehavior","bMature","bManualWordWrap","bSingleLine","bIsAmbisonics","FrequenciesToAnalyze","CookedSpectralTimeData",
+      "CookedEnvelopeTimeData","InitialChunkSize","SpokenText","SubtitlePriority","Volume","Pitch","NumChannels","SampleRate",
+      "Subtitles","Curves","InternalCurves","SoundClassObject","bDebug","bOverrideConcurrency","bOutputToBusOnly","bHasDelayNode",
+      "bHasConcatenatorNode","bBypassVolumeScaleForPriority","VirtualizationMode","ConcurrencySet","ConcurrencyOverrides",
+      "Duration","MaxDistance","TotalSamples","Priority","AttenuationSettings","ModulationSettings","SoundSubmixObject",
+      "SoundSubmixSends","SourceEffectChain","BusSends","PreEffectBusSends","AssetUserData"
+    ],
+    "critical_property_records":[
+      {"index":0,"record":"0x146102ca8","name":"SectionNameIndexTable","type":"Map<Name,int32>","native_offset":1360},
+      {"index":1,"record":"0x146102c70","name":"ModeNameIndexTable","type":"Map<Name,int32>","native_offset":1440},
+      {"index":15,"record":"0x146102a38","name":"SoundNameIndexTable","type":"Map<Name,SQEXSEADSoundIndexInfo>","native_offset":960},
+      {"index":17,"record":"0x1461028a0","name":"bStreamingAsset_PlatformPS5","type":"bool"},
+      {"index":18,"record":"0x146102868","name":"bStreamingAsset_PlatformXSX","type":"bool"},
+      {"index":19,"record":"0x146102980","name":"EndCustomType","type":"byte enum","native_offset":1050},
+      {"index":38,"record":"0x146527ac8","name":"Volume","type":"float32","native_offset":628},
+      {"index":39,"record":"0x146527af0","name":"Pitch","type":"float32","native_offset":632},
+      {"index":55,"record":"0x1465267e8","name":"Duration","type":"float32 seconds","native_offset":296},
+      {"index":56,"record":"0x146526810","name":"MaxDistance","type":"float32","native_offset":300}
+    ],
+    "sound_index_info": {
+      "struct_params":"0x146fbe7c0",
+      "properties":"0x146102ab8",
+      "size":12,
+      "alignment":4,
+      "fields":[[0,"SoundIndex","int32",0,"0x146102ad0"],[1,"Duration","float32",4,"0x146102a90"],[2,"VoicedSectionAdjustmentTime","float32",8,"0x146102a68"]],
+      "current_nested_fragment_compatibility":"Current bytes80 07 05 select three fields, zero-mask indexes0 and2, float duration at0x5d. These three older generated fields/types/order match. Exact older source emitting this fragment is not established."
+    },
+    "incompatibility_with_current_reflected_prefix": {
+      "current_words":["0400","020d","0601","0213","0310"],
+      "current_selected_indexes":[0,1,15,17,18,19,39,56],
+      "older_interpretation":"Same indexes select EndCustomType instead of SW2 streaming, Pitch instead of Volume, and MaxDistance instead of Duration. Both float writes would land in the wrong properties. This is not resolved by equal bank size, matching vtables, source hash acceptance or changing only duration offsets.",
+      "difference":"Older Sound has20 generated parameters/18 top-level properties and no bStreamingAsset_PlatformSW2. Current profile's extra SW2 property shifts inherited schema indexes by one."
+    },
+    "conditional_current_donor_rewrite": {
+      "status":"Binary-derived target serialization recipe, NOT authenticated older stock bytes and NOT a tested implementation",
+      "precondition":"Only the exact SHA-pinned current Music donor and complete reflected/wrapper/bank/suffix profile from NativeMusicExportProfile-20261016.md. This operation would transform a current donor into a deliberately older-schema export; do not relabel its original hash as old.",
+      "target_indexes":[0,1,15,17,18,38,55],
+      "target_fragment_words":["0400","020d","0401","0213","0310"],
+      "target_header_hex":"00040d02010413021003",
+      "operations":["Replace five top-level fragment words with target words", "Keep maps/nested struct through offset0x60 unchanged", "Keep PS5/XSX at0x61/0x62 and remove current SW2 serialized byte0x63", "Volume becomes float0x63, inherited Duration float0x67, zero GUID DWORD0x6b", "Image size field becomes0x6f, version0x73, alignment u16 at0x77, padding length u16 at0x79", "Increase padding from4 to5, zero padding bytes0x7b..0x7f; image root remains0x80, bank starts0x90", "Patch nested duration0x5d and inherited duration0x67 with finite positive logical seconds; do not patch Pitch/MaxDistance", "Image_size=N+16, root word0x21 at0x80, count/capacity=N at0x88/0x8c; update Zen export extent and all dependent metadata"],
+      "extent_if_suffix_qualified":"144+N+40 for StoreEntry alignment exponent0 and the selected nonstreaming branch. This minimal reflected rewrite alone does not select that branch; use controlled_nonstreaming_target_recipe instead.",
+      "not_a_producer_recommendation":"Superseded as a complete recipe by controlled_nonstreaming_target_recipe: missing explicit generic streaming/loading/channel values permit a concrete configuration-dependent wrong branch. Keep this section only as the minimal reflected-index comparison."
+    },
+    "mapped_bank": {
+      "target_zen_archive": {
+        "status":"Complete static relationship recovered in explicit ff7rebirth_.exe-1.004; not a trace of live execution. Ordinary fresh distinct native packages, not an existing UPackage with externally changed versions or a CDO.",
+        "request_to_storeentry":"1409af2b8 receives owner+8, obtains a borrowed StoreEntry pointer via140becbb0(owner+0x2a8,packageID), places it at request+8, and queues request through1409b0528(owner,request).140beb528 drains owner+0x50 and calls140becc74 ->140becfa4 ->140bed148. Constructor copies request+8 to package+0x10. Its allocations use entry+8 export count and entry+12 bundle count, independently matching the32-byte StoreEntry consumer representation. StoreEntry/backing and container must remain alive; no lookup/constructor invocation or recovery authority follows.",
+        "storeentry_packed_size":"140bed148, exact instructions140bed309..140bed32c: StoreEntry first u64 low60 bits become package+0x160 size, high4 bits become package byte+0xe7 alignment exponent. Mask0x0fffffffffffffff, exponent=word>>60, alignment=1ULL<<exponent. The current native_iostore_writer.cpp emits only zen.size() in that u64, hence exponent0/alignment1, NOT implicit alignment16. Do not infer alignment from a16-byte container-header allocation or the mapped-image alignment field.",
+        "registered_task_chain":"Owner144753ff8 installs six24-byte task descriptors, including140d894bc header preparation and14085a4ac export-bundle create/serialize. Package140bed744 binds those same descriptors to its task records, with package context and bundle ordinal. This is the StoreEntry-owned Zen path, not unrelated LinkerLoad14473eb4c.",
+        "header_to_export_metadata":"140d894bc reads NameMap from summary+0x18..0x24, import/export/bundle/graph offsets at+0x28/+0x2c/+0x30/+0x34 and graph size+0x38. Publishes export map at package+0x170; body/current pointers+0x158/+0x150=header+graphOffset+graphSize. Export entries are72 bytes, serial offset+0 and serial size+8; bundle commands8 bytes, command0=create and1=serialize. These are the same fields parsed/rebuilt by native_zen_package.cpp, not the unrelated128-byte linker export records.",
+        "fresh_upackage_versions":"140d89bf8 creates/resolves UPackage. For a newly created distinct package it copies summary flags+0x10 into UPackage+0x50 and sets UPackage+0x78=0x20a and+0x7c=1. Require a fresh generated package identity; do not reuse a prior stock/custom UPackage or treat unrelated objects with equal basenames as that identity.",
+        "actual_archive_constructor":"14085a4ac at14085a532..14085a561 supplies body/current/span bounds to140d4d3d0(RCX stack archive,RDX base,R8 cursor,R9 length). Constructor calls140d4d494/140d4d544, installs vtable1457ace08, zeros derived+0x98..+0xf8, and initializes the cursor triplet. Base reset zeros TargetPlatform+0x70 and saving/byte-swap state, sets default version0x20a and virtual+0x58 ->140d4d5f0 ->lazy custom-version byte+0x88=1.",
+        "actual_archive_setup":"14085a566..14085a61c: virtual+0xe8 ->14169f5f0 writes UPackage+0x78 to archive+0x40; +0xf0 ->14169f600 writes licensee+0x44. +0xc8 ->141607dc0 projects package flag bit13 into archive+0x28 bit5; +0xe0 ->141622620 projects flag bit23 into archive+0x29 bit0; +0xa0 ->140d4bf60 sets loading bit+0x28 bit0=1; +0xd8 ->140d4d310 sets+0x28 bit7=1; when package flags are negative,+0x60 ->141607dd0 sets+0x2b bit2. Also sets archive+0x2a bit5. None overwrites custom-version pointer+0x60/lazy+0x88 or sets TargetPlatform/saving/byte-swap state.",
+        "target_flag_rule":"For the converted shipping output explicitly project summary.flags=authenticatedDonorFlags|0x80802200 (bits31,23,13,9): editor-filter projection, mapped image, unversioned properties, and cooked/alignment guard. Preserve other SHA-authenticated donor flag bits and validate the resulting required mask; do not guess unrelated flags or accept unauthenticated inputs. Fresh UPackage propagation above then selects the recovered archive path, including association with its owning mapped chunk. This is a deliberate code-derived target projection, not a claim that the absent old source or known donor summary flags were separately observed.",
+        "exact_custom_version_source":"Target vtable1457ace08+0x48=140a4e228 and+0x58=140d4d5f0, not merely the raw async-reader table. Virtual+0x1e0=14076b370, raw c20000 (no-op). Thus Wave's GUID registration does not substitute an asset custom-version table. On first lookup140a4e020 ->virtual48 ->140a4e228 snapshots the registered-version collection140d4cc50 into archive+0x60 using142b69cec, clears lazy+0x88, then returns the GUID entry version. Initializer140656f10 registered Dev-Framework GUID3f74fccf8044b043df14919373201d17 at37. No custom-version override/summary deserialization appears between this constructor and serializer. With fresh UPackage file-version0x20a and queried37>=12 the legacy FName branch is NOT selected. Missing GUID would return-1 and is not this proven initialized path; external interception/re-registration is outside this profile.",
+        "actual_object_call":"14085a4ac command1 at14085a70c..14085a74b reads export serial offset/size and calls14085aa64(RCX package,EDX export index,R8 this archive). The helper requires a present non-skipped object with RF_NeedLoad0x400, clears that flag, sets archive context+0x98, and calls ordinary non-CDO UObject virtual+0xa8 with this archive. Music slot+a8=1410691a8; its structured wrapper is not an extra serializer. Afterwards sets load-completed0x200000 and restores context. Producer export flags decimal11 (0x0b) are non-CDO; task creation/load state remains native-owned.",
+        "exact_end_alignment":"After helper returns true,14085a75e..14085a7a7 tests (~UPackage.flags &0x800200)==0. If true reads exponent package+0xe7, A=1<<exponent and advances cursor by align_up(export.SerialOffset+object_bytes_consumed,A)-(export.SerialOffset+object_bytes_consumed). Independently advances package+0x150 by export.SerialSize. No serial-size equality comparison is present in this target command block; do not borrow a LinkerLoad fatal-size check as its contract. Nevertheless the supported producer requires declared serial size equal complete consumed object bytes plus this exact padding, never relies on ignored trailing bytes.",
+        "decisive_producer_rule":"Use existing writer's StoreEntry exponent0: first u64=whole Zen chunk size<2^60, native alignment1. Rebuild Music export serial offset0 and size160+N+40 for the controlled projection; emit precisely bank N followed by the first40 qualified suffix bytes, NOT48. End padding=0 for exponent0, so serializer cursor and declared end agree exactly. No shared StoreEntry writer change is necessary. Chunk metadata/compression bounds must cover the resulting whole chunk, not the export size alone.",
+        "alternative_not_required":"If a future writer deliberately chooses exponent4, first StoreEntry u64 must be (4ULL<<60)|wholeChunkSize and flags must satisfy0x800200. Then with export serial offset0, N divisible16 and this controlled prefix, append8 zero alignment bytes after the40-byte suffix and declare160+N+48. That is an explicit metadata-controlled padding profile, not the existing exponent0 writer and not proof that any unavailable older stock asset used it. Do not add this alternative just to preserve the donor's old extent.",
+        "scope_limit":"This closes selected target-archive custom-version/extent semantics for the supported converted carrier. It does not authenticate actual older disk chunks, independently hash the old executable, qualify arbitrary Music schemas, prove SQEXSEAD MABF/HCA internals or playback, or authorize live construction/mounting. Owners/chunks/borrowed rows remain retained as required by existing runtime policy."
+      },
+      "serialize_chain":"Music vtable1458d60f0+0xa0 ->142ddcf48 ->1410691a8 ->141068004 ->141068fe4 ->1408d8d04 after UObject reflected serialization",
+      "reader_and_fixups":"Same1408d8d04/1408d9ec0 as DataObjects; virtual+0x270 at1458d6360 is zero-return140d8a5b0, so version0x10000 is accepted. Reader uses serialized padding length, not constant4.",
+      "root_consumer":"0x1410671e4: reads UObject+0x38, requires root count at+8 >0, resolves root pointer low-bit relative tag and returns byte pointer. Exact bytes488b51384885d27414837a08007e0e488b02a801740648d1f84803c2c333c0c3.",
+      "source_route":"0x141020f04: if Sound+0x41b is set and +0x548 is empty, obtains byte pointer through1410671e4 then passes it into141067244(this+0x420,pointer); returns+0x548. This establishes mapped image-to-Sound source relationship, not successful audio playback or source/token ownership transfer.",
+      "compatibility":"Mapped pointer/count/capacity bank wrapper can represent the current bounded MABF image on old reader. It does NOT establish old SQEXSEAD acceptance of every MABF/HCA internal field; retained current MABF validation remains necessary and old playback is untested.",
+      "known_current_suffix_hex":"00000000000000000000000001000000000000009a3fe2037a43964ca54cc5a9700d15be010000000000000000000000",
+      "known_current_suffix_source":"src/pipeline/mabf_scaffold.h kTrailers[2], last48 bytes, pinned by native_music_export.cpp; NOT older asset bytes",
+      "suffix_static_parse":"Offsets relative to suffix:0/4/8 zero fixup counts consumed by1408d9ec0; +12 cooked DWORD1 consumed by141068004; +16 signed compressed-format count0 consumed by1410690c0 on the selected nonstreaming, null-TargetPlatform load path; +20..35 GUID consumed by four DWORD reads140858cdc; +36 DWORD1 consumed by1410691a8 when NumChannels==0, setting Sound+0x41b. These routines consume40 bytes on this path and do not read +40..47. Their structured-archive wrapper142ddcf48 only tail-jumps to1410691a8 and adds no reads.",
+      "selected_branch_contract": {
+        "authority":"Imported1.004 code only; target_zen_archive now independently establishes construction/version/flags for the supported fresh generated package. Not observed live execution or playback.",
+        "archive":"archive+0x28 bit0 set for loading, bit1 clear for not-saving; TargetPlatform pointer at+0x70 null; byte-swapping bit archive+0x29 bit6 clear for the retained little-endian donor. Mapped-versus-allocated image storage is separately selected by archive+0x29 bit0 and does not replace these predicates.",
+        "custom_version_guid_hex":"3f74fccf8044b043df14919373201d17",
+        "custom_version":"141068004 registers/queries this GUID via archive virtual+0x1e0 and140a4e020. If load and archive file-version DWORD+0x40 >0x187 and queried custom version <12, an additional FName is consumed BEFORE the format count. This donor has no such FName. Require file version<=0x187 OR queried custom version>=12. Registration140656f10 calls141924a98 with this GUID, version0x25, name Dev-Framework; compiled latest37 is NOT proof of a particular archive's queried version.",
+        "custom_version_default_path":"140a4e020 searches40-byte GUID/version entries via archive virtual+0x48; absent GUID returns-1. Target Zen table1457ace08+0x48 is140a4e228 and constructor/setup retain the lazy registered snapshot path, as independently connected in target_zen_archive. For this fresh native package Dev-Framework37 is selected and the legacy FName is absent; this conclusion no longer depends on assuming an arbitrary archive subclass uses defaults.",
+        "streaming":"141068f64 returns true if generic bStreaming at SoundWave+0x1e3 bit1 is set. Otherwise, when LoadingBehavior+0x1e4 !=4 and +0x1e5 bit1 clear, platform overrides can still force true through bUseAudioStreamCaching at override+0x64 or AutoStreamingThreshold float+0x60 >1e-8 with Duration+0x128 above threshold. Nonstreaming is therefore not established merely by omitting bStreaming from a fragment or by keeping PS5/XSX streaming flags.",
+        "configuration_evidence":"140bc2d88/140bc2dc8 obtain cached platform overrides.144e64584 defaults threshold/cache to0, but144e6651c refreshes Engine platform configuration, substitutes Windows for null platform, and reads bUseAudioStreamCaching and AutoStreamingThreshold. Constructor defaults alone cannot authenticate the selected runtime predicate.",
+        "nonstreaming_consumption":"With cooked DWORD1, streaming false and TargetPlatform null,1410690c0 reads count0 and consumes exactly4 bytes, no FName or bulk-format payload.140858cdc consumes GUID16.1410691a8 then consumes discriminator DWORD iff NumChannels at Sound+0x27c==0. Require that zero channel count explicitly rather than assuming every class default.",
+        "wrong_branch":"Streaming true invokes144e6d440 ->144e6d120 for a different streaming-platform payload. NumChannels nonzero omits the discriminator DWORD. Custom version<12 under the file-version guard inserts a FName. None is compatible with blindly preserving the same suffix layout.",
+        "guid_and_discriminator":"Retained GUID9a3fe2037a43964ca54cc5a9700d15be is serialized data, not an executable identity or inferred old stock GUID. The DWORD1 discriminator is not a channel count; on NumChannels==0 it sets Sound+0x41b, which selects the mapped source route141020f04. Preserve known-donor provenance; no old stock equality claim."
+      },
+      "final_eight_bytes": {
+        "not_an_unrecovered_sound_field":"Complete1410691a8 disassembly returns at1410691fe, fallback rejoins the same epilogue;142ddcf48 tail-jumps. On the selected branch the object serializer stops after suffix+39. +40..47 are not consumed by these Sound/Wave field readers.",
+        "native_alignment_reader":"The earlier LinkerLoad14473eb4c observation was not the target. Actual StoreEntry/Zen14085a4ac now independently proves the same0x800200 flag guard but obtains alignment from StoreEntry high4-bit exponent via package+0xe7, NOT linker+0x190. See target_zen_archive exact call/metadata relationship and producer rule.",
+        "arithmetic":"For N divisible by16, original compensated image root0x80/bank0x90 and40-byte suffix end at144+N+40, which is8 modulo16. Alignment16 consumes exactly the remaining8 zero bytes and reaches144+N+48. Do not assign them to GUID, format count, channels, or an undocumented extra Sound property.",
+        "resolved_rule":"The donor's final8 zeros are not Sound/Wave fields. Their compatibility depends on output StoreEntry metadata, not their provenance alone. Controlled converted output with existing exponent0 emits40 suffix bytes and exact declared end; exponent4 would consume8 padding under the proven guard. We do not claim original donor or unavailable old stock StoreEntry exponent was observed. No invented padding or suppressed native check is required."
+      },
+      "controlled_nonstreaming_target_recipe": {
+        "status":"Selected implementation-ready static serialization recipe with target StoreEntry/Zen path proven below; NOT implemented, executed, codec-qualified or playback-tested",
+        "input_authentication":"Accept only the exact known-current Music SHA and complete existing donor prefix/maps/nested struct/MABF/suffix validation. Donor bytes remain user-extracted inputs; do not embed/distribute copyrighted donor assets or classify this as an old stock hash.",
+        "reason":"The minimal SW2-removal recipe leaves native class defaults/platform configuration implicit. Explicitly serialize generic bStreaming=false, LoadingBehavior=4 and NumChannels=0 to select the recovered nonstreaming/channel path independently of streaming overrides. LoadingBehavior4 is justified by141068f64's actual bypass condition, not guessed enum semantics.",
+        "target_indexes":[0,1,15,17,18,25,27,38,40,55],
+        "target_fragment_words":["0400","020d","0401","0206","0201","020a","0201","030e"],
+        "target_header_hex":"00040d020104060201020a0201020e03",
+        "zero_masks":"All clear; explicitly serialize one-byte false bool, one-byte enum value4 and int32 zero. Old generated records146527c68 (bStreaming),146527d08 (LoadingBehavior),146527b18 (NumChannels) establish types/indexes. Generated bStreaming setter141917880 raw8089e301000002c3 sets this+0x1e3 bit1, corroborating the selector field.",
+        "value_offsets":"Header16; copied maps/nested struct at0x10..0x66; nested Duration moves to0x63. PS5/XSX at0x67/0x68; generic bStreaming0 at0x69; LoadingBehavior4 at0x6a; Volume float0x6b; NumChannels int32 zero0x6f; inherited Duration float0x73; UObject GUID-presence DWORD0 at0x77.",
+        "wrapper_offsets":"Image size0x7b, version0x7f, alignment u16 0x83, padding length u16 0x85; nine zero padding bytes0x87..0x8f; root0x90 contains0x21; count/cap N at0x98/0x9c; bank0xa0. Preserve original maps/cues/values except explicitly projected fields and logical durations; rebuild all package extents. Image count remains N+16.",
+        "extent":"Use StoreEntry exponent0/alignment1, export serial offset0, summary.flags=authenticatedDonorFlags|0x80802200 and first40 bytes of the exact authenticated48-byte donor suffix. Export serial size is160+N+40, with no end padding. Preserve the16-byte donor GUID as donor data; NumChannels int32 is explicitly0 and following discriminator DWORD is1. Update whole package/chunk extents and source/cache profile identity; do not truncate N bank bytes or reuse the current144+N+48 export-size validator. The existing current-build path stays unchanged."
+      },
+      "cooked_suffix_gap":"Closed for the controlled converted-current carrier: the actual StoreEntry/Zen constructor/call path selects registered Dev-Framework37 and metadata-controlled alignment; exponent0 output consumes exactly40 suffix bytes. Minimal reflected-only conversion remains rejected because of streaming/channel defaults. Actual-old stock reader provenance and arbitrary additional payload shapes remain separate, not prerequisites to fabricate for this SHA-pinned conversion."
+    }
+  },
+  "reproduction_windows": {
+    "policy":"Imported raw byte windows for reproducibility, not unique searched signatures or safe detour lengths; several32-byte windows end inside an instruction. Existing catalog owns actual complete signatures and hook policy.",
+    "entries":[
+      ["0x14164f848","488bc448895808488968104889701848897820415541564157b820000000e8c5"],
+      ["0x14415d470","b828000000e8b61af5fd482be08a05a4e22705a8020f85ae0000000c02c70581"],
+      ["0x1441565dc","48895c240855488dac24e0feffffb820020000e83c89f5fd482be0488b050232"],
+      ["0x1444b8654","b828000000e8d268bffd482be08a055824f604a8020f851a0100000c02c70535"],
+      ["0x1444b1488","48895c240855488d6c2480b880010000e893dabffd482be0488b055983af0248"],
+      ["0x1444ac060","b828000000e8c62ec0fd482be08a050cd8f604a8020f851a0100000c02c705e9"],
+      ["0x14448a560","48895c240855488d6c24d0b830010000e8bb49c2fd482be0488b0581f2b10248"],
+      ["0x1408d8d04","48895c240844884424185556574154415541564157488becb830000000e80a62"],
+      ["0x1408d9ec0","48894c2408555356574154415541564157488becb848000000e852507d01482b"],
+      ["0x141783858","48895c241057b820000000e8c8b69200482be0488bfa488bd9e8a6aa2cfff643"],
+      ["0x142b41a58","b888000000e8ced456ff482be0488b05bcd3760633c94885c00f859600000048"],
+      ["0x142ddd620","b828000000e806192dff482be0488b05ec174d064885c0751a488d1550fbe602"],
+      ["0x140bed309","48b9ffffffffffffff0f488b024823c148898760010000488b0248c1e83c8887e70000008b42108b5748"],
+      ["0x14085a75e","488b87c00000008b4850b800028000c4e270f2c875334c8b4c24580fb687e7000000488b5538c4c2f9f7cf492b5110482b5548490311488d42ff4803c148f7d94823c1482bc24901014c01af50010000"],
+      ["0x140d4d3d0","48895c2408488974241048897c24184156b820000000e8451b3601482be0498b"],
+      ["0x14085aa64","48895c240848896c241048897424185741564157b820000000e8ae448501482b"],
+      ["0x140d894bc","48895c240848896c241856574156b850000000e85c5a3201482be0488d4c2440"],
+      ["0x140d89bf8","488bc4488958084889681048897018488978204156b830000000e81953320148"]
+    ]
+  },
+  "source_authentication_and_next_step": {
+    "sufficient_static_facts":"Exact older ordered frozen members/types/offsets/strides, fixed root/map/fixup representation, direct mode1 binding and old Music inherited property indexes are recovered. A validator must require this exhaustive schema and canonical package/chunk/class identity, not arbitrary same-stride member lists.",
+    "still_absent":"Actual older stock four-chunk bytes/hashes, old NameMap/map counts/row values/fragments/tails and whole old executable hash remain unobserved. The selected converted-current serialization path no longer requires those constants: its source authentication stays the existing exact current hashes and its target contracts are independently recovered old native code. No arbitrary Music/MABF/HCA/playback qualification follows.",
+    "source_pipeline_decision":"Implement the separate SHA-pinned converted-current source path first, using exhaustive frozen schemas and controlled_nonstreaming_target_recipe; no source asset embedding. A separate actual-old installation reader may authenticate canonical package/chunk/class, exhaustive ordered frozen schema, maps, requested score/chart keys, BGM/Music crosslinks and extraction receipt instead of current hashes, but must reject unsupported actual payload shapes, tails and donor semantics. Generated tables alone do not authorize accepting arbitrary field combinations, maps or malformed schemas. Do not silently fall back from a failed known-donor SHA to permissive structural acceptance.",
+    "smallest_next_experiment":"Lead-owned implementation/validation, not more broad RE: first regression-test shared changes on current1.005 as the user requested, keeping the current profile/output unchanged. Then validate the old-only controlled conversion against recovered native consumption: header indexes/types, explicit nonstreaming/channel values, Dev-Framework37 target archive source, StoreEntry exponent0, serial offset0 and exact160+N+40 extent. Pure assumed-byte parser tests alone do not establish loading/playback; any focused old in-game validation needs explicit human authorization and remains separate from this static task. No Oodle/bootstrap duplication or additional archive-class search is needed for the closed gap.",
+    "lead_handoff":"Static asset-profile blocker closed for the selected converted-current Music carrier. BGM resource+0x60 (prior+0x50 was FinishSectionName), ScoreInfo BGM+0x50, strides132/120/176, direct frozen binding and old Music indexes are retained. Use the explicit nonstreaming/channel projection, existing StoreEntry exponent0 and40-byte suffix; declare160+N+40, not the source48-byte suffix extent. Current SHA receipts remain current. This is enough to implement the bounded serializer path, not to report an operational old ASI, native lifetime/codec success or old playback.",
+    "validation":"Initial JSON syntax/structural self-check passed before continuations. Continuations independently read property records, complete target task/archive/serializer functions and raw metadata/alignment windows; pure arithmetic checked forced indexes0,1,15,17,18,25,27,38,40,55, header16, GUID0x77, wrapper0x7b, padding9, root0x90/bank0xa0 and40-byte suffix. No shell/native execution, production test/build, install, startup, gameplay or old source-extraction in this continuation. Expanded JSON was manually syntax-reviewed, not reparsed through an external process; these are evidence checks, not a byte-only substitute for native validation."
+  }
+}

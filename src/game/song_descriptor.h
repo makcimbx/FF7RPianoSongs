@@ -3,8 +3,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
+
+namespace ff7rp::pipeline { struct NativeAudioArtifactSet; }
 
 namespace ff7r::piano::game {
 
@@ -69,6 +72,7 @@ struct SongDescriptor {
     std::array<int32_t, 2> mode_change_combo_counts{8, 16};
     std::vector<SongChartNote> chart_notes;
     std::wstring sidecar_path;
+    std::shared_ptr<const ff7rp::pipeline::NativeAudioArtifactSet> native_audio;
     std::vector<SongDifficultyProfile> profiles;
     int default_profile_index = 0;
     std::vector<SongChordVoicing> chord_voicings;

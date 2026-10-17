@@ -13,6 +13,11 @@
 #include <vector>
 
 namespace ff7r::piano::game {
+// Completion-worker only, after actual native initialization AND ordinary hook
+// publication. One attempt per installed lifetime; failure/stop cannot restart.
+// A not-yet-created HWND leaves window attachment pending; profile refresh
+// attaches it later without restarting the service or resolving names again.
+bool start_title_input_service(HMODULE exe_module) noexcept;
 
 struct TitleTextView {
     const wchar_t* data = nullptr;

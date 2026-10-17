@@ -1,12 +1,26 @@
 #include "game/runtime.h"
 #include "game/module_hooks.h"
+#include "game/native_audio_runtime.h"
 
 #include <array>
+#include <cstdlib>
 #include <iostream>
 
 namespace {
-std::array<int, 12> installed{};
+std::array<int, 13> installed{};
 std::size_t installed_count = 0;
+std::size_t shutdown_count = 0;
+std::size_t identity_clear_count = 0;
+bool native_shutdown_ready = false;
+bool native_install_ready = true;
+void (*initializer_notification)() noexcept = nullptr;
+bool initializer_notified = false;
+
+void initializer_complete() noexcept
+{
+    if (installed_count != installed.size()) std::abort();
+    initializer_notified = true;
+}
 
 bool record(const int module) noexcept
 {
@@ -16,6 +30,7 @@ bool record(const int module) noexcept
 
 ff7r::piano::core::HookShutdownResult shutdown_ok() noexcept
 {
+    ++shutdown_count;
     return {true, true, true, true, true, true};
 }
 }
@@ -23,7 +38,16 @@ ff7r::piano::core::HookShutdownResult shutdown_ok() noexcept
 namespace ff7r::piano::game {
 bool validate_release_hook_specs(HMODULE) { return true; }
 void initialize_uobject_identity(HMODULE) {}
-void clear_uobject_identity() {}
+void clear_uobject_identity() { ++identity_clear_count; }
+bool capture_current_uobject_identity_access(uobject_locator_core::UObjectIdentityAccess&) noexcept { return false; }
+native_audio::NativeAccessor* query_original_scoreinfo_accessor(native_audio::NativeAccessor*, std::uint64_t) noexcept { return nullptr; }
+namespace native_audio {
+bool install_native_audio_runtime(HMODULE, RuntimeServices services) noexcept {
+    initializer_notification = services.initializer_complete;
+    return services.identity && services.scoreinfo_original && record(-1) && native_install_ready;
+}
+bool shutdown_native_audio_runtime() noexcept { return native_shutdown_ready; }
+}
 bool install_menu_session_hooks(const HookInstallContext&) { return record(0); }
 bool install_list_patch_hooks(const HookInstallContext&) { return record(1); }
 bool install_selection_hooks(const HookInstallContext&) { return record(2); }
@@ -51,10 +75,32 @@ bool shutdown_audio_sead() { return true; }
 
 int main()
 {
-    const std::array<int, 12> expected{0, 1, 2, 3, 4, 5, 6, 11, 7, 8, 9, 10};
-    if (!ff7r::piano::game::install_release_hooks(nullptr)
+    const std::array<int, 13> expected{-1, 0, 1, 2, 3, 4, 5, 6, 11, 7, 8, 9, 10};
+    if (!ff7r::piano::game::install_release_hooks(nullptr, initializer_complete)
         || installed_count != expected.size() || installed != expected) {
         std::cerr << "release_hook_empty_catalog_selftest: empty-catalog install skipped a required module\n";
+        return 1;
+    }
+    if (initializer_notification != initializer_complete || initializer_notified) {
+        std::cerr << "release_hook_empty_catalog_selftest: initializer service lost or invoked during publication\n";
+        return 1;
+    }
+    initializer_notification();
+    if (!initializer_notified) return 1;
+    if (ff7r::piano::game::shutdown_release_hooks() || shutdown_count || identity_clear_count) {
+        std::cerr << "release_hook_empty_catalog_selftest: pending native work lost borrowed services\n";
+        return 1;
+    }
+    native_shutdown_ready = true;
+    if (!ff7r::piano::game::shutdown_release_hooks() || !shutdown_count || identity_clear_count != 1) {
+        std::cerr << "release_hook_empty_catalog_selftest: safe shutdown retry failed\n";
+        return 1;
+    }
+    installed_count = 0;
+    installed.fill(0);
+    native_install_ready = false;
+    if (ff7r::piano::game::install_release_hooks(nullptr) || installed_count != 1 || installed[0] != -1) {
+        std::cerr << "release_hook_empty_catalog_selftest: native install failure admitted ordinary modules\n";
         return 1;
     }
     std::cout << "release_hook_empty_catalog_selftest: ok\n";

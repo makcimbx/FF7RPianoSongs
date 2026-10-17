@@ -2,6 +2,11 @@
 
 This chronology was extracted from mutable status prose. It records investigated routes and bounded observations; the durable lifecycle invariants are in `../docs/Architecture.md` and current release disposition is in `../docs/CurrentStatus.md`.
 
+**Historical backend:** the source-patching, replay and borrower coordinator below
+was replaced by native cached-resource integration in October. Its artifact-bound
+results are not acceptance of that replacement. See the
+[native integration record](NativeAudioIntegration-20261017.md) for the newer route.
+
 ## Implemented Route At Capture Time
 
 - Sidecar loading used generated `.cache/song.mabf.bin`, custom `BGMName=bgm_piano_09`, scoped `SQEXSEADPlaySetup` patching, `BGMSlotController::Set/Play`, and a Stop lifetime guard.

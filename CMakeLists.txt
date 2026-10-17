@@ -220,6 +220,14 @@ set(FF7RP_PIPELINE_SOURCES
     src/pipeline/midi_chart_generator.cpp
     src/pipeline/midi_source_normalizer.cpp
     src/pipeline/native_asset_capabilities.cpp
+    src/pipeline/native_music_export.cpp
+    src/pipeline/native_iostore_source.cpp
+    src/pipeline/oodle_decoder.cpp
+    src/pipeline/native_asset_hash.cpp
+    src/pipeline/native_zen_package.cpp
+    src/pipeline/native_iostore_writer.cpp
+    src/pipeline/native_audio_cohort.cpp
+    src/pipeline/native_audio_cache.cpp
     src/pipeline/resolved_song_renderer.cpp
     src/pipeline/runtime_cache_codec.cpp
     src/pipeline/runtime_artifact_validator.cpp
@@ -234,6 +242,9 @@ target_compile_definitions(ff7rp_pipeline PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(ff7rp_pipeline PUBLIC
     "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(ff7rp_pipeline PUBLIC midifile)
+if(WIN32)
+    target_link_libraries(ff7rp_pipeline PRIVATE bcrypt)
+endif()
 if(FF7RP_BUILD_RUNTIME)
 add_library(FF7RPianoSongs SHARED ${FF7RPIANOSONGS_SOURCES})
 target_sources(FF7RPianoSongs PRIVATE src/game/chord_voicing_bridge.asm)
@@ -295,6 +306,32 @@ target_compile_definitions(audio_artifact_builder_selftest PRIVATE WIN32_LEAN_AN
 target_include_directories(audio_artifact_builder_selftest PRIVATE "src")
 target_link_libraries(audio_artifact_builder_selftest PRIVATE ff7rp_pipeline)
 
+add_executable(native_music_export_selftest src/tests/native_music_export_selftest.cpp)
+ff7rp_apply_cpp_policy(native_music_export_selftest)
+target_compile_definitions(native_music_export_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(native_music_export_selftest PRIVATE "src")
+target_link_libraries(native_music_export_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(native_iostore_source_selftest src/tests/native_iostore_source_selftest.cpp)
+ff7rp_apply_cpp_policy(native_iostore_source_selftest)
+target_compile_definitions(native_iostore_source_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(native_iostore_source_selftest PRIVATE "src")
+target_link_libraries(native_iostore_source_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(oodle_decoder_selftest src/tests/oodle_decoder_selftest.cpp)
+ff7rp_apply_cpp_policy(oodle_decoder_selftest)
+target_compile_definitions(oodle_decoder_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(oodle_decoder_selftest PRIVATE "src")
+target_link_libraries(oodle_decoder_selftest PRIVATE ff7rp_pipeline)
+
+foreach(native_writer_test IN ITEMS native_iostore_writer_selftest native_audio_cohort_selftest native_audio_cache_selftest)
+    add_executable(${native_writer_test} src/tests/${native_writer_test}.cpp)
+    ff7rp_apply_cpp_policy(${native_writer_test})
+    target_compile_definitions(${native_writer_test} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_include_directories(${native_writer_test} PRIVATE "src")
+    target_link_libraries(${native_writer_test} PRIVATE ff7rp_pipeline)
+endforeach()
+
 add_executable(wav_reader_selftest
     src/tests/wav_reader_selftest.cpp
 )
@@ -347,6 +384,7 @@ add_executable(release_hook_empty_catalog_selftest
     src/core/logging.cpp
 )
 ff7rp_apply_cpp_policy(release_hook_empty_catalog_selftest)
+ff7rp_use_generated_catalog(release_hook_empty_catalog_selftest)
 target_compile_definitions(release_hook_empty_catalog_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(release_hook_empty_catalog_selftest PRIVATE "src")
 target_link_libraries(release_hook_empty_catalog_selftest PRIVATE minhook)
@@ -421,6 +459,18 @@ ff7rp_apply_cpp_policy(song_descriptor_builder_selftest)
 target_compile_definitions(song_descriptor_builder_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_descriptor_builder_selftest PRIVATE "src")
 target_link_libraries(song_descriptor_builder_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(native_audio_preparation_selftest
+    src/tests/native_audio_preparation_selftest.cpp
+    src/startup/native_audio_preparation.cpp)
+ff7rp_apply_cpp_policy(native_audio_preparation_selftest)
+target_compile_definitions(native_audio_preparation_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(native_audio_preparation_selftest PRIVATE "src")
+target_link_libraries(native_audio_preparation_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(native_audio_startup_latch_selftest src/tests/native_audio_startup_latch_selftest.cpp)
+ff7rp_apply_cpp_policy(native_audio_startup_latch_selftest)
+target_include_directories(native_audio_startup_latch_selftest PRIVATE "src")
 if(FF7RP_BUILD_RUNTIME)
 add_executable(music_repository_loader_selftest
     src/tests/music_repository_loader_selftest.cpp
@@ -607,7 +657,6 @@ target_include_directories(bgm_playback_aggregate_policy_selftest PRIVATE "src")
 add_executable(mabf_sidecar_loader_selftest
     src/tests/mabf_sidecar_loader_selftest.cpp
     src/game/mabf_sidecar_loader.cpp
-    src/game/audio_sidecar_runtime.cpp
     src/core/logging.cpp
 )
 ff7rp_apply_cpp_policy(mabf_sidecar_loader_selftest)
@@ -653,6 +702,156 @@ add_executable(uobject_identity_selftest
 ff7rp_apply_cpp_policy(uobject_identity_selftest OMIT_FP_PRECISE)
 target_compile_definitions(uobject_identity_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(uobject_identity_selftest PRIVATE "src")
+add_executable(native_audio_decoder_selftest src/tests/native_audio_decoder_selftest.cpp)
+ff7rp_apply_cpp_policy(native_audio_decoder_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_decoder_selftest)
+target_compile_definitions(native_audio_decoder_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(native_audio_decoder_selftest PRIVATE "src")
+target_link_libraries(native_audio_decoder_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(native_audio_bindings_selftest
+    src/tests/native_audio_bindings_selftest.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/uobject_locator_core.cpp
+)
+ff7rp_apply_cpp_policy(native_audio_bindings_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_bindings_selftest)
+target_compile_definitions(native_audio_bindings_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+# This mapped-memory fixture uses assert expressions to populate/check identities.
+target_compile_options(native_audio_bindings_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_include_directories(native_audio_bindings_selftest PRIVATE "src")
+add_executable(native_audio_runtime_selftest
+    src/tests/native_audio_runtime_selftest.cpp
+    src/game/native_audio_bootstrap.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/native_audio_mount.cpp
+    src/game/uobject_locator_core.cpp
+    src/game/hook_specs.cpp
+    src/core/hooks.cpp
+    src/core/logging.cpp
+    src/core/pe_image.cpp
+)
+ff7rp_apply_cpp_policy(native_audio_runtime_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_runtime_selftest)
+target_compile_definitions(native_audio_runtime_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_audio_runtime_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_include_directories(native_audio_runtime_selftest PRIVATE "src")
+target_link_libraries(native_audio_runtime_selftest PRIVATE ff7rp_pipeline minhook)
+add_executable(native_audio_adapter_selftest
+    src/tests/native_audio_adapter_selftest.cpp
+    src/game/menu_session_state.cpp
+    src/game/native_audio_bootstrap.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/native_audio_mount.cpp
+    src/game/uobject_locator_core.cpp
+    src/game/hook_specs.cpp
+    src/game/song_registry.cpp
+    src/game/audio_production_wiring.cpp
+    src/core/hooks.cpp
+    src/core/logging.cpp
+    src/core/pe_image.cpp
+)
+ff7rp_apply_cpp_policy(native_audio_adapter_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_adapter_selftest)
+target_compile_definitions(native_audio_adapter_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_audio_adapter_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_include_directories(native_audio_adapter_selftest PRIVATE "src")
+target_link_libraries(native_audio_adapter_selftest PRIVATE ff7rp_pipeline minhook)
+
+add_executable(native_audio_extended_composition_selftest
+    src/tests/native_audio_extended_composition_selftest.cpp
+    src/tests/native_audio_extended_source_fixture.cpp
+    src/game/menu_session_state.cpp
+    src/game/native_audio_bootstrap.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/native_audio_mount.cpp
+    src/game/uobject_locator_core.cpp
+    src/game/hook_specs.cpp
+    src/game/song_registry.cpp
+    src/game/audio_production_wiring.cpp
+    src/core/hooks.cpp
+    src/core/logging.cpp
+    src/core/pe_image.cpp
+)
+ff7rp_apply_cpp_policy(native_audio_extended_composition_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_extended_composition_selftest)
+target_compile_definitions(native_audio_extended_composition_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_audio_extended_composition_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG;/Gy>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_link_options(native_audio_extended_composition_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/OPT:REF;/INCREMENTAL:NO>")
+target_include_directories(native_audio_extended_composition_selftest PRIVATE "src")
+target_link_libraries(native_audio_extended_composition_selftest PRIVATE ff7rp_pipeline minhook Psapi bcrypt)
+
+add_executable(native_audio_bootstrap_selftest
+    src/tests/native_audio_bootstrap_selftest.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/native_audio_mount.cpp
+    src/game/uobject_locator_core.cpp
+    src/game/hook_specs.cpp
+    src/core/hooks.cpp
+    src/core/logging.cpp
+    src/core/pe_image.cpp
+)
+ff7rp_apply_cpp_policy(native_audio_bootstrap_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_audio_bootstrap_selftest)
+target_compile_definitions(native_audio_bootstrap_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_audio_bootstrap_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_include_directories(native_audio_bootstrap_selftest PRIVATE "src")
+target_link_libraries(native_audio_bootstrap_selftest PRIVATE ff7rp_pipeline minhook)
+
+add_executable(chart_selected_row_selftest
+    src/tests/chart_selected_row_selftest.cpp
+    src/game/song_registry.cpp
+    src/core/pe_image.cpp
+    src/core/logging.cpp)
+ff7rp_apply_cpp_policy(chart_selected_row_selftest)
+ff7rp_use_generated_catalog(chart_selected_row_selftest)
+target_compile_definitions(chart_selected_row_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(chart_selected_row_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/Gy>")
+target_link_options(chart_selected_row_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/OPT:REF;/INCREMENTAL:NO>")
+target_include_directories(chart_selected_row_selftest PRIVATE "src")
+target_link_libraries(chart_selected_row_selftest PRIVATE ff7rp_pipeline)
+
+add_executable(scoreinfo_overlay_producer_selftest
+    src/tests/scoreinfo_overlay_producer_selftest.cpp
+    src/game/song_registry.cpp
+    src/game/hook_specs.cpp
+    src/core/hooks.cpp
+    src/core/pe_image.cpp
+    src/core/logging.cpp
+)
+ff7rp_apply_cpp_policy(scoreinfo_overlay_producer_selftest)
+ff7rp_use_generated_catalog(scoreinfo_overlay_producer_selftest)
+target_compile_definitions(scoreinfo_overlay_producer_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(scoreinfo_overlay_producer_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/Gy>")
+target_link_options(scoreinfo_overlay_producer_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/OPT:REF;/INCREMENTAL:NO>")
+target_include_directories(scoreinfo_overlay_producer_selftest PRIVATE "src")
+target_link_libraries(scoreinfo_overlay_producer_selftest PRIVATE minhook Psapi)
+
+add_executable(title_input_service_selftest
+    src/tests/title_input_service_selftest.cpp
+    src/game/profile_list_coordinator.cpp
+    src/game/song_registry.cpp
+    src/game/hook_specs.cpp
+    src/core/pe_image.cpp
+    src/core/hooks.cpp
+    src/core/logging.cpp)
+ff7rp_apply_cpp_policy(title_input_service_selftest)
+ff7rp_use_generated_catalog(title_input_service_selftest)
+target_compile_definitions(title_input_service_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(title_input_service_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/Gy>")
+target_link_options(title_input_service_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/OPT:REF;/INCREMENTAL:NO>")
+target_include_directories(title_input_service_selftest PRIVATE "src")
+target_link_libraries(title_input_service_selftest PRIVATE minhook User32 Hid Psapi)
 endif()
 enable_testing()
 if(NOT FF7RP_BUILD_RUNTIME)
@@ -674,11 +873,21 @@ add_test(NAME rva_catalog_generator_selftest
     COMMAND "${Python3_EXECUTABLE}" -B
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_rva_catalog.py"
 )
+add_test(NAME native_cached_resource_catalog_selftest
+    COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_native_cached_resource_catalog.py"
+)
 endif()
 add_test(NAME mabf_builder_selftest COMMAND mabf_builder_selftest)
 add_test(NAME pipeline_selftest COMMAND pipeline_selftest)
 add_test(NAME hca_encoder_selftest COMMAND hca_encoder_selftest)
 add_test(NAME audio_artifact_builder_selftest COMMAND audio_artifact_builder_selftest)
+add_test(NAME native_music_export_selftest COMMAND native_music_export_selftest)
+add_test(NAME native_iostore_source_selftest COMMAND native_iostore_source_selftest)
+add_test(NAME oodle_decoder_selftest COMMAND oodle_decoder_selftest)
+add_test(NAME native_iostore_writer_selftest COMMAND native_iostore_writer_selftest)
+add_test(NAME native_audio_cohort_selftest COMMAND native_audio_cohort_selftest)
+add_test(NAME native_audio_cache_selftest COMMAND native_audio_cache_selftest)
 add_test(NAME wav_reader_selftest COMMAND wav_reader_selftest)
 add_test(NAME encoded_audio_fixture_selftest COMMAND encoded_audio_fixture_selftest)
 if(FF7RP_BUILD_RUNTIME)
@@ -691,6 +900,8 @@ add_test(NAME profile_list_coordinator_selftest COMMAND profile_list_coordinator
 add_test(NAME menu_session_authority_selftest COMMAND menu_session_authority_selftest)
 endif()
 add_test(NAME song_descriptor_builder_selftest COMMAND song_descriptor_builder_selftest)
+add_test(NAME native_audio_preparation_selftest COMMAND native_audio_preparation_selftest)
+add_test(NAME native_audio_startup_latch_selftest COMMAND native_audio_startup_latch_selftest)
 if(FF7RP_BUILD_RUNTIME)
 add_test(NAME music_repository_loader_selftest COMMAND music_repository_loader_selftest)
 add_test(NAME startup_cache_overlay_selftest COMMAND startup_cache_overlay_selftest)
@@ -742,6 +953,15 @@ add_test(NAME audio_play_setup_diagnostics_selftest COMMAND audio_play_setup_dia
 add_test(NAME scoreinfo_result_policy_selftest COMMAND scoreinfo_result_policy_selftest)
 add_test(NAME startup_thread_selftest COMMAND startup_thread_selftest)
 add_test(NAME uobject_identity_selftest COMMAND uobject_identity_selftest)
+add_test(NAME native_audio_decoder_selftest COMMAND native_audio_decoder_selftest)
+add_test(NAME native_audio_bindings_selftest COMMAND native_audio_bindings_selftest)
+add_test(NAME native_audio_runtime_selftest COMMAND native_audio_runtime_selftest)
+add_test(NAME native_audio_bootstrap_selftest COMMAND native_audio_bootstrap_selftest)
+add_test(NAME native_audio_adapter_selftest COMMAND native_audio_adapter_selftest)
+add_test(NAME native_audio_extended_composition_selftest COMMAND native_audio_extended_composition_selftest)
+add_test(NAME chart_selected_row_selftest COMMAND chart_selected_row_selftest)
+add_test(NAME scoreinfo_overlay_producer_selftest COMMAND scoreinfo_overlay_producer_selftest)
+add_test(NAME title_input_service_selftest COMMAND title_input_service_selftest)
 endif()
 if(FF7RP_BUILD_RUNTIME)
 add_test(NAME runtime_gate_selftest
@@ -773,6 +993,7 @@ endif()
 set(FF7RP_BOUNDED_SELFTESTS
     rva_catalog_check
     rva_catalog_generator_selftest
+    native_cached_resource_catalog_selftest
     mabf_builder_selftest
     pipeline_selftest
     runtime_cache_codec_selftest
@@ -780,6 +1001,12 @@ set(FF7RP_BOUNDED_SELFTESTS
     runtime_artifact_validator_selftest
     cache_artifact_writer_selftest
     audio_artifact_builder_selftest
+    native_music_export_selftest
+    native_iostore_source_selftest
+    oodle_decoder_selftest
+    native_iostore_writer_selftest
+    native_audio_cohort_selftest
+    native_audio_cache_selftest
     hca_encoder_selftest
     wav_reader_selftest
     encoded_audio_fixture_selftest
@@ -787,6 +1014,8 @@ set(FF7RP_BOUNDED_SELFTESTS
     profile_list_coordinator_selftest
     menu_session_authority_selftest
     song_descriptor_builder_selftest
+    native_audio_preparation_selftest
+    native_audio_startup_latch_selftest
     music_repository_loader_selftest
     startup_cache_overlay_selftest
     midi_generator_selftest
@@ -809,6 +1038,15 @@ set(FF7RP_BOUNDED_SELFTESTS
     scoreinfo_result_policy_selftest
     startup_thread_selftest
     uobject_identity_selftest
+    native_audio_decoder_selftest
+    native_audio_bindings_selftest
+    native_audio_runtime_selftest
+    native_audio_bootstrap_selftest
+    native_audio_adapter_selftest
+    native_audio_extended_composition_selftest
+    chart_selected_row_selftest
+    scoreinfo_overlay_producer_selftest
+    title_input_service_selftest
     runtime_gate_selftest
     build_provenance_selftest
     build_catalog_selection_selftest
@@ -818,7 +1056,7 @@ set(FF7RP_BOUNDED_SELFTESTS
 )
 if(NOT FF7RP_BUILD_RUNTIME)
     list(REMOVE_ITEM FF7RP_BOUNDED_SELFTESTS
-        rva_catalog_check rva_catalog_generator_selftest registry_selftest
+        rva_catalog_check rva_catalog_generator_selftest native_cached_resource_catalog_selftest registry_selftest
         profile_list_coordinator_selftest menu_session_authority_selftest
         music_repository_loader_selftest startup_cache_overlay_selftest extended_chart_selftest runtime_lifecycle_selftest
         audio_native_call_policy_selftest audio_production_wiring_selftest
@@ -826,7 +1064,7 @@ if(NOT FF7RP_BUILD_RUNTIME)
         selection_substrate_policy_selftest bgm_playback_aggregate_policy_selftest
         mabf_sidecar_loader_selftest audio_pointer_patch_runtime_selftest
         audio_play_setup_diagnostics_selftest scoreinfo_result_policy_selftest
-        startup_thread_selftest uobject_identity_selftest runtime_gate_selftest
+        startup_thread_selftest uobject_identity_selftest native_audio_decoder_selftest native_audio_bindings_selftest native_audio_runtime_selftest native_audio_bootstrap_selftest native_audio_adapter_selftest native_audio_extended_composition_selftest chart_selected_row_selftest scoreinfo_overlay_producer_selftest title_input_service_selftest runtime_gate_selftest
         build_provenance_selftest build_catalog_selection_selftest release_package_selftest tracked_binary_audit documentation_audit)
 endif()
 set_tests_properties(${FF7RP_BOUNDED_SELFTESTS} PROPERTIES TIMEOUT 60)
@@ -846,6 +1084,15 @@ set_tests_properties(
     scoreinfo_result_policy_selftest
     startup_thread_selftest
     uobject_identity_selftest
+    native_audio_decoder_selftest
+    native_audio_bindings_selftest
+    native_audio_runtime_selftest
+    native_audio_bootstrap_selftest
+    native_audio_adapter_selftest
+    native_audio_extended_composition_selftest
+    chart_selected_row_selftest
+    scoreinfo_overlay_producer_selftest
+    title_input_service_selftest
     runtime_gate_selftest
     PROPERTIES
     LABELS "runtime;context-regression")
@@ -873,7 +1120,7 @@ set_tests_properties(song_repository_selftest PROPERTIES
 # Use CMake's configured registrations, not the spelling of add_test calls.
 get_property(FF7RP_REGISTERED_TESTS DIRECTORY PROPERTY TESTS)
 set(FF7RP_AUDIT_TESTS rva_catalog_check tracked_binary_audit documentation_audit)
-set(FF7RP_TOOLING_TESTS rva_catalog_generator_selftest runtime_gate_selftest
+set(FF7RP_TOOLING_TESTS rva_catalog_generator_selftest native_cached_resource_catalog_selftest runtime_gate_selftest
     build_provenance_selftest build_catalog_selection_selftest release_package_selftest)
 foreach(test IN LISTS FF7RP_REGISTERED_TESTS)
     if(test IN_LIST FF7RP_AUDIT_TESTS)
