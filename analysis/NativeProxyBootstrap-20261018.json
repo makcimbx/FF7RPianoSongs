@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "scope": "Static preparation for an app-local thin proxy and one-shot actual EXE-entry handoff; not implemented, installed or executed",
+  "status": "current_exe_imports_and_entry_path_verified_static_older_import_surface_unavailable",
+  "canonical_references": {
+    "catalog": "src/game/rva_catalog.json",
+    "catalog_sha256_at_read": "dcba8a94cff548d11ceed5ae8139f847bbfed9c5d8e7572fb4611b6db76b7a69",
+    "current_entry_and_tls": "analysis/NativeAudioBootstrapProfile-20261016.json",
+    "current_entry_profile_sha256": "192582fbccd38703d6b212d8cf410d536c175d2105ecb9ab79bb2f13c0ed1fec",
+    "older_entry_and_tls": "analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json",
+    "older_entry_profile_sha256_at_read": "16a7d617db4d425ae8435ae9aa47303245f199c45a4fd4466e24d3d989ec885c",
+    "existing_loader": "analysis/NativeAudioLoaderHandoff-20261016.json",
+    "existing_loader_profile_sha256_at_read": "6d8411fc7bd2e0110b945e5958144870f078b8a78cc96d04690d0d9ec407db62",
+    "runtime_entry_owner": "src/game/native_audio_runtime.cpp:ordinary_entry_hook",
+    "startup_exports": "src/main.cpp:InitializeASI and DllMain"
+  },
+  "provenance": {
+    "current_executable": {
+      "build_id": "ff7rebirth-steam-win64-6a16ced2",
+      "path": "D:/SteamLibrary/steamapps/common/FINAL FANTASY VII REBIRTH/End/Binaries/Win64/ff7rebirth_.exe",
+      "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc",
+      "file_bytes": 124317952,
+      "timestamp": "0x6a16ced2",
+      "size_of_image": "0x099d9000",
+      "checksum": "0x0769ea6e",
+      "evidence": "Fresh file-only PE import/delay-import/export/TLS parsing and Capstone decoding; canonical disk identity matched"
+    },
+    "older_program": {
+      "required_selector": "ff7rebirth_.exe-1.004",
+      "build_id": "ff7rebirth-steam-win64-68fd6fde",
+      "new_queries_possible": false,
+      "reason": "Read-only Ghidra list_instances returned no running instances; one GET to the previously existing bridge also failed. No restart/open/switch was performed.",
+      "retained_evidence_only": "Older actual AEP/cookie/CRT/TLS/initializer contracts remain in the older profile. No older disk file is authenticated and no older normal/delay import list is independently recovered here.",
+      "do_not_infer": "Current import names, import slots or backing-export ordinals are not automatically older-build facts. Do not advertise older proxy-filename support on this artifact alone."
+    },
+    "actions": "No game/UAL initialization, module loading, callback execution, target-memory read, process control, attachment, installation or Git action"
+  },
+  "current_normal_import_candidates": [
+    {
+      "dll": "D3DCOMPILER_43.dll",
+      "priority": "smallest_current_EXE_export_surface",
+      "descriptor_rva": "0x06c885b8",
+      "iat_rva": "0x055681a8",
+      "required_exports": [{"name": "D3DDisassemble", "exe_import_by": "name", "current_system_ordinal": 7}],
+      "app_local_file_at_inspection": "absent"
+    },
+    {
+      "dll": "d3d9.dll",
+      "priority": "alternative_unused_filename",
+      "descriptor_rva": "0x06c88590",
+      "iat_rva": "0x05569f28",
+      "required_exports": [
+        {"name": "D3DPERF_BeginEvent", "exe_import_by": "name", "current_system_ordinal": 27},
+        {"name": "D3DPERF_EndEvent", "exe_import_by": "name", "current_system_ordinal": 28}
+      ],
+      "app_local_file_at_inspection": "absent"
+    },
+    {
+      "dll": "d3d11.dll",
+      "descriptor_rva": "0x06c885a4",
+      "iat_rva": "0x05569f18",
+      "required_exports": [{"name": "D3D11CreateDevice", "exe_import_by": "name", "current_system_ordinal": 22}],
+      "qualification": "Real normal import, but broader graphics compatibility surface; not preferred over the two small surfaces"
+    },
+    {
+      "dll": "DSOUND.dll",
+      "descriptor_rva": "0x06c88644",
+      "iat_rva": "0x055681b8",
+      "required_exports": [
+        {"ordinal": 11, "current_system_name": "DirectSoundCreate8"},
+        {"ordinal": 8, "current_system_name": "DirectSoundCaptureEnumerateW"},
+        {"ordinal": 12, "current_system_name": "DirectSoundCaptureCreate8"}
+      ],
+      "app_local_file_at_inspection": "absent"
+    },
+    {
+      "dll": "WINMM.dll",
+      "descriptor_rva": "0x06c88658",
+      "iat_rva": "0x05569698",
+      "required_exports": [
+        {"name": "timeGetDevCaps", "current_system_ordinal": 139},
+        {"name": "timeEndPeriod", "current_system_ordinal": 138},
+        {"name": "timeGetTime", "current_system_ordinal": 141},
+        {"name": "timeBeginPeriod", "current_system_ordinal": 137}
+      ],
+      "app_local_file_at_inspection": "absent",
+      "warning": "The required APIs are direct exports of the inspected winmm.dll, not exports of winmmbase.dll; do not invent winmmbase forwarders"
+    },
+    {
+      "dll": "dxgi.dll",
+      "descriptor_rva": "0x06c8857c",
+      "iat_rva": "0x05569f68",
+      "required_exports": [{"name": "CreateDXGIFactory1"}, {"name": "CreateDXGIFactory"}],
+      "app_local_file_at_inspection": "occupied; preserve FFVIIHook-like proxy",
+      "installed_sha256": "84c029a04c49e4d497a41f8bce47d020e862ee77e4a1a907d496dc7ebdfddf9d"
+    },
+    {
+      "dll": "XINPUT1_3.dll",
+      "descriptor_rva": "0x06c88568",
+      "iat_rva": "0x055697f8",
+      "required_exports": [{"ordinal": 3, "current_system_name": "XInputSetState"}, {"ordinal": 2, "current_system_name": "XInputGetState"}],
+      "app_local_file_at_inspection": "occupied; preserve Ultimate ASI Loader",
+      "installed_sha256": "22fda9c71eaae02460f311bf3441638340ab591586d78f1de213c4819dcb883c"
+    }
+  ],
+  "loading_time": {
+    "normal_imports": "A chosen normal import is resolved and its static DLL process-attach initialization completes during process initialization, before control reaches the EXE AddressOfEntryPoint. Its first exported API call can occur later; do not wait for that first call to arm the actual-entry handoff.",
+    "not_early_sources": [
+      "d3d12.dll: delay descriptor 0x06c815d0",
+      "DSTORAGE.dll: delay descriptor 0x06c81610; DStorageGetFactory",
+      "turbojpeg.dll: delay descriptor 0x06c81630",
+      "steam_api64.dll: delay descriptor 0x06c815b0",
+      "EOSSDK-Win64-Shipping.dll: delay descriptor 0x06c81590"
+    ],
+    "unimported_name": "An arbitrary renamed proxy, such as dinput8.dll without another loader, is not made an early dependency merely by being placed beside this EXE.",
+    "search_constraints": "Application-local candidates were absent from this machine's observed KnownDLLs list. DLL redirection, API sets, SxS, already-loaded modules and KnownDLL policy precede application-directory search; static imports do not prove the local proxy wins on every machine.",
+    "late_load": "A later LoadLibrary invocation is not a fresh origin. Require actual static process-attach provenance, matching EXE normal-import contract and untouched supported entry. A filename match or empty pointers alone is not permission to arm late.",
+    "coexistence": "Use one unused selected normal-import filename. Never overwrite/chainswap existing dxgi/XInput files or install the same bootstrap under two names. Filename coexistence does not certify arbitrary other ASIs' pre-entry behavior or entrypoint modifications."
+  },
+  "backing_export_fixtures": {
+    "scope": "Current System32 files inspected as disk data only. Names are the EXE contract; ordinals shown are current backing-file facts, not universal OS version requirements. Direct exports were found, not PE forwarder strings.",
+    "D3DCOMPILER_43.dll": {
+      "path": "C:/Windows/System32/D3DCOMPILER_43.dll",
+      "sha256": "44c3a7e330b54a35a9efa015831392593aa02e7da1460be429d17c3644850e8a",
+      "exports_by_ordinal": {"1":"D3DAssemble","2":"DebugSetMute","3":"D3DCompile","4":"D3DCompressShaders","5":"D3DCreateBlob","6":"D3DDecompressShaders","7":"D3DDisassemble","8":"D3DDisassemble10Effect","9":"D3DGetBlobPart","10":"D3DGetDebugInfo","11":"D3DGetInputAndOutputSignatureBlob","12":"D3DGetInputSignatureBlob","13":"D3DGetOutputSignatureBlob","14":"D3DPreprocess","15":"D3DReflect","16":"D3DReturnFailure1","17":"D3DStripShader"},
+      "required_target_rva": "0x0006ff00"
+    },
+    "d3d9.dll": {
+      "path": "C:/Windows/System32/d3d9.dll",
+      "sha256": "87e157e78536c66fc413ed202296e39053cc9e14dc8d8381f8a3d18f444a4c0d",
+      "required_targets": {"D3DPERF_BeginEvent":"0x0006a820","D3DPERF_EndEvent":"0x0006a870"},
+      "exports_by_ordinal": {"16":null,"17":null,"18":null,"19":null,"20":"Direct3DCreate9On12","21":"Direct3DCreate9On12Ex","22":null,"23":null,"24":"Direct3DShaderValidatorCreate9","25":"PSGPError","26":"PSGPSampleTexture","27":"D3DPERF_BeginEvent","28":"D3DPERF_EndEvent","29":"D3DPERF_GetStatus","30":"D3DPERF_QueryRepeatFrame","31":"D3DPERF_SetMarker","32":"D3DPERF_SetOptions","33":"D3DPERF_SetRegion","34":"DebugSetLevel","35":"DebugSetMute","36":"Direct3D9EnableMaximizedWindowedModeShim","37":"Direct3DCreate9","38":"Direct3DCreate9Ex"}
+    },
+    "forwarding_requirements": [
+      "A thin proxy must preserve every required import name or ordinal and its actual calling convention/results. Do not return fabricated success or replace real multimedia behavior with no-op stubs.",
+      "At the actual entry shim, outside DllMain, obtain the trusted native System32 directory and load the exact genuine backing DLL by absolute path. Authenticate the returned module/path is not this proxy and resolve actual named/ordinal targets. Keep its real LoadLibrary reference for process lifetime.",
+      "Forward through transparent correctly typed wrappers or reviewed register/stack-preserving tail thunks. A named PE forwarder to the same basename recursively resolves the proxy; do not use it. No winmmbase substitute, renamed redistributed system binary, PATH search or arbitrary local original DLL.",
+      "The two smallest EXE import surfaces do not establish full module compatibility with other DLLs/plugins. Publishing the complete genuine export surface is preferable where coexistence requires it; unnamed ordinal exports need real ordinal forwarding.",
+      "Before backing resolution, no export wrapper may trigger heavy initialization or LoadLibrary under DllMain. Unexpected pre-entry export use by another DLL initializer is an unsupported forwarding case unless independently supported; it must not silently recurse, wait or fabricate an API result. This pass did not audit all transitive DLL initializers.",
+      "Do not defer cold-origin acquisition until a graphics/audio API is called; its call may be long after EXE CRT or selected operations."
+    ]
+  },
+  "actual_entry_contract": {
+    "current": {
+      "catalog_id": "native_audio_exe_entry",
+      "rva": "0x0216c0a4",
+      "expected_18_bytes": "4883ec28e8bf0600004883c428e97afeffff",
+      "instructions": ["SUB RSP,0x28", "CALL security-cookie initializer", "ADD RSP,0x28", "JMP native EXE CRT startup"],
+      "runtime_function": {"begin":"0x0216c0a4","end_exclusive":"0x0216c0b6","unwind":"0x06b827b8"},
+      "cookie_call": {"rva":"0x0216c0a8","target":"0x0216c76c","return":"0x0216c0ad"},
+      "crt_tail_jump": {"rva":"0x0216c0b1","target":"0x0216bf30"},
+      "tls_directory_rva":"0x063fb700",
+      "tls_callback_table_rva":"0x055e4a78",
+      "tls_callbacks": [
+        {"rva":"0x0216ba70","bytes":102,"sha256":"3bcced77b7eb067f71b0361bdfd88591aaffed1bf3317589404d8e31a96f02c1","process_attach":"Immediate reason!=2 return; selected initializer does not execute for process attach"},
+        {"rva":"0x0216bbd0","bytes":165,"sha256":"73371b6a6d3e8905f9c94522c8432160be53f7536f6b6fed9f608453c0bbc864","process_attach":"Only detach reasons0/3 enter destructor traversal; process attach1 returns"}
+      ],
+      "ordering": "Actual entry precedes its security-cookie call and the shipping EXE CRT initializer tables. Selected GU/manager/map/worker initialization remains downstream as established in the referenced native startup profiles. Import loading and EXE TLS process-attach may precede entry, but the two examined EXE TLS callbacks do not perform selected initialization."
+    },
+    "older": {
+      "evidence_ref":"analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json",
+      "catalog_id":"native_audio_exe_entry",
+      "rva":"0x020af454",
+      "expected_18_bytes":"4883ec28e8bf0600004883c428e97afeffff",
+      "runtime_function":{"begin":"0x020af454","end_exclusive":"0x020af466","unwind":"0x06d12688"},
+      "provenance":"Previously independently recovered older imported bytes/PE only, not newly queried here or validated against an older disk file",
+      "qualification":"Entry-shim shape supported by retained old evidence; appropriate normal proxy filename/import surface still requires explicit old-program or authenticated old-file recovery"
+    }
+  },
+  "minimal_handoff_design_for_review": {
+    "distinction": "Control-flow viability, not a tested detour implementation or new bootstrap authorization. The temporary actual-entry arm is itself a native code mutation; it must not be hidden as an ordinary filename change.",
+    "dll_process_attach": [
+      "Use a genuinely thin proxy with no game imports, pre-entry worker, engine call, file-cache producer, heavy static initializer or dependency on the native ASI having initialized.",
+      "Only the initial static process-attach path may arm. Perform bounded main-image PE/build/AEP/.pdata/exact original-byte matching, record original bytes/protection in fixed own storage and claim once without waiting. Existing modifications or duplicate owners reject arming.",
+      "An implementation may place a reviewed one-shot absolute tail jump to an in-image proxy shim over the complete supported18-byte entry window, using bounded Kernel32 protection/cache-coherency operations and restoring page protection. No MinHook setup, general disassembly, trampoline execution of stolen instructions, LoadLibrary, waiting, repository worker or native backend setup in DllMain.",
+      "Preserve explicit policy distinction: bounded PE/code matching before this temporary arm is not a full disk-SHA authentication. Full canonical EXE hash must precede product initialization/protective native hooks outside loader lock. If policy requires full disk hashing before ANY entry-code write, the proposed minimal pre-hash arm needs explicit review/authorization or cannot be used; do not silently weaken that rule."
+    ],
+    "actual_entry_shim": [
+      "Authenticate the real one-shot entry transfer, current primary thread, owned patch bytes and the referenced pre-EXE-CRT baseline. A forwarded proxy export, InitializeASI call, caller boolean or later LoadLibrary is not this source.",
+      "Use reviewed x64 assembly with unwind support: preserve entry RSP/original return chain, required registers/flags/vector state, correct alignment and shadow space before ordinary C++ calls. Do not fake a return address, RET into an unrelated target or call the original AEP as a nested fabricated entry.",
+      "Restore the exact original complete18-byte window and protection/cache state BEFORE initializing the native backend. Full file/hash/code/cold-baseline checks and genuine backing-export resolution run synchronously here, outside the DLL initialization callback. No asynchronous startup race.",
+      "The existing product's native entry observer is the sole permanent AEP owner. After temporary restoration it may install its own canonical hook, publish every protective barrier and finish baseline rereads. Then restore entry machine state and tail-jump to the actual entry address, now passing through that owned observer exactly once and its existing original forwarding.",
+      "Do not leave the proxy's temporary hook and product permanent hook independently stacked at the same address. Original cookie/CRT/WinMain code and return/result must execute normally once.",
+      "Retain proxy, genuine backing module and product code while any forwarding/hook can execute. No unload, teardown wait or hook restoration on process-detach loader-lock path."
+    ],
+    "entry_failure":"No native backend activation on mismatch/partial publication. Preserve original behavior only after exact owned temporary restoration is proved; no overwriting foreign patches or retrying at a late API. Nonrecoverable patch/restoration failure requires explicit host failure policy, not an improvised continuation.",
+    "source_integration_needed":"Current try_synchronous_native_audio_startup authenticates existing UAL/CRT source profiles, not an arbitrary proxy caller. Add a distinct authenticated actual-entry handoff and tests; do not relabel this source FirstSrw/PreWinMain or waive their checks.",
+    "coexisting_ual":"Current main.cpp DllMain is inert apart from module bookkeeping; InitializeASI still has a worker fallback if its existing synchronous source is not accepted. A reviewed process-wide once/ownership contract must prevent a coexisting UAL call from launching competing startup before the proxy's actual-entry handoff. Merely selecting another filename does not solve this competition.",
+    "later_authority":"Persistent PackageStore owner/subscription/generation/invalidation, original updater thread, all selected registration barriers and retained native owners/backing files remain unchanged. No native acquisition or mounting is permitted merely because the proxy was loaded."
+  },
+  "official_documentation": [
+    "https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-best-practices",
+    "https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-entry-point-function",
+    "https://learn.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order",
+    "https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect"
+  ],
+  "validation": {
+    "completed":"Read-only canonical current PE/SHA check; normal versus delay import parsing; current entry18-byte instruction/call-target checks; two TLS callback hashes/reason branches; current System32 required export names/ordinals/direct-target parsing; current candidate-file occupancy and KnownDLLs list inspection",
+    "not_done":["Proxy implementation/assembly/forwarding tests", "Actual local-loader selection or process entry execution", "Full transitive-DLL pre-entry export-call audit", "New older Ghidra import-table recovery or older disk hash", "Compatibility of arbitrary other ASIs or entrypoint patchers", "Runtime lifecycle/playback qualification"],
+    "changed_paths":["analysis/NativeProxyBootstrap-20261018.json"],
+    "production_catalog_generated_installed_files_untouched":true
+  }
+}

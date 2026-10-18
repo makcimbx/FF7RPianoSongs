@@ -1015,8 +1015,10 @@ bool try_synchronous_native_audio_startup(HMODULE exe,HMODULE asi,std::uintptr_t
         if(!open_file(exe,current.executable) || !open_file(current.loader,current.proxy) || !open_file(asi,current.self))return reject(BootstrapFailure::Files);
         const auto size=[](const File& f){return(static_cast<std::uint64_t>(f.identity.nFileSizeHigh)<<32)|f.identity.nFileSizeLow;};
         const auto slash=current.executable.path.find_last_of(L"\\/");
-        if(slash==std::wstring::npos || _wcsicmp(current.proxy.path.c_str(),
-            (current.executable.path.substr(0,slash+1)+L"xinput1_3.dll").c_str())
+        const auto proxy_slash=current.proxy.path.find_last_of(L"\\/");
+        // The caller module supplies its actual name; identity and handoff code authenticate the loader.
+        if(slash==std::wstring::npos || proxy_slash==std::wstring::npos
+            || _wcsicmp(current.proxy.path.substr(0,proxy_slash+1).c_str(),current.executable.path.substr(0,slash+1).c_str())
             || size(current.executable)!=core::generated::kExeFileSize || size(current.proxy)!=3615648
             || !hash_equal(current.executable.sha,core::generated::kExeSha256) || !hash_equal(current.proxy.sha,kLoaderSha))return reject(BootstrapFailure::Files);
         if(!validate(current))return false;

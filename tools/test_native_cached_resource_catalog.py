@@ -296,10 +296,13 @@ class NativeCachedResourceCatalogTest(unittest.TestCase):
 
     def test_supported_native_backend_still_requires_private_startup_scope(self):
         runtime = (ROOT / "src/game/native_audio_runtime.cpp").read_text()
-        self.assertIn('if(!synchronous)return false;', runtime)
+        self.assertIn('const bool proxy_entry=native_proxy_detail::scope_present();', runtime)
+        self.assertIn('if(synchronous==proxy_entry)return false;', runtime)
         self.assertIn('!native_audio_layout(core::generated::kBuildId)', runtime)
         self.assertIn('bootstrap_detail::begin_publication(module)', runtime)
         self.assertIn('bootstrap_detail::finish_publication(module)', runtime)
+        self.assertIn('native_proxy_detail::begin_publication(module)', runtime)
+        self.assertIn('native_proxy_detail::finish_publication(module,', runtime)
 
     def test_embedded_decoder_default_dependencies(self):
         entries = {entry["id"]: entry for entry in

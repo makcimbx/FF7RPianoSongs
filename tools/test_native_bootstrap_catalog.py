@@ -92,6 +92,10 @@ class BootstrapCatalogTests(unittest.TestCase):
         entries = json.loads((ROOT / "src/game/rva_catalog.json").read_text())["addresses"]
         selected = {e["id"].removeprefix("native_bootstrap_"): e for e in entries
                     if e["id"].startswith("native_bootstrap_")}
+        runtime_cold = {"hinstance", "task_graph", "pool", "background_pool", "gu_serial",
+                        "crash_stop", "crash_process", "crash_result", "crash_complete",
+                        "crash_worker", "crash_request", "crash_event", "srw_guard",
+                        "srw_gmalloc", "srw_pool_complete", "srw_reserve", "srw_lock", "srw_output"}
         self.assertEqual(set(selected), CODE.keys() | DATA.keys() | {"io_pool"})
         for name, rva in (CODE | DATA).items():
             with self.subTest(name=name):
@@ -104,7 +108,8 @@ class BootstrapCatalogTests(unittest.TestCase):
                 self.assertEqual(old["evidence"][0]["path"], "analysis/NativeAudioBootstrapProfile-OlderBuild-20261017.json")
                 self.assertIsNone(e["hook_owner"])
                 self.assertIsNone(e["hook_spec"])
-                self.assertEqual(e["consumers"], ["src/game/native_audio_bootstrap.cpp"])
+                self.assertEqual(e["consumers"], ["src/game/native_audio_bootstrap.cpp"]
+                                 + (["src/game/native_audio_runtime.cpp"] if name in runtime_cold else []))
                 self.assertEqual(e["install_policy"], "signature_only" if name in CODE else "data_only")
                 signature = e["builds"][BUILD]["signature"]
                 if name in CODE:
@@ -115,6 +120,7 @@ class BootstrapCatalogTests(unittest.TestCase):
                     self.assertIsNone(signature)
                     self.assertIsNone(old["signature"])
         io = selected["io_pool"]
+        self.assertEqual(io["consumers"], ["src/game/native_audio_bootstrap.cpp", "src/game/native_audio_runtime.cpp"])
         self.assertEqual(set(io["builds"]), {OLDER})
         self.assertEqual(io["builds"][OLDER]["rva"], "0x09104da0")
         self.assertIsNone(io["hook_owner"])

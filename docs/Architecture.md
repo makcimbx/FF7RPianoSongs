@@ -51,9 +51,18 @@ paths and dependency handling are documented in [Build And Release](BuildAndRele
 
 ### Startup And Admission
 
-The synchronous ASI export authenticates a supported early loader/executable
-continuation and its source-specific state. It publishes protective hooks before
-returning to that continuation. DllMain does not start asynchronous initialization.
+The owned proxy and the legacy ASI are alternative product images, not two modules
+that must be installed together. The proxy's bounded process-attach bridge requires
+an actual normal import and the selected executable's exact entry profile. At the
+real entry, outside DllMain, it restores the temporary patch/protection/cache before
+resolving System32 forwarding and invoking internal startup. The private active
+bridge scope, executable authentication and cold-state rereads gate protective
+hook publication; only subsequent genuine AEP execution establishes runtime origin.
+Export forwarding remains separate from optional product-startup acceptance.
+
+The alternative synchronous ASI export authenticates a supported early
+loader/executable continuation and its source-specific state before publishing
+protective hooks. DllMain does not start asynchronous product initialization.
 Unsupported or missed origins remain unavailable; later pointer snapshots cannot
 reconstruct continuity. Exact per-build code/data contracts belong in the catalog
 and indexed bootstrap evidence, not duplicated RVAs here.
@@ -173,7 +182,7 @@ src/generated/<build-id>/game/generated/{rvas.generated.h, *.generated.inc}
 src/generated/<build-id>/core/generated/build_identity.generated.h
 ```
 
-The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on the include path, so existing `#include "game/generated/rvas.generated.h"` directives resolve to the chosen build without source changes. The runtime stays single-build and its RVAs stay `constexpr`; one ASI is produced per game build. The generator is total over builds — it writes and checks every tree — so catalog validation does not depend on which build was selected for compilation. Adding a game build is a data change plus regeneration; the procedure is in [Build And Release](BuildAndRelease.md).
+The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on the include path, so existing `#include "game/generated/rvas.generated.h"` directives resolve to the chosen build without source changes. The runtime stays single-build and its RVAs stay `constexpr`; each product DLL or ASI targets one game build. The generator is total over builds — it writes and checks every tree — so catalog validation does not depend on which build was selected for compilation. Adding a game build is a data change plus regeneration; the procedure is in [Build And Release](BuildAndRelease.md).
 
 ## Publication Invariants
 

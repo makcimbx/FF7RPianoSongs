@@ -37,7 +37,16 @@ For a focused development check, select only the affected target (or pass an arr
 ctest --test-dir build -C Release -R '^pipeline_selftest$' --output-on-failure
 ```
 
-A test-only target does not rebuild or replace the `dist` ASI. Select `FF7RPianoSongs` when a new game-loadable artifact is needed; building still does not install it.
+A test-only target does not rebuild the game-loadable artifact. Build the default
+standalone DLL explicitly:
+
+```powershell
+./build.ps1 -Configuration Release -Target FF7RPianoSongsProxy -CatalogBuildId <catalog-build-id>
+```
+
+Its output is `build/proxy/Release/FF7RPianoSongsProxy.dll`; stage it as
+`D3DCOMPILER_43.dll`. For the alternative ASI edition, select `FF7RPianoSongs`;
+that wrapper target updates `dist/FF7RPianoSongs.asi`. Neither build installs files.
 
 ### Native cached-audio development dependency
 
@@ -67,9 +76,11 @@ alongside the runtime-gate session. Do not overwrite an unknown companion or
 assume the ASI-only installer installed it. No third-party redistribution or
 Release packaging is authorized by this development procedure.
 
-The synchronous bootstrap must authenticate the supported loader handoff and executable
-continuation outside `DllMain`, then publish the protective hooks in that scope. A late
-worker or a missed initializer cannot reconstruct that authority from live pointers.
+The owned proxy restores the executable entry before internal initialization and
+authenticates its private entry scope. The alternative ASI authenticates its supported
+loader handoff and executable continuation outside `DllMain`. Protective hooks must
+publish within that qualified scope; a late worker or missed initializer cannot
+reconstruct the authority from live pointers.
 Repository preparation starts only after the genuine native initializer notification.
 Do not invent loader settings or retry through an unqualified startup path.
 
@@ -80,7 +91,7 @@ The native route does not patch a stock Sound source or replay a synthetic reque
 native files, registrations and owning references remain retained until process exit,
 with no live unmount or release qualification.
 
-One ASI supports one game build. `-CatalogBuildId` selects which cataloged build identity it is
+One DLL or ASI supports one game build. `-CatalogBuildId` selects which cataloged build identity it is
 compiled against; without it, the catalog's `default_build` is used:
 
 ```powershell
@@ -447,6 +458,90 @@ installation, collection and final-disposition evidence. `Accepted` records a re
 `Keep`, not a gameplay or Release pass. Older experimental logs and ZIPs do not replace
 the current artifact's evidence; interpretation and manual limits are defined in
 [In-Game Validation](InGameValidation.md#automated-session-boundary).
+
+### Single normal-import proxy experiment
+
+`tools/native_proxy_session.py` is a separate, explicitly authorized Debug tool for
+one reviewed proxy DLL. It is not a replacement for the ASI runtime gate above or a
+release installer. It never launches, kills, attaches to, or unloads a process.
+Both the game and its bootstrap must be closed; failed CIM enumeration blocks every
+action. The selected basename must be a supported profile **and** a normal import
+of the exact catalog-qualified game executable. The default is `D3DCOMPILER_43.dll`;
+an existing target is always rejected, including an existing unrelated proxy.
+
+Optional profiles are `d3d9.dll`, `d3d11.dll`, `dsound.dll`, `winmm.dll`, `dxgi.dll`
+and `xinput1_3.dll`. Pass `--basename` explicitly for an alternative; never infer
+eligibility from the filename alone. The import list was recovered from 1.005;
+runtime installation checks the chosen executable's actual normal imports.
+Only one product DLL is installed, with the product ASI disabled. Neither a
+sibling ASI nor an ASI Loader configuration is required by the owned route.
+
+The canonical packaged player guide is [README](../README.md), registered as the
+package entrypoint in `package-docs.json`. Keep its default/alternative-name and
+single-edition instructions in sync; session identifiers, static-provenance and
+per-build qualification notes belong in [Current Status](CurrentStatus.md), not
+in the player installation instructions. Documentation-only edits do not rewrite
+previously generated archives or qualify a new release package.
+
+The lead supplies a reviewed JSON artifact receipt with these fields:
+
+- `schema`: integer `1`; `reviewed`: boolean `true`.
+- `source_identity` and `build_identity`: nonempty objects containing the reviewed
+  source/build provenance. These declarations still require independent review;
+  this tool does not reproduce a build or establish source cleanliness.
+- `artifact`: `path` (absolute plain path outside the game), `bytes` (positive
+  integer), and `sha256` (64 lowercase hexadecimal characters) of the x64 DLL.
+- `build_id`, `game_sha256`, and `game_bytes`: the exact target record from
+  `src/game/rva_catalog.json`.
+
+Use Python from the repository root of this native product, with explicit receipt
+and executable paths. The receipt must also be outside the game tree:
+
+```powershell
+$session = (& python -B ./tools/native_proxy_session.py prepare `
+  --artifact-receipt $ReviewedReceipt --game-binary $GameBinary `
+  --authorize-prepare | ConvertFrom-Json)
+```
+
+Prepare creates a new session under
+`$env:LOCALAPPDATA/FF7RPianoSongs/captures/native-proxy-*`. Before changing game
+files it archives the receipt and any existing product ASI/log, then publishes an
+immutable recovery plan. Only `FF7RPianoSongs.asi` is disabled by a nonce-suffixed,
+non-clobbering rename; its backup no longer ends in `.asi`. The old product log is
+similarly retained, and the new proxy is copied exclusively and hash-checked.
+INI files, other proxies, the decoder companion, songs and caches are not changed.
+Closure and file identities are rechecked before mutations; those observations are
+not an atomic filesystem/process lease. Do not run competing installation tools.
+
+The human launches and exits normally. After exit, collect a new changed log:
+
+```powershell
+python -B ./tools/native_proxy_session.py collect --session $session
+# Choose only after reviewing that collection and writing a bounded UTF-8 report:
+python -B ./tools/native_proxy_session.py keep --session $session `
+  --manual-report $ManualReport --authorize-keep
+# Or restore the prior product installation while both processes remain closed:
+python -B ./tools/native_proxy_session.py rollback --session $session
+```
+
+Collection is **Unassessed**, not a startup, playback or Release pass. Keep records
+explicit reviewed disposition and retains the proxy and disabled ASI backup; it
+never runs automatically. The immutable `session.json`, sequential checkpoints,
+archived log and optional manual report bind the tested DLL and prior bytes.
+Journal publication uses flushed temporary siblings and non-overwriting rename;
+interrupted temporaries remain evidence. Rollback removes only the hash-matching
+owned candidate and restores the exact disabled ASI without overwriting any new
+file. A new experiment log is preserved rather than replaced by the old log.
+Conflicts, changed bytes or running processes stop recovery; retain the session and
+resolve the reported uncertainty through review, not force-copying files. Failed
+preparation attempts a closed-game, hash-checked rollback and reports its result;
+otherwise recovery remains explicit. There is no live teardown, exit-triggered
+restoration or background cleanup.
+
+The focused fake-filesystem/process test is
+`python -B ./tools/test_native_proxy_session.py`; it performs no real process query
+or installation. This workflow still requires independent transaction review and
+the focused human evidence described in [In-Game Validation](InGameValidation.md).
 
 ## Release Gate
 

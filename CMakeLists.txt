@@ -202,6 +202,7 @@ file(GLOB_RECURSE FF7RPIANOSONGS_SOURCES CONFIGURE_DEPENDS
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/tests/")
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/tools/")
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/pipeline/")
+list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/proxy/")
 
 set(FF7RP_PIPELINE_SOURCES
     src/pipeline/audio_artifact_builder.cpp
@@ -246,6 +247,31 @@ if(WIN32)
     target_link_libraries(ff7rp_pipeline PRIVATE bcrypt)
 endif()
 if(FF7RP_BUILD_RUNTIME)
+set(FF7RP_PROXY_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated-proxy")
+set(FF7RP_PROXY_PROFILE "${FF7RP_PROXY_GENERATED_DIR}/proxy/generated/native_proxy_profile.generated.h")
+add_custom_command(OUTPUT "${FF7RP_PROXY_PROFILE}"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_proxy_profile.py"
+        --catalog "${FF7RP_RVA_CATALOG}" --build "${FF7RP_GAME_BUILD}" --output "${FF7RP_PROXY_PROFILE}"
+    DEPENDS "${FF7RP_RVA_CATALOG}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_native_proxy_profile.py"
+    VERBATIM)
+add_library(FF7RPianoSongsProxy SHARED
+    ${FF7RPIANOSONGS_SOURCES} src/game/chord_voicing_bridge.asm
+    src/proxy/proxy_main.cpp src/proxy/entry_bridge.cpp src/proxy/entry_thunk.asm
+    src/proxy/forwarding.cpp src/proxy/forwarding_thunks.asm src/proxy/forwarding.def
+    "${FF7RP_PROXY_PROFILE}")
+add_dependencies(FF7RPianoSongsProxy check_rva_catalog)
+ff7rp_apply_cpp_policy(FF7RPianoSongsProxy)
+ff7rp_use_generated_catalog(FF7RPianoSongsProxy)
+target_include_directories(FF7RPianoSongsProxy PRIVATE src "${FF7RP_PROXY_GENERATED_DIR}"
+    "${FF7RP_RELEASE_GENERATED_DIR}" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
+target_compile_definitions(FF7RPianoSongsProxy PRIVATE FF7RP_OWNED_PROXY WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(FF7RPianoSongsProxy PRIVATE ff7rp_pipeline minhook midifile user32 hid)
+if(MSVC)
+    target_link_options(FF7RPianoSongsProxy PRIVATE /INCREMENTAL:NO)
+endif()
+set_target_properties(FF7RPianoSongsProxy PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/proxy"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 add_library(FF7RPianoSongs SHARED ${FF7RPIANOSONGS_SOURCES})
 target_sources(FF7RPianoSongs PRIVATE src/game/chord_voicing_bridge.asm)
 add_dependencies(FF7RPianoSongs check_rva_catalog)
@@ -257,10 +283,35 @@ set_property(TARGET FF7RPianoSongs APPEND PROPERTY LINK_DEPENDS
 
 ff7rp_apply_cpp_policy(FF7RPianoSongs)
 target_compile_definitions(FF7RPianoSongs PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_include_directories(FF7RPianoSongs PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}"
+target_include_directories(FF7RPianoSongs PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}" "${FF7RP_PROXY_GENERATED_DIR}"
     "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_pipeline minhook midifile user32 hid)
 ff7rp_use_generated_catalog(FF7RPianoSongs)
+
+add_executable(native_proxy_entry_bridge_selftest
+    src/tests/native_proxy_entry_bridge_selftest.cpp src/proxy/entry_thunk.asm)
+ff7rp_apply_cpp_policy(native_proxy_entry_bridge_selftest)
+target_include_directories(native_proxy_entry_bridge_selftest PRIVATE src)
+target_compile_definitions(native_proxy_entry_bridge_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_executable(native_proxy_forwarding_selftest
+    src/tests/native_proxy_forwarding_selftest.cpp src/proxy/forwarding_thunks.asm)
+ff7rp_apply_cpp_policy(native_proxy_forwarding_selftest)
+target_include_directories(native_proxy_forwarding_selftest PRIVATE src)
+target_compile_definitions(native_proxy_forwarding_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+add_executable(native_proxy_startup_diagnostic_selftest
+    src/tests/native_proxy_startup_diagnostic_selftest.cpp "${FF7RP_PROXY_PROFILE}")
+ff7rp_apply_cpp_policy(native_proxy_startup_diagnostic_selftest)
+target_include_directories(native_proxy_startup_diagnostic_selftest PRIVATE src "${FF7RP_PROXY_GENERATED_DIR}")
+target_compile_definitions(native_proxy_startup_diagnostic_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_proxy_startup_diagnostic_selftest PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+if(MSVC)
+    set_source_files_properties(src/proxy/entry_bridge.cpp PROPERTIES
+        COMPILE_OPTIONS "/O2;/Oi;/GS-;/GR-")
+    target_compile_options(native_proxy_entry_bridge_selftest PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:/O2;/Oi;/GS-;/GR->)
+endif()
 
 if(MSVC)
     target_link_options(FF7RPianoSongs PRIVATE /INCREMENTAL:NO)
@@ -808,6 +859,38 @@ target_compile_options(native_audio_bootstrap_selftest PRIVATE
 target_include_directories(native_audio_bootstrap_selftest PRIVATE "src")
 target_link_libraries(native_audio_bootstrap_selftest PRIVATE ff7rp_pipeline minhook)
 
+add_executable(native_proxy_bootstrap_selftest
+    src/tests/native_proxy_bootstrap_selftest.cpp
+    src/game/native_audio_bootstrap.cpp
+    src/game/native_audio_bindings.cpp
+    src/game/native_audio_mount.cpp
+    src/game/uobject_locator_core.cpp
+    src/game/hook_specs.cpp
+    src/core/hooks.cpp src/core/logging.cpp src/core/pe_image.cpp)
+ff7rp_apply_cpp_policy(native_proxy_bootstrap_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(native_proxy_bootstrap_selftest)
+target_compile_definitions(native_proxy_bootstrap_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(native_proxy_bootstrap_selftest PRIVATE
+    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
+    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
+target_include_directories(native_proxy_bootstrap_selftest PRIVATE src "${FF7RP_GENERATED_PROXY_DIR}")
+target_link_libraries(native_proxy_bootstrap_selftest PRIVATE ff7rp_pipeline minhook)
+add_executable(native_proxy_unavailable_selftest
+    src/tests/native_proxy_bootstrap_selftest.cpp src/core/pe_image.cpp)
+ff7rp_apply_cpp_policy(native_proxy_unavailable_selftest)
+ff7rp_use_generated_catalog(native_proxy_unavailable_selftest)
+target_include_directories(native_proxy_unavailable_selftest PRIVATE src)
+target_compile_definitions(native_proxy_unavailable_selftest PRIVATE
+    FF7RP_NATIVE_PROXY_UNAVAILABLE_SELFTEST WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(native_proxy_unavailable_selftest PRIVATE bcrypt)
+target_compile_options(native_proxy_unavailable_selftest PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
+foreach(target IN ITEMS native_audio_runtime_selftest native_audio_adapter_selftest
+        native_audio_extended_composition_selftest native_audio_bootstrap_selftest)
+    target_sources(${target} PRIVATE src/game/native_proxy_bootstrap.cpp)
+    target_include_directories(${target} PRIVATE "${FF7RP_GENERATED_PROXY_DIR}")
+endforeach()
+
 add_executable(chart_selected_row_selftest
     src/tests/chart_selected_row_selftest.cpp
     src/game/song_registry.cpp
@@ -957,6 +1040,30 @@ add_test(NAME native_audio_decoder_selftest COMMAND native_audio_decoder_selftes
 add_test(NAME native_audio_bindings_selftest COMMAND native_audio_bindings_selftest)
 add_test(NAME native_audio_runtime_selftest COMMAND native_audio_runtime_selftest)
 add_test(NAME native_audio_bootstrap_selftest COMMAND native_audio_bootstrap_selftest)
+add_test(NAME native_proxy_entry_bridge_selftest COMMAND native_proxy_entry_bridge_selftest)
+add_test(NAME native_proxy_forwarding_selftest COMMAND native_proxy_forwarding_selftest)
+add_test(NAME native_proxy_startup_diagnostic_selftest COMMAND native_proxy_startup_diagnostic_selftest)
+add_test(NAME native_proxy_bootstrap_selftest COMMAND native_proxy_bootstrap_selftest)
+add_test(NAME native_proxy_unavailable_selftest COMMAND native_proxy_unavailable_selftest)
+add_test(NAME native_proxy_profile_selftest COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_native_proxy_profile.py")
+add_test(NAME native_proxy_callback_selftest COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_native_proxy_callback.py" --selftest)
+if(MSVC AND CMAKE_GENERATOR MATCHES "Visual Studio")
+    add_test(NAME native_proxy_callback_artifact_check COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_native_proxy_callback.py"
+        --object "${CMAKE_BINARY_DIR}/FF7RPianoSongsProxy.dir/$<CONFIG>/main.obj"
+        --image "$<TARGET_FILE:FF7RPianoSongsProxy>")
+    set_tests_properties(native_proxy_callback_artifact_check PROPERTIES TIMEOUT 60 LABELS "runtime;artifact")
+endif()
+if(MSVC)
+    get_filename_component(FF7RP_COMPILER_DIRECTORY "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(FF7RP_VCVARS64
+        "${FF7RP_COMPILER_DIRECTORY}/../../../../../../Auxiliary/Build/vcvars64.bat" ABSOLUTE)
+    add_test(NAME native_proxy_process_selftest COMMAND "${Python3_EXECUTABLE}" -B
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/tests/native_proxy_process_selftest.py" --vcvars "${FF7RP_VCVARS64}")
+    set_tests_properties(native_proxy_process_selftest PROPERTIES TIMEOUT 180 LABELS "runtime;integration")
+endif()
 add_test(NAME native_audio_adapter_selftest COMMAND native_audio_adapter_selftest)
 add_test(NAME native_audio_extended_composition_selftest COMMAND native_audio_extended_composition_selftest)
 add_test(NAME chart_selected_row_selftest COMMAND chart_selected_row_selftest)
@@ -1042,6 +1149,13 @@ set(FF7RP_BOUNDED_SELFTESTS
     native_audio_bindings_selftest
     native_audio_runtime_selftest
     native_audio_bootstrap_selftest
+    native_proxy_entry_bridge_selftest
+    native_proxy_forwarding_selftest
+    native_proxy_startup_diagnostic_selftest
+    native_proxy_bootstrap_selftest
+    native_proxy_unavailable_selftest
+    native_proxy_profile_selftest
+    native_proxy_callback_selftest
     native_audio_adapter_selftest
     native_audio_extended_composition_selftest
     chart_selected_row_selftest
@@ -1064,7 +1178,11 @@ if(NOT FF7RP_BUILD_RUNTIME)
         selection_substrate_policy_selftest bgm_playback_aggregate_policy_selftest
         mabf_sidecar_loader_selftest audio_pointer_patch_runtime_selftest
         audio_play_setup_diagnostics_selftest scoreinfo_result_policy_selftest
-        startup_thread_selftest uobject_identity_selftest native_audio_decoder_selftest native_audio_bindings_selftest native_audio_runtime_selftest native_audio_bootstrap_selftest native_audio_adapter_selftest native_audio_extended_composition_selftest chart_selected_row_selftest scoreinfo_overlay_producer_selftest title_input_service_selftest runtime_gate_selftest
+        startup_thread_selftest uobject_identity_selftest native_audio_decoder_selftest native_audio_bindings_selftest native_audio_runtime_selftest native_audio_bootstrap_selftest native_proxy_entry_bridge_selftest native_proxy_forwarding_selftest native_proxy_bootstrap_selftest native_audio_adapter_selftest native_audio_extended_composition_selftest chart_selected_row_selftest scoreinfo_overlay_producer_selftest title_input_service_selftest runtime_gate_selftest
+        native_proxy_profile_selftest
+        native_proxy_callback_selftest
+        native_proxy_startup_diagnostic_selftest
+        native_proxy_unavailable_selftest
         build_provenance_selftest build_catalog_selection_selftest release_package_selftest tracked_binary_audit documentation_audit)
 endif()
 set_tests_properties(${FF7RP_BOUNDED_SELFTESTS} PROPERTIES TIMEOUT 60)

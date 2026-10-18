@@ -10,26 +10,21 @@ FF7RPianoSongs adds user-authored piano songs to Final Fantasy VII Rebirth.
 This is an unofficial community project and is not affiliated with or endorsed
 by Square Enix.
 
-**Development source tree:** native cached-audio integration has changed since the
-published version above. Current 1.005 Development playback has bounded positive
-testing; the experimental 1.004 build still awaits gameplay testing. These source
-changes are not a new qualified public release.
-
 ## Requirements
 
 - Final Fantasy VII Rebirth on Windows x64. Each download supports one game build and the game version is part of its file name, so pick the download that matches your installed game. A download built for a different game version refuses to run rather than guessing.
-- An x64 ASI loader. The recommended setup is [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader), which provides the proxy that loads `.asi` files. Download its `xinput1_3-x64.zip` build and put `xinput1_3.dll` in `End/Binaries/Win64/`. The loader selects its behaviour from its own filename and upstream ships a separate build per supported name, so use that build rather than renaming another one. Without an ASI loader, `FF7RPianoSongs.asi` will not load. If a compatible x64 ASI loader is already installed, keep it and do not add a second proxy DLL.
-- The development native backend validates specific loader/Windows startup
-  profiles as well as the game build. An unqualified profile refuses startup;
-  arbitrary ASI loaders are not interchangeable. Its bootstrap requires the
-  authenticated `xinput1_3.dll` beside the ASI. No shared loader INI changes are
-  required.
+- The standalone DLL package includes the mod and its proxy loader in one file.
+  No separate ASI loader or loader-INI changes are required for this package.
+- Install the game's prerequisites, including the Microsoft Visual C++ x64 runtime.
+  The genuine Windows/System32 DLL for the selected proxy name must be available.
+- The mod needs write access to `Music/<Song Name>/.cache/` and
+  `%LOCALAPPDATA%/FF7RPianoSongs/native_audio/`.
 
 ## Install
 
 1. Exit the game.
-2. If no compatible x64 ASI loader is installed, install Ultimate ASI Loader from the link above.
-3. Copy this package's `End/` folder into the game directory and merge it with the existing `End/` folder.
+2. Copy `D3DCOMPILER_43.dll` and `FF7RPianoSongs.ini` from the package into `End/Binaries/Win64/`.
+3. Remove or move out any previous `FF7RPianoSongs.asi` or other copy of this mod's DLL. Do not overwrite another mod's proxy; see the alternatives below.
 4. Put each song in `End/Binaries/Win64/Music/<Song Name>/`.
 5. Start the game. Valid songs appear in the piano-song list.
 
@@ -37,8 +32,7 @@ Expected layout:
 
 ```text
 End/Binaries/Win64/
-  xinput1_3.dll                    (qualified ASI loader proxy)
-  FF7RPianoSongs.asi
+  D3DCOMPILER_43.dll               (the complete mod; default filename)
   FF7RPianoSongs.ini
   FF7RPianoSongs.log              (generated)
   Music/<Song Name>/
@@ -48,6 +42,21 @@ End/Binaries/Win64/
     song.mode1.wav                 (optional alternate audio; .mp3/.flac also accepted)
     song.mode2.wav                 (optional alternate audio; .mp3/.flac also accepted)
 ```
+
+### Alternative DLL Names
+
+If `D3DCOMPILER_43.dll` is already occupied by another mod, rename **our DLL** to
+one of these unused names:
+
+`d3d9.dll`, `d3d11.dll`, `dsound.dll`, `winmm.dll`, `dxgi.dll`, `xinput1_3.dll`.
+
+Use only one copy. The selected name must be a normal startup import of your game
+executable; an arbitrary name or late-loaded DLL is not supported. Never rename,
+overwrite or remove another mod's proxy to make room.
+
+Older **ASI packages** are an alternative installation: they need a compatible
+x64 ASI loader and `FF7RPianoSongs.asi` beside the executable. Do not rename an ASI
+to a proxy DLL or install both editions together.
 
 The package contains no music. To make your first song, put matching audio and MIDI in a song
 folder; the mod creates a starter `song.json` if it is missing. Audio alone cannot generate notes.
@@ -95,9 +104,9 @@ the game is running. Source changes produce separate content identities.
 
 ## Update, Roll Back, or Remove
 
-- **Update:** exit the game, replace the ASI, compare the new INI with yours, and keep your `Music/` folders. Delete caches only when the changelog asks for it. After the game itself updates, take the download for the new game version.
-- **Roll back:** with the game stopped, restore the previous ASI and matching INI, then delete generated song caches.
-- **Remove:** with the game stopped, delete `FF7RPianoSongs.asi`. Optionally remove its INI, log, score INI, and only the custom song folders you no longer want. Do not remove the ASI loader if another mod uses it.
+- **Update:** exit the game, replace this mod's DLL (or ASI for that edition), compare the new INI with yours, and keep your `Music/` folders. Keep only one edition/copy. Delete caches only when the changelog asks for it. After a game update, take the matching download.
+- **Roll back:** with the game stopped, restore the previous mod binary and matching INI, then delete generated song caches.
+- **Remove:** with the game stopped, delete only this mod's DLL or `FF7RPianoSongs.asi`. Optionally remove its INI, log, score INI, and custom song folders you no longer want. Leave other mods and their loaders alone.
 - Generated `native_audio/` containers may be removed after the game is fully
   closed. Do not remove other files in the product's LocalAppData directory as
   cache cleanup; they can contain retained diagnostics and rollback evidence.
@@ -106,9 +115,10 @@ the game is running. Source changes produce separate content identities.
 
 **The mod does not load**
 
-- Confirm Ultimate ASI Loader or another compatible x64 ASI loader is installed. A working layout normally includes a proxy DLL such as `End/Binaries/Win64/xinput1_3.dll`.
-- Confirm `FF7RPianoSongs.asi` is directly in `End/Binaries/Win64/` and `General.Enabled` is nonzero.
+- Confirm this mod's DLL is directly in `End/Binaries/Win64/`, uses the default or a supported unused name, and `General.Enabled` is nonzero. Do not leave a second copy or this mod's ASI installed.
+- For an ASI package, confirm its compatible x64 ASI loader and `FF7RPianoSongs.asi` are installed instead.
 - Check `FF7RPianoSongs.log`. If this download does not match your game version, the mod will not run; the log shows the mismatch. Install the matching download, or wait for one to be published.
+- If the main log is absent, include `FF7RPianoSongs.proxy-startup-failure.log` in your report if it exists.
 - A native-bootstrap rejection is not a slow cache build. Keep the first named
   failure in the log and report it; do not change global loader settings or
   repeatedly launch in an attempt to bypass the guard.
@@ -137,27 +147,16 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 ## Compatibility and Limitations
 
 - Each download supports exactly one Windows x64 game build. Updating or rolling back the game can require a different download.
-- [Custom chord compositions](docs/SongFormat.md#custom-chord-sounds) support the matching
-  1.004 and 1.005 builds with explicitly authored charts. A limited auditory/count/completion
-  check passed on a 1.005 development build; full sound/input/transition checks and 1.004
-  gameplay remain unqualified. Free-play and wrong-key sounds are not replaced.
-- Longer charts and independent left/right note symbols have limited in-game testing on 1.005
-  and remain **runtime-untested on 1.004**. Not every combination of grouping, chord filtering,
-  and alternate input has been checked in-game.
+- [Custom chord compositions](docs/SongFormat.md#custom-chord-sounds) use explicitly
+  authored charts on matching 1.004 and 1.005 builds. Free-play and wrong-key sounds
+  are not replaced.
 - The ordinary chart limit is 512 rows. Compatible builds can automatically accept longer charts,
   up to 8192 rows/events per profile; see [chart limits](docs/SongFormat.md#extended-charts-and-build-policy)
   for how two-hand rows and groups count. Unsupported charts are rejected, not shortened.
-- Replace, remove, or update the ASI only while the game is stopped. Live unload/reload is unsupported.
+- Replace, remove, or update this mod's DLL/ASI only while the game is stopped. Live unload/reload is unsupported.
 - Supply WAV, MP3, or FLAC audio within the [song limits](docs/SongFormat.md#folder-and-source-selection).
   Pre-encoded HCA/MABF files and audio looping are not supported authoring inputs.
-- Retry, abort, and unusual exit paths are not comprehensively tested. Keep backups of your song files.
-- For 0.2.3, the 1.005 development build received positive user feedback, but individual
-  new chords and fractional note values were not all checked in game. There are no new
-  1.004 gameplay checks or in-game checks of the exact packaged archives. These and
-  incomplete broader manual scenarios are accepted release limitations; development
-  results do not qualify another build or the packaged artifacts.
-- The replacement native backend retains its containers and acquired objects to
-  process exit. This does not qualify resource release, unmount or live unloading.
+- Keep backups of your song files and scores before updating.
 
 ## Reference
 

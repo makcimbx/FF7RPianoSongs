@@ -12,8 +12,9 @@ struct BootstrapFixture;
 BootstrapFixture* boot=nullptr;
 struct BootstrapFixture : RuntimeFixture {
     static constexpr na::Address loader=0x70000000,asi=0x80000000,system=0x90000000,crt=0xa0000000;
-    bool post=true,directory=false,file_changed=false,wrong_hash=false,wrong_size=false,wrong_export=false;
+    bool post=true,directory=false,file_changed=false,wrong_hash=false,wrong_proxy_hash=false,wrong_size=false,wrong_export=false;
     bool disk_drift=false,no_frames=false,install_result=false,noop=false,recurse=false,wrong_path=false;
+    std::wstring proxy_name=L"xinput1_3.dll";
     void (*before_install)(BootstrapFixture&)=nullptr;
     void (*during_install)(BootstrapFixture&,unsigned)=nullptr;
     na::Address import_slot=0;
@@ -282,14 +283,14 @@ struct BootstrapFixture : RuntimeFixture {
             if(bad_crt_hash)file.sha[0]^=1;return true;
         }
         const bool exe=module==reinterpret_cast<HMODULE>(base),self=module==reinterpret_cast<HMODULE>(asi);
-        file.path=exe?L"C:\\Game\\ff7rebirth_.exe":self?L"C:\\Game\\FF7RPianoSongs.asi":wrong_path?L"C:\\Other\\xinput1_3.dll":L"C:\\Game\\xinput1_3.dll";
+        file.path=exe?L"C:\\Game\\ff7rebirth_.exe":self?L"C:\\Game\\FF7RPianoSongs.asi":(wrong_path?L"C:\\Other\\":L"C:\\Game\\")+proxy_name;
         if(self && actual_self){file.nt=actual_self->nt;file.nt_offset=actual_self->nt_offset;file.identity=actual_self->identity;
             file.sections=actual_self->sections;file.sha=actual_self->sha;return true;}
         file.nt=exe?exe_nt:self?asi_nt:loader_nt;file.nt_offset=128;file.identity.nFileSizeLow=static_cast<DWORD>(exe?core::generated::kExeFileSize:self?8192:3615648);
         file.sections[0]=exe?exe_section:self?asi_section:loader_section;
         if(wrong_size)++file.identity.nFileSizeLow;const std::string_view hex=exe?core::generated::kExeSha256:bs::kLoaderSha;
         for(unsigned i=0;i<32;++i)file.sha[i]=static_cast<unsigned char>(bs::nibble(hex[i*2])*16+bs::nibble(hex[i*2+1]));
-        if(wrong_hash)file.sha[0]^=1;return true;
+        if(wrong_hash || (!exe && !self && wrong_proxy_hash))file.sha[0]^=1;return true;
     }
     static void initialize() noexcept {
         ++boot->callbacks;assert(bs::scope && bs::scope->owner_thread==GetCurrentThreadId());
@@ -503,6 +504,14 @@ void actual_crt_unwind_test() {
 }
 int main(int argc,char** argv) {
     actual_crt_unwind_test();
+    for(const auto* name:{L"xinput1_3.dll",L"dinput8.dll",L"dxgi.dll",L"version.dll"}) {
+        for(unsigned source=0;source<3;++source) {
+            BootstrapFixture f(source==1);f.proxy_name=name;if(source==2)f.first_scp();
+            assert(f.run() && f.install_result && f.callbacks==1 && !f.mounts && !f.acquires && !f.bridges);
+        }
+        {BootstrapFixture f;f.proxy_name=name;f.wrong_proxy_hash=true;f.rejected();}
+        {BootstrapFixture f;f.proxy_name=name;f.wrong_path=true;f.rejected();}
+    }
     for(bool directory:{false,true}){BootstrapFixture f(false,directory);f.first_scp();
         const bool accepted=f.run();if(!accepted){const auto s=na::native_audio_bootstrap_status();std::cerr<<"SCP source rejection="<<(s.frame.predicate?s.frame.predicate:"")<<'\n';}
         assert(accepted && f.install_result && f.callbacks==1 && f.installed==11 && na::g_origin.load());

@@ -1,5 +1,6 @@
 #include "game/native_audio_runtime.h"
 #include "game/native_audio_bootstrap.h"
+#include "game/native_proxy_bootstrap.h"
 #include "game/native_audio_gate.h"
 #include "game/native_audio_mount.h"
 #include "game/hook_specs.h"
@@ -188,16 +189,16 @@ void invalidate(RuntimeFailure reason) noexcept {
     RuntimeFailure expected=RuntimeFailure::None;
     g_failure.compare_exchange_strong(expected,reason,std::memory_order_acq_rel);
 }
-bool cold_baseline() noexcept {
+bool cold_baseline(Address base=g_base) noexcept {
     if constexpr(!rva::NativeAudioCrtState || !rva::NativeAudioInitialGuHeader || !rva::DataObjectNameMap)return false;
     else {
     std::uint32_t crt=1; Address map=1,owner=1;
     std::array<unsigned char,48> bytes{};
-    if(!read(g_base+rva::NativeAudioCrtState,crt) || crt
-        || !read(g_base+rva::DataObjectNameMap,map) || map
-        || !read(g_base+rva::PackageStoreOwnerGlobal,owner) || owner)return false;
+    if(!read(base+rva::NativeAudioCrtState,crt) || crt
+        || !read(base+rva::DataObjectNameMap,map) || map
+        || !read(base+rva::PackageStoreOwnerGlobal,owner) || owner)return false;
     for(auto rva:{rva::NativeAudioInitialGuHeader,rva::BgmListRegistry,rva::ScoreInfoRegistry,rva::PianoScoreRegistry}) {
-        if(!read(g_base+rva,bytes) || std::any_of(bytes.begin(),bytes.end(),[](auto b){return b!=0;}))return false;
+        if(!read(base+rva,bytes) || std::any_of(bytes.begin(),bytes.end(),[](auto b){return b!=0;}))return false;
     }
     return true;
     }
@@ -776,16 +777,43 @@ std::shared_ptr<PreparedNativeAudio> prepare_native_audio(std::shared_ptr<const 
     }catch(...){return {};}
 }
 
+namespace native_proxy_detail {
+EntryContract entry_contract() noexcept {
+    const auto* spec=find_hook_spec("native_audio_exe_entry");
+    return spec?EntryContract{spec->rva,spec->expected_prologue}:EntryContract{};
+}
+bool cold_entry_ready(HMODULE module) noexcept {
+    const auto base=reinterpret_cast<Address>(module);
+    if(!base || !cold_baseline(base))return false;
+    // Source-specific pre-CRT witnesses, not reconstructed post-initialization state.
+    for(auto offset:{rva::PackageStoreGeneration,rva::NativeBootstrapHinstance,rva::NativeBootstrapTaskGraph,
+        rva::NativeBootstrapPool,rva::NativeBootstrapBackgroundPool,
+        rva::NativeBootstrapCrashProcess,rva::NativeBootstrapCrashResult,
+        rva::NativeBootstrapCrashWorker,rva::NativeBootstrapCrashRequest,rva::NativeBootstrapCrashEvent,
+        rva::NativeBootstrapSrwGmalloc,rva::NativeBootstrapSrwReserve,rva::NativeBootstrapSrwLock,rva::NativeBootstrapSrwOutput}) {
+        Address value=1;if(!offset || !read(base+offset,value) || value)return false;
+    }
+    std::uint32_t serial=1,guard=1;unsigned char pool=1;
+    for(auto offset:{rva::NativeBootstrapCrashStop,rva::NativeBootstrapCrashComplete}){
+        std::uint32_t value=1;if(!offset || !read(base+offset,value) || value)return false;}
+    if(!rva::NativeBootstrapGuSerial || !read(base+rva::NativeBootstrapGuSerial,serial) || serial
+        || !rva::NativeBootstrapSrwGuard || !read(base+rva::NativeBootstrapSrwGuard,guard) || guard
+        || !rva::NativeBootstrapSrwPoolComplete || !read(base+rva::NativeBootstrapSrwPoolComplete,pool) || pool)return false;
+    if constexpr(rva::NativeBootstrapIoPool!=0){Address value=1;if(!read(base+rva::NativeBootstrapIoPool,value) || value)return false;}
+    return true;
+}
+}
 bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexcept {
     const bool synchronous=bootstrap_detail::scope_present();
+    const bool proxy_entry=native_proxy_detail::scope_present();
     // A worker with CRT=0 could already be inside the cookie API: patching its
     // suspended AEP return is unsafe even if a later entry event never arrives.
     // The literal pre-AEP transaction remains exercised by its injected early
     // source harness, not offered as an unqualified production-worker fallback.
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
-    if(!synchronous && !test_install_hook)return false;
+    if((synchronous && proxy_entry) || (!synchronous && !proxy_entry && !test_install_hook))return false;
 #else
-    if(!synchronous)return false;
+    if(synchronous==proxy_entry)return false;
 #endif
     if(g_base || !module || !services.identity || !services.scoreinfo_original
         || !native_audio_layout(core::generated::kBuildId))return false;
@@ -821,7 +849,7 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         "scoreinfo_append_bridge","pianoscore_append_bridge","bgmlist_accessor","pianoscore_accessor","package_store_mount_callback","native_audio_updater_return"};
     for(auto id:calls)if(!signature(id)){g_base=0;return false;}
     for(const auto& h:hooks)if(!find_hook_spec(h.id) || !signature(h.id)){g_base=0;return false;}
-    if(synchronous?!bootstrap_detail::begin_publication(module):!cold_baseline()) {
+    if(synchronous?!bootstrap_detail::begin_publication(module):proxy_entry?!native_proxy_detail::begin_publication(module):!cold_baseline()) {
         invalidate(RuntimeFailure::MissedInitializer);return false;
     }
     g_callbacks.open();
@@ -839,16 +867,19 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         installed=g_hooks[g_installed].install(module,s->rva,s->expected_prologue,h.detour,h.original,error);
         if(!installed) {
             if(synchronous)bootstrap_detail::abandon_publication(module);
+            if(proxy_entry)native_proxy_detail::abandon_publication(module);
             invalidate(RuntimeFailure::Install);return shutdown_native_audio_runtime() && false;
         }
         ++g_installed;
     }
     // If initializer returned during installation, its callback did not accept
     // capture. Never infer initialization from a later pointer observation.
-    if((synchronous?!bootstrap_detail::finish_publication(module):!cold_baseline())
+    if((synchronous?!bootstrap_detail::finish_publication(module):proxy_entry?
+            !native_proxy_detail::finish_publication(module,reinterpret_cast<Address>(&ordinary_entry_hook)):!cold_baseline())
         || g_initializer_seen.load(std::memory_order_acquire) || g_callbacks.callbacks_in_flight()
         || g_entry_seen.load(std::memory_order_acquire) || g_failure.load(std::memory_order_acquire)!=RuntimeFailure::None) {
         if(synchronous)bootstrap_detail::abandon_publication(module);
+        if(proxy_entry)native_proxy_detail::abandon_publication(module);
         invalidate(RuntimeFailure::MissedInitializer);return shutdown_native_audio_runtime() && false;
     }
     g_accepting.store(true,std::memory_order_release);

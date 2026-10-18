@@ -14,6 +14,8 @@
 #include "startup/native_audio_startup_latch.h"
 #include "game/native_audio_bootstrap.h"
 #include "game/native_audio_decoder.h"
+#include "game/native_proxy_bootstrap.h"
+#include "proxy/native_proxy.h"
 #include "startup/startup_cache_progress.h"
 #include "release_identity.generated.h"
 
@@ -32,6 +34,10 @@ namespace game = ff7r::piano::game;
 
 HMODULE g_module = nullptr;
 std::atomic<bool> g_started{false};
+std::atomic<bool> g_proxy_bootstrap{false}; // Diagnostic only; native admission revalidates its private scope.
+#ifdef FF7RP_OWNED_PROXY
+std::atomic<bool> g_proxy_startup_returned{false};
+#endif
 std::atomic<bool> g_repository_started{false};
 std::atomic<bool> g_completion_started{false};
 ff7r::piano::startup::NativeAudioStartupLatch g_native_startup;
@@ -203,7 +209,10 @@ DWORD startup_worker_body()
         std::string("[startup] product=") + std::string(generated::kProduct) +
         " version=" + std::string(generated::kVersion) +
         " platform=" + std::string(generated::kPlatform));
-    {
+    if (g_proxy_bootstrap.load(std::memory_order_acquire)) {
+        core::log(core::LogLevel::Info,
+            "[native_audio] status=bootstrap_context source=owned_proxy_entry callback_invoked=1 readiness=not_published");
+    } else {
         const auto bootstrap = game::native_audio::native_audio_bootstrap_status();
         constexpr const char* failures[] = {"none", "reused", "arguments", "build", "files",
             "image", "export", "frames", "unwind", "code", "baseline", "thread", "scope",
@@ -339,8 +348,20 @@ void initialize_inline() noexcept
     (void)core::run_startup_once(g_started, worker_thread, nullptr);
 }
 
+#if defined(FF7RP_OWNED_PROXY)
+void initialize_proxy_inline() noexcept
+{
+    g_proxy_bootstrap.store(true, std::memory_order_release);
+    initialize_inline();
+    // Keep a real return frame: the owned-entry validator authenticates its unwind record.
+    g_proxy_startup_returned.store(true, std::memory_order_release);
+}
+
+#endif
+
 } // namespace
 
+#if !defined(FF7RP_OWNED_PROXY)
 extern "C" __declspec(dllexport) void InitializeASI()
 {
     if (g_started.load(std::memory_order_acquire)) return;
@@ -354,12 +375,24 @@ extern "C" __declspec(dllexport) void ReloadedStart()
 {
     InitializeASI();
 }
+#else
+bool ff7r::piano::proxy::initialize_owned_product(HMODULE executable, HMODULE self) noexcept
+{
+    if (g_started.load(std::memory_order_acquire) || self != g_module) return false;
+    const auto invoked = game::native_audio::try_owned_proxy_native_audio_startup(
+        executable, self, reinterpret_cast<std::uintptr_t>(_ReturnAddress()), initialize_proxy_inline);
+    return invoked && g_proxy_startup_returned.load(std::memory_order_acquire);
+}
+#endif
 
-BOOL APIENTRY DllMain(HMODULE module, DWORD reason, LPVOID)
+BOOL APIENTRY DllMain(HMODULE module, DWORD reason, [[maybe_unused]] LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         g_module = module;
         DisableThreadLibraryCalls(module);
+#if defined(FF7RP_OWNED_PROXY)
+        return ff7r::piano::proxy::attach_process_start(module, reason, reserved);
+#endif
     }
     return TRUE;
 }
