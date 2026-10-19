@@ -2,6 +2,7 @@
 #include "pipeline/cache.h"
 #include "pipeline/pipeline_limits.h"
 #include "tools/song_cache_tool_args.h"
+#include "transcription/muscriptor_transcriber.h"
 
 #include "MidiFile.h"
 
@@ -21,6 +22,10 @@
 
 int main(int argc, char** argv)
 {
+    // Songs without song.mid are transcribed when the model sits next to this tool, as next to the DLL.
+    ff7rp::transcription::register_muscriptor_transcriber(
+        std::filesystem::absolute(argv[0]).parent_path() / ff7rp::transcription::kMuscriptorModelFileName, 4,
+        [](const std::string& line) { std::cerr << line << '\n'; });
     // Supported builds play extended charts, so that is the default policy; --native-512
     // models a build without it. --playable-extended is still accepted for old scripts.
     const std::string_view policy_flag = argc > 1 ? argv[argc - 1] : "";

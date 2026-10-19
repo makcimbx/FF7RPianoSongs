@@ -189,11 +189,41 @@ FetchContent_Declare(
     GIT_TAG 98917df5b1bf0d6e8d4c0e5fff86d6b05343e793
     PATCH_COMMAND "${CMAKE_COMMAND}"
         "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
-        "-DMIDIFILE_SOURCE_DIR=<SOURCE_DIR>"
+        "-DPATCH_SOURCE_DIR=<SOURCE_DIR>"
         "-DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/midifile-running-status.patch"
-        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_midifile_patch.cmake"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_source_patch.cmake"
 )
 FetchContent_MakeAvailable(midifile)
+
+# Audio transcription for songs without song.mid, CPU only. The patch raises
+# ggml's x86 baseline from Ivy Bridge to AVX2/FMA (about 8x faster on CPU).
+set(MUSCRIPTOR_NATIVE OFF CACHE BOOL "" FORCE)
+set(MUSCRIPTOR_VULKAN OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    muscriptor
+    GIT_REPOSITORY https://github.com/DamRsn/muscriptor.cpp.git
+    GIT_TAG c8adc019677ed3479fa3c22c1a117d662382f347
+    SOURCE_SUBDIR cpp
+    PATCH_COMMAND "${CMAKE_COMMAND}"
+        "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+        "-DPATCH_SOURCE_DIR=<SOURCE_DIR>"
+        "-DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/muscriptor-avx2.patch"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/apply_source_patch.cmake"
+)
+FetchContent_MakeAvailable(muscriptor)
+FetchContent_GetProperties(ggml)
+# ggml enables the generic ASM language, which would otherwise claim .asm files for cl.exe.
+set_source_files_properties(
+    src/game/chord_voicing_bridge.asm src/game/chord_voicing_bridge_harness.asm
+    src/proxy/entry_thunk.asm src/proxy/forwarding_thunks.asm
+    PROPERTIES LANGUAGE ASM_MASM)
+if(FF7RP_BUILD_RUNTIME)
+    # Packaged beside the DLL. A matching existing file is not downloaded again.
+    file(DOWNLOAD
+        "https://huggingface.co/DamRsn/muscriptor-gguf/resolve/d7045f94e8b19427f4ff9542975035e66596e51c/v1/muscriptor-small-f16.gguf"
+        "${CMAKE_BINARY_DIR}/models/muscriptor-small-f16.gguf"
+        EXPECTED_HASH SHA256=925f55af65a20ebc4f8b45ceaf095a12b72493d436cb112623cd0041a1af23d4)
+endif()
 
 file(GLOB_RECURSE FF7RPIANOSONGS_SOURCES CONFIGURE_DEPENDS
     "src/*.cpp"
@@ -203,12 +233,14 @@ list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/tests/")
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/tools/")
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/pipeline/")
 list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/proxy/")
+list(FILTER FF7RPIANOSONGS_SOURCES EXCLUDE REGEX "/transcription/")
 
 set(FF7RP_PIPELINE_SOURCES
     src/pipeline/audio_artifact_builder.cpp
     src/pipeline/audio_loudness.cpp
     src/pipeline/audio_metronome.cpp
     src/pipeline/audio_reader.cpp
+    src/pipeline/audio_transcription.cpp
     src/pipeline/cache.cpp
     src/pipeline/cache_artifact_writer.cpp
     src/pipeline/cache_manifest_renderer.cpp
@@ -246,6 +278,12 @@ target_link_libraries(ff7rp_pipeline PUBLIC midifile)
 if(WIN32)
     target_link_libraries(ff7rp_pipeline PRIVATE bcrypt)
 endif()
+
+# Kept out of ff7rp_pipeline so self-tests do not link ggml.
+add_library(ff7rp_transcription STATIC src/transcription/muscriptor_transcriber.cpp)
+ff7rp_apply_cpp_policy(ff7rp_transcription)
+target_compile_definitions(ff7rp_transcription PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(ff7rp_transcription PUBLIC ff7rp_pipeline PRIVATE muscriptor_ggml)
 if(FF7RP_BUILD_RUNTIME)
 set(FF7RP_PROXY_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated-proxy")
 set(FF7RP_PROXY_PROFILE "${FF7RP_PROXY_GENERATED_DIR}/proxy/generated/native_proxy_profile.generated.h")
@@ -265,7 +303,7 @@ ff7rp_use_generated_catalog(FF7RPianoSongsProxy)
 target_include_directories(FF7RPianoSongsProxy PRIVATE src "${FF7RP_PROXY_GENERATED_DIR}"
     "${FF7RP_RELEASE_GENERATED_DIR}" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_compile_definitions(FF7RPianoSongsProxy PRIVATE FF7RP_OWNED_PROXY WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(FF7RPianoSongsProxy PRIVATE ff7rp_pipeline minhook midifile user32 hid)
+target_link_libraries(FF7RPianoSongsProxy PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid)
 if(MSVC)
     target_link_options(FF7RPianoSongsProxy PRIVATE /INCREMENTAL:NO)
 endif()
@@ -285,7 +323,7 @@ ff7rp_apply_cpp_policy(FF7RPianoSongs)
 target_compile_definitions(FF7RPianoSongs PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(FF7RPianoSongs PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}" "${FF7RP_PROXY_GENERATED_DIR}"
     "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
-target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_pipeline minhook midifile user32 hid)
+target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid)
 ff7rp_use_generated_catalog(FF7RPianoSongs)
 
 add_executable(native_proxy_entry_bridge_selftest
@@ -558,7 +596,7 @@ add_executable(song_cache_tool
 ff7rp_apply_cpp_policy(song_cache_tool)
 target_compile_definitions(song_cache_tool PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_cache_tool PRIVATE "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
-target_link_libraries(song_cache_tool PRIVATE ff7rp_pipeline midifile)
+target_link_libraries(song_cache_tool PRIVATE ff7rp_transcription ff7rp_pipeline midifile)
 add_executable(hca_parity_fixture
     tools/hca_parity_fixture.cpp
 )
@@ -926,6 +964,8 @@ if(NOT FF7RP_BUILD_RUNTIME)
             -DFF7RP_TEST_BUILD_ID=${FF7RP_GAME_BUILD}
             -DFF7RP_MINIAUDIO_SOURCE_DIR=${miniaudio_SOURCE_DIR}
             -DFF7RP_MIDIFILE_SOURCE_DIR=${midifile_SOURCE_DIR}
+            -DFF7RP_MUSCRIPTOR_SOURCE_DIR=${muscriptor_SOURCE_DIR}
+            -DFF7RP_GGML_SOURCE_DIR=${ggml_SOURCE_DIR}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/src/tests/offline_configuration_selftest.cmake)
 endif()
 if(FF7RP_BUILD_RUNTIME)

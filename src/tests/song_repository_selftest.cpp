@@ -2,6 +2,7 @@
 #include "pipeline/diagnostic_descriptor_hash.h"
 #include "pipeline/audio_loudness.h"
 #include "pipeline/audio_reader.h"
+#include "pipeline/audio_transcription.h"
 #include "pipeline/chart_event_plan.h"
 #include "pipeline/chart_compiler.h"
 #include "pipeline/mabf_builder.h"
@@ -3488,6 +3489,56 @@ int test_authored_onset_bounds(const std::filesystem::path& root) {
 
 } // namespace
 
+int test_audio_transcription_fallback(const std::filesystem::path& root) {
+    const std::filesystem::path song_directory = root / "TranscriptionFixture";
+    std::filesystem::create_directories(song_directory);
+    if (!write_silent_wav(song_directory / "song.wav", 8.5) ||
+        !write_song_json(song_directory / "song.json", "Transcription Fixture", true)) {
+        return fail("failed to write transcription fixture");
+    }
+
+    int calls = 0;
+    std::size_t sample_count = 0;
+    bool empty = true;
+    ff7rp::pipeline::set_audio_transcriber([&](std::span<const float> samples,
+                                               std::vector<ff7rp::pipeline::TranscribedNote>* out) {
+        ++calls;
+        sample_count = samples.size();
+        if (!empty) {
+            for (int index = 0; index < 8; ++index) {
+                out->push_back({index * 1.0, index * 1.0 + 0.125, 72 + index % 5, 0});
+            }
+        }
+        return ff7rp::pipeline::Status::ok_status();
+    });
+    struct Reset { ~Reset() { ff7rp::pipeline::set_audio_transcriber({}); } } reset;
+
+    ff7rp::pipeline::LoadedSong song;
+    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    if (status.ok() || std::filesystem::exists(song_directory / "song.mid") ||
+        std::filesystem::exists(song_directory / "song.mid.partial")) {
+        return fail("empty transcription must fail without leaving song.mid");
+    }
+    const std::size_t expected = static_cast<std::size_t>(8.5 * ff7rp::pipeline::kTranscriptionSampleRate);
+    if (calls != 1 || sample_count + 16 < expected || sample_count > expected + 16) {
+        return fail("transcriber did not receive 16 kHz mono audio");
+    }
+
+    empty = false;
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    if (!status.ok()) return fail("transcribed song failed to load: " + status.message);
+    if (calls != 2 || !std::filesystem::is_regular_file(song_directory / "song.mid") ||
+        song.loaded_from_runtime_cache || song.difficulty_profiles.empty()) {
+        return fail("transcription did not produce song.mid and generated charts");
+    }
+
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    if (!status.ok() || calls != 2 || !song.loaded_from_runtime_cache) {
+        return fail("transcribed song.mid was not reused from disk on the next load");
+    }
+    return 0;
+}
+
 int main() {
     TemporaryRoot root("ff7rp-repository-selftest");
     const char* filter = std::getenv("FF7RP_SELFTEST_FILTER");
@@ -3525,6 +3576,7 @@ int main() {
     if (run("synthetic_envelope", [&] { return test_synthetic_gain_envelope_integration(root.path()); }) != 0) return 1;
     if (run("midi_pitch_exclusions", [&] { return test_midi_pitch_exclusions(root.path()); }) != 0) return 1;
     if (run("synthetic_profiles", [&] { return test_synthetic_reviewed_profiles(root.path()); }) != 0) return 1;
+    if (run("audio_transcription", [&] { return test_audio_transcription_fallback(root.path()); }) != 0) return 1;
     std::cout << "song_repository_selftest ok\n";
     return 0;
 }

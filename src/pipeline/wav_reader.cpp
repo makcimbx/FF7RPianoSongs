@@ -150,7 +150,7 @@ Status parse_wav_bytes(const std::vector<std::uint8_t>& bytes, WavAudio* out_aud
         audio.stereo_samples[frame * 2 + 1] = right;
     }
 
-    Status validation = validate_decoded_pcm(audio);
+    Status validation = sanitize_decoded_pcm(&audio);
     if (!validation.ok()) return validation;
     *out_audio = std::move(audio);
     return Status::ok_status();

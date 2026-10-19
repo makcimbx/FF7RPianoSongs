@@ -45,7 +45,7 @@ Music/My Song/
   song.wav | song.mp3 | song.flac  choose exactly one audio file
   song.mode1.wav                  optional; .mp3 or .flac also accepted
   song.mode2.wav                  optional; .mp3 or .flac also accepted
-  song.mid | song.midi              required only when JSON has no explicit notes
+  song.mid | song.midi              required only when JSON has no explicit notes; transcribed when missing
 ```
 
 The folder belongs under `End/Binaries/Win64/Music/`. The `|` above means “choose one”; it is not
@@ -457,6 +457,11 @@ a row requiring both hands contributes two.
 ## MIDI-backed songs
 
 When root `notes` and `profiles` are absent, exactly one `song.mid` or `song.midi` is required.
+If neither exists and `muscriptor-small-f16.gguf` sits beside the mod DLL (or `song_cache_tool.exe`),
+the piano in the base audio is transcribed once and written as `song.mid`; other instruments are
+ignored, so use a piano recording or cover. Later loads use that file like an authored one; edit or
+delete it to change or redo the transcription. Transcription runs on
+`Advanced.TranscriptionThreads` CPU threads and takes a few minutes per song.
 The generator tries difficulty labels 1 through 6; root `difficulty` does not select one of them.
 Each level chooses a playable selection from the MIDI, not necessarily every original note.
 Levels that cannot be generated within the supported limits are omitted, so some numbers may be missing.

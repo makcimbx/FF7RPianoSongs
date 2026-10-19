@@ -10,6 +10,7 @@ struct Config {
     bool enabled = true;
     LogLevel log_level = LogLevel::Info;
     bool rebuild_audio_cache = false;
+    int transcription_threads = 4;
 };
 
 Config load_config(const std::wstring& ini_path);

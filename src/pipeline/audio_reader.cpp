@@ -1,5 +1,6 @@
 #include "audio_reader.h"
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <cmath>
@@ -48,7 +49,7 @@ Status decode_initialized(ma_decoder* decoder, WavAudio* out_audio) {
     audio.channels = 2;
     audio.source_frame_count = samples.size() / 2;
     audio.stereo_samples = std::move(samples);
-    const Status validation = validate_decoded_pcm(audio);
+    const Status validation = sanitize_decoded_pcm(&audio);
     if (!validation.ok()) return validation;
     *out_audio = std::move(audio);
     return Status::ok_status();
@@ -60,18 +61,21 @@ ma_decoder_config decoder_config() {
 
 } // namespace
 
-Status validate_decoded_pcm(const WavAudio& audio) {
-    if (audio.sample_rate != kSongWavSampleRate || audio.channels != 2 ||
-        audio.stereo_samples.empty() || (audio.stereo_samples.size() & 1u) != 0) {
+Status sanitize_decoded_pcm(WavAudio* audio) {
+    if (audio->sample_rate != kSongWavSampleRate || audio->channels != 2 ||
+        audio->stereo_samples.empty() || (audio->stereo_samples.size() & 1u) != 0) {
         return Status::error(StatusCode::InvalidAudio, "decoded PCM must be non-empty 48 kHz stereo");
     }
-    for (const float sample : audio.stereo_samples) {
+    float peak = 0.0f;
+    for (const float sample : audio->stereo_samples) {
         if (!std::isfinite(sample)) {
             return Status::error(StatusCode::InvalidAudio, "decoded PCM contains NaN or infinity");
         }
-        if (sample < -1.0f || sample > 1.0f) {
-            return Status::error(StatusCode::InvalidAudio, "decoded PCM sample is outside normalized [-1, 1] range");
-        }
+        peak = std::max(peak, std::fabs(sample));
+    }
+    // Loud lossy masters decode with peaks above full scale; lower the whole song instead of clipping.
+    if (peak > 1.0f) {
+        for (float& sample : audio->stereo_samples) sample /= peak;
     }
     return Status::ok_status();
 }

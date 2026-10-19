@@ -71,11 +71,22 @@ struct NativePianoScoreRow {
     std::uintptr_t provider=0,row=0;
     std::uint64_t selected_name=0,cohort_generation=0;
 };
+// Static predicates and copied facts only; format after capture releases its guards.
+struct NativePianoScoreCaptureFacts {
+    const char* predicate="not_attempted";
+    std::uint64_t generation=0,requested_name=0,observed_name=0;
+    RuntimeStage stage=RuntimeStage::Unavailable;
+    RuntimeFailure failure=RuntimeFailure::None;
+    BindingFailure binding_failure=BindingFailure::None;
+    unsigned char binding_role=0;
+    bool status_observed=false,binding_observed=false,name_observed=false;
+};
 // Read-only snapshot of the retained constructor result, not a mutation lease.
 // Requires the exact immutable artifact and parser-selected name. Chart writes
 // still require their own activation authority and reversible scoped journal.
 bool capture_native_pianoscore_row(const ff7rp::pipeline::NativeAudioArtifactSet&,
-    std::uint64_t selected_name,NativePianoScoreRow&) noexcept;
+    std::uint64_t selected_name,NativePianoScoreRow&,
+    NativePianoScoreCaptureFacts* = nullptr) noexcept;
 // Close admission first. Native files/owning pairs/registration are deliberately
 // retained until process exit; this does NOT release, remove or unmount anything.
 // Incomplete is nonblocking and retains protective hooks while work is admitted;

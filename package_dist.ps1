@@ -208,6 +208,7 @@ $Artifact = Join-Path $Root "dist/FF7RPianoSongs.asi"
 $BuiltDll = Join-Path $Root "build/bin/$Configuration/FF7RPianoSongs.dll"
 $ProvenancePath = Join-Path $Root "build/bin/$Configuration/FF7RPianoSongs.provenance.json"
 $Ini = Join-Path $Root "FF7RPianoSongs.example.ini"
+$Model = Join-Path $Root "build/models/muscriptor-small-f16.gguf"
 $AuditCandidates = @(
     (Join-Path $Root "build/$Configuration/release_audit_tool.exe"),
     (Join-Path $Root "build/bin/$Configuration/release_audit_tool.exe"),
@@ -314,6 +315,7 @@ function Get-ExpectedPackageInventory {
     $inventory = @(
         "$BinaryRelative/FF7RPianoSongs.asi",
         "$BinaryRelative/FF7RPianoSongs.ini",
+        "$BinaryRelative/muscriptor-small-f16.gguf",
         "release.json"
     )
     foreach ($mapping in $DocumentMappings) { $inventory += $mapping.Destination }
@@ -335,6 +337,7 @@ function Assert-PackageTree {
         Assert-FilesEqual -Source $ExpectedAsiPath -Destination $candidateAsi
     }
     Assert-FilesEqual -Source $Ini -Destination (Join-Path $binaryRoot "FF7RPianoSongs.ini")
+    Assert-FilesEqual -Source $Model -Destination (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
     Assert-FilesEqual -Source (Join-Path $Root "release.json") -Destination (Join-Path $Candidate "release.json")
     foreach ($mapping in $DocumentMappings) {
         Assert-FilesEqual -Source (Join-Path $Root $mapping.Source) `
@@ -412,6 +415,7 @@ $binaryRoot = Join-Path $packageStaging $BinaryRelative
 try {
     Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "FF7RPianoSongs.asi")
     Copy-ValidatedFile $Ini (Join-Path $binaryRoot "FF7RPianoSongs.ini")
+    Copy-ValidatedFile $Model (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
     Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $packageStaging "release.json")
     foreach ($mapping in $DocumentMappings) {
         Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $packageStaging $mapping.Destination)

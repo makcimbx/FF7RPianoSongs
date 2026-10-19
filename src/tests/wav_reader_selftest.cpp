@@ -107,11 +107,20 @@ int main()
         return fail("generic audio decoder did not normalize mono WAV to 48 kHz stereo");
     }
     for (const float invalid_sample : {std::numeric_limits<float>::quiet_NaN(),
-            std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), 1.0001f, -1.0001f}) {
+            std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()}) {
         const auto bytes = float32_wav(invalid_sample);
         if (ff7rp::pipeline::parse_wav_bytes(bytes, &audio).ok() ||
             ff7rp::pipeline::decode_audio_bytes(bytes, &audio).ok()) {
-            return fail("nonfinite or out-of-range decoded PCM was accepted");
+            return fail("nonfinite decoded PCM was accepted");
+        }
+    }
+    for (const float over_sample : {1.25f, -1.25f}) {
+        const auto bytes = float32_wav(over_sample);
+        if (!ff7rp::pipeline::parse_wav_bytes(bytes, &audio).ok() ||
+            audio.stereo_samples.front() != std::copysign(1.0f, over_sample) ||
+            !ff7rp::pipeline::decode_audio_bytes(bytes, &audio).ok() ||
+            audio.stereo_samples.front() != std::copysign(1.0f, over_sample)) {
+            return fail("PCM above full scale was not scaled to full scale");
         }
     }
     for (const float boundary_sample : {-1.0f, 1.0f}) {

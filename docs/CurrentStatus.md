@@ -1,9 +1,18 @@
 # Current Status
 
-Updated 2026-10-18. This page describes the current development worktree and
+Updated 2026-10-19. This page describes the current development worktree and
 tested artifacts, not a new public release. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## Second-play chart rejection investigation (2026-10-19)
+
+- A reported same-song replay after a difficulty change rejected the final selected-row capture. The old `selected_provider_changed` marker also covered capture failure; its zero output does not prove provider drift or a catalog-republication defect. Earlier captures and audio admission succeeded.
+- Added bounded first-failure capture facts and separated failed capture from observed identity drift, without changing validation, native reads, or fallback behavior. Independent scoped review found no actionable issues; the runtime, adapter, selected-row and extended-composition selftests pass.
+- The diagnostic proxy session `native-proxy-20261019T130912Z-1ce0c5f8fea440aaa8502a33396912df` was collected and rolled back after a subsequent startup failure. The rollback restored its prior product ASI. This supersedes the installed-artifact disposition below, not its historical acceptance evidence.
+- Original replay log/DLL, source snapshots, reviewed receipt and focused test output are retained under `%LOCALAPPDATA%/FF7RPianoSongs/captures/replay-chart-20261019T155547`. A new startup log is retained under the sibling `cache-setup-failure-20261019T164851` directory: GU object-count growth during a binding uniqueness scan produced `gu_header_drift`, terminal native bindings failure, and repository publication rejection.
+- The startup recovery candidate treats only readable, unchanged-storage count growth with unique scanned candidates as `IncompleteSnapshot`, not success. Initial authentication remains pending for the next existing updater; acquisitions and registration are not repeated. Ambiguity, storage drift and post-bridge failures still fail closed. Independent review passed; bindings, runtime, adapter, selected-row and extended-composition selftests pass, including repeated deferral, recovery and an ambiguous appended tail.
+- The reviewed candidate proxy is installed through prepared session `native-proxy-20261019T135529Z-20c6d22425cf49119954c19e8ad602db`; its source/binary/receipt/test evidence is in the startup-failure capture directory above. The product ASI is disabled. Live startup recovery is not yet verified, the original replay failure remains unresolved, and no Release qualification is claimed. Forced reproduction is not required.
 
 ## Offline MIDI generation investigation (2026-10-18)
 

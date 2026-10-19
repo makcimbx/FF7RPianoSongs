@@ -170,7 +170,17 @@ BindingResult unique_candidates(const gu::UObjectIdentityAccess& access,
     if (!facts.after_observed) return fail("final_gu_header_read");
     if (before.chunks != after.chunks || before.num_elements != after.num_elements
         || before.max_elements != after.max_elements || before.num_chunks != after.num_chunks
-        || before.max_chunks != after.max_chunks) return fail("gu_header_drift");
+        || before.max_chunks != after.max_chunks) {
+        auto result = fail("gu_header_drift");
+        // An appended, unscanned tail cannot prove uniqueness. No capture or bridge has occurred.
+        if (!scan.failed && before.chunks == after.chunks && before.max_elements == after.max_elements
+            && before.num_chunks == after.num_chunks && before.max_chunks == after.max_chunks
+            && after.num_elements > before.num_elements && after.num_elements <= after.max_elements
+            && after.num_chunks <= after.max_chunks && gu::list_header_accepts(after)
+            && found == std::array<unsigned, 3>{1, 1, 1})
+            result.failure = Failure::IncompleteSnapshot;
+        return result;
+    }
     for (unsigned char i = 0; i < 3; ++i) if (found[i] != 1) return fail("candidate_missing", i);
     return {};
 }
@@ -489,6 +499,7 @@ const char* binding_failure_name(BindingFailure value) noexcept
     NAMED(Relationship); NAMED(Owner); NAMED(RegistryBounds); NAMED(RegistryWeak);
     NAMED(RegistryMembership); NAMED(MapBounds); NAMED(MapChain); NAMED(MapBinding);
     NAMED(HistoricalMapDrift); NAMED(Backing); NAMED(Drift); NAMED(Budget); NAMED(PartialMutation);
+    NAMED(IncompleteSnapshot);
 #undef NAMED
     }
     return "Unknown";

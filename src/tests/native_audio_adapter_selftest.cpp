@@ -179,9 +179,15 @@ int main() {
      assert(custom_audio_route_idle_for_menu_input());
      // Repeated activation/profile choice reuses genuine native identity without
      // another mount/acquisition/bridge, but receives a fresh exact chart guard.
-     for(int profile=0;profile<2;++profile) {
-         auto claim=f.claim(profile);assert(claim);
-         auto admission=begin_selection_audio_admission(std::move(claim),true);assert(admission);
+      for(int profile=0;profile<2;++profile) {
+          auto claim=f.claim(profile);assert(claim);
+          na::NativePianoScoreRow before, admitted;
+          assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,before));
+          auto admission=begin_selection_audio_admission(std::move(claim),true);assert(admission);
+          assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,admitted));
+          assert(admitted.provider==before.provider && admitted.row==before.row
+              && admitted.selected_name==before.selected_name
+              && admitted.cohort_generation==before.cohort_generation);
          SelectionAudioAdmissionAuthority authority;assert(capture_selection_audio_admission_authority(admission,authority));
          assert(authority.selection.profile_index==profile);
          assert(selection_audio_admission_authority_matches(authority));

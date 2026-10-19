@@ -34,11 +34,12 @@ Expected layout:
 End/Binaries/Win64/
   D3DCOMPILER_43.dll               (the complete mod; default filename)
   FF7RPianoSongs.ini
+  muscriptor-small-f16.gguf        (optional; transcribes songs without song.mid)
   FF7RPianoSongs.log              (generated)
   Music/<Song Name>/
     song.json                      (settings and optional hand-authored notes)
     song.wav                       (required audio; .mp3 or .flac also accepted)
-    song.mid                       (or song.midi; needed unless JSON supplies notes)
+    song.mid                       (or song.midi; transcribed from the audio when missing)
     song.mode1.wav                 (optional alternate audio; .mp3/.flac also accepted)
     song.mode2.wav                 (optional alternate audio; .mp3/.flac also accepted)
 ```
@@ -83,6 +84,7 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.Enabled` | `0` or nonzero | Disables or enables the mod. |
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
+| `Advanced.TranscriptionThreads` | `1`-`64` | CPU threads for transcribing the piano of a song without `song.mid`. Default: `4`. |
 
 The dot in the table separates an INI section from its setting; do not type `General.LogLevel`
 as a key. For example, to enable detailed logging, change the existing entry to:

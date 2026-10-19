@@ -30,6 +30,7 @@
 #include "cache_manifest_renderer.h"
 #include "audio_reader.h"
 #include "audio_loudness.h"
+#include "audio_transcription.h"
 #include "audio_metronome.h"
 #include "chart_event_plan.h"
 #include "chart_compiler.h"
@@ -812,6 +813,13 @@ Status load_song_directory(
 
     if (!song.config.notes_provided) {
         status = find_midi_source(directory, &midi_path);
+        if (status.code == StatusCode::NotFound && audio_transcriber_available()) {
+            // The transcription is written as song.mid, so later loads take the authored-MIDI path.
+            advance(SongLoadProgressStage::GeneratingChart);
+            report("audio_transcription_started");
+            status = transcribe_audio_to_midi(song.audio_source_path, directory / "song.mid");
+            if (status.ok()) status = find_midi_source(directory, &midi_path);
+        }
         if (!status.ok()) {
             song.status = status;
             write_last_error(song.directory, status);

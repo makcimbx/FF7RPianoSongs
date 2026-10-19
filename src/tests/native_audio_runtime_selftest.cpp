@@ -318,6 +318,71 @@ struct RuntimeFixture : Fixture {
 
 #ifndef FF7RP_NATIVE_AUDIO_RUNTIME_FIXTURE_ONLY
 int main() {
+    for(unsigned delayed_frames:{0u,2u}) {
+      RuntimeFixture f;f.put(f.array+36,126);f.start(true);
+      for(unsigned attempt=0;attempt<delayed_frames;++attempt) {
+          f.after_read=[](Fixture& f,na::Address a,std::size_t size) noexcept {
+              if(a==f.seeds[0].candidate.objects[0] && size==40) {
+                  int count=0;assert(Fixture::read(&f,f.array+36,&count,sizeof(count)));
+                  f.put(f.array+36,count+1);f.after_read=nullptr;
+              }
+          };
+          f.frame();const auto pending=na::native_audio_status(*f.work);
+          assert(!f.after_read && pending.stage==na::RuntimeStage::Authenticating
+              && pending.failure==na::RuntimeFailure::None && !f.work->bindings.captured());
+          assert(na::g_accepting.load() && na::g_failure.load()==na::RuntimeFailure::None && !na::g_next);
+          std::uint64_t name=1;na::NativePianoScoreRow row;
+          assert(!na::native_audio_selected_name(*f.work,41,name) && !name);
+          assert(!na::capture_native_pianoscore_row(*f.artifacts,1,row) && !row.row);
+          assert(f.mounts==1 && f.acquires==3 && !f.reserves && !f.bridges);
+      }
+      f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
+      assert(f.mounts==1 && f.acquires==3 && f.bridges==3);
+      // Global growth after registration is not provider drift; pinned graphs still validate.
+      f.put(f.array+36,128);na::NativePianoScoreRow row;
+      assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,row));
+      f.frame();assert(f.mounts==1 && f.acquires==3 && f.bridges==3);
+    }
+    {RuntimeFixture f;f.start(true);f.frame();
+     const auto selected=f.work->selected_name;
+     na::NativePianoScoreRow plain,row;na::NativePianoScoreCaptureFacts facts;
+     auto reads=f.reads;
+     assert(na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
+     const auto success_reads=f.reads-reads;reads=f.reads;
+     assert(na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+     assert(f.reads-reads==success_reads && success_reads>0);
+     assert(std::string_view(facts.predicate)=="accepted" && facts.generation==41
+         && facts.status_observed && facts.binding_observed && facts.name_observed
+         && facts.stage==na::RuntimeStage::Ready && facts.failure==na::RuntimeFailure::None
+         && facts.binding_failure==na::BindingFailure::None
+         && facts.requested_name==selected && facts.observed_name==selected);
+     assert(row.provider==plain.provider && row.row==plain.row
+         && row.selected_name==plain.selected_name && row.cohort_generation==plain.cohort_generation);
+     // A foreign native entry excludes the capture without invalidating retained bindings.
+     std::latch entered(1),release(1);
+     auto reader=std::async(std::launch::async,[&]{
+         na::NativeEntryGate::Reader gate{na::g_managers};entered.count_down();release.wait();
+     });
+     entered.wait();reads=f.reads;
+     assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
+     const auto busy_reads=f.reads-reads;reads=f.reads;
+     assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+     assert(f.reads-reads==busy_reads && std::string_view(facts.predicate)=="manager_exclusion"
+         && facts.status_observed && !facts.binding_observed && !facts.name_observed
+         && !row.row && !row.provider);
+     release.count_down();reader.get();
+     na::g_services.identity=+[](gu::UObjectIdentityAccess&) noexcept {return false;};
+     reads=f.reads;assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
+     const auto identity_reads=f.reads-reads;reads=f.reads;
+     assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+     assert(f.reads-reads==identity_reads && std::string_view(facts.predicate)=="identity_service"
+         && facts.status_observed && !facts.binding_observed && !facts.name_observed
+         && !row.row && !row.provider);
+     na::g_services.identity=RuntimeFixture::identity;
+     assert(na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+     assert(std::string_view(facts.predicate)=="accepted" && row.row==f.new_rows[2]);
+     assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready
+         && f.mounts==1 && f.acquires==3 && f.bridges==3);}
     {RuntimeFixture f;na::NativePianoScoreRow row;
      assert(!na::capture_native_pianoscore_row(*f.artifacts,1,row) && !row.row);
      f.start(true);f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
@@ -549,7 +614,13 @@ int main() {
      assert(na::native_audio_status(*f.work).failure==Failure::Replaced);f.frame();assert(f.mounts==1);}
     {RuntimeFixture f;f.start(false);f.put(f.seeds[2].owner.handle+17,static_cast<unsigned char>(1));f.frame();
      assert(na::native_audio_status(*f.work).failure==Failure::Acquisition);assert(!f.bridges);}
-    {RuntimeFixture f;f.start(true);f.incomplete_bridge=1;f.frame();assert(f.bridges==2);
+    {RuntimeFixture f;f.put(f.array+36,127);f.start(true);f.incomplete_bridge=1;
+     f.after_read=[](Fixture& f,na::Address a,std::size_t) noexcept {
+         if(current->bridges==2 && a==f.manager(1)+40) {
+             f.put(f.array+36,128);f.after_read=nullptr;
+         }
+     };
+     f.frame();assert(f.bridges==2 && !f.after_read);
      assert(na::native_audio_status(*f.work).stage==Stage::Failed);
      assert(f.work->bindings.terminal_failure().failure==na::BindingFailure::RegistryMembership);
      f.registered(1);f.frame();assert(f.bridges==2 && f.mounts==1);}

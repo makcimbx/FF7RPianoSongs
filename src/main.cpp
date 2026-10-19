@@ -17,6 +17,7 @@
 #include "game/native_proxy_bootstrap.h"
 #include "proxy/native_proxy.h"
 #include "startup/startup_cache_progress.h"
+#include "transcription/muscriptor_transcriber.h"
 #include "release_identity.generated.h"
 
 #include <windows.h>
@@ -204,6 +205,11 @@ DWORD startup_worker_body()
     const std::wstring ini_path = dll_dir + L"\\FF7RPianoSongs.ini";
     const core::Config config = core::load_config(ini_path);
     core::set_log_level(config.log_level);
+    const bool transcription = ff7rp::transcription::register_muscriptor_transcriber(
+        std::filesystem::path(dll_dir) / ff7rp::transcription::kMuscriptorModelFileName,
+        config.transcription_threads, [](const std::string& line) { core::log(core::LogLevel::Info, line); });
+    core::log(core::LogLevel::Info, std::string("[transcription] model=") + (transcription ? "found" : "missing") +
+        " threads=" + std::to_string(config.transcription_threads));
 
     core::log(core::LogLevel::Info,
         std::string("[startup] product=") + std::string(generated::kProduct) +

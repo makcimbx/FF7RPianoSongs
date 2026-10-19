@@ -277,6 +277,25 @@ int main() {
       assert(result.diagnostic.before.max_elements==128 && result.diagnostic.after.max_elements==129);
       assert((result.diagnostic.matches==std::array<unsigned,3>{1,1,1}) && result.diagnostic.scanned==128);
     }
+    for(bool duplicate_tail:{false,true}) {
+      Fixture f;f.zero_metadata();f.put(f.array+36,127);
+      if(duplicate_tail)f.put(f.items+127*24,f.seeds[0].candidate.objects[0]);
+      f.after_read=[](Fixture& f,na::Address a,std::size_t size) noexcept {
+          if(a==f.seeds[0].candidate.objects[0] && size==40) {
+              f.put(f.array+36,128);f.after_read=nullptr;
+          }
+      };
+      na::CohortBindings b;const auto pending=f.capture(b);
+      assert(!pending && pending.failure==F::IncompleteSnapshot && !b.captured() && b.terminal_failure());
+      assert(std::string_view(pending.diagnostic.predicate)=="gu_header_drift");
+      assert(pending.diagnostic.before.num_elements==127 && pending.diagnostic.after.num_elements==128);
+      assert(pending.diagnostic.scanned==127 && !pending.diagnostic.read_failed);
+      const auto retried=f.capture(b);
+      if(duplicate_tail) {
+          assert(!retried && retried.failure==F::Identity && !b.captured());
+          assert(std::string_view(retried.diagnostic.predicate)=="candidate_ambiguous");
+      } else assert(retried && b.captured() && b.validate(f.access(),P::BeforeBridge));
+    }
     for(unsigned defect=0;defect<4;++defect) {
       Fixture f;f.zero_metadata();
       if(defect==0)f.unreadable=f.array+32;

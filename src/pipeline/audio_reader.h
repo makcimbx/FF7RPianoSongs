@@ -10,7 +10,7 @@ namespace ff7rp::pipeline {
 
 Status decode_audio_bytes(const std::vector<std::uint8_t>& bytes, WavAudio* out_audio);
 Status read_audio_file(const std::string& path, WavAudio* out_audio);
-// Decoder output is accepted only when every sample is finite and in normalized [-1, 1] range.
-Status validate_decoded_pcm(const WavAudio& audio);
+// Rejects non-finite decoder output and scales a song peaking above full scale down to [-1, 1].
+Status sanitize_decoded_pcm(WavAudio* audio);
 
 } // namespace ff7rp::pipeline

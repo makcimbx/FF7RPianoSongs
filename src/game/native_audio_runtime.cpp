@@ -609,7 +609,7 @@ BindingResult stock_baseline(bool& ready) noexcept {
     }
     return {};
 }
-void advance(PreparedNativeAudio& work) {
+void advance(PreparedNativeAudio& work,BindingResult& deferred) {
     if(!provenance()){fail(work,RuntimeFailure::Provenance);return;}
     if(work.resident) {
         if(work.resident->stage.load(std::memory_order_acquire)==RuntimeStage::Ready)
@@ -644,6 +644,9 @@ void advance(PreparedNativeAudio& work) {
     if(!discover(work,identity)){fail(work,RuntimeFailure::Discovery);return;}
     const auto checked=work.bindings.capture(core::generated::kBuildId,g_base,identity,work.artifacts,work.seeds,
         {work.resolved.data(),work.name_count});
+    if(checked.failure==BindingFailure::IncompleteSnapshot) {
+        deferred=checked;return; // Retain acquisitions; the next updater retries only read-only authentication.
+    }
     if(!checked){fail(work,RuntimeFailure::Bindings,checked.role,checked);return;}
     work.stage.store(RuntimeStage::Registering,std::memory_order_release);
     if(register_cohort(work,identity))work.stage.store(RuntimeStage::Ready,std::memory_order_release);
@@ -669,17 +672,21 @@ void updater_hook(void* receiver) {
     if(g_working.test_and_set(std::memory_order_acquire))return;
     std::shared_ptr<PreparedNativeAudio> observed;
     RuntimeSnapshot snapshot{};
+    BindingResult deferred{};
     {
         std::shared_lock<std::shared_mutex> lifetime(g_lifetime,std::try_to_lock);
         if(lifetime.owns_lock()) {
             std::shared_ptr<PreparedNativeAudio> work;
             {std::lock_guard lock(g_queue_mutex);if(g_next<g_count)work=g_queue[g_next];}
             if(work) {
-                advance(*work);
+                advance(*work,deferred);
                 const auto stage=work->stage.load(std::memory_order_acquire);
                 if(stage==RuntimeStage::Ready) {std::lock_guard lock(g_queue_mutex);++g_next;}
                 else if(stage==RuntimeStage::Failed)invalidate(work->failure.load(std::memory_order_acquire));
                 observed=work;snapshot=native_audio_status(*work);
+                if(deferred.failure==BindingFailure::IncompleteSnapshot) {
+                    snapshot.binding=deferred;snapshot.role=deferred.role;
+                }
             }
         }
     }
@@ -944,31 +951,55 @@ const char* native_audio_failure_name(RuntimeFailure value) noexcept {
     const auto index=static_cast<unsigned char>(value);return index<std::size(names)?names[index]:"invalid";
 }
 static bool validated_native_binding(const PreparedNativeAudio& work,std::uint64_t generation,std::uint64_t& name,
-    NativePianoScoreRow* source=nullptr) noexcept {
+    NativePianoScoreRow* source=nullptr,NativePianoScoreCaptureFacts* facts=nullptr) noexcept {
     name=0;
+    if(facts){*facts={};facts->generation=generation;facts->predicate="work_depth";}
     if(g_work_depth)return false;
     std::shared_lock admission(g_admission,std::try_to_lock);
-    if(!admission.owns_lock() || !g_accepting.load(std::memory_order_acquire))return false;
+    if(facts)facts->predicate="admission_contention";
+    if(!admission.owns_lock())return false;
+    if(facts)facts->predicate="admission_closed";
+    if(!g_accepting.load(std::memory_order_acquire))return false;
     struct WorkDepth {WorkDepth(){++g_work_depth;} ~WorkDepth(){--g_work_depth;}} depth;
-    if(generation!=work.generation || native_audio_status(work).stage!=RuntimeStage::Ready)return false;
+    if(facts)facts->predicate="generation";
+    if(generation!=work.generation)return false;
+    const auto status=native_audio_status(work);
+    if(facts){facts->predicate="readiness";facts->status_observed=true;facts->stage=status.stage;facts->failure=status.failure;}
+    if(status.stage!=RuntimeStage::Ready)return false;
     BindingResult checked{};
     {
-        std::shared_lock lifetime(g_lifetime,std::try_to_lock);if(!lifetime.owns_lock() || !provenance())return false;
-        NativeEntryGate::Writer exclusion{g_managers};if(!exclusion)return false;
+        std::shared_lock lifetime(g_lifetime,std::try_to_lock);
+        if(facts)facts->predicate="lifetime_contention";
+        if(!lifetime.owns_lock())return false;
+        if(facts)facts->predicate="lifetime_provenance";
+        if(!provenance())return false;
+        NativeEntryGate::Writer exclusion{g_managers};
+        if(facts)facts->predicate="manager_exclusion";
+        if(!exclusion)return false;
         gu::UObjectIdentityAccess identity{};
+        if(facts)facts->predicate="identity_service";
         if(!g_services.identity(identity))return false;
         const auto& owner=work.resident?*work.resident:work;
         checked=owner.bindings.validate(identity,BindingPhase::CurrentRegistered);
-        if(checked && g_accepting.load(std::memory_order_acquire) && provenance()) {
+        if(facts){facts->predicate="binding_validation";facts->binding_observed=true;facts->binding_failure=checked.failure;facts->binding_role=checked.role;}
+        if(checked) {
+            if(facts)facts->predicate="final_admission_closed";
+            if(!g_accepting.load(std::memory_order_acquire))return false;
+            if(facts)facts->predicate="final_provenance";
+            if(!provenance())return false;
             name=owner.selected_name;
+            if(facts){facts->name_observed=true;facts->observed_name=name;}
             if(source) {
                 const auto row=owner.candidate_rows[2].words[1];
-                if(!row || row==owner.stock_rows[2].words[1])return false;
+                if(facts)facts->predicate="row_missing";
+                if(!row)return false;
+                if(facts)facts->predicate="row_is_stock";
+                if(row==owner.stock_rows[2].words[1])return false;
                 *source={owner.seeds[2].candidate.objects[0],static_cast<std::uintptr_t>(row),name,generation};
             }
+            if(facts)facts->predicate=name?"accepted":"selected_name_missing";
             return name!=0;
         }
-        if(checked)return false;
         invalidate(RuntimeFailure::Bindings);
     }
     // Only copied first-failure facts are formatted after native exclusion ends.
@@ -980,8 +1011,9 @@ bool native_audio_selected_name(const PreparedNativeAudio& work,std::uint64_t ge
     return validated_native_binding(work,generation,name);
 }
 bool capture_native_pianoscore_row(const ff7rp::pipeline::NativeAudioArtifactSet& artifacts,
-    std::uint64_t selected_name,NativePianoScoreRow& out) noexcept {
+    std::uint64_t selected_name,NativePianoScoreRow& out,NativePianoScoreCaptureFacts* facts) noexcept {
     out={};std::shared_ptr<PreparedNativeAudio> work;
+    if(facts){*facts={};facts->predicate="artifact_not_retained";facts->requested_name=selected_name;}
     {
         std::lock_guard lock(g_queue_mutex);
         for(std::size_t i=0;i<g_count;++i) {
@@ -989,8 +1021,15 @@ bool capture_native_pianoscore_row(const ff7rp::pipeline::NativeAudioArtifactSet
         }
     }
     NativePianoScoreRow source;std::uint64_t name=0;
-    if(!work || !selected_name || !validated_native_binding(*work,work->generation,name,&source)
-        || name!=selected_name)return false;
+    if(!work)return false;
+    if(facts)facts->predicate="requested_name_missing";
+    if(!selected_name)return false;
+    const bool captured=validated_native_binding(*work,work->generation,name,&source,facts);
+    if(facts)facts->requested_name=selected_name;
+    if(!captured)return false;
+    if(facts)facts->predicate="selected_name_mismatch";
+    if(name!=selected_name)return false;
+    if(facts)facts->predicate="accepted";
     out=source;return true;
 }
 bool shutdown_native_audio_runtime() noexcept {

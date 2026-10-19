@@ -133,8 +133,9 @@ function New-Fixture([string]$Root) {
         "CMakeLists.txt" = "fixture-cmake"
         "build.ps1" = "fixture-build"
         "release.json" = "{}"
-        "cmake/apply_midifile_patch.cmake" = "fixture-patch-driver"
+        "cmake/apply_source_patch.cmake" = "fixture-patch-driver"
         "cmake/midifile-running-status.patch" = "fixture-dependency-patch"
+        "cmake/muscriptor-avx2.patch" = "fixture-transcriber-patch"
         "cmake/release_identity.generated.h.in" = "fixture-template"
         "src/game/chord_voicing_bridge.asm" = "fixture-production-adapter"
         "tools/generate_rva_catalog.py" = "fixture-generator"
@@ -147,8 +148,9 @@ function New-Fixture([string]$Root) {
     $inputPaths = @(
         "CMakeLists.txt",
         "build.ps1",
-        "cmake/apply_midifile_patch.cmake",
+        "cmake/apply_source_patch.cmake",
         "cmake/midifile-running-status.patch",
+        "cmake/muscriptor-avx2.patch",
         "cmake/release_identity.generated.h.in",
         "release.json",
         "src/game/chord_voicing_bridge.asm",

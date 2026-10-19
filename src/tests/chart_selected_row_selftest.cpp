@@ -23,10 +23,13 @@ struct Provider {
 };
 std::array<Provider*,3> providers{};
 unsigned captures=0;bool drift_on_second=false;
-bool capture(const ff7rp::pipeline::NativeAudioArtifactSet& artifacts,std::uint64_t name,na::NativePianoScoreRow& out) noexcept {
+bool capture(const ff7rp::pipeline::NativeAudioArtifactSet& artifacts,std::uint64_t name,na::NativePianoScoreRow& out,
+    na::NativePianoScoreCaptureFacts* facts) noexcept {
+    if(facts){*facts={};facts->predicate="selected_name_mismatch";}
     out={};for(auto* p:providers)if(p && &p->artifacts==&artifacts && p->name==name) {
         out={reinterpret_cast<std::uintptr_t>(p),reinterpret_cast<std::uintptr_t>(p->row.data()),name,1};
         if(drift_on_second && ++captures==2)out.row+=16;
+        if(facts)facts->predicate="accepted";
         return true;
     }return false;
 }
@@ -80,18 +83,23 @@ std::array<FrozenProvider*,2> frozen_providers{};
 unsigned frozen_captures=0;enum class FrozenDrift {None,Generation,Headers,RecaptureFailure,Unreadable};
 FrozenDrift frozen_drift=FrozenDrift::None;std::uintptr_t frozen_row_override=0;
 void* frozen_protection=nullptr;std::size_t frozen_protection_size=0;
-bool capture_frozen(const ff7rp::pipeline::NativeAudioArtifactSet& artifacts,std::uint64_t name,na::NativePianoScoreRow& out) noexcept {
+bool capture_frozen(const ff7rp::pipeline::NativeAudioArtifactSet& artifacts,std::uint64_t name,na::NativePianoScoreRow& out,
+    na::NativePianoScoreCaptureFacts* facts) noexcept {
+    if(facts){*facts={};facts->predicate="selected_name_mismatch";}
     out={};for(auto* p:frozen_providers)if(&p->artifacts==&artifacts && p->name==name) {
         out={reinterpret_cast<std::uintptr_t>(p),frozen_row_override?frozen_row_override:p->row(),name,1};
         if(++frozen_captures==2) {
             if(frozen_drift==FrozenDrift::Generation)++out.cohort_generation;
             if(frozen_drift==FrozenDrift::Headers){auto h=p->header(0);++h.max;p->header(0,h);}
-            if(frozen_drift==FrozenDrift::RecaptureFailure){out={};return false;}
+            if(frozen_drift==FrozenDrift::RecaptureFailure){
+                out={};if(facts)facts->predicate="identity_service";return false;
+            }
             if(frozen_drift==FrozenDrift::Unreadable) {
                 DWORD previous=0;
                 if(!VirtualProtect(frozen_protection,frozen_protection_size,PAGE_NOACCESS,&previous))std::abort();
             }
         }
+        if(facts)facts->predicate="accepted";
         return true;
     }return false;
 }
@@ -101,7 +109,8 @@ void frozen_row_regression() {
     SongDescriptor song;auto p=profile(3,"A");SelectionSnapshot selection{};selection.song=&song;selection.profile=&p;
     auto select=[&](FrozenProvider& owner) {song.native_audio=std::shared_ptr<const ff7rp::pipeline::NativeAudioArtifactSet>(&owner.artifacts,[](auto*){});};
     select(a);na::NativePianoScoreRow source;ChartMemoryLayout layout;std::string reason;
-    auto qualify=[&](std::uint64_t key) {frozen_captures=0;return resolve_selected_chart_layout(selection,&key,source,layout,reason);};
+    na::NativePianoScoreCaptureFacts facts;
+    auto qualify=[&](std::uint64_t key) {frozen_captures=0;return resolve_selected_chart_layout(selection,&key,source,layout,reason,&facts);};
     assert(a.first_note()==0x9999 && std::wcscmp(a.first_time(),L"01_23")==0);
     ChartNameResolver resolver{resolve,resolve,resolve};
     auto run=[&](FrozenProvider& owner,unsigned count,const char* note) {
@@ -124,9 +133,13 @@ void frozen_row_regression() {
     };
     run(a,3,"A");run(b,7,"B");run(a,5,"B");run(a,3,"A");select(a);
     assert(!qualify(b.name) && reason=="selected_provider_identity");
-    frozen_drift=FrozenDrift::Generation;assert(!qualify(a.name) && reason=="selected_source_generation_drift");frozen_drift=FrozenDrift::None;
+    frozen_drift=FrozenDrift::Generation;assert(!qualify(a.name) && reason=="selected_source_generation_drift");
+    assert(std::string_view(facts.predicate)=="accepted");frozen_drift=FrozenDrift::None;
     frozen_drift=FrozenDrift::Headers;assert(!qualify(a.name) && reason=="selected_row_header_mismatch");frozen_drift=FrozenDrift::None;a.bytes=original_a;
-    frozen_drift=FrozenDrift::RecaptureFailure;assert(!qualify(a.name) && reason=="selected_provider_recapture");frozen_drift=FrozenDrift::None;
+    frozen_drift=FrozenDrift::RecaptureFailure;assert(!qualify(a.name) && reason=="selected_provider_recapture");
+    assert(std::string_view(facts.predicate)=="identity_service");frozen_drift=FrozenDrift::None;
+    assert(!capture_selected_pianoscore_row(selection,nullptr,source,&facts)
+        && std::string_view(facts.predicate)=="wrapper_missing" && !source.row);
     frozen_row_override=a.row()+2;assert(!qualify(a.name) && reason=="selected_row_pointer_alignment4");
     frozen_row_override=4;assert(!qualify(a.name) && reason=="selected_row_pointer_low");
     frozen_row_override=UINTPTR_MAX-3;assert(!qualify(a.name) && reason=="selected_row_bounds");frozen_row_override=0;

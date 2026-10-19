@@ -11,7 +11,10 @@ root in PowerShell; no parent repository is required.
 - Git and network access for the first CMake population of MinHook, miniaudio,
   and midifile through `FetchContent`, unless those exact pinned commits are
   already available in the local CMake dependency cache. These dependencies
-  are not checked into this repository.
+  are not checked into this repository. muscriptor.cpp and its ggml are fetched
+  the same way for audio transcription. Runtime configuration also downloads the
+  pinned 209 MB `muscriptor-small-f16.gguf` into `build/models/` and verifies its
+  SHA256; `package_dist.ps1` ships it beside the ASI.
 
 An offline-only build needs MSVC, CMake, and the pinned miniaudio/midifile
 dependencies (Git/network on first population). It does not need MASM,
@@ -308,7 +311,8 @@ It reads the closed schema-v2 `package-docs.json` registry, requires every
 canonical role and source, derives the slim packaged subset from `distribution`,
 and verifies source/staged documentation, binary/document byte parity, exact
 inventory, provenance, hashes, adverse paths, and rollback behavior before
-replacing `package/`. No music examples, caches, PDBs, build products, analysis,
+replacing `package/`. Besides the ASI, only the pinned transcription model is
+copied from `build/`. No music examples, caches, PDBs, other build products, analysis,
 or developer tools are copied. Do not add a second document list.
 
 `release.json` declares one target per supported game build. Each target names its game

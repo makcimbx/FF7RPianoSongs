@@ -1,0 +1,22 @@
+diff --git a/cpp/CMakeLists.txt b/cpp/CMakeLists.txt
+index fc9769d..7bc4665 100644
+--- a/cpp/CMakeLists.txt
++++ b/cpp/CMakeLists.txt
+@@ -70,16 +70,11 @@ set(GGML_NATIVE      ${MUSCRIPTOR_NATIVE})
+ # x86 baseline: Ivy Bridge, the oldest CPU in a Mac that boots macOS 11. With
+ # native off, ggml would otherwise enable AVX2, BMI2 and FMA too. Normal variable
+ # as well as cache (CMP0077), and checked after the fetch. Ignored on ARM.
+-foreach(MUSCRIPTOR_X86_FEATURE GGML_SSE42 GGML_AVX GGML_F16C)
++foreach(MUSCRIPTOR_X86_FEATURE GGML_SSE42 GGML_AVX GGML_F16C GGML_AVX2 GGML_BMI2 GGML_FMA)
+     set(${MUSCRIPTOR_X86_FEATURE} ON CACHE BOOL "" FORCE)
+     set(${MUSCRIPTOR_X86_FEATURE} ON)
+ endforeach()
+ 
+-foreach(MUSCRIPTOR_X86_FEATURE GGML_AVX2 GGML_BMI2 GGML_FMA)
+-    set(${MUSCRIPTOR_X86_FEATURE} OFF CACHE BOOL "" FORCE)
+-    set(${MUSCRIPTOR_X86_FEATURE} OFF)
+-endforeach()
+-
+ # Metal, on Apple platforms only. Without a Metal device, Auto runs on the CPU.
+ # How the shaders are shipped: docs/BUILDING.md#metal.
+ if(APPLE)

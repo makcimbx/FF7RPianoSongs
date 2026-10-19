@@ -33,8 +33,9 @@ function New-ProvenanceFixture {
         "CMakeLists.txt" = "fixture cmake input`n"
         "build.ps1" = "fixture build input`n"
         "release.json" = "{}`n"
-        "cmake/apply_midifile_patch.cmake" = "# fixture patch driver`n"
+        "cmake/apply_source_patch.cmake" = "# fixture patch driver`n"
         "cmake/midifile-running-status.patch" = "fixture dependency patch`n"
+        "cmake/muscriptor-avx2.patch" = "fixture transcriber patch`n"
         "cmake/release_identity.generated.h.in" = "fixture template`n"
         "src/game/rva_catalog.json" = "{}`n"
         "src/game/chord_voicing_bridge.asm" = "; fixture production adapter`n"
@@ -53,7 +54,8 @@ function New-ProvenanceFixture {
     }
 
     $inputs = @(Get-ProductionInputRelativePaths $Root)
-    foreach ($required in @("cmake/apply_midifile_patch.cmake", "cmake/midifile-running-status.patch",
+    foreach ($required in @("cmake/apply_source_patch.cmake", "cmake/midifile-running-status.patch",
+            "cmake/muscriptor-avx2.patch",
             "src/game/chord_voicing_bridge.asm")) {
         if ($inputs -cnotcontains $required) {
             throw "Production input inventory omitted required input: $required"

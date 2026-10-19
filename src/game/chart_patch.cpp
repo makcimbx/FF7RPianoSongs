@@ -1187,25 +1187,33 @@ bool should_cap_wrapper_count_after_expand(
 // not the resident object's historical +0x480 table slice. No basename scan.
 #ifdef FF7RP_CHART_PATCH_SELFTEST
 bool (*g_test_capture_pianoscore_row)(const ff7rp::pipeline::NativeAudioArtifactSet&,
-    std::uint64_t,native_audio::NativePianoScoreRow&) noexcept=nullptr;
+    std::uint64_t,native_audio::NativePianoScoreRow&,native_audio::NativePianoScoreCaptureFacts*) noexcept=nullptr;
 #endif
 bool capture_selected_pianoscore_row(const SelectionSnapshot& selection,void* wrapper,
-    native_audio::NativePianoScoreRow& source)
+    native_audio::NativePianoScoreRow& source,native_audio::NativePianoScoreCaptureFacts* facts=nullptr)
 {
     source={};std::uint64_t selected_name=0;
-    if(!selection || !selection.song->native_audio || !wrapper
-        || !core::safe_copy_bytes(wrapper,&selected_name,sizeof(selected_name)))return false;
+    if(facts){*facts={};facts->predicate="selection_missing";}
+    if(!selection)return false;
+    if(facts)facts->predicate="artifact_missing";
+    if(!selection.song->native_audio)return false;
+    if(facts)facts->predicate="wrapper_missing";
+    if(!wrapper)return false;
+    if(facts)facts->predicate="wrapper_name_read";
+    if(!core::safe_copy_bytes(wrapper,&selected_name,sizeof(selected_name)))return false;
 #ifdef FF7RP_CHART_PATCH_SELFTEST
-    return g_test_capture_pianoscore_row && g_test_capture_pianoscore_row(*selection.song->native_audio,selected_name,source);
+    if(facts)facts->predicate="test_capture_missing";
+    return g_test_capture_pianoscore_row && g_test_capture_pianoscore_row(*selection.song->native_audio,selected_name,source,facts);
 #else
-    return native_audio::capture_native_pianoscore_row(*selection.song->native_audio,selected_name,source);
+    return native_audio::capture_native_pianoscore_row(*selection.song->native_audio,selected_name,source,facts);
 #endif
 }
 [[maybe_unused]] bool resolve_selected_chart_layout(const SelectionSnapshot& selection,void* wrapper,
-    native_audio::NativePianoScoreRow& source,ChartMemoryLayout& layout,std::string& reason)
+    native_audio::NativePianoScoreRow& source,ChartMemoryLayout& layout,std::string& reason,
+    native_audio::NativePianoScoreCaptureFacts* facts=nullptr)
 {
     layout={};reason="selected_provider_identity";
-    if(!capture_selected_pianoscore_row(selection,wrapper,source))return false;
+    if(!capture_selected_pianoscore_row(selection,wrapper,source,facts))return false;
     constexpr std::size_t row_size=kObservedPianoScoreRowCounts.size()*sizeof(FrozenStringEntry);
     static_assert(row_size==0xb0);
     std::array<FrozenStringEntry,kObservedPianoScoreRowCounts.size()> headers{};
@@ -1234,7 +1242,7 @@ bool capture_selected_pianoscore_row(const SelectionSnapshot& selection,void* wr
     native_audio::NativePianoScoreRow fresh;
     decltype(headers) reread{};
     reason="selected_provider_recapture";
-    if(!capture_selected_pianoscore_row(selection,wrapper,fresh))return false;
+    if(!capture_selected_pianoscore_row(selection,wrapper,fresh,facts))return false;
     reason="selected_provider_drift";
     if(fresh.provider!=source.provider || fresh.row!=source.row || fresh.selected_name!=source.selected_name)return false;
     if(fresh.cohort_generation!=source.cohort_generation){reason="selected_source_generation_drift";return false;}
@@ -1247,6 +1255,18 @@ bool capture_selected_pianoscore_row(const SelectionSnapshot& selection,void* wr
 }
 
 #ifndef FF7RP_CHART_PATCH_SELFTEST
+void append_selected_row_capture_facts(std::ostream& out,
+    const native_audio::NativePianoScoreCaptureFacts& facts)
+{
+    out << " capture_predicate=" << facts.predicate << " capture_generation=" << std::dec << facts.generation;
+    if(facts.status_observed)out << " capture_stage=" << native_audio::native_audio_stage_name(facts.stage)
+        << " capture_failure=" << native_audio::native_audio_failure_name(facts.failure);
+    if(facts.binding_observed)out << " capture_binding=" << native_audio::binding_failure_name(facts.binding_failure)
+        << " capture_role=" << static_cast<unsigned>(facts.binding_role);
+    out << " capture_requested_name=0x" << std::hex << facts.requested_name;
+    if(facts.name_observed)out << " capture_observed_name=0x" << facts.observed_name;
+}
+
 bool selection_chart_rows(
     const SelectionSnapshot& selection, std::vector<DescriptorChartRow>& rows)
 {
@@ -2092,7 +2112,8 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
     native_audio::NativePianoScoreRow source;
     ChartMemoryLayout layout{};
     std::string layout_reason;
-    const bool layout_ok = resolve_selected_chart_layout(selection,wrapper,source,layout,layout_reason);
+    native_audio::NativePianoScoreCaptureFacts layout_capture;
+    const bool layout_ok = resolve_selected_chart_layout(selection,wrapper,source,layout,layout_reason,&layout_capture);
     ChartNameResolver resolver{};
     resolver.resolve_monotone_id = [](const std::string& monotone_id, uint64_t& packed_name) {
         return resolve_monotone_id_fname(g_chart_fname_ctor, monotone_id, packed_name);
@@ -2126,6 +2147,7 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
                     << " cohort_generation=" << source.cohort_generation
                     << " selected_name=0x" << std::hex << source.selected_name
                     << " provider=0x" << source.provider << " row=0x" << source.row;
+                if(!layout_ok)append_selected_row_capture_facts(out,layout_capture);
                 core::log(core::LogLevel::Error, out.str());
             });
         }
@@ -2199,18 +2221,23 @@ ChartExpandPreparationOutcome prepare_active_chart_row_patch_impl(
         }
     }
     native_audio::NativePianoScoreRow current_source;
-    if(!capture_selected_pianoscore_row(selection,wrapper,current_source)
+    native_audio::NativePianoScoreCaptureFacts current_capture;
+    const bool current_captured=capture_selected_pianoscore_row(selection,wrapper,current_source,&current_capture);
+    if(!current_captured
         || current_source.provider!=source.provider || current_source.row!=source.row
         || current_source.selected_name!=source.selected_name
         || current_source.cohort_generation!=source.cohort_generation) {
         static std::atomic_uint rejected_targets{0};
         if(rejected_targets.fetch_add(1,std::memory_order_relaxed)<64) {
-            std::ostringstream out;out << "[chart_patch] target status=rejected predicate=selected_provider_changed"
+            std::ostringstream out;out << "[chart_patch] target status=rejected predicate="
+                << (current_captured?"selected_provider_changed":"selected_provider_capture_failed")
                 << " song_id=" << song->id << " selection_generation=" << selection.generation
                 << " expected_name=0x" << std::hex << source.selected_name
                 << " expected_provider=0x" << source.provider << " expected_row=0x" << source.row
                 << " current_name=0x" << current_source.selected_name << " current_provider=0x" << current_source.provider
-                << " current_row=0x" << current_source.row;core::log(core::LogLevel::Error,out.str());
+                << " current_row=0x" << current_source.row;
+            append_selected_row_capture_facts(out,current_capture);
+            core::log(core::LogLevel::Error,out.str());
         }
         admission={};return ChartExpandPreparationOutcome::NativePristine;
     }

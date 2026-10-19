@@ -30,6 +30,7 @@ enum class BindingFailure : unsigned char {
     None, UnsupportedBuild, Input, Read, Identity, Relationship, Owner,
     RegistryBounds, RegistryWeak, RegistryMembership, MapBounds, MapChain,
     MapBinding, HistoricalMapDrift, Backing, Drift, Budget, PartialMutation,
+    IncompleteSnapshot, // Not success: only initial read-only capture may defer.
 };
 enum class BindingPhase : unsigned char { BeforeBridge, AfterOwnBridge, CurrentRegistered };
 
