@@ -2,6 +2,14 @@
 
 This dated record preserves the calibration and fixture details removed from the durable `../docs/MidiGeneration.md` contract.
 
+**Provenance correction, 2026-10-18:** the retained corpus used below matches
+a third-party replacement-song mod, not installed stock PianoScore/ScoreInfo.
+Its unresolved timestamps also include decoder defects, not unavailable source
+music. These measurements remain a historical algorithm record, not evidence
+that current levels match the original game. See
+[stock corpus recovery](VanillaCorpusRecovery-20261018.md). Existing envelope
+constants are not newly qualified or automatically retuned by this correction.
+
 ## Authored Evidence
 
 The recovered authored routes showed that displayed level cannot be inferred from row count, APM, or one movement statistic.
@@ -36,7 +44,7 @@ The optimizer used shared contiguous beam state, deferred row materialization an
 
 ## External Basis
 
-The calibration borrowed general concepts from rhythm-game strain decay, rolling windows, jack/stream detection, and percentile bounds, but the final dimensions and thresholds were constrained by recovered FF7 Rebirth authored charts and native piano controls. External models were not treated as ground truth for native level labels.
+The calibration borrowed general concepts from rhythm-game strain decay, rolling windows, jack/stream detection, and percentile bounds. At capture time the recovered authored charts were believed to be stock; the provenance correction above withdraws that interpretation. Neither those measurements nor external models establish human controller difficulty or stock level equivalence.
 
 ## Example Diagnostics
 

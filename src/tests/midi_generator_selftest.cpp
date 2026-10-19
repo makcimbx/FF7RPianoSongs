@@ -335,6 +335,17 @@ bool notes_equal(
     return true;
 }
 
+std::size_t required_actions(const std::vector<ff7rp::pipeline::Note>& notes) {
+    std::size_t actions = 0;
+    int previous_group = 0;
+    for (const auto& note : notes) {
+        if (note.group_index == 0 || note.group_index != previous_group)
+            actions += static_cast<std::size_t>(!note.pitch.empty()) + static_cast<std::size_t>(!note.chord_id.empty());
+        previous_group = note.group_index;
+    }
+    return actions;
+}
+
 bool local_skills_equal(
     const ff7rp::pipeline::MidiLocalSkillMetrics& a,
     const ff7rp::pipeline::MidiLocalSkillMetrics& b) {
@@ -769,9 +780,9 @@ int test_joint_cooldown_and_collision_policy() {
     MidiTrack accompaniment;
     add_note(&melody, 0, 240, 84, 110);
     add_note(&melody, 3840, 240, 84, 110);
-    add_note(&accompaniment, 0, 240, 48, 90);
-    add_note(&accompaniment, 0, 240, 52, 90);
-    add_note(&accompaniment, 0, 240, 55, 90);
+    add_note(&accompaniment, 0, 240, 36, 90);
+    add_note(&accompaniment, 0, 240, 40, 90);
+    add_note(&accompaniment, 0, 240, 43, 90);
     add_note(&accompaniment, 1920, 180, 36, 90);
     add_note(&accompaniment, 1980, 180, 38, 90);
     const TemporaryMidi midi(build_midi(1, 480, {melody, accompaniment}));
@@ -782,8 +793,8 @@ int test_joint_cooldown_and_collision_policy() {
     if (stats.fallback_candidates < 2 || stats.cooldown_rejections == 0) {
         return fail("primary and fallback candidates did not share one cooldown");
     }
-    // The salient tracked C6 now wins the same-frame competition with the
-    // accompaniment chord. The isolated C2 fills the source gap, but its nearby
+    // The salient tracked C6 shares the accompaniment onset. The isolated C2
+    // fills the source gap, but its nearby
     // weaker D2 still loses at actual selection rather than preliminary vicinity.
     if (stats.fallback_events != 1 || stats.right_events != 3 || notes.size() != 3 ||
         notes[0].pitch != "C6" || notes[0].beat != 0.0 ||
@@ -796,13 +807,15 @@ int test_joint_cooldown_and_collision_policy() {
             std::to_string(stats.right_events) + ", candidates=" +
             std::to_string(stats.fallback_candidates) + ", emitted=" + emitted);
     }
-    if (stats.merged_events != 0 || stats.cross_hand_conflicts != 1 ||
-        stats.scheduled_conflicts != 0 || stats.dropped_conflicts < 1 || notes.empty()) {
-        return fail("same-frame cross-hand events were not reduced to one exact-onset action");
+    if (stats.merged_events != 1 || stats.left_events != 1 || stats.selected_actions != 4 || stats.cross_hand_conflicts != 1 ||
+        stats.scheduled_conflicts != 0 || stats.dropped_conflicts != 2 || notes.empty()) {
+        return fail("exact pair accounting: merged=" + std::to_string(stats.merged_events)
+            + ", left=" + std::to_string(stats.left_events) + ", selected=" + std::to_string(stats.selected_actions)
+            + ", conflicts=" + std::to_string(stats.cross_hand_conflicts) + ", dropped=" + std::to_string(stats.dropped_conflicts));
     }
     for (const auto& note : notes) {
-        if (note.pitch.empty() == note.chord_id.empty()) {
-            return fail("cross-hand scheduler emitted a dual-action or empty row");
+        if (note.pitch.empty() && note.chord_id.empty()) {
+            return fail("cross-hand scheduler emitted an empty row");
         }
     }
     // These counters describe candidate competition, not emitted collisions.
@@ -923,11 +936,10 @@ int test_half_beat_phrase_profiles() {
     return 0;
 }
 
-int test_authored_vanilla_display_envelopes() {
-    // Provenance: Analysis/VanillaPiano/piano_dataobject_decoded.json, PianoScore
-    // TimeStr rows decoded at 60 Hz. Unresolved actions/times are excluded and
-    // duplicate native frames are coalesced using the shipping UI mapping.
-    struct VanillaMetrics {
+int test_historical_display_envelopes() {
+    // These partial mod-corpus measurements pin historical settings, not stock
+    // difficulty; decoder defects censored rows. See analysis/VanillaCorpusRecovery-20261018.md.
+    struct HistoricalMetrics {
         const char* song;
         int display_level;
         std::size_t raw_rows;
@@ -935,10 +947,7 @@ int test_authored_vanilla_display_envelopes() {
         double joint_strain_p95;
         double joint_strain_peak;
     };
-    // Provenance: Analysis/VanillaPiano/piano_dataobject_decoded.json, PianoScore rows,
-    // user-verified shipping UI mapping. Only resolved TimeStr/pitch/chord values are
-    // measured. The unresolved remainder is unknown evidence, never zero-demand input.
-    const std::array<VanillaMetrics, 8> authored{{
+    const std::array<HistoricalMetrics, 8> historical{{
         {"Journey / On Our Way", 1, 212, 124, 2.791, 3.325},
         {"TifasTheme", 2, 199, 57, 2.663, 2.815},
         {"BarretTheme", 3, 378, 360, 4.214, 5.288},
@@ -966,10 +975,10 @@ int test_authored_vanilla_display_envelopes() {
                 std::to_string(difficulty));
         }
     }
-    for (const VanillaMetrics& metrics : authored) {
+    for (const HistoricalMetrics& metrics : historical) {
         if (metrics.resolved_rows == 0 || metrics.resolved_rows >= metrics.raw_rows ||
             metrics.joint_strain_p95 <= 0.0 || metrics.joint_strain_peak < metrics.joint_strain_p95) {
-            return fail(std::string(metrics.song) + " lost resolved/unresolved Vanilla provenance");
+            return fail(std::string(metrics.song) + " lost historical partial-corpus provenance");
         }
     }
     MidiTrack track;
@@ -1127,9 +1136,9 @@ int test_global_native_frame_conflict_policy() {
     constexpr int onset_count = 5;
     for (int index = 0; index < onset_count; ++index) {
         const int tick = index * 960;
-        add_note(&track, tick, 18, 48, 90);
-        add_note(&track, tick, 18, 52, 90);
-        add_note(&track, tick, 18, 55, 90);
+        add_note(&track, tick, 18, 36, 90);
+        add_note(&track, tick, 18, 40, 90);
+        add_note(&track, tick, 18, 43, 90);
         add_note(&track, tick, 18, 72 + index % 5, 110);
     }
     const TemporaryMidi midi(build_midi(0, 480, {track}));
@@ -1144,23 +1153,24 @@ int test_global_native_frame_conflict_policy() {
         return fail("native-frame conflict resolution was not deterministic");
     }
     // Each frame now offers the melody, one bounded alternate, and the chord.
-    // Exactly one wins; neither discarded action is retimed into another frame.
-    if (stats.right_events + stats.left_events != notes.size() ||
-        stats.merged_events != 0 || stats.cross_hand_conflicts != onset_count ||
+    // The exact melody/chord pair wins; the alternate is not retimed.
+    if (stats.right_events + stats.left_events != notes.size() + stats.merged_events ||
+        stats.merged_events != onset_count || stats.cross_hand_conflicts != onset_count ||
         stats.scheduled_conflicts != 0 || stats.dropped_conflicts != onset_count * 2 ||
-        stats.selected_actions != onset_count || stats.candidate_actions != onset_count * 3 ||
+        stats.selected_actions != onset_count * 2 || stats.candidate_actions != onset_count * 3 ||
         stats.candidate_frames != onset_count ||
         stats.source_pitch_witness_failures != 0) {
         return fail("cross-hand conflicts were not deterministically reduced to exact-frame winners");
     }
     std::set<long long> frames;
     for (const auto& note : notes) {
-        if (note.pitch.empty() == note.chord_id.empty()) {
-            return fail("generated row did not contain exactly one gameplay action");
+        if (note.pitch.empty() && note.chord_id.empty()) {
+            return fail("generated row did not contain a gameplay sound");
         }
         frames.insert(std::llround(note.beat * 0.5 * 60.0));
     }
-    if (frames.size() != stats.selected_actions) return fail("generated chart changed independent input frames");
+    if (frames.size() != onset_count || required_actions(notes) != stats.selected_actions)
+        return fail("generated chart changed exact onset frames or dual input accounting");
     const long long final_source_frame = (onset_count - 1) * 60;
     if (frames.rbegin() == frames.rend() || *frames.rbegin() != final_source_frame ||
         notes.back().pitch.empty() ||
@@ -1173,9 +1183,9 @@ int test_global_native_frame_conflict_policy() {
 int test_globally_unschedulable_conflict_drop() {
     MidiTrack track;
     add_tempo(&track, 0);
-    add_note(&track, 0, 60, 48, 100);
-    add_note(&track, 0, 60, 52, 100);
-    add_note(&track, 0, 60, 55, 100);
+    add_note(&track, 0, 60, 36, 100);
+    add_note(&track, 0, 60, 40, 100);
+    add_note(&track, 0, 60, 43, 100);
     add_note(&track, 0, 60, 72, 120);
     const TemporaryMidi midi(build_midi(0, 480, {track}));
     std::vector<ff7rp::pipeline::Note> notes;
@@ -1185,7 +1195,7 @@ int test_globally_unschedulable_conflict_drop() {
         stats.selected_actions != 1 || stats.candidate_actions != 3 || stats.cross_hand_conflicts != 1 ||
         stats.scheduled_conflicts != 0 || stats.dropped_conflicts != 2 ||
         stats.desired_rows != 4) {
-        return fail("globally full one-frame timing domain did not report its dropped alternate and chord actions");
+        return fail("one-frame density target did not retain one root and its exact automatic followers");
     }
     return 0;
 }
@@ -1269,9 +1279,11 @@ int test_runtime_row_ceiling_omits_instead_of_truncating() {
     std::vector<ff7rp::pipeline::Note> exact_notes;
     ff7rp::pipeline::MidiChartStats exact_stats;
     const auto exact_status = generate(exact_midi.path(), fixture_config(6), &exact_notes, &exact_stats);
-    if (!exact_status.ok() || exact_notes.size() != ff7rp::pipeline::kMaxChartRows ||
+    if (!exact_status.ok() || exact_notes.size() > ff7rp::pipeline::kMaxChartRows ||
+        exact_stats.selected_actions != ff7rp::pipeline::kMaxChartRows ||
+        required_actions(exact_notes) != exact_stats.selected_actions ||
         exact_stats.row_limit_exceeded) {
-        return fail("complete 512-row profile was not accepted: " + exact_status.message +
+        return fail("complete 512-input profile was not accepted: " + exact_status.message +
             " rows=" + std::to_string(exact_notes.size()));
     }
 
@@ -1360,7 +1372,7 @@ int test_imported_profile_bands() {
             auto config = fixture_config(difficulty);
             config.midi_minimum_lead_in_seconds = 2.0;
             const std::size_t maximum_visible_rows = visible_baseline.empty() ? 0 :
-                ff7rp::pipeline::maximum_midi_visible_profile_actions(visible_baseline.size());
+                ff7rp::pipeline::maximum_midi_visible_profile_actions(required_actions(visible_baseline));
             const auto status = generate(path, config, &notes, &stats,
                 visible_baseline.empty() ? nullptr : &visible_baseline, maximum_visible_rows);
             if (status.code == ff7rp::pipeline::StatusCode::ChartRowLimitExceeded ||
@@ -1368,7 +1380,7 @@ int test_imported_profile_bands() {
                 if (status.code == ff7rp::pipeline::StatusCode::ChartStrainLimitExceeded && !notes.empty()) {
                     const auto witness = ff7rp::pipeline::validate_midi_difficulty_route(
                         notes, stats.source_bpm, difficulty);
-                    if (notes.size() != stats.selected_actions ||
+                    if (required_actions(notes) != stats.selected_actions ||
                         !local_skills_equal(witness.metrics, stats.local_skills)) {
                         result.failures += fixture + " Lv." + std::to_string(difficulty) +
                             " did not report one exact near-feasible witness; ";
@@ -1382,7 +1394,7 @@ int test_imported_profile_bands() {
                 result.failures += fixture + ": " + status.message + "; ";
                 break;
             }
-            if (!visible_baseline.empty() && stats.protected_baseline_actions != visible_baseline.size()) {
+            if (!visible_baseline.empty() && stats.protected_baseline_actions != required_actions(visible_baseline)) {
                 result.failures += fixture + " Lv." + std::to_string(difficulty) +
                     " lost previous source-preference diagnostics; ";
             }
@@ -1411,8 +1423,8 @@ int test_imported_profile_bands() {
             std::set<long long> frames;
             double previous_seconds = -1.0;
             for (const auto& note : notes) {
-                if (note.pitch.empty() == note.chord_id.empty()) {
-                    result.failures += fixture + " emitted a row without exactly one action; ";
+                if (note.pitch.empty() && note.chord_id.empty()) {
+                    result.failures += fixture + " emitted an empty row; ";
                 }
                 const double seconds = note.beat * seconds_per_beat;
                 frames.insert(std::llround(seconds * 60.0));
@@ -1820,7 +1832,7 @@ int main(const int argc, char** argv) {
         {"half_beat_phrase_profiles", test_half_beat_phrase_profiles},
         {"local_multi_skill_metrics", test_local_multi_skill_metrics},
         {"duration_normalized_dense_texture", test_duration_normalized_dense_texture},
-        {"authored_vanilla_display_envelopes", test_authored_vanilla_display_envelopes},
+        {"historical_display_envelopes", test_historical_display_envelopes},
         {"global_native_frame_conflict_policy", test_global_native_frame_conflict_policy},
         {"globally_unschedulable_conflict_drop", test_globally_unschedulable_conflict_drop},
         {"timing_domain_bounds", test_timing_domain_bounds},

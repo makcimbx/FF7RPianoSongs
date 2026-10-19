@@ -1288,7 +1288,7 @@ int test_dense_collision_cache_round_trip(const std::filesystem::path& root) {
         const int melody_pitch = 72 + onset % 8;
         track.push_back({tick, 2, {0x90, static_cast<unsigned char>(melody_pitch), 110}});
         track.push_back({tick + 30, 1, {0x80, static_cast<unsigned char>(melody_pitch), 0}});
-        for (const int chord_pitch : {48, 52, 55}) {
+        for (const int chord_pitch : {36, 40, 43}) {
             track.push_back({tick, 2, {0x91, static_cast<unsigned char>(chord_pitch), 80}});
             track.push_back({tick + 30, 1, {0x81, static_cast<unsigned char>(chord_pitch), 0}});
         }
@@ -1460,9 +1460,9 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
     for (int index = 0; index < 8; ++index) {
         const int tick = 1920 + index * 960;
         add_note(&accidental_melody, tick, 240, 84 + index % 3, 108);
-        add_note(&accidental_harmony, tick, 480, 49, 82);
-        add_note(&accidental_harmony, tick, 480, 53, 81);
-        add_note(&accidental_harmony, tick, 480, 56, 80);
+        add_note(&accidental_harmony, tick, 480, 37, 82);
+        add_note(&accidental_harmony, tick, 480, 41, 81);
+        add_note(&accidental_harmony, tick, 480, 44, 80);
     }
     if (!write_bytes(accidental_directory / "song.mid", build_format_one_midi(
             std::move(accidental_melody), std::move(accidental_harmony)))
@@ -1479,8 +1479,8 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
         if (song.difficulty_profiles.empty()) return false;
         bool found_db_chord = false;
         bool found_db_melody = false;
-        // Selection is independent per label. The source-backed Ab3 fallback
-        // carries Db3/F3 followers; the root profile need not select harmony.
+        // Selection is independent per label. The source-backed Ab2 fallback
+        // carries Db2/F2 followers; the root profile need not select harmony.
         // Check exact source identities/ticks and per-side lengths, not an old
         // selector's choice of hand in the first visible profile.
         for (const auto& profile : song.difficulty_profiles) {
@@ -1498,11 +1498,11 @@ int test_normal_chart_cache_policy_normalization(const std::filesystem::path& ro
                 const std::array<std::string, 3> native_melody{"Cn6", "Db6", "Dn6"};
                 const auto index = static_cast<std::size_t>(onset_index) % 3u;
                 if (!note.pitch.empty()) {
-                    const bool fallback = note.pitch == "Ab3" || note.pitch == "Db3" || note.pitch == "F3";
+                    const bool fallback = note.pitch == "Ab2" || note.pitch == "Db2" || note.pitch == "F2";
                     const ff7rp::pipeline::NoteValueOverride value{
                         {static_cast<std::uint8_t>(fallback ? 2 : 3), 0}, true};
                     if ((!fallback && note.pitch != melody[index]) ||
-                        compiled.monotone_id != (fallback ? (note.pitch == "F3" ? "Fn3" : note.pitch) : native_melody[index]) ||
+                        compiled.monotone_id != (fallback ? (note.pitch == "F2" ? "Fn2" : note.pitch) : native_melody[index]) ||
                         note.monotone_note_value != value) return false;
                     found_db_melody |= note.pitch == "Db6";
                 } else if (!compiled.monotone_id.empty()) return false;
@@ -1585,13 +1585,12 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::test_target_native_assets().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v18 expands note values and chord coverage. Relative to
-        // v16, this one-note fixture retains exact semantics and all six labels:
-        // changing only the policy token reproduces the cache-key delta, and
-        // restoring the old cache_key line recovers the old manifest digest.
+        // Generated-MIDI v23 ranks partial LH carriers by root/context. This one-note fixture
+        // retains its chart semantic hash, manifest size, and all six labels;
+        // only the policy-dependent cache key and manifest digest change.
         // Pipeline v48 and binary format 16 are unchanged.
-        expected_cache_key = 0x4573351caad21631ull;
-        expected_normalized_manifest_digest = 0x645b7fc861ae049eull;
+        expected_cache_key = 0x92878db6835140d0ull;
+        expected_normalized_manifest_digest = 0x8ad95b93f6f60353ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -1884,9 +1883,10 @@ int test_row_limit_omission(const std::filesystem::path& root) {
     for (int index = 0; index < onset_count; ++index) {
         const int tick = index * 180;
         if (index % 12 == 0) {
-            add_note(&track, tick, 40, 48, 90);
-            add_note(&track, tick, 40, 52, 90);
-            add_note(&track, tick, 40, 55, 90);
+            // These exact RH followers cannot be absorbed by a native LH bass carrier.
+            add_note(&track, tick, 40, 24, 90);
+            add_note(&track, tick, 40, 28, 90);
+            add_note(&track, tick, 40, 31, 90);
         }
         add_note(&track, tick, 40, 60 + index % 7, 110);
     }
@@ -3314,7 +3314,7 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
 int test_partial_lh_cache(const std::filesystem::path& root) {
     ff7rp::pipeline::configure_chart_row_limit(false);
     for (const int scenario : {0, 1, 2, 3}) {
-        const bool expect_left = scenario == 1 || scenario == 2;
+        const bool expect_left = scenario != 0;
         const auto directory = root / ("partial-lh-" + std::to_string(scenario));
         std::filesystem::create_directories(directory);
         std::vector<MidiEvent> melody, bass;
@@ -3356,6 +3356,11 @@ int test_partial_lh_cache(const std::filesystem::path& root) {
                 ++left;
                 if (note.source_chord_pitches.empty() || note.ignore_sound_pitches.empty())
                     return fail("partial LH warm profile lost source/filtered voicing");
+                // At the tail the tracked voice switches to the fresh G2 bass
+                // attack. Only that exact G2+C2 dual is valid, not the ended RH.
+                if (scenario == 3 && (note.pitch != "G2" ||
+                        note.source_chord_pitches != std::vector<std::string>{"C2"}))
+                    return fail("ended RH admitted partial LH without its fresh exact tracked bass witness: " + note.pitch);
             }
         }
         if (expect_left != (left != 0)) return fail("partial LH cache hand control failed, scenario=" +

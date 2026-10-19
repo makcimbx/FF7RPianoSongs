@@ -5,6 +5,18 @@ tested artifacts, not a new public release. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
+## Offline MIDI generation investigation (2026-10-18)
+
+- Corrected the historical reference corpus provenance: retained “VanillaPiano” assets are modded, not stock; historical route settings are not newly qualified stock/controller limits.
+- Added the [stock export/comparison benchmark](VanillaBenchmark.md) and repaired the optional parent decoder, retaining required-input/group/control identities separately from musical attacks.
+- Generated-policy v22 retains simultaneous tracked RH + representable LH pairs and adds the [source-exact LH/local-selection corrections](../analysis/MidiSelectionCorrections-20261018.md); policy-keyed generated caches rebuild, authored formats and binary layout are unchanged.
+- The [eight-chart roundtrip](../analysis/MidiGenerationRoundtrip-20261018.md) improves attack retention but also increases some uninterrupted input series. It does not prove reduced fatigue or solve all LH underuse.
+- The [installed-song review](../analysis/InstalledSongGenerationReview-20261018.md) exposed wrong-register full/superset LH admission. The follow-up now requires literal source pitches and truthful witnesses; existing exact reduced bass/two-tone carriers retain compatible accompaniment without invented octaves. Across the final isolated corpus, independently detected LH mismatch rows fall from 1,038 to zero. Unavailable or spacing-conflicting harmony can still be reduced or omitted.
+- Generated-policy v23 ranks equally exact partial/reduced LH carriers by an emitted carrier root, fewest ignores, accompaniment pitch-class agreement, plain major/minor triads, then whole-onset agreement before lexical ID. The lexical rule had named lone C3 `pca_A_dim` and favored dim/sus4 names over the heard harmony; emitted sound is unchanged.
+- Existing spacing floors now apply to native frames as well as source seconds, and selection uses a soft categorical-assignment switch preference. Independent review finds mixed local outcomes and longer series in some profiles; this is not proof of uniformly reduced fatigue.
+- A bounded representative-root exchange improves source coverage without increasing required inputs or combined switch cost. All 30 isolated songs / 178 profiles prepare successfully; the Gate/Megalovania Lv6 gaps gain source-backed anchors, with no missing labels/endings and unchanged authored Rufus. All eight focused CTests pass. Remaining lower-level gaps and perceptual importance/controller comfort are not claimed solved.
+- These are offline development changes, not changes to the installed artifact qualified below. Generated dual sound/scoring/tail checks, authenticated-audio listening and actual stick/retrigger/window semantics remain unqualified. No game launch, install or release package was performed for this work.
+
 ## Implemented Now
 
 - Strict song discovery, JSON v2 explicit charts/profiles, MIDI generation,
@@ -35,7 +47,7 @@ tested artifacts, not a new public release. Public version history remains in
 | Build | Current disposition | What is not established |
 | --- | --- | --- |
 | 1.005 | Development ASI accepted/kept after native audio, distinct-song chart and extended-chart scenarios; the later shared-code regression exercised the embedded executable decoder successfully. The owned `D3DCOMPILER_43.dll` also has a positive user report with native startup and two distinct song plans recorded. | Other proxy basenames, exhaustive songs/profiles/notes, separately witnessed pause/retry/stock transitions on the latest artifact, and complete lifecycle or Release qualification. |
-| 1.004 | Separate bootstrap/runtime/asset profiles implemented; experimental ASI and debug-INI ZIP built with affected offline/mapped tests passing. | Authentic older installed-asset validation, real startup, decoder interoperability and gameplay. Friend testing is pending. |
+| 1.004 | Separate bootstrap/runtime/asset profiles implemented; experimental ASI and full-product proxy archives built with affected offline/mapped tests passing. | Authentic older installed-asset validation, real startup, decoder interoperability and gameplay. Friend testing is pending. |
 
 Exact executable identities, addresses and signatures remain in the
 [RVA catalog](../src/game/rva_catalog.json). Older profiles were recovered from
@@ -77,6 +89,12 @@ authenticated 1.005 executable's normal imports, not from a generic DLL-name lis
 The selected filename must actually be a normal import of the target executable;
 older import-name parity has not been independently established. Arbitrary
 renaming or late `LoadLibrary` does not provide the required early origin.
+The refreshed `FF7RPianoSongs-1.004-proxy-test.zip` contains one
+`D3DCOMPILER_43.dll`, the mod INI with debug logging, and the user documentation.
+Its selected-build artifact, generated entry profile, callback/export contracts
+and archive contents were checked independently. It was not installed locally;
+the kept 1.005 proxy is unchanged. This remains a test build pending older-game
+startup and gameplay evidence.
 Existing occupied proxy files must not be overwritten or chained implicitly.
 The proxy and `FF7RPianoSongs.asi` are alternative distributions of the same mod;
 do not load both together.

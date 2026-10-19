@@ -28,7 +28,8 @@ release or another executable build.
 
 - [Analysis Index](../analysis/README.md) separates dated evidence from durable contracts.
 - [Chart Row Limit Evidence](../analysis/ChartRowLimitEvidence.md) preserves parser, ABI, ownership, and runtime qualification research.
-- [MIDI Calibration Evidence](../analysis/MidiDifficultyCalibration-v38-20260714.md) preserves authored-chart calibration and fixture metrics.
+- [Stock Piano Corpus](../analysis/VanillaCorpusRecovery-20261018.md) records corrected stock/mod provenance and required-input counts. The [historical calibration](../analysis/MidiDifficultyCalibration-v38-20260714.md) preserves mod-corpus measurements, not stock difficulty qualification.
+- [Vanilla Benchmark](VanillaBenchmark.md) covers offline MIDI export, authored controls and independent retention/workload diagnostics; not a physical-controller qualification.
 - [Native Audio Integration](../analysis/NativeAudioIntegration-20261017.md) preserves the replacement backend's bounded failures, corrections and accepted Development runs.
 - [Earlier Development Milestones](../analysis/DevelopmentMilestones-202609.md) separates previous implementation/release decisions from current requirements.
 - [July Audio Lifecycle Evidence](../analysis/AudioLifecycleEvidence-202607.md) is historical source-substitution evidence, not the current backend contract.

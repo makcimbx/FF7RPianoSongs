@@ -202,10 +202,10 @@ std::vector<unsigned char> db_chord_context_midi_bytes(const DbChordContext cont
         // Exercise chord identity/notation with salient harmony, rather than
         // relying on lower-load preference to displace a louder melody.
         add_note(&melody, tick, 360, 84 + event % 3, 90);
-        add_note(&harmony, tick, 720, 49, 127);
+        add_note(&harmony, tick, 720, 37, 127);
         const int upper_tick = context == DbChordContext::Straddling ? tick + 6 : tick;
-        add_note(&harmony, upper_tick, 720, 53, 127);
-        add_note(&harmony, upper_tick, 720, 56, 127);
+        add_note(&harmony, upper_tick, 720, 41, 127);
+        add_note(&harmony, upper_tick, 720, 44, 127);
     }
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
     append_u16(&file, 1);
@@ -299,6 +299,7 @@ struct PhysicalFrame {
     int velocity = 100;
     int duration_ticks = 8;
     int tick_offset = 0;
+    int channel = 0;
 };
 
 std::vector<unsigned char> physical_frame_midi_bytes(
@@ -319,7 +320,7 @@ std::vector<unsigned char> physical_frame_midi_bytes(
     for (const PhysicalFrame& frame : frames) {
         for (const int pitch : frame.pitches) {
             add_note(&melody, base_tick + frame.frame * ticks_per_frame + frame.tick_offset, frame.duration_ticks,
-                pitch, frame.velocity);
+                pitch, frame.velocity, frame.channel);
         }
     }
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
@@ -341,9 +342,9 @@ std::vector<unsigned char> verified_chord_runs_midi_bytes(
     for (std::size_t index = 0; index < frame_count; ++index) {
         const int tick = base_tick + static_cast<int>(index) * spacing_frames * ticks_per_frame;
         add_note(&melody, tick, 8, 72 + static_cast<int>(index % 5u), 104);
-        add_note(&harmony, tick, 8, 48, 84);
-        add_note(&harmony, tick, 8, 52, 82);
-        add_note(&harmony, tick, 8, 55, 80);
+        add_note(&harmony, tick, 8, 36, 84);
+        add_note(&harmony, tick, 8, 40, 82);
+        add_note(&harmony, tick, 8, 43, 80);
     }
     std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
     append_u16(&file, 1);
@@ -543,12 +544,12 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 15> expected{{
-    {"manual-lv1", 12665978319995869156ull, 0, ""},
-    {"manual-lv2", 16910628195291395619ull, 0, ""},
-    {"manual-lv3", 18132972371069659791ull, 0, ""},
-    {"manual-lv4", 1901749588887380908ull, 0, ""},
-    {"manual-lv5", 9041594378335335571ull, 0, ""},
-    {"manual-lv6", 11760437677581941825ull, 0, ""},
+    {"manual-lv1", 5624942181862413287ull, 0, ""},
+    {"manual-lv2", 6870984845381300190ull, 0, ""},
+    {"manual-lv3", 12551535923768744583ull, 0, ""},
+    {"manual-lv4", 5670263482831599819ull, 0, ""},
+    {"manual-lv5", 12533206831081390320ull, 0, ""},
+    {"manual-lv6", 2063125170046023327ull, 0, ""},
     // Preference cases are checked semantically below: the former hashes
     // included statistics from the removed hard retention-pruning policy.
     {"baseline-lv1", 0, 0, ""},
@@ -557,7 +558,7 @@ constexpr std::array<Expected, 15> expected{{
     {"baseline-lv4", 0, 0, ""},
     {"baseline-lv5", 0, 0, ""},
     {"baseline-lv6", 0, 0, ""},
-    {"automatic-alignment", 9905158162428429845ull, 0, ""},
+    {"automatic-alignment", 10563661697807204685ull, 0, ""},
     {"timing-domain-empty", 3095648943021463551ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
@@ -567,6 +568,276 @@ constexpr std::array<Expected, 15> expected{{
 int fail(const std::string& message) {
     std::cerr << "midi_chart_compilation_selftest: " << message << '\n';
     return 1;
+}
+
+int test_exact_dual_actions(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    for (const int variant : {0, 240, 1, -1}) {
+        const int offset = std::max(0, variant);
+        std::vector<MidiEvent> melody, harmony;
+        melody.push_back({0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}});
+        for (int i = 0; i < 24; ++i) add_note(&melody, 1920 + i * 480, 432, 72 + 2 * (i % 2), 110);
+        if (variant == -1) add_note(&melody, 1920 + 23 * 480 - 38, 20, 77, 127);
+        for (int i = 0; i < 6; ++i) {
+            // Include the protected final melody onset in the simultaneous case.
+            const int index = offset == 0 && i == 5 ? 23 : i * 4;
+            for (const int pitch : {36, 40, 43})
+                add_note(&harmony, 1920 + index * 480 + offset, 120, pitch, 95, 1);
+        }
+        std::vector<unsigned char> bytes{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&bytes, 1); append_u16(&bytes, 2); append_u16(&bytes, 480);
+        append_midi_track(&bytes, std::move(melody)); append_midi_track(&bytes, std::move(harmony));
+        const auto path = root / ("dual-" + std::to_string(variant) + ".mid");
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_offset_seconds = config.midi_audio_alignment_seconds = 0;
+        const auto actual = generate(path, WavAudio{}, config);
+        const auto repeated = generate(path, WavAudio{}, config, &actual.notes);
+        if (!actual.status.ok() || !repeated.status.ok() || actual.notes.empty() ||
+            canonical_note_bytes(actual.notes) != canonical_note_bytes(repeated.notes) ||
+            actual.stats.source_pitch_witness_failures || actual.stats.scheduled_conflicts ||
+            !validate_midi_difficulty_route(actual.notes, 120, 6).feasible)
+            return fail("dual selection lost deterministic source-backed route feasibility: " + actual.status.message);
+        if (offset != 1 && (actual.stats.selected_actions != 30 || actual.stats.right_events != 24 ||
+                actual.stats.left_events != 6 || actual.stats.merged_events != (offset == 0 ? 6u : 0u)))
+            return fail("exact simultaneous accompaniment displaced salient tracked melody: " +
+                std::to_string(actual.stats.right_events) + "/" + std::to_string(actual.stats.left_events));
+        if (offset == 1 && actual.stats.merged_events != 0)
+            return fail("rounded same-frame attacks from different source ticks acquired dual authority");
+        for (const auto& note : actual.notes) {
+            const long long frame = std::llround(note.beat * 30);
+            if (note.group_index || !note.ignore_sound_pitches.empty() ||
+                (!note.pitch.empty() && (note.pitch != "C5" && note.pitch != "D5")) ||
+                (!note.chord_id.empty() && (note.chord_id != "pca_C" ||
+                    note.source_chord_pitches != std::vector<std::string>{"C2", "E2", "G2"})) ||
+                frame < 120 || frame > 825 || (frame - 120) % 15 != 0)
+                return fail("dual row invented sounds, grouped unrelated streams, or retimed source material: " +
+                    note.pitch + "/" + note.chord_id + " frame=" + std::to_string(frame) +
+                    " source=" + (note.source_chord_pitches.empty() ? "empty" : note.source_chord_pitches.front()));
+        }
+        config.bpm = 120; config.notes = actual.notes;
+        CompiledChart chart; ChartEventPlan plan;
+        if (!compile_chart(config, &chart).ok() || !derive_chart_event_plan(config.notes, chart.notes, &plan) ||
+            plan.required_action_count != actual.stats.selected_actions ||
+            plan.native_event_count != actual.stats.selected_actions || !plan.links.empty() ||
+            (offset == 0 && (chart.notes.size() != 24 || plan.native_event_count != 30)))
+            return fail("dual rows disagreed with compiler event/action topology");
+    }
+    return 0;
+}
+
+int test_assignment_switch_penalty() {
+    using namespace ff7rp::pipeline;
+    const auto note = [](const int frame, const std::string& right, const std::string& left = "",
+                         const bool alternate = false, const std::uint8_t group = 0) {
+        Note result;
+        result.beat = frame / 30.0; result.pitch = right; result.chord_id = left;
+        result.alternate_monotone = alternate; result.group_index = group;
+        return result;
+    };
+    const auto cost = [](const std::vector<Note>& rows) {
+        return calculate_midi_assignment_switch_penalty(rows, 120.0);
+    };
+    const auto equal = [](const double a, const double b) { return std::fabs(a - b) < 1e-10; };
+    if (!equal(cost({note(0,"C4"), note(5,"C#4"), note(10,"C4")}), .4) ||
+        !equal(cost({note(0,"C4"), note(5,"C4"), note(10,"C4")}), 0.0))
+        return fail("categorical switch cost lost semitone reversals or taxed same-ID repeats");
+    if (!equal(cost({note(0,"C4"), note(5,"C4","",true), note(10,"C4")}), .4) ||
+        !equal(cost({note(0,"C#4"), note(5,"Db4")}), .2))
+        return fail("switch cost collapsed alternate or native spelling identities");
+    if (!equal(cost({note(0,"C4"), note(3,"","pca_C"), note(5,"C#4"), note(8,"","pca_F")}), .4) ||
+        !equal(cost({note(0,"C4","pca_C"), note(5,"C#4","pca_F")}), .6) ||
+        !equal(cost({note(0,"C4","pca_C"), note(5,"C#4","pca_C")}), .2))
+        return fail("switch cost forgot interleaved same-hand inputs or bilateral joint changes");
+    if (!equal(cost({note(0,"C4"), note(10,"D4")}), .1) ||
+        !equal(cost({note(0,"C4"), note(5,"C#4"), note(10,"D4")}), .4))
+        return fail("inserted switch failed to replace both incoming and outgoing edges");
+    if (!equal(cost({note(0,"C4","",false,1), note(0,"D4","",false,1), note(5,"C4")}), 0.0))
+        return fail("automatic follower was promoted to a required assignment switch");
+    return 0;
+}
+
+int test_native_frame_spacing(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    // Source gaps 77/960s satisfy .08s, but frame 131 -> 135 is only 4/60s.
+    const std::vector<std::vector<PhysicalFrame>> cases{
+        {{-120,{72},1,8}, {10,{72},110,8,8}, {15,{73},110,8,5}, {120,{74},110,8}},
+        {{-120,{72},1,8}, {10,{72},127,8,8}, {15,{72,36,40,43},110,8,5}},
+        // LH frame distance 54 satisfies .9s, but the original source gap does not.
+        {{0,{72},110,8}, {10,{72,36,40,43},110,8,7}, {64,{72,36,40,43},110,8,2}, {120,{72},110,8}}};
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        const auto path = root / ("native-frame-spacing-" + std::to_string(index) + ".mid");
+        const auto bytes = physical_frame_midi_bytes(cases[index]);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        config.midi_minimum_lead_in_seconds = 0.0;
+        const auto selected = generate(path, WavAudio{}, config);
+        const auto repeated = generate(path, WavAudio{}, config, &selected.notes);
+        if (!selected.status.ok() || selected.stats.source_pitch_witness_failures ||
+            canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes))
+            return fail("native-frame spacing stranded a mandatory tail or lost deterministic replay");
+        std::array<long long, 2> previous{-10000,-10000};
+        std::uint8_t previous_group = 0;
+        for (const auto& row : selected.notes) {
+            const bool follower = row.group_index && row.group_index == previous_group;
+            previous_group = row.group_index;
+            if (follower) continue;
+            const long long frame = std::llround(row.beat * 30.0);
+            for (const std::size_t hand : {0u,1u}) {
+                if (hand == 0 ? row.pitch.empty() : row.chord_id.empty()) continue;
+                if (frame - previous[hand] < (hand == 0 ? 5 : 54))
+                    return fail("emitted native frame spacing violated the existing hand floor");
+                previous[hand] = frame;
+            }
+        }
+        if ((index == 0 && selected.stats.selected_actions != 3) ||
+            (index == 1 && (previous[0] != 135 || selected.stats.merged_events != 1 || selected.stats.selected_actions != 3)) ||
+            (index == 2 && selected.stats.left_events != 1))
+            return fail("source/frame spacing fixture did not exercise RH, dual tail, or source-only LH rejection: " + std::to_string(index) +
+                " tail=" + std::to_string(previous[0]) + " merged=" + std::to_string(selected.stats.merged_events) +
+                " actions=" + std::to_string(selected.stats.selected_actions) + " left=" + std::to_string(selected.stats.left_events));
+    }
+    return 0;
+}
+
+int test_representative_root_repair(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    const auto run = [&](const char* name, const std::vector<PhysicalFrame>& frames,
+                         const std::vector<int>& preferred_frames, const std::size_t maximum_actions,
+                         const double minimum_lead_in = 0.0) {
+        const auto path = root / name;
+        std::vector<std::pair<int,int>> meters;
+        for (const auto& frame : frames) meters.emplace_back(frame.frame, 1);
+        const auto bytes = physical_frame_midi_bytes(frames, meters);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        NormalizedMidiSource source;
+        const auto status = normalize_midi_source(path.string(), &source);
+        if (!status.ok()) { MidiChartCompilationResult failed; failed.status = status; return failed; }
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        config.midi_minimum_lead_in_seconds = minimum_lead_in;
+        std::vector<Note> preferred;
+        for (const int frame : preferred_frames) {
+            Note note; note.beat = static_cast<double>(frame + 120) / 30.0;
+            note.duration_beats = 8.0 / 480.0; note.pitch = "C5";
+            const auto source_frame = std::find_if(frames.begin(), frames.end(), [&](const auto& item) { return item.frame == frame; });
+            if (source_frame != frames.end() && source_frame->duration_ticks == 480) {
+                note.monotone_note_value.provided = true;
+                note.monotone_note_value.value = {2,0};
+            }
+            preferred.push_back(note);
+        }
+        return compile_normalized_midi_chart({source, WavAudio{}, config,
+            preferred.empty() ? nullptr : &preferred, maximum_actions, test_target_native_assets()});
+    };
+    std::vector<PhysicalFrame> frames;
+    for (const int frame : {0,40,80,120,160,400,440,480}) frames.push_back({frame,{72},100,8});
+    frames.front().velocity = 127;
+    frames.front().duration_ticks = 480;
+    const auto selected = run("representative-root.mid", frames, {0,160,400,480}, 4);
+    const auto repeated = run("representative-root-repeat.mid", frames, {0,160,400,480}, 4);
+    const auto& repair = selected.representative_repair;
+    if (!selected.status.ok() || !repair.applied || repair.radius_before != 80 || repair.radius_after != 40 ||
+        repair.salience_delta < -1e-9 || repair.switch_penalty_delta > 1e-9 ||
+        selected.stats.selected_actions != 4 || selected.stats.source_pitch_witness_failures ||
+        repair.inserted.tick != 3840 || repair.removed.tick != 4480 ||
+        std::llround(selected.notes.front().beat * 30.0) != 120 ||
+        std::llround(selected.notes.back().beat * 30.0) != 600 ||
+        canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes)) {
+        std::string detail;
+        for (const auto& row : selected.notes) detail += " " + row.pitch + "@" + std::to_string(std::llround(row.beat * 30.0) - 120);
+        return fail("representative-root lossless coverage repair failed: " + selected.status.message + detail +
+            " applied=" + std::to_string(repair.applied) + " radius=" + std::to_string(repair.radius_before) + "/" + std::to_string(repair.radius_after));
+    }
+    const auto no_repair = [&](const char* name, const std::vector<PhysicalFrame>& input,
+                               const std::size_t count, const double lead_in = 0.0) {
+        const auto result = run(name, input, {}, count, lead_in);
+        return result.status.ok() && !result.representative_repair.applied &&
+            result.stats.selected_actions == count && result.stats.source_pitch_witness_failures == 0;
+    };
+    auto less_salient = frames; less_salient[3].velocity = 80;
+    auto more_switching = frames; more_switching[3].pitches = {73};
+    const auto rejected_salience = run("repair-no-salience-loss.mid", less_salient, {0,160,400,480}, 4);
+    const auto rejected_switch = run("repair-no-switch-increase.mid", more_switching, {0,160,400,480}, 4);
+    if (!rejected_salience.status.ok() || rejected_salience.representative_repair.applied ||
+        !rejected_switch.status.ok() || rejected_switch.representative_repair.applied)
+        return fail("coverage repair traded away salience or assignment-switch cost");
+    const std::vector<PhysicalFrame> rest{{0,{72},100,8},{60,{72},100,8},{120,{72},100,8},{480,{72},100,8}};
+    auto sustain = rest; sustain[2].duration_ticks = 3840;
+    auto unsupported = rest; unsupported.push_back({300,{23,97},127,8});
+    auto drums = rest; drums.push_back({300,{64},127,8,0,9});
+    if (!no_repair("repair-true-rest.mid", rest, 4) || !no_repair("repair-sustain.mid", sustain, 4) ||
+        !no_repair("repair-unsupported.mid", unsupported, 4) || !no_repair("repair-drums.mid", drums, 4) ||
+        !no_repair("repair-no-removable.mid", {{0,{72},100,8},{480,{72},100,8}}, 2) ||
+        !no_repair("repair-before-leadin.mid", frames, 4, 4.5) ||
+        !no_repair("repair-no-feasible-spacing.mid", {{-120,{72},127,480},{0,{72},100,8},
+            {8,{72},100,8},{12,{72},100,8},{16,{72},100,8},{24,{72},100,8},
+            {32,{72},100,8},{480,{72},100,8}}, 7))
+        return fail("representative repair invented an onset or bypassed a boundary/spacing constraint");
+
+    // Eight 64-sound exact groups fit 512 rows. The useful replacement needs 65.
+    std::vector<PhysicalFrame> capacity;
+    for (const int frame : {0,40,80,120,160,400,440,480,520,560,600,640}) {
+        const bool weaker = frame == 40 || frame == 80 || frame == 440;
+        const bool anchor = frame == 0 || (frame >= 400 && !weaker);
+        capacity.push_back({frame,{72},anchor ? 127 : weaker ? 80 : 100,anchor ? 480 : 8});
+        std::vector<int> followers;
+        for (int pitch = 24; pitch <= (frame == 120 ? 88 : 87); ++pitch)
+            if (pitch != 72) followers.push_back(pitch);
+        capacity.push_back({frame,followers,1,8});
+    }
+    const std::vector<int> preferred{0,160,400,480,520,560,600,640};
+    const auto ordinary = run("repair-capacity.mid", capacity, preferred, 8);
+    configure_chart_row_limit(true, true);
+    const auto extended = run("repair-capacity-extended.mid", capacity, preferred, 8);
+    configure_chart_row_limit(false, false);
+    std::string capacity_roots;
+    std::uint8_t previous_group = 0;
+    for (const auto& note : extended.notes) {
+        const bool follower = note.group_index && note.group_index == previous_group;
+        previous_group = note.group_index;
+        if (!follower) capacity_roots += " " + note.pitch + "@" + std::to_string(std::llround(note.beat * 30.0) - 120);
+    }
+    if (!ordinary.status.ok() || ordinary.representative_repair.applied || ordinary.notes.size() != 512 ||
+        !extended.status.ok() || !extended.representative_repair.applied || extended.notes.size() != 513 ||
+        ordinary.stats.selected_actions != 8 || extended.stats.selected_actions != 8 ||
+        ordinary.stats.source_pitch_witness_failures || extended.stats.source_pitch_witness_failures)
+        return fail("repair failed transactional follower-inclusive capacity: ordinary=" + ordinary.status.message +
+            "/" + std::to_string(ordinary.notes.size()) + " repaired=" + std::to_string(ordinary.representative_repair.applied) +
+            " extended=" + extended.status.message + "/" + std::to_string(extended.notes.size()) +
+            " repaired=" + std::to_string(extended.representative_repair.applied) + capacity_roots);
+    return 0;
+}
+
+int test_switch_utility_selection(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    for (const int velocity : {100,101,127}) {
+        const auto path = root / ("switch-utility-" + std::to_string(velocity) + ".mid");
+        // The weak preceding source equalizes the two alternatives' rhythmic
+        // evidence; this isolates small salience advantages from switch cost.
+        const auto bytes = physical_frame_midi_bytes({{-120,{72},1,8}, {5,{72},40,8},
+            {10,{73},velocity,velocity == 127 ? 480 : 8}, {11,{72},100,8}, {16,{72},100,8}});
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        config.midi_minimum_lead_in_seconds = 0.0;
+        const auto selected = generate(path, WavAudio{}, config, nullptr, 2);
+        const auto repeated = generate(path, WavAudio{}, config, &selected.notes, 2);
+        const std::string expected = velocity == 127 ? "C#5" : "C5";
+        if (!selected.status.ok() || selected.stats.selected_actions != 2 ||
+            canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes) ||
+            selected.notes.front().pitch != expected || std::llround(selected.notes.back().beat * 30.0) != 136)
+            return fail("soft switch utility failed near/equal salience or overruled a strong musical anchor: " + std::to_string(velocity) +
+                " actions=" + std::to_string(selected.stats.selected_actions) + " first=" +
+                (selected.notes.empty() ? "empty" : selected.notes.front().pitch + "@" + std::to_string(std::llround(selected.notes.front().beat * 30.0))) +
+                " status=" + selected.status.message);
+    }
+    return 0;
 }
 
 int test_salient_reduction(const std::filesystem::path& root) {
@@ -742,7 +1013,7 @@ int test_chord_inventory(const std::filesystem::path& root) {
         std::vector<std::string> source;
         std::vector<std::string> ignores;
     };
-    const std::array<Fixture, 7> fixtures{{
+    const std::array<Fixture, 15> fixtures{{
         {{41, 44, 47}, "pca_F_dim", {"F2", "G#2", "B2"}, {}},
         {{38, 42, 45, 48}, "pca_D_7", {"D2", "F#2", "A2", "C3"}, {}},
         {{47, 51, 54}, "pca_B", {"B2", "D#3", "F#3"}, {}},
@@ -751,6 +1022,16 @@ int test_chord_inventory(const std::filesystem::path& root) {
         {{41, 45, 52}, "pca_F_Maj7", {"F2", "A2", "E3"}, {"Cn3"}},
         {{41, 45, 51}, "", {}, {}}, // ambiguous F7/F9; no guessing
         {{41, 42}, "", {}, {}}, // no exact native dyad carrier
+        // Reduced carriers describe only emitted bass/subset, never the whole source voicing.
+        // Db-major context names B-flat minor 7, not unheard A major 7.
+        {{56, 61, 65}, "pca_As_m7", {"G#3"}, {"As2", "Cs3", "Fn3"}},
+        {{48, 52, 55}, "pca_A_m", {"C3", "E3"}, {"An2"}},
+        {{55, 59, 66}, "pca_Ab_mM7", {"G3"}, {"Ab2", "Bn2", "Eb3"}}, // shares B with context
+        {{43, 47, 54}, "pca_G_Maj7", {"G2", "B2", "F#3"}, {"Dn3"}},
+        {{36, 40, 43, 48}, "pca_C", {"C2", "E2", "G2"}, {}}, // no witness for unplayed octave doubling
+        {{53, 59}, "", {}, {}}, // exact one/two-note carriers must remain octave-exact too
+        {{24, 40, 43}, "", {}, {}}, // unsupported actual bass must not be discarded for E2/G2
+        {{48, 55, 52}, "pca_A_m7", {"C3", "G3"}, {"An2", "En3"}}, // stronger compatible second tone wins
     }};
     for (std::size_t index = 0; index < fixtures.size(); ++index) {
         const auto& fixture = fixtures[index];
@@ -775,7 +1056,7 @@ int test_chord_inventory(const std::filesystem::path& root) {
                 note.beat < 0 || note.beat > 14 || note.beat != 2.0 * std::round(note.beat / 2.0) ||
                 note.chord_note_value != NoteValueOverride{{2, 1}, true})
                 return fail("expanded native chord changed exact source/ignore/frame/notation semantics: " +
-                    std::to_string(index));
+                    std::to_string(index) + " actual=" + note.chord_id);
         }
         if ((*fixture.id != '\0') != (chords != 0u) ||
             (*fixture.id == '\0' && observed.stats.chord_candidates != 0u))
@@ -787,6 +1068,118 @@ int test_chord_inventory(const std::filesystem::path& root) {
         ChartEventPlan plan;
         if (!compile_chart(config, &chart).ok() || !derive_chart_event_plan(config.notes, chart.notes, &plan))
             return fail("expanded chord output did not compile into an exact event plan");
+    }
+    return 0;
+}
+
+int test_lh_source_witnesses() {
+    using namespace ff7rp::pipeline;
+    Note note;
+    note.pitch = "C5";
+    note.chord_id = "pca_Db";
+    note.source_chord_pitches = {"G#3", "C#4", "F4"};
+    std::vector<MidiSourceIdentity> sources;
+    for (const int pitch : {56, 61, 65}) {
+        MidiSourceIdentity source;
+        source.tick = 25200; source.end_tick = 25559; source.pitch = pitch;
+        source.track = 1; source.channel = 0; source.velocity = 80;
+        sources.push_back(source);
+    }
+    const std::set<MidiSourceIdentity> miku_sources(sources.begin(), sources.end());
+    const auto valid = [&](const Note& n, const std::vector<MidiSourceIdentity>& witnesses,
+                           const std::set<MidiSourceIdentity>& immutable) {
+        return midi_chord_has_exact_source_witnesses(n, witnesses, immutable, test_target_native_assets());
+    };
+    if (valid(note, sources, miku_sources)) return fail("Miku register/inversion substitution passed LH witness validation");
+    Note reduced;
+    reduced.chord_id = "pca_A_Maj7";
+    reduced.source_chord_pitches = {"G#3"};
+    reduced.ignore_sound_pitches = {"An2", "Cs3", "En3"};
+    if (!valid(reduced, {sources.front()}, miku_sources) || valid(reduced, sources, miku_sources))
+        return fail("reduced Miku carrier did not retain exactly its one actual bass witness");
+    for (std::size_t i = 0; i < sources.size(); ++i) sources[i].pitch = std::array{37, 41, 44}[i];
+    const std::set<MidiSourceIdentity> exact_sources(sources.begin(), sources.end());
+    note.source_chord_pitches = {"C#2", "F2", "G#2"};
+    if (!valid(note, sources, exact_sources)) return fail("native-exact dual LH failed witness validation");
+    auto forged = sources;
+    ++forged[0].ordinal;
+    if (valid(note, forged, exact_sources) || valid(note, sources, miku_sources))
+        return fail("LH witness identity was not checked against immutable MIDI source");
+    note.ignore_sound_pitches = {"Ab2"};
+    if (valid(note, sources, exact_sources)) return fail("unplayed LH source was retained as a witness");
+    sources.pop_back();
+    note.source_chord_pitches.pop_back();
+    if (!valid(note, sources, exact_sources)) return fail("native-exact partial LH witness was rejected");
+    note.ignore_sound_pitches.clear();
+    if (valid(note, sources, exact_sources)) return fail("missing native constituent lacked a source witness");
+    return 0;
+}
+
+int test_lone_partial_carrier_name(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    // Lone C3 has no root carrier. Lexical order used to name it A dim; a plain
+    // triad wins, and a melody tone only chooses among plain triads.
+    struct Case { int melody; const char* id; std::vector<std::string> ignores; };
+    const std::array<Case, 2> cases{{
+        {74, "pca_A_m", {"An2", "En3"}}, {75, "pca_Ab", {"Ab2", "Eb3"}}}};
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        std::vector<MidiEvent> melody{{0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}}}, harmony;
+        for (int event = 0; event < 8; ++event) {
+            add_note(&melody, event * 960, 360, cases[index].melody, 104);
+            add_note(&harmony, event * 960, 720, 48, 82);
+        }
+        std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&file, 1); append_u16(&file, 2); append_u16(&file, 480);
+        append_midi_track(&file, std::move(melody)); append_midi_track(&file, std::move(harmony));
+        const auto path = root / ("lone-partial-carrier-" + std::to_string(index) + ".mid");
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(file.data()), file.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        const auto observed = generate(path, WavAudio{}, config);
+        std::size_t chords = 0;
+        for (const auto& note : observed.notes) {
+            if (note.chord_id.empty()) continue;
+            ++chords;
+            if (note.chord_id != cases[index].id || note.ignore_sound_pitches != cases[index].ignores ||
+                note.source_chord_pitches != std::vector<std::string>{"C3"})
+                return fail("lone partial carrier was not named by a plain triad: " + note.chord_id);
+        }
+        if (!observed.status.ok() || chords == 0u) return fail("lone partial carrier was not offered");
+    }
+    return 0;
+}
+
+int test_reduced_bass_context(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    struct Case { int melody_end; int upper_delay; int upper_channel; bool admitted; };
+    const std::array<Case, 5> cases{{
+        {1921, 0, 1, true}, {1920, 0, 1, false}, {1919, 0, 1, false},
+        {1921, 1, 1, false}, {1921, 0, 2, false}}};
+    for (std::size_t index = 0; index < cases.size(); ++index) {
+        const auto& item = cases[index];
+        std::vector<MidiEvent> melody{{0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}}}, harmony;
+        add_note(&melody, 0, item.melody_end, 84, 110);
+        add_note(&melody, 3840, 480, 84, 110);
+        add_note(&harmony, 1920, 240, 56, 80, 1);
+        for (const int pitch : {61, 65})
+            add_note(&harmony, 1920 + item.upper_delay, 240, pitch, 80, item.upper_channel);
+        std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+        append_u16(&file, 1); append_u16(&file, 2); append_u16(&file, 480);
+        append_midi_track(&file, std::move(melody)); append_midi_track(&file, std::move(harmony));
+        const auto path = root / ("reduced-bass-context-" + std::to_string(index) + ".mid");
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(file.data()), file.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        const auto observed = generate(path, WavAudio{}, config);
+        if (!observed.status.ok() || observed.stats.source_pitch_witness_failures ||
+            (observed.stats.chord_candidates != 0u) != item.admitted)
+            return fail("reduced bass crossed source tick/stream or half-open sounding context: " + std::to_string(index));
+        for (const auto& note : observed.notes) {
+            if (!note.chord_id.empty() && note.source_chord_pitches != std::vector<std::string>{"G#3"})
+                return fail("reduced bass invented held melody or retained unsupported harmony metadata");
+        }
     }
     return 0;
 }
@@ -846,7 +1239,7 @@ int test_exact_note_values(const std::filesystem::path& root) {
                     std::to_string(ppq) + " row " + std::to_string(index));
         }
     }
-    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v18"))
+    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v23"))
         return fail("new exact MIDI notation did not invalidate generated policy caches");
     return 0;
 }
@@ -948,6 +1341,16 @@ int test_pitch_exclusion(const std::filesystem::path& root) {
 
 int main(int argc, char** argv) {
     ff7rp::tests::TemporaryDirectory temporary("ff7rp-midi-compilation-oracle");
+    if (test_exact_dual_actions(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--dual-only") return 0;
+    if (test_lh_source_witnesses() != 0) return 1;
+    if (test_reduced_bass_context(temporary.path()) != 0) return 1;
+    if (test_lone_partial_carrier_name(temporary.path()) != 0) return 1;
+    if (test_representative_root_repair(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--repair-only") return 0;
+    if (test_assignment_switch_penalty() != 0 || test_native_frame_spacing(temporary.path()) != 0 ||
+        test_switch_utility_selection(temporary.path()) != 0) return 1;
+    if (argc == 2 && std::string_view(argv[1]) == "--switch-only") return 0;
     if (test_exact_note_values(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--note-values-only") return 0;
     if (test_chord_inventory(temporary.path()) != 0) return 1;
@@ -975,9 +1378,9 @@ int main(int argc, char** argv) {
             if (!value->status.ok() || value->notes.empty() ||
                 !ff7rp::pipeline::validate_midi_difficulty_route(value->notes, value->stats.source_bpm, 6).feasible ||
                 value->stats.source_pitch_witness_failures != 0 || value->stats.scheduled_conflicts != 0 ||
-                // The final source onset is already protected in the initial state;
-                // every other source frame must be traversed by the selector.
-                value->stats.selector_processed_frames + 1 != value->stats.candidate_frames ||
+                // The final source onset can offer a dual input, so it too must
+                // be traversed rather than preselected as a single-sided row.
+                value->stats.selector_processed_frames != value->stats.candidate_frames ||
                 value->notes.front().beat * 30.0 > 120.0 + 480.0 ||
                 value->notes.back().beat * 30.0 != 120.0 + 1999.0 * 54.0) {
                 return fail("soft goals lost a complete, source-backed, fully validated result: " + value->status.message +
@@ -988,7 +1391,7 @@ int main(int argc, char** argv) {
             for (const auto& note : value->notes) {
                 const double ordinal = (note.beat * 30.0 - 120.0) / 54.0;
                 if (std::fabs(ordinal - std::round(ordinal)) > 1e-7 || ordinal < 0.0 || ordinal > 1999.0 ||
-                    note.group_index != 0 || (!note.pitch.empty() && !note.chord_id.empty())) {
+                    note.group_index != 0 || (note.pitch.empty() && note.chord_id.empty())) {
                     return fail("bounded selection invented or retimed a source action");
                 }
             }
@@ -1032,7 +1435,7 @@ int main(int argc, char** argv) {
     };
     const std::filesystem::path superset_path = write_chord_fixture("chord-superset.mid", {43, 47, 54});
     const std::filesystem::path ambiguous_path = write_chord_fixture("chord-ambiguous.mid", {48, 52, 58});
-    const std::filesystem::path exact_path = write_chord_fixture("chord-exact.mid", {48, 52, 55});
+    const std::filesystem::path exact_path = write_chord_fixture("chord-exact.mid", {36, 40, 43});
     const std::filesystem::path duplicate_path = write_chord_fixture("duplicate-pitch.mid", {48, 52, 48});
     const std::filesystem::path unsupported_pitch_path =
         write_chord_fixture("unsupported-pitch.mid", {20, 48, 52});
@@ -1105,7 +1508,7 @@ int main(int argc, char** argv) {
     const std::filesystem::path straddling_db_chord_path = write_bytes_fixture(
         "straddling-db-chord.mid", db_chord_context_midi_bytes(DbChordContext::Straddling));
     const std::filesystem::path heterogeneous_db_chord_path = write_bytes_fixture(
-        "heterogeneous-db-chord-lengths.mid", single_chord_midi_bytes({49, 53, 56}, true, true));
+        "heterogeneous-db-chord-lengths.mid", single_chord_midi_bytes({37, 41, 44}, true, true));
     const std::filesystem::path exact_note_values_path = write_physical_fixture(
         "exact-note-values.mid", {
             {0, {60}, 100, 1920}, {200, {61}, 100, 2880}, {400, {62}, 100, 960},
@@ -1312,7 +1715,6 @@ int main(int argc, char** argv) {
         observations.emplace_back("manual-lv" + std::to_string(difficulty),
             manual[static_cast<std::size_t>(difficulty - 1)]);
     }
-    bool observed_exact_voicing = false;
     for (const Observation& profile : manual) {
         std::size_t required_actions = 0;
         for (const Note& note : profile.notes) {
@@ -1320,15 +1722,16 @@ int main(int argc, char** argv) {
             if (!note.pitch.empty()) ++required_actions;
             if (!note.chord_id.empty()) {
                 ++required_actions;
-                observed_exact_voicing = observed_exact_voicing || !note.source_chord_pitches.empty();
-                if (!note.ignore_sound_pitches.empty()) return fail("generated IgnoreSound guessed without a verified mapping");
+                if (note.source_chord_pitches.empty() || note.ignore_sound_pitches.size() > 3u)
+                    return fail("generated LH lacks its exact emitted source subset");
             }
         }
         if (profile.status.ok() && profile.stats.selected_actions != required_actions) {
             return fail("ungrouped generated event was not counted as a required action");
         }
     }
-    if (!observed_exact_voicing) return fail("exact source chord voicing was not preserved");
+    // Absolute native/source equality is tested by test_chord_inventory and the
+    // witness validator; metadata presence alone is not voicing preservation.
     const Observation superset = generate(superset_path, no_audio, config_for(6));
     const Observation repeated_superset = generate(superset_path, no_audio, config_for(6));
     if (!superset.status.ok() || fingerprint(superset) != fingerprint(repeated_superset)) {
@@ -1678,9 +2081,10 @@ int main(int argc, char** argv) {
     if (!compile_plan(flat_c_sharp_chord, &flat_chord_plan)
         || !compile_plan(heterogeneous_db_chord, &heterogeneous_chord_plan)
         || !compile_plan(sharp_chord, &sharp_chord_plan)
-        || flat_chord_plan.source_row_count != flat_chord_plan.native_event_count
-        || flat_chord_plan.native_prefix_event_count != flat_chord_plan.source_row_count
-        || flat_chord_plan.source_row_count != flat_chord_plan.required_action_count
+        || flat_chord_plan.source_row_count != flat_c_sharp_chord.notes.size()
+        || flat_chord_plan.native_prefix_event_count != flat_chord_plan.native_event_count
+        || flat_chord_plan.required_action_count != flat_c_sharp_chord.stats.selected_actions
+        || flat_chord_plan.native_event_count != flat_chord_plan.required_action_count
         || flat_chord_plan.physical_digest == sharp_chord_plan.physical_digest
         || flat_chord_plan.physical_digest == heterogeneous_chord_plan.physical_digest) {
         return fail("automatic Db chord accounting or physical identity was not exact");
@@ -1688,7 +2092,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v18") {
+        != "midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers:v23") {
         return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
@@ -1804,7 +2208,7 @@ int main(int argc, char** argv) {
     const Observation ordinary = generate(extended_path, no_audio, envelope_config(6));
     if (!extended.status.ok() || extended.notes.size() <= ff7rp::pipeline::kMaxChartRows
         || extended.notes.size() > ff7rp::pipeline::kMaximumExtendedChartRows
-        || extended.stats.selected_actions != extended.notes.size()
+        || extended.stats.selected_actions != extended.notes.size() * 2
         || std::any_of(extended.notes.begin(), extended.notes.end(), [](const Note& note) {
             return note.group_index != 0;
         }) || !ordinary.status.ok() || ordinary.notes.empty()
@@ -1818,7 +2222,7 @@ int main(int argc, char** argv) {
     }
     if (!pathological.status.ok() || !pathological_repeat.status.ok() || pathological.notes.empty()
         || pathological.stats.selector_beam_width >= 384
-        || pathological.stats.selector_processed_frames + 1 != pathological.stats.candidate_frames
+        || pathological.stats.selector_processed_frames != pathological.stats.candidate_frames
         || !ff7rp::pipeline::validate_midi_difficulty_route(pathological.notes, pathological.stats.source_bpm, 6).feasible
         || canonical_note_bytes(pathological.notes) != canonical_note_bytes(pathological_repeat.notes)
         || pathological.stats.selector_skill_row_visits != pathological_repeat.stats.selector_skill_row_visits) {
@@ -1831,10 +2235,10 @@ int main(int argc, char** argv) {
     if (!physical_plan(physical_exact_easy, 1, &exact_easy_plan)
         || !physical_plan(physical_exact, 6, &exact_hard_plan)
         || exact_easy_plan.source_row_count != physical_exact_easy.notes.size()
-        || exact_easy_plan.native_event_count != physical_exact_easy.notes.size()
+        || exact_easy_plan.native_event_count != physical_exact_easy.stats.right_events + physical_exact_easy.stats.left_events
         || exact_easy_plan.required_action_count != physical_exact_easy.stats.selected_actions
         || exact_hard_plan.source_row_count != physical_exact.notes.size()
-        || exact_hard_plan.native_event_count != physical_exact.notes.size()
+        || exact_hard_plan.native_event_count != physical_exact.stats.right_events + physical_exact.stats.left_events
         || exact_hard_plan.required_action_count != physical_exact.stats.selected_actions) {
         return fail("independent ungrouped exact R/P/E/A accounting changed");
     }

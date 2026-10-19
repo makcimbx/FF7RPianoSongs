@@ -28,6 +28,21 @@ such as metronome-beat extraction, may parse the source separately.
   and extended chart policies: an unsupported pitch does not by itself reject all
   otherwise usable profiles. A source with no supported pitched notes still fails.
 - No pitch is invented or transposed.
+  Full and unique-superset LH recognition remains pitch-class based, but candidate
+  admission now requires every unmuted native sound to have a literal absolute
+  MIDI-pitch witness. Wrong-register/inverted carriers are rejected, not retuned.
+  Source-voicing metadata retains only the demonstrated tones actually emitted;
+  the final source-witness validator checks LH as well as RH before publication.
+  When a recognized full/superset voicing fails this check, a reduced carrier
+  may retain its actual fresh bass and one compatible source tone. The entire
+  source harmony must share one exact tick/track/channel; the existing partial
+  path still requires same-onset or sounding tracked melody context above it.
+  An unsupported actual bass rejects reduction rather than substituting a higher
+  tone. Two emitted tones are preferred over bass alone; compatible second tones
+  rank by source velocity, duration, then immutable identity. Metadata and witnesses
+  contain only emitted tones, with all other carrier sounds explicitly ignored.
+  Some accompaniment is still omitted when no exact bass carrier exists.
+  Authored `chord_voicings` remains explicit-only and is not enabled for MIDI inference.
 - Actions before the established audio lead-in or after known source-audio duration are excluded.
 - Explicit JSON notes remain authoritative and bypass MIDI reduction.
 
@@ -40,8 +55,18 @@ native-superset chords. Exact source voicing remains attached to inferred chords
 IgnoreSound can suppress only verified extra native constituents. Accepted chords
 are not converted to monotones merely to simplify publication.
 
-The selector still chooses independent single-sided required inputs for spacing,
-route, strain, score-growth, and recognizability analysis. After selection, each
+The selector offers single-sided inputs and exact simultaneous tracked-melody RH
+plus representable LH pairs. A pair requires the same exact source tick for the
+melody and every fresh LH constituent, with LH constituents on one track/channel;
+sharing a humanized cluster or rounded native frame is insufficient. Fallback RH
+attacks are not paired with accompaniment. Dual rows consume two required inputs,
+with independent hand spacing and both inputs included in density, fatigue, local
+windows and full-route validation before publication. They compete with their
+single-sided alternatives rather than acquiring a forced LH quota. The last real
+melody attack remains required, including when selected as part of a dual row.
+The legacy `dropped_actions` diagnostic remains candidate actions minus candidate
+frames; it counts frame alternatives, not omitted source notes or required inputs.
+After selection, each
 right-hand root retains the other unique supported source pitches at exactly its
 source tick, track, and channel as consecutive same-beat automatic group followers.
 The root stays first; followers sort by pitch then immutable source identity, with
@@ -64,15 +89,56 @@ an otherwise valid later label after an intermediate label was omitted. Higher
 labels need not have strictly more rows: timing and input patterns also determine
 their load. These preferences do not authorize relaxing the route's load ceiling.
 
-At equal density-goal error, fully feasible selections prefer summed musical
-salience before lower route load, even target timing, and previous-profile
-preference. Salience uses the existing velocity, duration, audio prominence,
+At equal density-goal error, fully feasible selections prefer musical utility
+before lower route load, even target timing, and previous-profile preference.
+Utility is summed salience minus a small categorical assignment-switch penalty.
+Salience uses the existing velocity, duration, audio prominence,
 metric accent, melody evidence, and rhythmic-quality score; it is not phrase or
 motif recognition. Intermediate ranking first distinguishes full-route-feasible
-states at equal density error, then spends feasible headroom on salience. States
+states at equal density error, then spends feasible headroom on the same utility. States
 still needing recovery retain load/penalty guidance, and the separate per-route
 feasible-state reservation remains in force. Final publication still requires one
 coherent route and every source, spacing, coverage, and physical boundary.
+
+For each required hand input whose actual native assignment ID changes, the
+penalty adds `1 / positive native-frame gap` from that hand's previous input.
+Simultaneous changes add `min(right rate, left rate)` as well. RH IDs retain
+spelling and alternate variants; LH uses the carrier ID. Automatic followers are
+excluded, and interleaved other-hand inputs do not reset either hand's history.
+Insertion analysis includes incoming and outgoing edges, cached once per analysis
+work item rather than recomputed in sort comparators. This is a small descriptive
+ranking preference, **not** angular geometry, calibrated effort, or a new hard
+human timing threshold. Strong musical evidence can outweigh it. Same-ID repeats
+still incur the existing action, jack, fatigue, and route costs.
+
+Existing per-hand seconds spacing floors must hold both on authoritative source
+times **and** on the quantized native-frame distance, using the same deterministic
+comparison epsilon. Both sides of a dual row and protected-final neighbors obey
+both checks; rounding cannot shorten an admitted gap below its existing floor.
+
+After beam selection, a bounded representative-root repair may replace **one**
+internal, unprotected RH-only input with an already admitted fresh RH candidate.
+It preserves required-action count, boundary inputs, first/last RH inputs, all
+dual/LH roots, and immutable source witnesses. No note-off, sustained reattack,
+unsupported/drum event, or cross-stream simultaneous follower is invented.
+
+Coverage is the descending vector of distances from unique admitted fresh RH
+onset frames to the nearest selected root frame. The vector must improve
+lexicographically, with **no decrease in raw summed source salience and no
+increase in assignment-switch cost** (within the existing comparison epsilon).
+This is source-onset representation, not phrase/motif recognition, uniform
+resampling, or proof that an omitted sound is perceptually unimportant. A true
+rest supplies no fresh candidate and creates no repair obligation.
+
+Search examines at most eight uncovered onset targets and eight low-salience
+removable roots, then at most eight full-route/publication proposals. Both
+source-time/native-frame spacing and the existing coherent route/source-bridge
+constraints remain authoritative. Publication is transactional: exact followers
+are materialized and native compilation must fit complete row/event capacity
+before committing a swap. If a repair would overflow an ordinary-limit profile,
+the original publishable profile is kept, not omitted or truncated. A bounded
+search may leave source-active holes; it does not promise a globally optimal or
+fully represented arrangement. The internal repair witness is not serialized.
 
 Fallback generation keeps at most one non-tracked source alternate per onset
 cluster, plus weak tracked attacks. Proximity to a preliminary primary is not a
@@ -117,7 +183,7 @@ output before return. Path copies therefore do not duplicate each row's strings,
 chord pitches, or source witnesses. This changes allocation cost, not selection
 arithmetic, search breadth, generated output, or cache identity.
 
-Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Authored calibration routes overlap, and incomplete recovered evidence is treated as unknown rather than as rests or easy material.
+Generated level is not a simple function of row count, actions per minute, pitch span, or one strain statistic. Current route envelopes remain historical regression settings, not stock-calibrated human-difficulty limits; see the [corpus provenance correction](../analysis/VanillaCorpusRecovery-20261018.md). Missing evidence must not be interpreted as rests or easy material.
 
 ## Timing And Audio
 
@@ -135,13 +201,20 @@ whole-through-sixteenth value keeps precedence. Nonmatching or heterogeneous
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. This derivation is covered by
-`midi_generation=independent_roots+exact_simultaneous_groups:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_partial_lh:v18`.
+`midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers:v23`.
 The policy identity rebuilds generated MIDI caches without changing authored JSON
 semantics or the binary cache layout. Complete enriched rows pass the existing
 compiler and event-plan topology/physical limits; oversized profiles are omitted,
 never truncated or reduced to an unsafe playable prefix. Same-time native group
 followers may sound on the next game frame. This Integration experiment still
-requires focused in-game sound, scoring, and full-tail verification.
+requires focused in-game sound, scoring, and full-tail verification, including
+generated dual rows with automatic followers. Offline route feasibility is not
+human playability qualification: RH movement/reversals use a MIDI-pitch proxy,
+not stick geometry; fatigue uses per-hand decayed action counts. Current route
+margins permit one-handed charts and do not impose mandatory recovery rests.
+The old partial summaries describe a modded corpus, not stock charts, and remain
+historical regression evidence rather than a validated controller or
+musical-perception model.
 
 Before any difficulty reduction, eligible C and C-sharp events in the complete
 canonical right-hand source sequence are assigned normal or verified `_2`
@@ -176,12 +249,13 @@ capability identity participates in every authored-JSON and MIDI repository
   attestation; runtime name resolution remains fail closed. This offline rule
   is not a human runtime qualification for build 1.004.
 Exact source chord voicing is retained until IgnoreSound
-derivation. Exact chord matches remain preferred and unchanged. A partial source
+derivation. Full chord matches remain preferred only when every unmuted native
+absolute pitch has a source witness. A partial source
 harmony of at least three distinct pitch classes may use a native chord superset
 only when exactly one supported template contains its pitch classes, its lowest
 source tone is that template's root, each class has one source event on one
 track/channel, and
-every intended pitch class exists in the verified native voicing. IgnoreSound is
+every emitted absolute pitch exists in the source harmony. IgnoreSound is
 then populated, in native table order, only with mapped native constituents absent
 from the intended source harmony. Ambiguous qualities, inversions, unsupported
 voicings, or more than three required ignores decline the partial match.
@@ -204,11 +278,19 @@ source subset (octave doubling retains the lowest supported source octave of
 each class; an unmappable class declines), one track/channel and exact tick,
 and suppresses every other native sound with at most three IgnoreSound entries.
 It retains only the surviving source identities, exact onset and note values.
-Every candidate carrier must reproduce that same intended subset; fewest ignores
-then lexical native ID breaks ties. The carrier does not assert missing major/minor harmony.
+Every candidate carrier must reproduce that same intended subset. Because the
+player sees and performs the carrier chord, ties prefer a carrier whose own root
+(first native sound) is emitted, then fewest ignores, then most carrier pitch
+classes present in the onset's accompaniment, then a plain major/minor triad
+over dim/sus4/extended names, then most carrier pitch classes in the whole onset
+(melody may be a passing tone), then lexical native ID. Without this, the lexical rule
+named C3 alone `pca_A_dim` and an inverted Db-major bass `pca_A_Maj7`. The
+carrier still does not assert missing major/minor harmony, and no octave is folded
+to make the root representable.
 Unknown capability, monophonic melody, high ornaments outside the native voicing,
 or unmappable octaves decline this path. There is no LH quota, score bonus,
-held-note invention, dual-row rewrite, or relaxation of route/spacing limits.
+held-note invention, or relaxation of route/spacing limits. Exact simultaneous
+tracked melody may share the resulting row under the dual-input rules above.
 
 ## Author Expectations
 

@@ -31,6 +31,16 @@ capability. Use isolated source copies for comparisons: changing policy changes 
 local cache identity. Pitch-exclusion warnings are printed with song-directory context
 on source analysis, not repeated on accepted warm-cache hits.
 
+## vanilla_piano_benchmark.py
+
+Exports provenance-checked decoded stock charts to isolated MIDI sources and an
+authored-chart control, then compares resolved profiles against the original
+attacks and required input identities. Uses only Python's standard library.
+The sidecar preserves groups and raw assignments; the synthetic WAV and assumed
+note gates are not stock-performance or listening evidence. See
+[VanillaBenchmark.md](../docs/VanillaBenchmark.md) for inputs, commands, matching
+rules and focused selftests. It never installs or launches the game.
+
 ## extended_chart_fixture_tool
 
 Creates an ordinary exactly-520-row compatibility fixture in a new or empty destination. The generated JSON contains no legacy diagnostic authority field: a proven playable exact-build runtime publishes the complete 512-prefix-plus-eight-tail chart, while native-512 or unsupported policy rejects it. Generation is staged in a unique sibling directory and validates the exact two-file protocol (`song.json` plus a 70-second, 48 kHz mono PCM16 `song.wav`). An existing empty destination is first renamed to a unique sibling backup; staging is then published by same-parent rename and validated again before that backup is retired. Publish or post-publish failures remove the generated fixture and restore the original empty directory. Existing nonempty data is never overwritten. If generated-output cleanup or empty-directory restoration fails, the error reports the exact `.ff7rp-previous-*` backup, failed or obstructing output, and staging paths needed for recovery.

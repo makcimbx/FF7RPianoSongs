@@ -35,9 +35,9 @@ The recovered static duration helper maps NoteType `0..6` as follows; DotType `0
 
 The authored supported scope is deliberately narrower: NoteType `0..4` and DotType `0..1` (whole through dotted sixteenth). NoteTypes `5` and `6`, DotType above `1`, negative values, and other bytes are rejected before native mutation. For an absent hand the required stored pair is also `(0,0)`; presence is distinguished by the side FName, so `(0,0)` remains valid whole-note metadata for a present hand.
 
-## Retained vanilla observation
+## Retained mod-corpus observation (provenance corrected 2026-10-18)
 
-The completed retained-vanilla inspection covered **2,385 rows**. Present monotone and chord events used the recovered NoteType/DotType pairs. Among **338 dual rows**, **106** had equal complete pairs and **232** had unequal complete pairs. Considering the components independently, NoteType was equal/unequal in **127/211** rows and DotType was equal/unequal in **254/84** rows. These are bounded static corpus counts, not evidence of audible or gameplay behavior.
+The completed retained-corpus inspection covered **2,385 rows**. Present monotone and chord events used the recovered NoteType/DotType pairs. Among **338 dual rows**, **106** had equal complete pairs and **232** had unequal complete pairs. Considering the components independently, NoteType was equal/unequal in **127/211** rows and DotType was equal/unequal in **254/84** rows. The assets were subsequently identified as a third-party replacement-song mod, not stock; see [stock corpus recovery](VanillaCorpusRecovery-20261018.md). These remain bounded static mod-corpus counts, not evidence of stock notation distribution, audible behavior, or gameplay behavior. The independent static constructor/layout evidence above is unchanged.
 
 ## Runtime decision and nonclaims
 
