@@ -21,11 +21,14 @@
 
 int main(int argc, char** argv)
 {
-    const bool playable_extended = argc > 1 &&
-        std::string_view(argv[argc - 1]) == "--playable-extended";
-    if (playable_extended) --argc;
+    // Supported builds play extended charts, so that is the default policy; --native-512
+    // models a build without it. --playable-extended is still accepted for old scripts.
+    const std::string_view policy_flag = argc > 1 ? argv[argc - 1] : "";
+    const bool native_512 = policy_flag == "--native-512";
+    if (native_512 || policy_flag == "--playable-extended") --argc;
+    const bool playable_extended = !native_512;
     if (argc != 2 && argc != 3) {
-        std::cerr << "usage: song_cache_tool <song-directory> [dump-difficulty] [--playable-extended]\n";
+        std::cerr << "usage: song_cache_tool <song-directory> [dump-difficulty] [--native-512]\n";
         return 2;
     }
     std::optional<int> dump_difficulty;

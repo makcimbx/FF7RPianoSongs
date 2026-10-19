@@ -209,12 +209,13 @@ Build the production cache tool for an explicit catalog identity:
 
 ```powershell
 ./build.ps1 -Configuration Release -CatalogBuildId <catalog-build-id> -Target song_cache_tool
-./build/Release/song_cache_tool.exe "<isolated-song-directory>" --playable-extended
+./build/Release/song_cache_tool.exe "<isolated-song-directory>"
 ```
 
 The tool writes caches and resolved exports in the supplied song directory. Use
 an external scratch copy of the song inputs, never installed Music, for cold
-benchmarks. `--playable-extended` selects offline chart policy only; it does not
+benchmarks. It defaults to the playable-extended chart policy; `--native-512`
+selects ordinary 512-row policy. Either is offline chart policy only; it does not
 authorize runtime hooks or installation.
 
 `timing elapsed_ms=... delta_ms=... stage=...` records steady-clock time at the

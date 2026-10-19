@@ -24,10 +24,11 @@ The generated header embeds only the non-HCA scaffold: the 0x460-byte MABF heade
 
 Loads one song directory through the production repository pipeline and prints the current pipeline/runtime magic and format, chart policy, cache source, profile/tail diagnostics, loudness/gain envelope, metronome, and MABF metadata. This is a mutating developer tool: running it creates or refreshes that song's local `.cache` files and may atomically create a missing `song.json` before cache generation. It never mutates source audio or MIDI. An optional difficulty argument must be an exact integer from 1 through 6 with no sign, whitespace, or trailing characters; missing or omitted sparse labels fail explicitly.
 
-Use `song_cache_tool <song-directory> [dump-difficulty] [--playable-extended]`.
-The trailing flag selects the offline playable-extended row/event policy; without it,
-the tool uses ordinary 512-row policy. It does not install hooks or prove runtime
-capability. Use isolated source copies for comparisons: changing policy changes the
+Use `song_cache_tool <song-directory> [dump-difficulty] [--native-512]`.
+The tool defaults to the offline playable-extended row/event policy that supported
+builds play; the trailing `--native-512` flag selects ordinary 512-row policy, which
+omits every profile above 512 rows (the old `--playable-extended` flag is accepted and
+changes nothing). It does not install hooks or prove runtime capability. Use isolated source copies for comparisons: changing policy changes the
 local cache identity. Pitch-exclusion warnings are printed with song-directory context
 on source analysis, not repeated on accepted warm-cache hits.
 
