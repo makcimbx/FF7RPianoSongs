@@ -210,5 +210,13 @@ inline constexpr uintptr_t PianoAutoplayAdvancer = 0x03c60f58;
 inline constexpr uintptr_t PianoAutoplayTerminalizer = 0x03c4d37c;
 inline constexpr uintptr_t PianoAutoplayControllerTick = 0x03c60ed0;
 inline constexpr uintptr_t PianoAutoplayStateTable = 0x05d5f220;
+inline constexpr uintptr_t PreviewRootSharedGetter = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewRootLayoutWriter = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewScreenToUi = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewReferenceScale = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewWidgetGeometry = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewSlatePaintWriter = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewRootPointer = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
+inline constexpr uintptr_t PreviewRootController = 0x0; // absent in build ff7rebirth-steam-win64-68fd6fde
 
 } // namespace ff7r::piano::game::rva

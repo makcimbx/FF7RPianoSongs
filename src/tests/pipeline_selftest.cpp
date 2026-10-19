@@ -298,7 +298,7 @@ int main(int argc, char** argv)
     if (test_note_values() != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--note-values-only") return 0;
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)
-        != "ff7rpianosongs.pipeline.v48") {
+        != "ff7rpianosongs.pipeline.v49") {
         return fail("pipeline cache identity did not invalidate pre-voicing serialized configurations");
     }
     if (test_authored_chord_voicings() != 0) return 1;

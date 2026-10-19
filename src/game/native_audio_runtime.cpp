@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <intrin.h>
 #include <limits>
@@ -39,6 +40,18 @@ struct alignas(8) Acquisition {
     SoftPath path{};
     std::array<std::uint64_t,2> delegate{}, debug{};
 };
+struct AdmissionTimings {
+    // -1 means not attempted; retryable authentication reports its latest attempt.
+    std::int64_t mount_us=-1,request_us=-1,discover_us=-1,bindings_us=-1,register_us=-1;
+};
+template<class Fn> auto timed_stage(std::int64_t& duration,Fn&& fn) {
+    struct Timer {
+        std::int64_t& duration;
+        std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
+        ~Timer(){duration=std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-start).count();}
+    } timer{duration};
+    return fn();
+}
 static_assert(sizeof(SoftPath) == 24 && sizeof(NativeAccessor) == 32);
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
 MemoryReader test_memory{};
@@ -113,6 +126,7 @@ public:
     unsigned char role = 0;
     bool mounted = false;
     RuntimeStage reported_stage=RuntimeStage::Unavailable;
+    AdmissionTimings timings{};
     std::array<std::uint64_t,3> environment{};
     std::array<unsigned char,260> mount_status{};
     std::array<std::uint64_t,2> encryption_id{};
@@ -629,8 +643,8 @@ void advance(PreparedNativeAudio& work,BindingResult& deferred) {
             } // Loader originals may need manager readers: never mount under writer exclusion.
         }
         work.stage.store(RuntimeStage::Mounting,std::memory_order_release);
-        if(!mount(work)){fail(work,RuntimeFailure::Mount);return;}
-        if(!acquire(work)){fail(work,RuntimeFailure::Acquisition);return;}
+        if(!timed_stage(work.timings.mount_us,[&]{return mount(work);})){fail(work,RuntimeFailure::Mount);return;}
+        if(!timed_stage(work.timings.request_us,[&]{return acquire(work);})){fail(work,RuntimeFailure::Acquisition);return;}
         work.stage.store(RuntimeStage::Acquiring,std::memory_order_release);return;
     }
     if(stage!=RuntimeStage::Acquiring && stage!=RuntimeStage::Authenticating)return;
@@ -641,15 +655,15 @@ void advance(PreparedNativeAudio& work,BindingResult& deferred) {
     if(!g_services.identity(identity))return;
     work.stage.store(RuntimeStage::Authenticating,std::memory_order_release);
     seed_names(work);
-    if(!discover(work,identity)){fail(work,RuntimeFailure::Discovery);return;}
-    const auto checked=work.bindings.capture(core::generated::kBuildId,g_base,identity,work.artifacts,work.seeds,
-        {work.resolved.data(),work.name_count});
+    if(!timed_stage(work.timings.discover_us,[&]{return discover(work,identity);})){fail(work,RuntimeFailure::Discovery);return;}
+    const auto checked=timed_stage(work.timings.bindings_us,[&]{return work.bindings.capture(core::generated::kBuildId,g_base,identity,work.artifacts,work.seeds,
+        {work.resolved.data(),work.name_count});});
     if(checked.failure==BindingFailure::IncompleteSnapshot) {
         deferred=checked;return; // Retain acquisitions; the next updater retries only read-only authentication.
     }
     if(!checked){fail(work,RuntimeFailure::Bindings,checked.role,checked);return;}
     work.stage.store(RuntimeStage::Registering,std::memory_order_release);
-    if(register_cohort(work,identity))work.stage.store(RuntimeStage::Ready,std::memory_order_release);
+    if(timed_stage(work.timings.register_us,[&]{return register_cohort(work,identity);}))work.stage.store(RuntimeStage::Ready,std::memory_order_release);
 }
 void updater_hook(void* receiver) {
     covered_entry();
@@ -673,6 +687,7 @@ void updater_hook(void* receiver) {
     std::shared_ptr<PreparedNativeAudio> observed;
     RuntimeSnapshot snapshot{};
     BindingResult deferred{};
+    AdmissionTimings timings{};
     {
         std::shared_lock<std::shared_mutex> lifetime(g_lifetime,std::try_to_lock);
         if(lifetime.owns_lock()) {
@@ -684,6 +699,7 @@ void updater_hook(void* receiver) {
                 if(stage==RuntimeStage::Ready) {std::lock_guard lock(g_queue_mutex);++g_next;}
                 else if(stage==RuntimeStage::Failed)invalidate(work->failure.load(std::memory_order_acquire));
                 observed=work;snapshot=native_audio_status(*work);
+                timings=work->timings;
                 if(deferred.failure==BindingFailure::IncompleteSnapshot) {
                     snapshot.binding=deferred;snapshot.role=deferred.role;
                 }
@@ -716,7 +732,9 @@ void updater_hook(void* receiver) {
                 "native_audio cohort="+observed->artifacts->identity+" generation="+std::to_string(snapshot.generation)
                 +" stage="+native_audio_stage_name(snapshot.stage)+" failure="+native_audio_failure_name(snapshot.failure)
                 +" binding="+binding_failure_name(snapshot.binding.failure)+" role="+std::to_string(snapshot.role)
-                +details+" retention=process_exit rollback=none");
+                +details+" mount_us="+std::to_string(timings.mount_us)+" request_us="+std::to_string(timings.request_us)
+                +" discover_us="+std::to_string(timings.discover_us)+" bindings_us="+std::to_string(timings.bindings_us)
+                +" register_us="+std::to_string(timings.register_us)+" retention=process_exit rollback=none");
         }
     }catch(...){}
     report_failure();

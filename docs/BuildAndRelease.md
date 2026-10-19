@@ -208,6 +208,18 @@ Test names and totals are derived from CMake/CTest and release-audit output. The
 
 ## Measure Song Preparation
 
+Native warm-cache regression checks require external fixtures:
+
+```powershell
+./build.ps1 -Configuration Release -Target native_audio_warm_selftest
+./build/Release/native_audio_warm_selftest.exe "<absolute-Paks>" "<authenticated-companion>" "<fresh-absolute-scratch-root>"
+```
+
+Without arguments this selftest checks invalid input only. The fixture run checks
+template-session reuse, byte-identical cold/warm outputs, invalidation and corrupt
+immutable-file rejection. Use a short, fresh external scratch root, never installed cache
+directories; this remains offline validation, not native readiness or gameplay.
+
 Build the production cache tool for an explicit catalog identity:
 
 ```powershell

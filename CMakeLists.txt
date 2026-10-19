@@ -266,6 +266,7 @@ set(FF7RP_PIPELINE_SOURCES
     src/pipeline/runtime_artifact_validator.cpp
     src/pipeline/song_json.cpp
     src/pipeline/song_repository.cpp
+    src/pipeline/song_preview.cpp
     src/pipeline/song_source_template.cpp
     src/pipeline/wav_reader.cpp
 )
@@ -413,7 +414,7 @@ target_compile_definitions(oodle_decoder_selftest PRIVATE WIN32_LEAN_AND_MEAN NO
 target_include_directories(oodle_decoder_selftest PRIVATE "src")
 target_link_libraries(oodle_decoder_selftest PRIVATE ff7rp_pipeline)
 
-foreach(native_writer_test IN ITEMS native_iostore_writer_selftest native_audio_cohort_selftest native_audio_cache_selftest)
+foreach(native_writer_test IN ITEMS native_iostore_writer_selftest native_audio_cohort_selftest native_audio_cache_selftest native_audio_warm_selftest)
     add_executable(${native_writer_test} src/tests/${native_writer_test}.cpp)
     ff7rp_apply_cpp_policy(${native_writer_test})
     target_compile_definitions(${native_writer_test} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -577,6 +578,7 @@ target_link_libraries(music_repository_loader_selftest PRIVATE ff7rp_pipeline)
 add_executable(startup_cache_overlay_selftest
     src/tests/startup_cache_overlay_selftest.cpp
     src/game/startup_cache_overlay.cpp
+    src/game/song_preview_overlay.cpp
     src/startup/startup_cache_progress.cpp
     src/core/hooks.cpp
     src/core/logging.cpp
@@ -638,6 +640,10 @@ ff7rp_apply_cpp_policy(song_repository_selftest)
 target_compile_definitions(song_repository_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(song_repository_selftest PRIVATE "src" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_link_libraries(song_repository_selftest PRIVATE ff7rp_pipeline midifile)
+
+add_executable(song_preview_selftest src/tests/song_preview_selftest.cpp)
+ff7rp_apply_cpp_policy(song_preview_selftest)
+target_link_libraries(song_preview_selftest PRIVATE ff7rp_pipeline)
 add_executable(resolved_song_renderer_selftest
     src/tests/resolved_song_renderer_selftest.cpp
 )
@@ -949,6 +955,16 @@ ff7rp_apply_cpp_policy(toggle_feedback_selftest)
 target_compile_definitions(toggle_feedback_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(toggle_feedback_selftest PRIVATE "src")
 
+foreach(preview_test IN ITEMS song_preview_policy_selftest preview_audio_selftest song_preview_runtime_selftest song_preview_overlay_selftest song_preview_anchor_selftest)
+    add_executable(${preview_test} src/tests/${preview_test}.cpp)
+    ff7rp_apply_cpp_policy(${preview_test})
+    target_compile_definitions(${preview_test} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_include_directories(${preview_test} PRIVATE "src")
+endforeach()
+target_sources(song_preview_runtime_selftest PRIVATE src/game/song_registry.cpp)
+target_sources(song_preview_overlay_selftest PRIVATE src/game/song_preview_overlay.cpp)
+target_sources(song_preview_anchor_selftest PRIVATE src/game/song_preview_anchor.cpp src/game/song_preview_overlay.cpp)
+
 add_executable(autoplay_runtime_selftest
     src/tests/autoplay_runtime_selftest.cpp
     src/game/hook_specs.cpp src/core/pe_image.cpp src/core/hooks.cpp src/core/logging.cpp)
@@ -1005,6 +1021,13 @@ set_tests_properties(autoplay_runtime_selftest PROPERTIES TIMEOUT 60)
 set_tests_properties(config_selftest PROPERTIES TIMEOUT 60)
 add_test(NAME toggle_feedback_selftest COMMAND toggle_feedback_selftest)
 set_tests_properties(toggle_feedback_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME song_preview_policy_selftest COMMAND song_preview_policy_selftest)
+add_test(NAME preview_audio_selftest COMMAND preview_audio_selftest)
+add_test(NAME song_preview_runtime_selftest COMMAND song_preview_runtime_selftest)
+add_test(NAME song_preview_overlay_selftest COMMAND song_preview_overlay_selftest)
+add_test(NAME song_preview_anchor_selftest COMMAND song_preview_anchor_selftest)
+set_tests_properties(song_preview_policy_selftest preview_audio_selftest song_preview_runtime_selftest song_preview_overlay_selftest song_preview_anchor_selftest
+    PROPERTIES TIMEOUT 60)
 add_test(NAME rva_catalog_check
     COMMAND "${Python3_EXECUTABLE}" "${FF7RP_RVA_GENERATOR}" --check
         --temp-dir "${CMAKE_CURRENT_BINARY_DIR}/rva_catalog_ctest"
@@ -1028,6 +1051,7 @@ add_test(NAME oodle_decoder_selftest COMMAND oodle_decoder_selftest)
 add_test(NAME native_iostore_writer_selftest COMMAND native_iostore_writer_selftest)
 add_test(NAME native_audio_cohort_selftest COMMAND native_audio_cohort_selftest)
 add_test(NAME native_audio_cache_selftest COMMAND native_audio_cache_selftest)
+add_test(NAME native_audio_warm_selftest COMMAND native_audio_warm_selftest)
 add_test(NAME wav_reader_selftest COMMAND wav_reader_selftest)
 add_test(NAME encoded_audio_fixture_selftest COMMAND encoded_audio_fixture_selftest)
 if(FF7RP_BUILD_RUNTIME)
@@ -1050,6 +1074,7 @@ add_test(NAME midi_generator_selftest COMMAND midi_generator_selftest)
 add_test(NAME midi_chart_compilation_selftest COMMAND midi_chart_compilation_selftest)
 add_test(NAME midi_analysis_core_selftest COMMAND midi_analysis_core_selftest)
 add_test(NAME song_repository_selftest COMMAND song_repository_selftest)
+add_test(NAME song_preview_selftest COMMAND song_preview_selftest)
 add_test(NAME resolved_song_renderer_selftest COMMAND resolved_song_renderer_selftest)
 
 add_executable(runtime_cache_codec_selftest
@@ -1170,6 +1195,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     native_iostore_writer_selftest
     native_audio_cohort_selftest
     native_audio_cache_selftest
+    native_audio_warm_selftest
     hca_encoder_selftest
     wav_reader_selftest
     encoded_audio_fixture_selftest
@@ -1185,6 +1211,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     midi_chart_compilation_selftest
     midi_analysis_core_selftest
     song_repository_selftest
+    song_preview_selftest
     resolved_song_renderer_selftest
     metronome_selftest
     extended_chart_selftest

@@ -43,6 +43,7 @@
 #include "runtime_cache_codec.h"
 #include "runtime_artifact_validator.h"
 #include "song_json.h"
+#include "song_preview.h"
 #include "song_source_template.h"
 #include "wav_reader.h"
 
@@ -845,6 +846,7 @@ Status load_song_directory(
     }
     std::vector<std::string> cache_identity{
         kPipelineCacheVersion, song.chart_from_midi ? "chart=midi" : "chart=json",
+        kSongPreviewIdentity,
         song.chart_policy_identity,
         std::string(native_assets.cache_identity()),
         "audio_processing=gain_envelope_then_loudness_or_limiter:v1",
@@ -879,7 +881,14 @@ Status load_song_directory(
         runtime_profiles_semantically_valid(cached_song, native_assets);
     report(runtime_semantics_valid ? "runtime_semantics_valid" : "runtime_semantics_rejected");
     std::string artifact_failure;
-    const bool runtime_artifacts_valid = runtime_semantics_valid &&
+    std::vector<std::int16_t> preview_samples;
+    const bool preview_valid = runtime_semantics_valid && cached_song.preview &&
+        cached_song.preview->path.parent_path() == std::filesystem::path(cache_directory_path(song.directory)) &&
+        cached_song.preview->path.filename() == "preview-" + hex64(cached_song.preview->content_hash) + ".pcm" &&
+        cached_song.preview->source_start_seconds + double(cached_song.preview->frame_count) / kSongPreviewSampleRate <=
+            cached_song.audio.source_duration_seconds() &&
+        read_song_preview_pcm(*cached_song.preview, &preview_samples).ok();
+    const bool runtime_artifacts_valid = preview_valid &&
         runtime_artifacts_match(cached_song, source_config, trace, &artifact_failure);
     if (runtime_artifacts_valid) {
         report("runtime_artifacts_valid");
@@ -1236,6 +1245,14 @@ Status load_song_directory(
     song.gain_envelope_max_gain_db = loudness.gain_envelope_max_gain_db;
     song.gain_envelope_min_gain_db = loudness.gain_envelope_min_gain_db;
     report("clean_audio_processing_ready");
+
+    status = prepare_song_preview(song.audio, cache_directory_path(song.directory), &song.preview);
+    if (!status.ok()) {
+        song.status = status;
+        write_last_error(song.directory, status);
+        *out_song = std::move(song);
+        return status;
+    }
 
     for (std::size_t role = 1; role < song.audio_sources.authored.size(); ++role) {
         if (!song.audio_sources.authored[role].present) continue;

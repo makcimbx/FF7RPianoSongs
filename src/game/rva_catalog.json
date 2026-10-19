@@ -4199,6 +4199,93 @@
     {"id":"piano_autoplay_terminalizer","cpp_symbol":"PianoAutoplayTerminalizer","kind":"function","subsystem":"autoplay","requirement":"optional","validation":{"policy":"signature"},"install_policy":"optional_hook","status":"production","hook_owner":"autoplay","consumers":["src/game/autoplay.cpp"],"hook_spec":{"name":"piano_autoplay_terminalizer","order":44,"required_for_release_startup":false},"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x039a6758","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 13 54 7c fe 48 2b e0 48 83 39 00 48 8b f9","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/AutoplayRuntimeEvidence.md","detail":"Terminalizer RCX borrowed event, void Windows x64 ABI. Does not read root marker; restore exact introduced marker before forwarding and never access discharged event after callback."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x03c4d37c","signature":{"bytes":"48 89 5c 24 08 48 89 74 24 10 57 b8 40 00 00 00 e8 9f 1b 46 fe 48 2b e0 48 83 39 00 48 8b f9","mask":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/AutoplayRuntimeEvidence-1.004.md","detail":"Selected 1.004 import: unique complete prefix, RCX event/void ABI. Root marker not consumed; restore before callback and discharge guard. Static parity only; runtime gates required."}]}}},
     {"id":"piano_autoplay_controller_tick","cpp_symbol":"PianoAutoplayControllerTick","kind":"function","subsystem":"autoplay","requirement":"optional","validation":{"policy":"signature"},"install_policy":"optional_hook","status":"production","hook_owner":"autoplay","consumers":["src/game/autoplay.cpp"],"hook_spec":{"name":"piano_autoplay_controller_tick","order":45,"required_for_release_startup":false},"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x039ba4fc","signature":{"bytes":"40 53 b8 30 00 00 00 e8 78 16 7b fe 48 2b e0 48 8b d9 48 81 c1 b8 0f 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_disk_contract","path":"analysis/AutoplayRuntimeEvidence.md","detail":"RCX controller, XMM1 float delta, AL continuation. Unique complete prefix; synchronous dispatcher observation only; no retained native reads after return."},{"type":"authorized_runtime_observation","path":"analysis/AutoplayRuntimeObservation-20261019.md","detail":"List/play/pause/continue/replay/leave route supports copied seated tokens and synchronous chart admission, not a universal pause predicate."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x03c60ed0","signature":{"bytes":"40 53 b8 30 00 00 00 e8 54 e0 44 fe 48 2b e0 48 8b d9 48 81 c1 b8 0f 00 00","mask":"xxxxxxxxxxxxxxxxxxxxxxxxx"},"evidence":[{"type":"static_import_contract","path":"analysis/AutoplayRuntimeEvidence-1.004.md","detail":"Selected 1.004 import: unique complete prefix; RCX controller, XMM1 float delta, AL continuation; synchronous tick/state9/chart nesting and layout parity. No older live pause trace; no worker native reads or actuation outside admitted chart route."}]}}},
     {"id":"piano_autoplay_state_table","cpp_symbol":"PianoAutoplayStateTable","kind":"global","subsystem":"autoplay","requirement":"optional","validation":{"policy":"data_reference"},"install_policy":"data_only","status":"production","hook_owner":null,"hook_spec":null,"consumers":["src/game/autoplay.cpp"],"builds":{"ff7rebirth-steam-win64-6a16ced2":{"rva":"0x05bc25f0","signature":null,"evidence":[{"type":"static_disk_contract","path":"analysis/AutoplayRuntimeEvidence.md","detail":"Controller+fc8 table, count14, stride20, IDs0..13. Current+fd0 and pending+fd8 must be null or exact members with matching IDs."}]},"ff7rebirth-steam-win64-68fd6fde":{"rva":"0x05d5f220","signature":null,"evidence":[{"type":"static_import_contract","path":"analysis/AutoplayRuntimeEvidence-1.004.md","detail":"Selected 1.004 import: constructor references 0x03c31534/0x03c31541; complete 14-entry stride20 table IDs0..13. Consumed controller fields/layout parity independently recovered; exact table/member runtime validation remains mandatory."}]}}}
+    ,{
+      "id": "preview_root_shared_getter", "cpp_symbol": "PreviewRootSharedGetter",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x009d7ea4",
+        "signature": {"bytes": "45 33 c0 4c 89 01 48 8b 15 4f 1b 63 08 48 89 51 08 48 85 d2 74 1c 8b 42 08 85 c0 74 19 ff c0 89 42 08 4c 39 41 08 74 0a 48 8b 05 25 1b 63 08 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 researcher authenticated live Frida bytes and independent Ghidra source. Exact 48-byte getter gate includes controller RIP load at +06 (disp +09, end +0d) and pointer RIP load at +28 (disp +2b, end +2f); both decoded targets must equal cataloged globals. Strong count is signed int32 controller+08, never weak+0c. No refcount acquisition or native getter call."}]
+      }}
+    },{
+      "id": "preview_root_layout_writer", "cpp_symbol": "PreviewRootLayoutWriter",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00b0ed18",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 57 41 56 41 57 b8 80 03 00 00 e8 4f ce 65 01 48 2b e0 c5 f8 29 b4", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature plus independent Ghidra source establishes SEndRootOverlay fields +318/+31c origin, +320/+324 UI-render extent, +328/+32c output extent, +330 viewport scale. Borrow only during game-thread PostRender; root paint geometry itself is zero/default and not an anchor."}]
+      }}
+    },{
+      "id": "preview_screen_to_ui", "cpp_symbol": "PreviewScreenToUi",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00f7080c",
+        "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 5f b3 1f 01 48 2b e0 49 8b f0 4d 8b c8 4c 8b", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish inverse native transform output=origin+outputExtent/2+(ui-renderExtent/2)*(viewportScale/uiScale). No extra Windows DPI or ordinary LocalToViewport. Initial drawing capability admits zero-origin/full borrowed Canvas extent only."}]
+      }}
+    },{
+      "id": "preview_reference_scale", "cpp_symbol": "PreviewReferenceScale",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00bc7998",
+        "signature": {"bytes": "c5 fa 6f 1d 70 1d 34 05 c5 fa 10 25 58 1d 34 05 48 89 4c 24 10 c5 fa 10 54 24 10 c5 f8 28 c2 c5", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish uiScale=max(.01,min(renderWidth/1920,renderHeight/1080)); native render-space geometry is not ordinary Slate viewport pixels."}]
+      }}
+    },{
+      "id": "preview_widget_geometry", "cpp_symbol": "PreviewWidgetGeometry",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x01600438",
+        "signature": {"bytes": "48 89 5c 24 10 57 b8 20 00 00 00 e8 38 b7 b6 00 48 2b e0 48 83 b9 e8 00 00 00 00 75 45 48 8b 99", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish widget preferred shared pair +e8/+f0 then fallback +d8/+e0. Require nonnull pointer/controller and positive signed strong count+08; borrowed reads do not acquire/release references. Tick geometry+c8 is not the anchor."}]
+      }}
+    },{
+      "id": "preview_slate_paint_writer", "cpp_symbol": "PreviewSlatePaintWriter",
+      "kind": "function", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00dd40d4",
+        "signature": {"bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 08 ff ff ff b8 f8 01 00 00 e8 8d 7a 39 01 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 live/static correlation establishes paint geometry+90 length56 (size+0/+4, affine a,b,c,d,tx,ty at +1c..+30); transform all four corners. Incoming cull+100 length16 is LTRB, not full effective clip. Parent weak pair+38/+40 requires positive STRONG count+08 and bounded ancestry to authenticated root. Live selected/list/root at ancestry nodes0/4/13. Hide partial scrolling; keep badge inside inherited cull, not horizontally clipped to list frame."}]
+      }}
+    },{
+      "id": "preview_root_pointer", "cpp_symbol": "PreviewRootPointer",
+      "kind": "global", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x090099f8", "signature": null,
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live/static getter RIP target at +28; seven-byte load is covered by extended48-byte getter signature. Contiguous root shared pair pointer,controller; recheck pair and positive strong count before/after borrowed snapshot."}]
+      }}
+    },{
+      "id": "preview_root_controller", "cpp_symbol": "PreviewRootController",
+      "kind": "global", "subsystem": "song_preview", "requirement": "optional",
+      "validation": {"policy": "data_reference"}, "install_policy": "data_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x09009a00", "signature": null,
+        "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live/static getter RIP target at +06; signed strong count+08 must be positive. Weak count+0c is never lifetime proof; no reference mutation or native getter invocation."}]
+      }}
+    }
   ],
   "locators": [
     {

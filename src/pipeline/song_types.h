@@ -13,6 +13,7 @@
 namespace ff7rp::pipeline {
 
 struct NativeAudioArtifactSet;
+struct SongPreviewArtifact;
 
 enum class AudioSourceRole : std::uint8_t {
     Base = 0,
@@ -317,6 +318,7 @@ struct LoadedSong {
     std::string cache_manifest_path;
     std::string cache_sidecar_path;
     std::shared_ptr<const NativeAudioArtifactSet> native_audio;
+    std::shared_ptr<const SongPreviewArtifact> preview;
     MabfArtifactMetadata mabf_metadata;
     std::uint64_t manifest_digest = 0;
     Status status;

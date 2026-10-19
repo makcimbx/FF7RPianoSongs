@@ -254,28 +254,39 @@ Bytes empty_pak() {
     const std::string hash="ace857fc068a791ca324a99e384f0629d18c6c4d"; for(std::size_t i=0;i<hash.size();i+=2) b.push_back(std::uint8_t(digit(hash[i])*16+digit(hash[i+1])));
     b.resize(347); return b;
 }
-std::uint64_t file_hash(const Bytes& b) { auto h=native_sha256(b); return get(h,0,8); }
+std::uint64_t file_hash(std::span<const std::uint8_t> b) { auto h=native_sha256(b); return get(h,0,8); }
 NativeAudioArtifactSet projection(const NativeAudioCohortRequest& request,const NativeAudioCohortResult& b,const std::filesystem::path& root) {
     NativeAudioArtifactSet set; set.build_id=request.build_id; set.identity=request.identity; set.container_prefix=root/b.content_id/("native_"+b.content_id); set.container_id=b.container.container_id;
     set.base_score_name=request.base_score_name;
     set.packages=b.container.packages; set.music_name=b.music_name; set.bgm_key=b.bgm_key; set.score_name=b.score_name;
-    std::array<Bytes,3> bytes{empty_pak(),b.container.utoc,b.container.ucas}; const char* ext[]{".pak",".utoc",".ucas"};
+    const auto pak=empty_pak();
+    const std::array<std::span<const std::uint8_t>,3> bytes{pak,b.container.utoc,b.container.ucas}; const char* ext[]{".pak",".utoc",".ucas"};
     for(std::size_t i=0;i<3;++i) { auto path=set.container_prefix; path+=ext[i]; set.files[i]={path,bytes[i].size(),file_hash(bytes[i])}; }
     return set;
 }
-Status verify_files(const NativeAudioCohortResult& b,const NativeAudioArtifactSet& set) {
-    std::array<Bytes,3> expected{empty_pak(),b.container.utoc,b.container.ucas};
+Status verify_files(const NativeAudioCohortResult& b,const NativeAudioArtifactSet& set,const NativeAudioArtifactSet& expected_set) {
+    const auto pak=empty_pak();
+    const std::array<std::span<const std::uint8_t>,3> expected{pak,b.container.utoc,b.container.ucas};
+    std::array<std::uint8_t,65536> buffer;
     for(std::size_t i=0;i<3;++i) {
         std::error_code ec; const auto& f=set.files[i];
-        if(std::filesystem::is_symlink(f.path,ec)||ec||std::filesystem::file_size(f.path,ec)!=expected[i].size()||ec||f.bytes!=expected[i].size()||f.content_hash!=file_hash(expected[i])) return bad("Native cache file extent/hash metadata");
-        std::ifstream in(f.path,std::ios::binary); Bytes data(expected[i].size()); in.read(reinterpret_cast<char*>(data.data()),std::streamsize(data.size()));
-        if(!in||in.peek()!=std::char_traits<char>::eof()||data!=expected[i]) return bad("Native cache file differs; immutable outputs will not be replaced");
+        if(std::filesystem::is_symlink(f.path,ec)||ec||std::filesystem::file_size(f.path,ec)!=expected[i].size()||ec||f.bytes!=expected_set.files[i].bytes||f.content_hash!=expected_set.files[i].content_hash) return bad("Native cache file extent/hash metadata");
+        std::ifstream in(f.path,std::ios::binary);
+        for(std::size_t at=0;at<expected[i].size();) {
+            const auto n=std::min(buffer.size(),expected[i].size()-at);
+            if(!in.read(reinterpret_cast<char*>(buffer.data()),std::streamsize(n))||
+                !std::equal(buffer.begin(),buffer.begin()+n,expected[i].begin()+at))
+                return bad("Native cache file differs; immutable outputs will not be replaced");
+            at+=n;
+        }
+        if(!in||in.peek()!=std::char_traits<char>::eof()) return bad("Native cache file differs; immutable outputs will not be replaced");
     }
     return Status::ok_status();
 }
 }
 NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest& request) {
     NativeAudioCohortResult result;
+    const auto& source_zen=request.source_snapshot?*request.source_snapshot:request.source_zen;
     const bool older=request.build_id==kOlderBuild;
     if((request.build_id!=kCurrentBuild&&!older)||!valid_native_audio_identity(request.identity)||!ascii(request.base_score_name)||request.base_score_name.size()>128) { result.status=bad("Unsupported native cohort build/identity/base score"); return result; }
     // Stock template receipts: preserved Music and the independently decoded
@@ -286,11 +297,13 @@ NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest
     add(identity,request.timing.logical_source_frames,8); add(identity,request.timing.sample_rate,4);
     if(request.mabf.size()>64*1024*1024) { result.status=bad("Native cohort MABF size"); return result; }
     for(std::size_t i=0;i<4;++i) {
-        if(request.source_zen[i].size()>64*1024*1024||(!older&&hex(native_sha256(request.source_zen[i]))!=hashes[i])) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
-        result.status=inspect_native_zen_package(request.source_zen[i],NativeAudioPackageRole(i),p[i]); if(!result.status.ok()) return result;
-        if(older) { result.status=older_source_metadata(request.source_zen[i],p[i],i); if(!result.status.ok()) return result; }
-        auto digest=native_sha256(request.source_zen[i]); append(identity,digest);
-        if(i) { result.status=frozen(request.source_zen[i],p[i],f[i-1],true); if(!result.status.ok()) return result; }
+        if(source_zen[i].size()>64*1024*1024) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
+        const auto digest=native_sha256(source_zen[i]);
+        if(!older&&hex(digest)!=hashes[i]) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
+        result.status=inspect_native_zen_package(source_zen[i],NativeAudioPackageRole(i),p[i]); if(!result.status.ok()) return result;
+        if(older) { result.status=older_source_metadata(source_zen[i],p[i],i); if(!result.status.ok()) return result; }
+        append(identity,digest);
+        if(i) { result.status=frozen(source_zen[i],p[i],f[i-1],true); if(!result.status.ok()) return result; }
     }
     if(older) { result.status=older_rows(f,p); if(!result.status.ok()) return result; }
     auto digest=native_sha256(request.mabf); append(identity,digest); result.content_id=hex(native_sha256(identity));
@@ -300,26 +313,26 @@ NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest
     if(selected==f[1].keys.end()||!f[1].properties.contains("BGMName")) { result.status=bad("Requested base score absent from supported stock template"); return result; }
     auto row=f[1].starts[4]+f[1].key_rows[std::size_t(selected-f[1].keys.begin())]*f[1].stride;
     auto bgm=fname(f[1],p[2],row+f[1].properties.at("BGMName"));
-    Bytes music_body(request.source_zen[0].begin()+p[0].body_at,request.source_zen[0].end());
-    if(older&&music_body.size()>=10&&music_body[5]==6&&hex(native_sha256(request.source_zen[0]))!=hashes[0]) { result.status=bad("Only SHA-pinned current Music may be transformed to the older schema"); return result; }
+    Bytes music_body(source_zen[0].begin()+p[0].body_at,source_zen[0].end());
+    if(older&&music_body.size()>=10&&music_body[5]==6&&hex(native_sha256(source_zen[0]))!=hashes[0]) { result.status=bad("Only SHA-pinned current Music may be transformed to the older schema"); return result; }
     if(older) { result.status=older_music_names(p[0],music_body); if(!result.status.ok()) return result; }
     auto music=build_native_music_export(music_body,request.mabf,request.timing,
         older?NativeMusicExportProfile::Older1004:NativeMusicExportProfile::Current1005); if(!music.status.ok()) { result.status=music.status; return result; }
     if((p[0].names.size()!=29&&!(older&&p[0].names.size()==28)) || p[0].names[0]!="/Game/Sound/BGM/bgm_piano_01" ||
        p[0].names[3]!="bgm_piano_01" || p[0].names[4]!="bgm_piano_01_Lv1_[Master]" ||
        p[0].package_name!=p[0].names[0] || p[0].export_name!=p[0].names[3] ||
-       get(request.source_zen[0],0,8)!=0 || get(request.source_zen[0],p[0].export_at+16,8)!=3 ||
+       get(source_zen[0],0,8)!=0 || get(source_zen[0],p[0].export_at+16,8)!=3 ||
        get(music_body,0x52,8)!=3) { result.status=bad("Unsupported Music cue/package NameMap profile"); return result; }
     // Native queue lookup uses this exact package path. Retarget the qualified
     // slots so the preserved (3,0) inner cue also names the generated resource.
     auto names=p[0].names; auto music_package="/Game/Sound/BGM/"+result.music_name;
     names[0]=music_package; names[3]=result.music_name;
     for(std::size_t i=0;i<4;++i) result.packages[i].role=NativeAudioPackageRole(i);
-    result.status=rebuild_native_zen_package(request.source_zen[0],NativeAudioPackageRole::Music,music_package,result.music_name,names,music.bytes,result.packages[0].zen); if(!result.status.ok()) return result;
-    if(older) put(result.packages[0].zen,16,get(request.source_zen[0],16)|0x80802200);
+    result.status=rebuild_native_zen_package(source_zen[0],NativeAudioPackageRole::Music,music_package,result.music_name,names,music.bytes,result.packages[0].zen); if(!result.status.ok()) return result;
+    if(older) put(result.packages[0].zen,16,get(source_zen[0],16)|0x80802200);
     const std::string objects[]{"","BGMList","PianoScoreInfo","PianoScore"};
     for(std::size_t i=1;i<4;++i) {
-        result.status=single_row(request.source_zen[i],p[i],f[i-1],i==1?bgm:request.base_score_name,i==1?result.bgm_key:result.score_name,i==1?result.music_name:i==2?result.bgm_key:"",ns+objects[i],result.packages[i].zen);
+        result.status=single_row(source_zen[i],p[i],f[i-1],i==1?bgm:request.base_score_name,i==1?result.bgm_key:result.score_name,i==1?result.music_name:i==2?result.bgm_key:"",ns+objects[i],result.packages[i].zen);
         if(!result.status.ok()) return result;
     }
     result.container=build_native_iostore("native_"+result.content_id,result.packages); result.status=result.container.status; return result;
@@ -330,7 +343,7 @@ Status verify_native_audio_cohort(const NativeAudioCohortRequest& request,const 
     if(set.build_id!=expected.build_id||set.identity!=expected.identity||set.base_score_name!=expected.base_score_name||set.container_prefix!=expected.container_prefix||set.container_id!=expected.container_id||set.music_name!=expected.music_name||set.bgm_key!=expected.bgm_key||set.score_name!=expected.score_name) return bad("Native cohort descriptor identity mismatch");
     for(std::size_t i=0;i<4;++i) { auto& a=set.packages[i]; auto& e=expected.packages[i]; if(a.role!=e.role||a.object_path!=e.object_path||a.class_path!=e.class_path||a.package_id!=e.package_id||a.public_export_hash!=e.public_export_hash) return bad("Native cohort package descriptor mismatch"); }
     for(std::size_t i=0;i<3;++i) if(set.files[i].path!=expected.files[i].path) return bad("Native cohort file path mismatch");
-    return verify_files(b,set);
+    return verify_files(b,set,expected);
 }
 Status prepare_native_audio_cohort(const NativeAudioCohortRequest& request,const std::filesystem::path& root,NativeAudioArtifactSet& output) {
     output={}; if(!root.is_absolute()) return bad("Native cache root must be absolute");
@@ -340,9 +353,10 @@ Status prepare_native_audio_cohort(const NativeAudioCohortRequest& request,const
     auto dir=set.container_prefix.parent_path(); const auto created=std::filesystem::create_directory(dir,ec);
     if(ec||std::filesystem::is_symlink(dir,ec)||ec) return Status::error(StatusCode::IoError,"Cannot create safe native cache content directory");
     if(created) {
-        std::array<Bytes,3> bytes{empty_pak(),b.container.utoc,b.container.ucas};
+        const auto pak=empty_pak();
+        const std::array<std::span<const std::uint8_t>,3> bytes{pak,b.container.utoc,b.container.ucas};
         for(std::size_t i=0;i<3;++i) { std::ofstream out(set.files[i].path,std::ios::binary); out.write(reinterpret_cast<const char*>(bytes[i].data()),std::streamsize(bytes[i].size())); out.close(); if(!out) return Status::error(StatusCode::IoError,"Native cache write failed; partial immutable directory retained"); }
     }
-    auto s=verify_files(b,set); if(s.ok()) output=std::move(set); return s;
+    auto s=verify_files(b,set,set); if(s.ok()) output=std::move(set); return s;
 }
 } // namespace ff7rp::pipeline

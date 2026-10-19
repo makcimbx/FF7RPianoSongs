@@ -210,5 +210,13 @@ inline constexpr uintptr_t PianoAutoplayAdvancer = 0x039ba584;
 inline constexpr uintptr_t PianoAutoplayTerminalizer = 0x039a6758;
 inline constexpr uintptr_t PianoAutoplayControllerTick = 0x039ba4fc;
 inline constexpr uintptr_t PianoAutoplayStateTable = 0x05bc25f0;
+inline constexpr uintptr_t PreviewRootSharedGetter = 0x009d7ea4;
+inline constexpr uintptr_t PreviewRootLayoutWriter = 0x00b0ed18;
+inline constexpr uintptr_t PreviewScreenToUi = 0x00f7080c;
+inline constexpr uintptr_t PreviewReferenceScale = 0x00bc7998;
+inline constexpr uintptr_t PreviewWidgetGeometry = 0x01600438;
+inline constexpr uintptr_t PreviewSlatePaintWriter = 0x00dd40d4;
+inline constexpr uintptr_t PreviewRootPointer = 0x090099f8;
+inline constexpr uintptr_t PreviewRootController = 0x09009a00;
 
 } // namespace ff7r::piano::game::rva

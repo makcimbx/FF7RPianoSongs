@@ -5,6 +5,7 @@
 #include "pipeline/chart_compiler.h"
 #include "pipeline/chord_voicing.h"
 #include "pipeline/native_audio_artifacts.h"
+#include "pipeline/song_preview.h"
 #include "tests/target_native_assets.h"
 
 #include <array>
@@ -107,7 +108,7 @@ bool descriptor_equal(const SongDescriptor& left, const SongDescriptor& right)
         left.score_thresholds != right.score_thresholds ||
         left.mode_change_combo_counts != right.mode_change_combo_counts ||
         left.chart_notes.size() != right.chart_notes.size() ||
-        left.sidecar_path != right.sidecar_path || left.native_audio != right.native_audio ||
+        left.sidecar_path != right.sidecar_path || left.native_audio != right.native_audio || left.preview != right.preview ||
         left.profiles.size() != right.profiles.size() ||
         left.default_profile_index != right.default_profile_index) {
         return false;
@@ -321,9 +322,17 @@ int main()
         std::weak_ptr<const ff7rp::pipeline::NativeAudioArtifactSet> lifetime = artifacts;
         LoadedSong native_song = full_fixture();
         native_song.native_audio = artifacts;
+        auto preview = std::make_shared<ff7rp::pipeline::SongPreviewArtifact>();
+        preview->frame_count = 48000;
+        native_song.preview = preview;
         const auto native_descriptor = ff7r::piano::build_song_descriptor(native_song, 17);
         if (native_descriptor.native_audio != artifacts)
             return fail("native artifacts lost their prepared ownership during projection");
+        if (native_descriptor.preview != preview) return fail("preview ownership lost during projection");
+        native_song.preview.reset();
+        preview.reset();
+        if (!native_descriptor.preview || native_descriptor.preview->frame_count != 48000)
+            return fail("descriptor did not retain immutable preview metadata");
         native_song.native_audio.reset();
         artifacts.reset();
         if (lifetime.expired() || native_descriptor.native_audio->identity != "immutable-native-cache")

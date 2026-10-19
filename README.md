@@ -78,7 +78,7 @@ and the full settings/chord reference.
 ### Autoplay
 
 In the song list or during a song, including pause, press **Ctrl+F8** or click
-**both sticks (L3+R3) on the same XInput controller** to toggle autoplay. Release
+**both sticks (L3+R3) on the same controller** (XInput, or one the game reads natively such as a DualSense) to toggle autoplay. Release
 the combination before pressing it again. A rising tone means enabled; a falling
 tone means disabled. The shortcut does nothing outside the piano or while the
 game is unfocused; standing up switches autoplay off.
@@ -90,6 +90,23 @@ If autoplay's optional hooks cannot be verified, it stays unavailable without
 disabling the rest of the mod. Development qualification is tracked in
 [Current Status](docs/CurrentStatus.md#autoplay-development-2026-10-19).
 
+### Song previews
+
+By default, a custom song previews once after the highlight remains on it for
+about a second. **Ctrl+F7** or **R3 alone** starts/stops preview manually; use
+`Preview.Mode=manual` to disable automatic starts, or `off` to disable previews.
+Changing rows, starting a song, closing the menu or losing focus stops preview;
+changing rows or pressing the control fades it out briefly. The badge fades in
+only once a preview starts and fades out when it stops; it shows the position and
+length of the song, an equalizer and where the excerpt sits in the song.
+Default game songs are not previewed.
+
+The mod prepares an excerpt of up to 20 seconds with short fades and a waveform
+from its actual sound. Automatic selection favors sustained activity away from
+the edges, not necessarily a chorus or the musically best passage. The separate
+preview stream does not use the game's music-volume mixer. Development progress
+and untested scope are recorded in [Current Status](docs/CurrentStatus.md#song-preview-development-2026-10-19).
+
 ## Settings
 
 Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
@@ -99,6 +116,8 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `General.Enabled` | `0` or nonzero | Disables or enables the mod. |
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
 | `Autoplay.KeyboardFunctionKey` | `0`-`12` | Ctrl+F1 through Ctrl+F12; default `8` (Ctrl+F8). `0` disables the keyboard shortcut, not L3+R3. |
+| `Preview.Mode` | `auto`, `manual`, `off` | Default: `auto`; `manual` starts song previews only on request; `off` disables previews. |
+| `Preview.KeyboardFunctionKey` | `0`-`12` | Ctrl+F1 through Ctrl+F12 for preview; default `7` (Ctrl+F7). `0` disables the keyboard shortcut. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
 | `Advanced.TranscriptionThreads` | `1`-`64` | CPU threads for transcribing the piano of a song without `song.mid`. Default: `4`. |
 

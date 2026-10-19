@@ -1,4 +1,5 @@
 #include "game/module_hooks.h"
+#include "game/song_preview.h"
 #include "game/menu_ui_refresh.h"
 
 #include "core/hooks.h"
@@ -301,6 +302,9 @@ int32_t fallback_base_slot_for_descriptor(const SongDescriptor& descriptor)
 
 void set_active_selection(void* context, int32_t visible_index, int32_t base_slot)
 {
+    const auto prior_preview_selection = registry().selection_snapshot();
+    if (prior_preview_selection.visible_index != visible_index)
+        (void)cancel_song_preview("navigation", true);
     UObjectLiveHandle identity{};
     if (!capture_live_uobject_handle(context, identity)) {
         return;
@@ -323,6 +327,7 @@ void set_active_selection(void* context, int32_t visible_index, int32_t base_slo
 
 void clear_active_selection()
 {
+    (void)cancel_song_preview("selection_clear");
     std::lock_guard<std::mutex> lock(g_selection_state_mutex);
     clear_activation_denial();
     revoke_selection_audio_activation();
@@ -638,6 +643,7 @@ bool __fastcall action_state_query_detour(void* action_ref)
             }
         },
         [&]() {
+            if (!cancel_song_preview("confirmation")) return false;
             const SelectionSnapshot selection = registry().selection_snapshot();
             if (!selection || !selection.song) return true;
             std::uint64_t native_name=0;

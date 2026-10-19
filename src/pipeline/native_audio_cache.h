@@ -12,10 +12,20 @@ struct NativeAudioCacheRequest {
     native_binary::Bytes mabf;
     NativeMusicCueTiming timing;
 };
+// Single repository-worker/session owner; do not share mutable use between threads.
+// Successful preparation freezes the source bytes for this path/build until the
+// session ends (or changes path/build). A new session rereads installed sources.
+class NativeAudioCacheSession {
+    friend Status prepare_native_audio_cache(const NativeAudioCacheRequest&,
+        const OodleDecoder&, NativeAudioArtifactSet&, NativeAudioCacheSession*);
+    std::filesystem::path source_paks_;
+    std::string build_id_;
+    std::shared_ptr<const std::array<native_binary::Bytes,4>> sources_;
+};
 // Caller supplies an authenticated decoder; no function resolution or DLL search here.
 // Reads qualified stock chunks and constructs/verifies immutable output only.
 Status prepare_native_audio_cache(const NativeAudioCacheRequest&,
-    const OodleDecoder&, NativeAudioArtifactSet&);
+    const OodleDecoder&, NativeAudioArtifactSet&, NativeAudioCacheSession* session = nullptr);
 Status validate_native_audio_artifacts(const NativeAudioCacheRequest&,
     const OodleDecoder&, const NativeAudioArtifactSet&);
 } // namespace ff7rp::pipeline

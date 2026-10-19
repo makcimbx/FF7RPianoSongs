@@ -106,6 +106,7 @@ game::SongDescriptor build_song_descriptor(
     }
     descriptor.sidecar_path = core::widen(song.cache_sidecar_path);
     descriptor.native_audio = song.native_audio;
+    descriptor.preview = song.preview;
     descriptor.default_profile_index = 0;
     descriptor.profiles.reserve(song.difficulty_profiles.size());
     for (size_t profile_index = 0; profile_index < song.difficulty_profiles.size(); ++profile_index) {

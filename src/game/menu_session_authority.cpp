@@ -1,4 +1,5 @@
 #include "game/menu_session_authority.h"
+#include "game/song_preview.h"
 #include "game/autoplay.h"
 #include "game/catalog_adoption.h"
 #include "game/mandatory_hook_transaction.h"
@@ -243,6 +244,7 @@ void __fastcall close_detour(void* list) noexcept {
     uint16_t word_before = 0;
     const bool before_read = read_active_word(list, word_before);
     const MenuSessionSnapshot closing = menu_session_authority().begin_close(list);
+    if (closing) (void)cancel_song_preview("menu_close");
     try { original(list); } catch (...) {
         SelectionActivationTerminalResult result;
         if (closing) {
@@ -303,6 +305,7 @@ void terminal_detour(void* controller, ControllerFn original,
     auto lease = non_audio_hook_gate().try_enter();
     if (!lease) { try { original(controller); } catch (...) {} return; }
     const MenuSessionSnapshot ending = menu_session_authority().begin_ending(controller);
+    if (ending) (void)cancel_song_preview("menu_terminal");
     if (ending) {
         profile_list_coordinator().retire_session(ending.generation);
         (void)terminate_terminal_audio(ending, reason);

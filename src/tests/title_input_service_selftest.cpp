@@ -19,6 +19,8 @@ bool ctrl=false, function=false, foreground=true, fail_feedback_stop=false, acce
 int configured_key=8;
 std::uint64_t seat_token=0;
 unsigned toggles=0,feedback=0,feedback_stops=0;
+bool preview_focus=false,observed_preview_held=false,preview_chord=false,fail_preview_stop=false;
+unsigned preview_cancels=0,preview_shutdowns=0;
 WORD controller_buttons[4]{};
 SHORT WINAPI async_key(int key) {return ((key==VK_CONTROL && ctrl)
     || (key==VK_F1+configured_key-1 && configured_key && function))?SHORT(-32768):0;}
@@ -96,6 +98,12 @@ BOOL WINAPI test_register_raw_devices(PCRAWINPUTDEVICE devices,UINT count,UINT) 
 using namespace ff7r::piano::game;
 // Unrelated UI/audio paths must not be reached by this startup/entry test.
 namespace ff7r::piano::game {
+int preview_function_key() noexcept { return 7; }
+void poll_song_preview(bool focus, bool held, bool chord) noexcept {
+    preview_focus=focus;observed_preview_held=held;preview_chord=chord;
+}
+bool cancel_song_preview(const char*, bool) noexcept { ++preview_cancels;return true; }
+bool shutdown_song_preview() noexcept { ++preview_shutdowns;return !fail_preview_stop; }
 core::HookCallbackGate& non_audio_hook_gate() {static core::HookCallbackGate gate;return gate;}
 int autoplay_function_key() noexcept {return configured_key;}
 std::uint64_t autoplay_seated_token() noexcept {return seat_token;}
@@ -153,6 +161,7 @@ void reset() {
     non_audio_hook_gate().open();
     ctrl=function=false;foreground=true;configured_key=8;seat_token=0;
     fail_feedback_stop=false;accept_toggle=true;toggles=feedback=feedback_stops=0;
+    fail_preview_stop=false;
     std::memset(controller_buttons,0,sizeof(controller_buttons));
     g_autoplay_input_edge={};g_difficulty_input_state.reset();
 }
@@ -189,6 +198,24 @@ void autoplay_input_tests() {
     poll_dynamic_difficulty_input_impl();require(toggles==3,"keyboard disabled");
     configured_key=13;poll_dynamic_difficulty_input_impl();require(toggles==3,"F13 unsupported");
 }
+void preview_input_tests() {
+    reset();g_xinput_get_states={&xinput};
+    controller_buttons[0]=XINPUT_GAMEPAD_RIGHT_THUMB;
+    poll_dynamic_difficulty_input_impl();
+    require(preview_focus && observed_preview_held && !preview_chord,"R3-only preview");
+    controller_buttons[0]|=XINPUT_GAMEPAD_LEFT_THUMB;
+    poll_dynamic_difficulty_input_impl();
+    require(!observed_preview_held && preview_chord,"autoplay chord excluded from preview");
+    controller_buttons[0]=0;configured_key=7;ctrl=function=true;
+    poll_dynamic_difficulty_input_impl();require(observed_preview_held,"Ctrl+F7 preview");
+    foreground=false;poll_dynamic_difficulty_input_impl();require(!preview_focus,"preview focus projection");
+    const auto prior=preview_cancels;
+    g_input_service_state=TitleInputServiceState::Active;
+    g_previous_window_proc=reinterpret_cast<WNDPROC>(1);
+    difficulty_window_proc(nullptr,WM_KILLFOCUS,0,0);
+    difficulty_window_proc(nullptr,WM_ACTIVATEAPP,FALSE,0);
+    require(preview_cancels==prior+2,"synchronous preview focus cancellation");
+}
 void __fastcall result_consumer(void*) {
     auto* scope=AutoplayResultScope::active();require(scope && scope->suppress(),"outer shadow absent on rejected gate");
     std::array<std::uint8_t,16> record{};
@@ -198,6 +225,7 @@ void __fastcall result_consumer(void*) {
 int main() {
     try {
         autoplay_input_tests();
+        preview_input_tests();
         reset();non_audio_hook_gate().close();g_original_detail_update=result_consumer;
         detail_update_detour(nullptr);require(!AutoplayResultScope::active(),"outer shadow leaked");
         reset();install();
@@ -207,7 +235,7 @@ int main() {
         deferred=true;
         require(!start_title_input_service(reinterpret_cast<HMODULE>(4)),"wrong installation module");
         require(start_title_input_service(module()),"deferred startup");
-        require(start_title_input_service(module()) && names==10 && threads==1 && windows==1 && raw_adds==1,"startup not once");
+        require(start_title_input_service(module()) && names==12 && threads==1 && windows==1 && raw_adds==1,"startup not once");
         require(player_input_key_detour(nullptr,&key,0,1,true),"active key original");
         require(g_difficulty_event_providers.snapshot().decrement.player_input_held,"resolved key lost");
         require(player_input_key_detour(nullptr,&key,1,0,true),"release original");
@@ -217,11 +245,11 @@ int main() {
 
         reset();install();deferred=true;window_available=false;
         require(start_title_input_service(module()) && !g_game_window,"no-window startup was fatal");
-        require(start_title_input_service(module()) && names==10 && threads==1 && windows==1 && !raw_adds,"pending service restarted");
+        require(start_title_input_service(module()) && names==12 && threads==1 && windows==1 && !raw_adds,"pending service restarted");
         auto refresh=make_profile_list_callbacks().post_refresh;
         require(!refresh(1) && !posts && windows==2,"pending refresh incorrectly posted");
         window_available=true;
-        require(refresh(2) && posts==1 && raw_adds==1 && names==10 && threads==1,"late window attachment");
+        require(refresh(2) && posts==1 && raw_adds==1 && names==12 && threads==1,"late window attachment");
         require(refresh(3) && windows==3 && raw_adds==1,"window attached twice");
         require(difficulty_window_proc(g_game_window,WM_KEYDOWN,VK_GAMEPAD_DPAD_LEFT,0)==77
             && g_difficulty_event_providers.snapshot().decrement.window_key_held,"late window key lost");
@@ -239,7 +267,7 @@ int main() {
         auto stopped_refresh=make_profile_list_callbacks().post_refresh;
         require(shutdown_title().ok() && !raw_removes,"pending service cleanup");
         window_available=true;
-        require(!stopped_refresh(1) && windows==1 && names==10 && threads==1
+        require(!stopped_refresh(1) && windows==1 && names==12 && threads==1
             && !start_title_input_service(module()),"pending service revived after stop");
         for(int failure=0;failure<2;++failure) {
             reset();install();deferred=true;window_available=false;
@@ -247,7 +275,7 @@ int main() {
             window_available=true;fail_window=failure==0;fail_raw=failure==1;
             auto failed_refresh=make_profile_list_callbacks().post_refresh;
             require(!failed_refresh(1) && !posts && !g_difficulty_input_thread_running,"late failure admitted");
-            require(!failed_refresh(2) && windows==2 && names==10 && threads==1
+            require(!failed_refresh(2) && windows==2 && names==12 && threads==1
                 && !start_title_input_service(module()),"late failure retried");
             require(shutdown_title().ok() && waits==1 && closes==1 && window_proc==1,"late failure cleanup");
         }
@@ -277,6 +305,11 @@ int main() {
         require(!shutdown_title().ok() && g_original_detail_update && !g_difficulty_input_thread,
             "sound stop failure lost hook ownership");
         fail_feedback_stop=false;require(shutdown_title().ok(),"retained sound ownership cleanup");
+        reset();install();deferred=true;require(start_title_input_service(module()),"preview-stop setup");
+        fail_preview_stop=true;
+        require(!shutdown_title().ok() && g_original_detail_update && !g_difficulty_input_thread,
+            "preview stop failure lost hook ownership");
+        fail_preview_stop=false;require(shutdown_title().ok(),"retained preview ownership cleanup");
         std::cout<<"title input service selftest passed\n";return 0;
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

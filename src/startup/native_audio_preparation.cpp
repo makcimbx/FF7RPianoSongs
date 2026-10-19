@@ -10,7 +10,8 @@ namespace ff7r::piano::startup {
 
 ff7rp::pipeline::Status prepare_native_audio_descriptor(game::SongDescriptor& descriptor,
     const std::string_view build_id, const std::filesystem::path& source_paks,
-    const ff7rp::pipeline::OodleDecoder& decoder, const std::filesystem::path& cache_root)
+    const ff7rp::pipeline::OodleDecoder& decoder, const std::filesystem::path& cache_root,
+    ff7rp::pipeline::NativeAudioCacheSession* session)
 {
     namespace pipeline = ff7rp::pipeline;
     descriptor.native_audio.reset();
@@ -42,7 +43,7 @@ ff7rp::pipeline::Status prepare_native_audio_descriptor(game::SongDescriptor& de
     request.timing = {metadata.logical_source_frames, metadata.sample_rate,
         metadata.sample_rate ? static_cast<double>(metadata.logical_source_frames) / metadata.sample_rate : 0.0};
     pipeline::NativeAudioArtifactSet artifacts;
-    status = pipeline::prepare_native_audio_cache(request, decoder, artifacts);
+    status = pipeline::prepare_native_audio_cache(request, decoder, artifacts, session);
     if (!status.ok()) return status;
     descriptor.native_audio = std::make_shared<const pipeline::NativeAudioArtifactSet>(std::move(artifacts));
     return pipeline::Status::ok_status();

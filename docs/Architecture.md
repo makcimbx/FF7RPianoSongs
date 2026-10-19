@@ -44,6 +44,11 @@ not overwritten under a potentially retained native reader. A descriptor retains
 the immutable artifact set, authenticated source-row name and prepared runtime
 token. The pipeline owns no game-memory address or native reference.
 
+One repository session reuses its successfully authenticated stock-template bytes
+for the same source path/build. Each song still validates those bytes and rebuilds
+the expected cohort; warm verification compares every existing file byte using
+bounded read storage. No cache-authored digest replaces validation authority.
+
 The repository worker qualifies the executable's decoder/default callbacks, or
 loads the explicitly authenticated companion. Decoder availability is not engine
 ownership, a callback-replacement lease or native audio readiness. Native cache
@@ -86,6 +91,11 @@ only a candidate's own returned bridge may establish its positive registry seria
 Unknown names, partial native mutation or uncertain completion are terminal and
 retained: no retry, guessed repair, registration withdrawal or automatic unmount.
 
+Admission transition diagnostics include steady-clock microseconds for mount,
+request submission, discovery, binding capture and registration. An unattempted
+stage is `-1`; retried authentication reports its latest attempt. These are native
+call durations, not streaming-completion latency or total frame time.
+
 ### Selection, Charts And Retention
 
 Only Ready tokens may enter catalog adoption and activation. The existing selected
@@ -105,6 +115,41 @@ The small `audio_sead` adapter owns readiness and chart/selection handoff—not
 Sound-source patches, PlaySetup replay or Set/Play/Stop reconstruction. The
 historical filename `audio_sidecar_runtime` now owns immutable prepared native
 token prefixes, not a synthetic MABF allocation handed to SQEXSEAD.
+
+## Song-List Previews
+
+Preview artifacts are bounded PCM excerpts and waveform metadata prepared by the
+pipeline, independently of gameplay HCA/MABF artifacts. Descriptors own immutable
+artifact metadata, not whole-song decoded audio. `game/song_preview` loads only
+these validated excerpts on its background worker; game callbacks do not decode
+source files or read preview files.
+
+The pipeline/runtime cache identities include the preview format and immutable
+path, content hash, frame count, source offset and waveform metadata. Warm loads
+validate the bounded excerpt; missing or corrupt artifacts trigger ordinary
+offline rebuilding rather than retaining full-song PCM.
+
+`core/preview_audio` owns a separate OS audio stream and its queued buffers.
+Preview never obtains chart/playback authority or calls SQEXSEAD. Menu/selection
+generations bind pending loads; navigation, confirmation, menu retirement and
+focus loss cancel preview authority. Cancellation failure retains device-owned
+storage instead of freeing it or reporting successful retirement. Row changes and
+the manual toggle fade out by rewriting the not-yet-played tail of the queued
+buffer (about 100 ms ahead of the device position, then a 150 ms ramp and
+silence), and the device is stopped outright if that fade has not completed after
+400 ms; confirmation, focus loss, menu exit and teardown still stop the device
+immediately.
+
+The equalizer is a per-excerpt spectrogram (16 log-spaced bands, 30 frames per
+second) computed by the preview worker from the loaded PCM, never in a game
+callback. It is not cached; the render snapshot interpolates it by the device
+position.
+
+The badge is visible only while the preview is loading or playing, so scrolling
+past rows never shows it. The render callback owns a 150 ms opacity ramp and keeps
+the last shown snapshot (with its storage reference) to fade out after stop, row
+change or menu transitions. Its clock is the excerpt start plus device position,
+over the song duration.
 
 ## Address Ownership
 
@@ -208,7 +253,7 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   been atomically published. Logical source-frame metadata, chart/profile semantics,
   descriptor inputs, cache identity, and sidecar artifact paths remain available for
   lexical settlement and runtime admission.
-- Pipeline cache identity v48 and runtime-cache format 16 include authored group,
+- Pipeline cache identity v49 and runtime-cache format 17 include authored group,
   monotone-variant, IgnoreSound, retained source-voicing, compiled IgnoreSound,
   profile-witness, and diagnostic semantics. Older artifacts are invalidated
   rather than interpreted under the new layout. Generated MIDI adds its own semantic
@@ -224,7 +269,7 @@ The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on
   to repeat those warnings. Every authored-JSON and
   MIDI repository cache key also includes an immutable native-asset capability
    identity supplied explicitly by composition from the exact catalog build ID; descriptive game
-  version strings never grant asset authority. Runtime-cache format 16 serializes
+   version strings never grant asset authority. Runtime-cache format 17 serializes
   both source-side overrides and the separate compiled monotone/chord pairs, plus
   canonical song-level chord definitions in each configuration. Ordered sound slots
   are semantic; dictionary insertion order is not. Root and profile definitions must
@@ -325,7 +370,7 @@ compatibility is claimed across different game targets.
 - Hook callbacks validate executable identity, native object identity, ownership generations, and pointer readability before use.
 - Runtime registry snapshots outlive callbacks that can observe them.
 - Piano-list activity is owned by a monotonic menu-session generation. Open, shared close, state exit, and controller destruction form one mandatory hook transaction; stale generations cannot submit profile input, refresh UI, or claim activation ownership.
-- Profile-direction input is sampled as explicit held facts per keyboard, PlayerInput, WindowProc, RawInput/HID, async-gamepad, and XInput provider. A merged direction emits only its aggregate released-to-held edge and rearms only after aggregate release, so overlapping reports for one physical hold cannot submit multiple profile changes. Authoritative focus loss, application deactivation, device removal, and teardown clear all event-backed PlayerInput, WindowProc-key, and RawInput/HID facts; sampled keyboard, async-gamepad, and XInput facts remain independent. Native forwarding, opposite-direction policy, callback admission, and missing-provider fallback remain unchanged.
+- Profile-direction input is sampled as explicit held facts per keyboard, PlayerInput, WindowProc, RawInput/HID, async-gamepad, and XInput provider. PlayerInput stick clicks (L3/R3) are event-backed facts merged with XInput for the autoplay chord and preview toggle, so controllers the game reads without XInput (for example a Bluetooth DualSense) also work. A merged direction emits only its aggregate released-to-held edge and rearms only after aggregate release, so overlapping reports for one physical hold cannot submit multiple profile changes. Authoritative focus loss, application deactivation, device removal, and teardown clear all event-backed PlayerInput, WindowProc-key, and RawInput/HID facts; sampled keyboard, async-gamepad, and XInput facts remain independent. Native forwarding, opposite-direction policy, callback admission, and missing-provider fallback remain unchanged.
 - Autoplay is optional: unavailable contracts or a fully rolled-back hook failure
   leave existing product hooks usable. Its coupled actuator hooks publish authority
   only after their complete transaction succeeds; uncertain rollback remains fatal

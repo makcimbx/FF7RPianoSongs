@@ -1,4 +1,5 @@
 #include "runtime_cache_codec.h"
+#include "song_preview.h"
 
 #include <algorithm>
 #include <array>
@@ -665,6 +666,13 @@ bool write_payload(RuntimeCacheWriter& out, const LoadedSong& song,
             !write_profile_diagnostics(out, omission.diagnostics) || !write_song_config(out, witness) ||
             hash == 0 || !out.pod(hash)) return false;
     }
+    if (!out.pod(static_cast<std::uint8_t>(song.preview != nullptr))) return false;
+    if (song.preview) {
+        const auto& preview = *song.preview;
+        if (!out.string(preview.path.string()) || !out.pod(preview.content_hash) ||
+            !out.pod(preview.frame_count) || !out.pod(preview.source_start_seconds)) return false;
+        for (float value : preview.waveform) if (!out.pod(static_cast<double>(value))) return false;
+    }
     return true;
 }
 
@@ -758,6 +766,25 @@ bool read_payload(RuntimeCacheReader& in, LoadedSong* song,
         if (hash == 0 || hash != omission_semantic_hash_impl(omission) || omission.difficulty < 0 || omission.reason.empty() ||
             (omission.desired_rows == 0 && omission.reason != "not_evaluated_after_monotonic_row_limit") ||
             (i > 0 && song->difficulty_profile_omissions[i - 1].difficulty >= omission.difficulty)) return false;
+    }
+    std::uint8_t has_preview = 0;
+    if (!in.pod(&has_preview) || has_preview > 1) return false;
+    song->preview.reset();
+    if (has_preview) {
+        auto preview = std::make_shared<SongPreviewArtifact>();
+        std::string path;
+        if (!in.string(&path) || !in.pod(&preview->content_hash) || !in.pod(&preview->frame_count) ||
+            !in.pod(&preview->source_start_seconds) || preview->frame_count == 0 ||
+            preview->frame_count > kSongPreviewMaxFrames || !std::isfinite(preview->source_start_seconds) ||
+            preview->source_start_seconds < 0 || preview->source_start_seconds +
+                double(preview->frame_count) / kSongPreviewSampleRate > song->audio.source_duration_seconds()) return false;
+        preview->path = path;
+        for (float& value : preview->waveform) {
+            double encoded = 0;
+            if (!in.pod(&encoded) || !std::isfinite(encoded) || encoded < 0 || encoded > 1) return false;
+            value = static_cast<float>(encoded);
+        }
+        song->preview = std::move(preview);
     }
     if (!in.at_end()) return false;
     song->mabf_metadata = metadata; song->status = Status::ok_status(); song->hca_status = Status::ok_status();

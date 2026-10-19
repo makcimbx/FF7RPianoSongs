@@ -320,6 +320,9 @@ struct RuntimeFixture : Fixture {
 int main() {
     for(unsigned delayed_frames:{0u,2u}) {
       RuntimeFixture f;f.put(f.array+36,126);f.start(true);
+      assert(f.work->timings.mount_us>=0 && f.work->timings.request_us>=0);
+      assert(f.work->timings.discover_us==-1 && f.work->timings.bindings_us==-1 && f.work->timings.register_us==-1);
+      assert(f.work->reported_stage==na::RuntimeStage::Acquiring);
       for(unsigned attempt=0;attempt<delayed_frames;++attempt) {
           f.after_read=[](Fixture& f,na::Address a,std::size_t size) noexcept {
               if(a==f.seeds[0].candidate.objects[0] && size==40) {
@@ -335,13 +338,21 @@ int main() {
           assert(!na::native_audio_selected_name(*f.work,41,name) && !name);
           assert(!na::capture_native_pianoscore_row(*f.artifacts,1,row) && !row.row);
           assert(f.mounts==1 && f.acquires==3 && !f.reserves && !f.bridges);
+          assert(f.work->timings.discover_us>=0 && f.work->timings.bindings_us>=0 && f.work->timings.register_us==-1);
+          assert(f.work->reported_stage==na::RuntimeStage::Authenticating);
       }
       f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
       assert(f.mounts==1 && f.acquires==3 && f.bridges==3);
+      assert(f.work->timings.discover_us>=0 && f.work->timings.bindings_us>=0 && f.work->timings.register_us>=0);
+      assert(f.work->reported_stage==na::RuntimeStage::Ready);
+      const auto ready_timings=f.work->timings;
       // Global growth after registration is not provider drift; pinned graphs still validate.
       f.put(f.array+36,128);na::NativePianoScoreRow row;
       assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,row));
       f.frame();assert(f.mounts==1 && f.acquires==3 && f.bridges==3);
+      assert(f.work->timings.mount_us==ready_timings.mount_us && f.work->timings.request_us==ready_timings.request_us
+          && f.work->timings.discover_us==ready_timings.discover_us && f.work->timings.bindings_us==ready_timings.bindings_us
+          && f.work->timings.register_us==ready_timings.register_us);
     }
     {RuntimeFixture f;f.start(true);f.frame();
      const auto selected=f.work->selected_name;

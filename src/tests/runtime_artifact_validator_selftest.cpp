@@ -335,8 +335,8 @@ int main() {
 
         const std::vector<std::pair<std::string, std::string>> parent_mismatch_cases{
             {"first-line",
-                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v48:"
-                "expected=version=ff7rpianosongs.pipeline.v48"},
+                "manifest_bytes:offset=0:actual=xersion=ff7rpianosongs.pipeline.v49:"
+                "expected=version=ff7rpianosongs.pipeline.v49"},
             {"line-boundary",
                 "manifest_bytes:offset=36:actual=xache_key=123456789abcdef0:"
                 "expected=cache_key=123456789abcdef0"},
@@ -359,7 +359,7 @@ int main() {
             }
             // Exact reasons independently produced by the unextracted parent validator at
             // 923237c3acb005e6e50dcb16dc41b65a7205c85e in the approved isolated oracle tree.
-            // The first-line identity is updated to v48; its byte offset and
+            // The first-line identity is updated to v49; its byte offset and
             // actual/expected corruption diagnostic remain pinned exactly.
             if (!write_text(mismatch.song.cache_manifest_path, actual) ||
                 !expect(validate(mismatch), false, expected_reason,

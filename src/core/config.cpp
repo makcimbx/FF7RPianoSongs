@@ -34,6 +34,15 @@ Config load_config(const std::wstring& ini_path)
         L"Autoplay", L"KeyboardFunctionKey", 8, ini_path.c_str()));
     config.autoplay_function_key = autoplay_key >= 0 && autoplay_key <= 12 ? autoplay_key : 8;
 
+    wchar_t preview_mode[32]{};
+    GetPrivateProfileStringW(L"Preview", L"Mode", L"auto", preview_mode,
+        static_cast<DWORD>(std::size(preview_mode)), ini_path.c_str());
+    if (_wcsicmp(preview_mode, L"manual") == 0) config.preview_mode = PreviewMode::Manual;
+    else if (_wcsicmp(preview_mode, L"off") == 0) config.preview_mode = PreviewMode::Off;
+    const int preview_key = static_cast<int>(GetPrivateProfileIntW(
+        L"Preview", L"KeyboardFunctionKey", 7, ini_path.c_str()));
+    config.preview_function_key = preview_key >= 0 && preview_key <= 12 ? preview_key : 7;
+
     wchar_t level[32]{};
     GetPrivateProfileStringW(L"General", L"LogLevel", L"info", level, static_cast<DWORD>(std::size(level)), ini_path.c_str());
     config.log_level = parse_log_level(level);

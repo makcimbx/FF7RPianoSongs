@@ -5,6 +5,55 @@ tested artifacts, not a new public release. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
+## Song preview development (2026-10-19)
+
+- The preview badge was redesigned (navy panel, time or control hint, whole-song
+  timeline with the excerpt window, a 16-band equalizer while playing, and a
+  contrast-stretched waveform when idle). Row changes and the manual toggle now
+  fade out briefly instead of cutting, with a 400 ms hard-stop fallback. An
+  independent review found no blockers; full ctest passes. Installed through
+  prepared session `native-proxy-20261019T183459Z-73f804efd5044c1b818b5f44c29fdab8`
+  (prior session rolled back); in-game listening and visual checks are pending.
+- Autoplay L3+R3 and preview R3 were XInput-only, so a Bluetooth DualSense without
+  XInput emulation could not trigger them. Native PlayerInput stick clicks are now
+  merged in as event-backed facts cleared on focus/application loss, device
+  removal and teardown.
+- The badge now appears only while a preview loads or plays, fades in and out over
+  150 ms, and its clock shows the real song position and length instead of the
+  excerpt clock. Idle waveform and control hint were removed. The excerpt
+  `waveform` remains in the runtime cache codec but is no longer drawn. Reviewed
+  (no blockers) and installed through prepared session
+  `native-proxy-20261019T192442Z-9756db1d00154c76989403456cc107fc` (prior session
+  rolled back); in-game DualSense L3/R3, fade and clock checks are pending.
+- Integration work is in progress for custom-song previews: automatic after a
+  selection dwell by default, with manual and disabled modes in the INI.
+  Excerpts and waveform metadata are prepared offline; preview playback must
+  remain independent of native gameplay audio, charts and scores.
+- Prepared excerpts are bounded PCM artifacts with sound-derived waveform data,
+  validated on cold and warm paths. Cache identity v49/runtime format 17 requires
+  rebuilding earlier song caches; gameplay audio generation is unchanged.
+- Authenticated read-only live observation and foreground scrolling correlated
+  the selected row with the game's root-overlay coordinate conversion. The
+  catalog-gated badge follows that row on the default build; unsupported builds
+  and unqualified layouts hide it rather than using guessed coordinates.
+- Focused pipeline, descriptor, configuration, policy, audio, renderer, anchor,
+  input/startup and native compatibility tests pass, as do the source-document
+  audit and diff check. The production proxy built successfully without WinMM
+  imports. Independent reviews found no remaining concrete blockers in preview
+  lifetime, borrowed geometry reads or the combined worktree's native-cache
+  changes. A documented WinMM position-unit fallback was corrected and tested.
+- After explicit human authorization and verified game/bootstrap closure, the
+  prior owned proxy session was rolled back and the reviewed preview proxy was
+  installed through prepared session
+  `native-proxy-20261019T175733Z-37d18ef68309478d892d03facf1d12ce`.
+  Both DLLs, receipts, production-input hashes, checks and prior-version recovery
+  plan remain under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-preview-integration-20261019T175536Z-857aba5f`.
+  Installed bytes match the reviewed candidate; settings, songs and scores were
+  not modified. Actual-device listening, drawn scrolling/close/reopen/focus
+  checks and post-exit collection remain pending. Preparation is not a gameplay
+  or Release pass; the external-fixture native warm-cache benchmark was not run.
+
 ## Autoplay development (2026-10-19)
 
 - The Integration candidate implements a seated-only toggle with configurable
@@ -61,7 +110,7 @@ tested artifacts, not a new public release. Public version history remains in
   The human authorized a corrected-candidate installation after these checks;
   no automatic-note, audible-feedback or record-preservation success is claimed.
   No diagnostic product binary or release package was installed.
-- The corrected candidate is now owned by kept session
+- The corrected autoplay candidate was accepted and retained in session
   `native-proxy-20261019T164143Z-1eeab49b65e746e791bba976376246e7`.
   The temporary previous-version restoration session above was rolled back
   without a gameplay run before this installation. Both artifacts, receipts,

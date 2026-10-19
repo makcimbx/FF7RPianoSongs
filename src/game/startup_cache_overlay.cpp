@@ -5,6 +5,8 @@
 #include "core/pe_image.h"
 #include "game/hook_specs.h"
 #include "game/rvas.h"
+#include "game/song_preview_overlay.h"
+#include "game/song_preview_anchor.h"
 
 #include <algorithm>
 #include <array>
@@ -102,11 +104,72 @@ constexpr bool rebuild_stage(
         || stage == Stage::BuildingAudioCache || stage == Stage::PublishingCache;
 }
 
+// Render-thread only: the last shown badge keeps fading out after the preview stops
+// or the row changes. Leaked so process exit never releases its storage reference.
+struct PreviewBadgeFade {
+    SongPreviewRenderSnapshot shown;
+    PreviewBadgeLayout layout;
+    float opacity = 0;
+    std::chrono::steady_clock::time_point last;
+};
+
+bool preview_badge_active(const SongPreviewRenderSnapshot& snapshot) noexcept
+{
+    return snapshot && (snapshot.phase == PreviewPhase::Loading
+        || snapshot.phase == PreviewPhase::Ready || snapshot.phase == PreviewPhase::Playing);
+}
+
+void render_preview_badge(void* viewport, void* canvas,
+    const std::chrono::steady_clock::time_point now) noexcept
+{
+    static auto& fade = *new PreviewBadgeFade{};
+    constexpr float fade_seconds = .15f;
+    const float step = fade.last == std::chrono::steady_clock::time_point{} ? 0
+        : std::chrono::duration<float>(now - fade.last).count() / fade_seconds;
+    fade.last = now;
+    void* engine = nullptr;
+    void* font = nullptr;
+    void* fcanvas = nullptr;
+    float width = 0, height = 0;
+    const OverlayNativeRead read = production_read;
+    if (!read_value(read, viewport, runtime_layouts::UObject::outer, engine)
+        || !read_value(read, engine, runtime_layouts::UEngine::small_font, font)
+        || !read_value(read, canvas, runtime_layouts::UCanvas::canvas, fcanvas)
+        || !read_value(read, canvas, runtime_layouts::UCanvas::clip_x, width)
+        || !read_value(read, canvas, runtime_layouts::UCanvas::clip_y, height)) {
+        fade.shown = {};
+        fade.opacity = 0;
+        return;
+    }
+    // Shown only once a selection has dwelled into loading or playback, never while scrolling.
+    const auto snapshot = capture_song_preview_render_snapshot();
+    PreviewSelectedRowBounds row;
+    std::optional<PreviewBadgeLayout> layout;
+    if (preview_badge_active(snapshot) && capture_song_preview_row_bounds(snapshot, viewport, canvas, row))
+        layout = preview_badge_layout(row, width, height);
+    const auto current = layout ? capture_song_preview_render_snapshot() : SongPreviewRenderSnapshot{};
+    if (preview_badge_active(current) && current.session_generation == snapshot.session_generation
+        && current.selection.generation == snapshot.selection.generation
+        && current.ticket == snapshot.ticket) {
+        fade.shown = current;
+        fade.layout = *layout;
+        fade.opacity = std::min(1.0f, fade.opacity + step);
+    } else {
+        fade.opacity = std::max(0.0f, fade.opacity - step);
+    }
+    if (fade.opacity <= 0) { fade.shown = {}; return; }
+    (void)draw_song_preview_badge(fade.shown, fade.layout, fcanvas, font,
+        production_draw, production_draw_tile, fade.opacity);
+}
+
 void render_callback(void* viewport, void* canvas) noexcept
 {
     auto lease = g_callback_gate.try_enter();
     if (!lease || !g_renderer) return;
-    (void)g_renderer->render(viewport, canvas, std::chrono::steady_clock::now());
+    const auto now = std::chrono::steady_clock::now();
+    (void)g_renderer->render(viewport, canvas, now);
+    // Startup hiding never retires the shared PostRender owner or preview rendering.
+    render_preview_badge(viewport, canvas, now);
 }
 
 void __fastcall post_render_detour(void* viewport, void* canvas) noexcept
@@ -360,6 +423,7 @@ bool install_startup_cache_overlay(HMODULE exe_module,
                 "[startup_overlay] status=disabled_hook_install_failed error=" + error);
             return false;
         }
+        configure_song_preview_anchor(exe_module);
         g_callback_gate.open();
         log_overlay_noexcept(core::LogLevel::Info, "[startup_overlay] status=installed");
         return true;

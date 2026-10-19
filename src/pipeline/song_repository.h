@@ -13,8 +13,8 @@
 
 namespace ff7rp::pipeline {
 
-inline constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
-inline constexpr std::uint32_t kRuntimeCacheFormat = 16;
+inline constexpr char kRuntimeCacheMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '7'};
+inline constexpr std::uint32_t kRuntimeCacheFormat = 17;
 
 enum class SongDiscoveryCode {
     Completed,

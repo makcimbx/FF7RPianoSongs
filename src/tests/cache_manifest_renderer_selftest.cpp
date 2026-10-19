@@ -206,20 +206,20 @@ bool check_golden(
 int main() {
     SongConfig source_config;
     const LoadedSong comprehensive = comprehensive_song(&source_config);
-    // Compared byte-for-byte with the 193285b oracle: only pipeline v46 -> v48
+    // Compared byte-for-byte with the 193285b oracle: only pipeline v46 -> v49
     // and config/profile/omission hashes changed. The latter now serialize the
     // authored chord-voicing count (zero in these fixtures). All other bytes,
     // including descriptor hashes and side-specific notation, are unchanged.
-    bool goldens_match = check_golden(comprehensive, source_config, 5625u, 0x80f1e801ca193405ull, "comprehensive");
+    bool goldens_match = check_golden(comprehensive, source_config, 5625u, 0x8e2a16c9ec470726ull, "comprehensive");
 
     SongConfig empty_source;
     const LoadedSong empty = empty_song(&empty_source);
-    goldens_match &= check_golden(empty, empty_source, 3715u, 0xccc58dc8b0e505b6ull, "empty");
+    goldens_match &= check_golden(empty, empty_source, 3715u, 0x097f2d37c4d26d59ull, "empty");
 
     LoadedSong nonfinite = empty;
     nonfinite.midi_alignment_confidence = std::numeric_limits<double>::infinity();
     nonfinite.loudness_input_lufs = std::numeric_limits<double>::quiet_NaN();
-    goldens_match &= check_golden(nonfinite, empty_source, 3716u, 0x982550d717c02358ull, "nonfinite");
+    goldens_match &= check_golden(nonfinite, empty_source, 3716u, 0xd147e522711e0605ull, "nonfinite");
     if (!goldens_match) return 1;
 
     std::string unchanged = "unchanged";

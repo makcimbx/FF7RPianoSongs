@@ -1,5 +1,6 @@
 #include "core/config.h"
 #include "game/autoplay.h"
+#include "game/song_preview.h"
 #include "core/fail_closed_boundary.h"
 #include "core/hooks.h"
 #include "core/logging.h"
@@ -66,6 +67,7 @@ void catalog_readiness_changed(void* context, const game::CatalogReadinessEvent 
 DWORD repository_worker_body()
 {
     ff7rp::pipeline::OodleDecoder native_decoder;
+    ff7rp::pipeline::NativeAudioCacheSession native_cache_session;
     std::filesystem::path native_cache_root;
     const DWORD appdata_units = GetEnvironmentVariableW(L"LOCALAPPDATA", nullptr, 0);
     if (appdata_units && appdata_units <= 32768) {
@@ -98,7 +100,8 @@ DWORD repository_worker_body()
     callbacks.on_descriptor_admission = [&](game::SongDescriptor& descriptor) {
         if (native_decoder.available()) {
             const auto status = ff7r::piano::startup::prepare_native_audio_descriptor(
-                descriptor, core::generated::kBuildId, source_paks, native_decoder, native_cache_root);
+                descriptor, core::generated::kBuildId, source_paks, native_decoder, native_cache_root,
+                &native_cache_session);
             if (!status.ok())
                 core::log(core::LogLevel::Error, "[native_cache] status=not_prepared song=" + descriptor.id +
                     " native_artifacts=unavailable error=" + status.message);
@@ -305,6 +308,7 @@ DWORD startup_worker_body()
         return 0;
     }
 
+    game::configure_song_preview(config.preview_mode, config.preview_function_key);
     game::configure_extended_chart_capability(exe);
     game::configure_catalog_readiness_observer(
         {&g_startup_cache_progress, catalog_readiness_changed});

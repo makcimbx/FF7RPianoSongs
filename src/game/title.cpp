@@ -1,5 +1,6 @@
 #include "game/title.h"
 #include "game/autoplay.h"
+#include "game/song_preview.h"
 #include "core/toggle_feedback.h"
 
 #include "core/hooks.h"
@@ -52,6 +53,9 @@ std::atomic_bool g_raw_hid_logged{false};
 std::atomic_uint32_t g_native_dpad_left_name{0};
 std::atomic_uint32_t g_native_dpad_right_name{0};
 std::atomic_bool g_native_dpad_logged{false};
+std::atomic_uint32_t g_native_left_thumb_name{0};
+std::atomic_uint32_t g_native_right_thumb_name{0};
+std::atomic_bool g_native_thumb_logged{false};
 constexpr std::array<const wchar_t*, 8> kNativePianoDirectionNames{
     L"Gamepad_LeftStick_Up", L"Gamepad_LeftStick_Down", L"Gamepad_LeftStick_Left", L"Gamepad_LeftStick_Right",
     L"Gamepad_RightStick_Up", L"Gamepad_RightStick_Down", L"Gamepad_RightStick_Left", L"Gamepad_RightStick_Right",
@@ -163,6 +167,16 @@ bool resolve_native_dpad_names()
     }
     g_native_dpad_left_name.store(left, std::memory_order_release);
     g_native_dpad_right_name.store(right, std::memory_order_release);
+    uint32_t left_thumb = 0;
+    uint32_t right_thumb = 0;
+    if (construct_fname_id(L"Gamepad_LeftThumbstick", left_thumb)
+        && construct_fname_id(L"Gamepad_RightThumbstick", right_thumb)) {
+        g_native_left_thumb_name.store(left_thumb, std::memory_order_release);
+        g_native_right_thumb_name.store(right_thumb, std::memory_order_release);
+    } else {
+        core::log(core::LogLevel::Info,
+            "[title] difficulty_input status=native_thumbstick_unavailable fallback=xinput");
+    }
     for (size_t index = 0; index < kNativePianoDirectionNames.size(); ++index) {
         if (g_native_piano_direction_names[index].load(std::memory_order_acquire) != 0) {
             continue;
@@ -255,6 +269,14 @@ bool __fastcall player_input_key_detour(void* player_input, const void* key, int
                 g_difficulty_event_providers.update_player_input(true, event_type);
             } else if (comparison_id == g_native_dpad_right_name.load(std::memory_order_acquire)) {
                 g_difficulty_event_providers.update_player_input(false, event_type);
+            } else if (comparison_id == g_native_left_thumb_name.load(std::memory_order_acquire)
+                || comparison_id == g_native_right_thumb_name.load(std::memory_order_acquire)) {
+                g_difficulty_event_providers.update_thumbstick(
+                    comparison_id == g_native_left_thumb_name.load(std::memory_order_relaxed), event_type);
+                if (!g_native_thumb_logged.exchange(true, std::memory_order_acq_rel)) {
+                    core::log(core::LogLevel::Info,
+                        "[title] difficulty_input status=native_thumbstick_ready source=player_input_input_key");
+                }
             }
             for (size_t index = 0; index < g_native_piano_direction_names.size(); ++index) {
                 if (comparison_id == g_native_piano_direction_names[index].load(std::memory_order_acquire)) {
@@ -338,12 +360,17 @@ void resolve_xinput_get_state()
     core::log(core::LogLevel::Info, "[title] difficulty_input status=xinput_unavailable keyboard=enabled");
 }
 
-DifficultyInputProviderFacts sample_difficulty_input(bool& autoplay_held)
+DifficultyInputProviderFacts sample_difficulty_input(
+    bool& autoplay_held, bool& preview_held, bool& preview_chord_held)
 {
     const int function_key = autoplay_function_key();
     autoplay_held = function_key > 0 && function_key <= 12
         && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
         && (GetAsyncKeyState(VK_F1 + function_key - 1) & 0x8000) != 0;
+    const int preview_key = preview_function_key();
+    preview_held = preview_key > 0 && preview_key <= 12
+        && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+        && (GetAsyncKeyState(VK_F1 + preview_key - 1) & 0x8000) != 0;
     DifficultyInputProviderFacts state = g_difficulty_event_providers.snapshot();
     state.decrement.keyboard_held = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
     state.increment.keyboard_held = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
@@ -359,6 +386,10 @@ DifficultyInputProviderFacts sample_difficulty_input(bool& autoplay_held)
             if (get_state(user_index, &xinput_state) == ERROR_SUCCESS) {
                 constexpr WORD sticks = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB;
                 autoplay_held = autoplay_held || (xinput_state.Gamepad.wButtons & sticks) == sticks;
+                preview_chord_held = preview_chord_held
+                    || (xinput_state.Gamepad.wButtons & sticks) == sticks;
+                preview_held = preview_held
+                    || (xinput_state.Gamepad.wButtons & sticks) == XINPUT_GAMEPAD_RIGHT_THUMB;
                 state.decrement.xinput_held = state.decrement.xinput_held
                     || (xinput_state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) != 0;
                 state.increment.xinput_held = state.increment.xinput_held
@@ -366,6 +397,12 @@ DifficultyInputProviderFacts sample_difficulty_input(bool& autoplay_held)
             }
         }
     }
+    // PlayerInput also sees controllers XInput cannot, such as a Bluetooth DualSense.
+    const bool l3 = g_difficulty_event_providers.left_thumbstick_held();
+    const bool r3 = g_difficulty_event_providers.right_thumbstick_held();
+    autoplay_held = autoplay_held || (l3 && r3);
+    preview_chord_held = preview_chord_held || (l3 && r3);
+    preview_held = preview_held || (r3 && !l3);
     return state;
 }
 
@@ -373,11 +410,15 @@ void poll_dynamic_difficulty_input_impl()
 {
     const auto seat = autoplay_seated_token();
     bool autoplay_held = false;
-    const DifficultyInputProviderFacts current = sample_difficulty_input(autoplay_held);
+    bool preview_held = false;
+    bool preview_chord_held = false;
+    const DifficultyInputProviderFacts current = sample_difficulty_input(
+        autoplay_held, preview_held, preview_chord_held);
     DWORD foreground_process = 0;
     const HWND focused_window = GetForegroundWindow();
     if (focused_window) GetWindowThreadProcessId(focused_window, &foreground_process);
     const bool focused = focused_window && foreground_process == GetCurrentProcessId();
+    poll_song_preview(focused, preview_held, preview_chord_held);
     if (g_autoplay_input_edge.update(autoplay_held, focused && seat != 0)) {
         bool enabled = false;
         if (autoplay_toggle(seat, enabled)) {
@@ -422,6 +463,7 @@ void poll_dynamic_difficulty_input_impl()
         }
     }
     if (decrement_edge != increment_edge) {
+        if (!cancel_song_preview("profile_input")) return;
         ProfileListCallbacks callbacks = make_profile_list_callbacks();
         (void)profile_list_coordinator().submit_edge(
             decrement_edge ? -1 : 1, callbacks);
@@ -563,9 +605,11 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
         else if (wparam == VK_GAMEPAD_DPAD_RIGHT)
             g_difficulty_event_providers.update_window_key(false, false);
     } else if (message == WM_KILLFOCUS) {
+        (void)cancel_song_preview("focus_loss");
         g_difficulty_event_providers.reset_for_focus_loss();
         reset_native_piano_input_diagnostic_held();
     } else if (message == WM_ACTIVATEAPP && wparam == FALSE) {
+        (void)cancel_song_preview("application_loss");
         g_difficulty_event_providers.reset_for_application_loss();
         reset_native_piano_input_diagnostic_held();
     } else if (message == WM_INPUT_DEVICE_CHANGE && wparam == GIDC_REMOVAL) {
@@ -1217,6 +1261,7 @@ bool start_title_input_service(HMODULE exe_module) noexcept
 
 core::HookShutdownResult shutdown_title()
 {
+    const bool preview_stopped = shutdown_song_preview();
     g_input_service_state.store(TitleInputServiceState::Stopped,std::memory_order_release);
     std::unique_lock service_lock(g_input_service_mutex,std::try_to_lock);
     if(!service_lock.owns_lock())return {};
@@ -1226,8 +1271,9 @@ core::HookShutdownResult shutdown_title()
         core::teardown_operation(g_title_converter_hook),
         core::teardown_operation(g_title_population_hook),
         core::teardown_operation(g_detail_update_hook),
-    }, [] {
+    }, [preview_stopped] {
         if (!stop_difficulty_input_thread()) return false;
+        if (!preview_stopped) return false;
         if (!core::stop_toggle_feedback()) return false;
         return uninstall_difficulty_window_hook();
     }, [] {
@@ -1235,6 +1281,9 @@ core::HookShutdownResult shutdown_title()
         g_native_dpad_left_name.store(0, std::memory_order_release);
         g_native_dpad_right_name.store(0, std::memory_order_release);
         g_native_dpad_logged.store(false, std::memory_order_release);
+        g_native_left_thumb_name.store(0, std::memory_order_release);
+        g_native_right_thumb_name.store(0, std::memory_order_release);
+        g_native_thumb_logged.store(false, std::memory_order_release);
         for (auto& direction : g_native_piano_direction_names) direction.store(0, std::memory_order_release);
         g_original_title_converter = nullptr;
         g_original_title_population = nullptr;

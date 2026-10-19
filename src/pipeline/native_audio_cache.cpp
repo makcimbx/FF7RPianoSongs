@@ -4,12 +4,14 @@
 namespace ff7rp::pipeline {
 namespace {
 Status extract_request(const NativeAudioCacheRequest& r,const OodleDecoder& decoder,
-    NativeAudioCohortRequest& out) {
+    NativeAudioCohortRequest& out,
+    std::shared_ptr<const std::array<native_binary::Bytes,4>> sources = {}) {
     if(!r.source_paks.is_absolute()||!r.cache_root.is_absolute()||
         (r.build_id!="ff7rebirth-steam-win64-6a16ced2"&&r.build_id!="ff7rebirth-steam-win64-68fd6fde"))
         return Status::error(StatusCode::InvalidArgument,"Native audio cache requires absolute Paks/cache paths and supported build");
     out.build_id=r.build_id; out.identity=r.identity; out.base_score_name=r.base_score_name;
     out.mabf=r.mabf; out.timing=r.timing;
+    if(sources) { out.source_snapshot=std::move(sources); return Status::ok_status(); }
     constexpr NativeIoChunkId ids[]{
         {0x80,0xbd,0x41,0x80,0xba,0x7f,0x81,0xe1,0,0,0,2},
         {0x7a,0x80,0x41,0xd3,0x1d,0x69,0x1a,0x3d,0,0,0,2},
@@ -23,10 +25,18 @@ Status extract_request(const NativeAudioCacheRequest& r,const OodleDecoder& deco
 }
 }
 Status prepare_native_audio_cache(const NativeAudioCacheRequest& request,
-    const OodleDecoder& decoder,NativeAudioArtifactSet& out) {
+    const OodleDecoder& decoder,NativeAudioArtifactSet& out,NativeAudioCacheSession* session) {
     out={}; NativeAudioCohortRequest decoded;
-    auto s=extract_request(request,decoder,decoded); if(!s.ok()) return s;
-    return prepare_native_audio_cohort(decoded,request.cache_root,out);
+    const bool reuse=session&&session->sources_&&session->source_paks_==request.source_paks&&
+        session->build_id_==request.build_id;
+    auto s=extract_request(request,decoder,decoded,reuse?session->sources_:nullptr); if(!s.ok()) return s;
+    s=prepare_native_audio_cohort(decoded,request.cache_root,out);
+    // Never retain unqualified/partially extracted templates after a failed build.
+    if(s.ok()&&session&&!reuse) {
+        session->sources_=std::make_shared<const std::array<native_binary::Bytes,4>>(std::move(decoded.source_zen));
+        session->source_paks_=request.source_paks; session->build_id_=request.build_id;
+    }
+    return s;
 }
 Status validate_native_audio_artifacts(const NativeAudioCacheRequest& request,
     const OodleDecoder& decoder,const NativeAudioArtifactSet& artifacts) {

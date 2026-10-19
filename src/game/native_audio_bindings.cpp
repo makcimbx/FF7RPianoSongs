@@ -26,11 +26,15 @@ struct Capture {
     // Includes nested three-role captures and their rereads at the group bound.
     static constexpr std::size_t kSpanLimit = kNativeAudioEntryLimit * 512;
     MemoryReader source;
-    std::unique_ptr<Span[]> spans{new (std::nothrow) Span[kSpanLimit]};
+    // Fixed indexing preserves every nested read/reread without copying old spans on growth.
+    static constexpr std::size_t kBlockSize = 2048;
+    static_assert(kSpanLimit % kBlockSize == 0);
+    std::array<std::unique_ptr<Span[]>, kSpanLimit / kBlockSize> blocks{};
     std::size_t used = 0;
     Failure failure = Failure::None;
     Address failure_address = 0;
     bool reread_failed = false;
+    const Span& span(std::size_t index) const noexcept { return blocks[index / kBlockSize][index % kBlockSize]; }
     static bool read(void* context, Address address, void* out, std::size_t size) noexcept
     {
         auto& c = *static_cast<Capture*>(context);
@@ -38,8 +42,11 @@ struct Capture {
             || address > std::numeric_limits<Address>::max() - size || !c.source.read) {
             c.failure = Failure::Read; return false;
         }
-        if (!c.spans || c.used == kSpanLimit) { c.failure = Failure::Budget; return false; }
-        auto& s = c.spans[c.used]; s.address = address; s.size = size;
+        if (c.used == kSpanLimit) { c.failure = Failure::Budget; return false; }
+        auto& block = c.blocks[c.used / kBlockSize];
+        if (!block) block.reset(new (std::nothrow) Span[kBlockSize]);
+        if (!block) { c.failure = Failure::Budget; return false; }
+        auto& s = block[c.used % kBlockSize]; s.address = address; s.size = size;
         if (!c.source.read(c.source.context, address, s.bytes.data(), size)) {
             c.failure = Failure::Read; c.failure_address = address; return false;
         }
@@ -52,7 +59,7 @@ struct Capture {
     {
         std::array<unsigned char, 80> bytes{};
         for (std::size_t i = 0; i < used; ++i) {
-            const auto& s = spans[i];
+            const auto& s = span(i);
             if (!source.read(source.context, s.address, bytes.data(), s.size)) {
                 failure_address = s.address; reread_failed = true; return false;
             }
@@ -278,8 +285,8 @@ BindingResult CohortBindings::read_record(const gu::UObjectIdentityAccess& acces
             if (live_result == Live::Success || live_result == Live::ObjectMismatch
                 || live_result == Live::SerialInvalid || live_result == Live::ItemFlagsDead
                 || live_result == Live::UObjectDestroyed) {
-                if (c.used > first_span && c.spans[c.used - 1].size == sizeof(std::int32_t)) {
-                    std::memcpy(&facts.serial, c.spans[c.used - 1].bytes.data(), sizeof(facts.serial));
+                if (c.used > first_span && c.span(c.used - 1).size == sizeof(std::int32_t)) {
+                    std::memcpy(&facts.serial, c.span(c.used - 1).bytes.data(), sizeof(facts.serial));
                     facts.serial_observed = true;
                 }
             }

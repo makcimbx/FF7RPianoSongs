@@ -372,8 +372,17 @@ void test_difficulty_input_merge_state()
     require(!event_providers.snapshot().decrement.player_input_held,
         "production PlayerInput provider did not apply Released state");
 
+    event_providers.update_thumbstick(false, 0);
+    event_providers.update_thumbstick(false, 2);
+    require(event_providers.right_thumbstick_held() && !event_providers.left_thumbstick_held(),
+        "native R3 Press/Repeat was not retained independently of L3");
+    event_providers.update_thumbstick(false, 1);
+    require(!event_providers.right_thumbstick_held(), "native R3 Released state was not applied");
+
     const auto populate_all_event_providers = [&] {
         event_providers.update_player_input(true, 0);
+        event_providers.update_thumbstick(true, 0);
+        event_providers.update_thumbstick(false, 0);
         event_providers.update_window_key(false, true);
         event_providers.update_raw_hid(true, true);
     };
@@ -382,7 +391,9 @@ void test_difficulty_input_merge_state()
         require(!cleared.decrement.player_input_held
                 && !cleared.increment.window_key_held
                 && !cleared.decrement.raw_hid_held
-                && !cleared.increment.raw_hid_held,
+                && !cleared.increment.raw_hid_held
+                && !event_providers.left_thumbstick_held()
+                && !event_providers.right_thumbstick_held(),
             message);
     };
     populate_all_event_providers();

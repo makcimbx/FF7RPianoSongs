@@ -1,6 +1,7 @@
 #pragma once
 #include "native_iostore_writer.h"
 #include "native_music_export.h"
+#include <memory>
 
 namespace ff7rp::pipeline {
 struct NativeAudioCohortRequest {
@@ -12,6 +13,9 @@ struct NativeAudioCohortRequest {
     std::array<native_binary::Bytes,4> source_zen;
     native_binary::Bytes mabf;
     NativeMusicCueTiming timing;
+    // Optional immutable session snapshot instead of source_zen. This is storage
+    // reuse only: build_native_audio_cohort still authenticates every source.
+    std::shared_ptr<const std::array<native_binary::Bytes,4>> source_snapshot;
 };
 struct NativeAudioCohortResult {
     Status status;

@@ -13,6 +13,7 @@
 #include "pipeline/runtime_cache_codec.h"
 #include "pipeline/song_repository.h"
 #include "pipeline/song_json.h"
+#include "pipeline/song_preview.h"
 #include "tests/test_support.h"
 #include "tests/target_native_assets.h"
 
@@ -874,6 +875,12 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
     ff7rp::pipeline::LoadedSong exact_cached;
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &exact_cached);
     if (!status.ok() || !exact_cached.loaded_from_runtime_cache ||
+        !exact_cached.preview || !generated.preview ||
+        exact_cached.preview->path != generated.preview->path ||
+        exact_cached.preview->content_hash != generated.preview->content_hash ||
+        exact_cached.preview->frame_count != generated.preview->frame_count ||
+        exact_cached.preview->source_start_seconds != generated.preview->source_start_seconds ||
+        exact_cached.preview->waveform != generated.preview->waveform ||
         !configs_equal(exact_cached.config, reloaded.config) || !charts_equal(exact_cached.chart, reloaded.chart) ||
         exact_cached.gain_envelope_applied != reloaded.gain_envelope_applied ||
         exact_cached.gain_envelope_point_count != reloaded.gain_envelope_point_count ||
@@ -887,6 +894,16 @@ int test_growth_cache_and_manifest(const std::filesystem::path& root) {
     }
 
     const std::vector<std::uint8_t> valid_runtime = read_binary(runtime_path);
+    const auto preview_bytes = read_binary(generated.preview->path);
+    auto damaged_preview = preview_bytes;
+    damaged_preview.back() ^= 1;
+    if (!write_bytes(generated.preview->path, damaged_preview) ||
+        ff7rp::pipeline::load_song_directory(song_directory.string(), &exact_cached, {}, false).ok())
+        return fail("corrupt preview cache accepted");
+    damaged_preview.resize(33);
+    if (!write_bytes(generated.preview->path, damaged_preview) ||
+        ff7rp::pipeline::load_song_directory(song_directory.string(), &exact_cached, {}, false).ok() ||
+        !write_bytes(generated.preview->path, preview_bytes)) return fail("truncated preview cache accepted");
     const std::vector<std::uint8_t> valid_mabf = read_binary(generated.cache_sidecar_path);
     const auto expect_rebuild = [&] {
         const auto runtime_before = read_binary(runtime_path);
@@ -1586,12 +1603,9 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::test_target_native_assets().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v25 grades the fast RH step by level. This one-note fixture
-        // retains its chart semantic hash, manifest size, and all six labels;
-        // only the policy-dependent cache key and manifest digest change.
-        // Pipeline v48 and binary format 16 are unchanged.
-        expected_cache_key = 0xca5fdb9396478964ull;
-        expected_normalized_manifest_digest = 0xbdc8a65ce076dfd6ull;
+        // Pipeline v49 adds preview identity; chart semantics remain unchanged.
+        expected_cache_key = 0x40cbf913db7e90eeull;
+        expected_normalized_manifest_digest = 0xb7098ffbe869d5f0ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -2341,7 +2355,7 @@ int test_gain_envelope_cache_and_hca(const std::filesystem::path& root) {
         !generated.gain_envelope_applied || generated.gain_envelope_point_count != 2 ||
         generated.gain_envelope_max_gain_db != 6.0 || generated.gain_envelope_min_gain_db != 0.0 ||
         !generated.loudness_gain_applied || !generated.loudness_limiter_engaged ||
-        first_manifest.find("version=ff7rpianosongs.pipeline.v48") == std::string::npos ||
+        first_manifest.find("version=" + std::string(ff7rp::pipeline::kPipelineCacheVersion)) == std::string::npos ||
         first_manifest.find("gain_envelope_present=1") == std::string::npos ||
         first_manifest.find("gain_envelope_points=2") == std::string::npos ||
         first_manifest.find("gain_envelope_interpolation=linear_amplitude") == std::string::npos ||
@@ -3226,11 +3240,14 @@ int test_bounded_discovery_order_and_cache_race(const std::filesystem::path& roo
             ++compact_settled_songs;
             compact_settlement_valid = compact_settlement_valid &&
                 candidate.song.audio.stereo_samples.empty() &&
+                candidate.song.preview &&
                 candidate.song.audio.source_frame_count != 0;
         }
     };
     const auto compacted = ff7rp::pipeline::discover_songs(music_root.string(), compact_hooks);
     if (compacted.songs.size() != 2u || !compacted.songs[0].audio.stereo_samples.empty() ||
+        !compacted.songs[0].preview || !compacted.songs[1].preview ||
+        compacted.songs[0].preview->content_hash != discovered.songs[0].preview->content_hash ||
         !compacted.songs[1].audio.stereo_samples.empty() ||
         compacted.songs[0].audio.source_frame_count != first_frames ||
         compacted.songs[1].audio.source_frame_count != second_frames ||

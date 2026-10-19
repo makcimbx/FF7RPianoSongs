@@ -1,4 +1,12 @@
 #include "game/startup_cache_overlay.h"
+#include "game/song_preview_overlay.h"
+
+namespace ff7r::piano::game {
+SongPreviewRenderSnapshot capture_song_preview_render_snapshot() noexcept { return {}; }
+void configure_song_preview_anchor(HMODULE) noexcept {}
+bool capture_song_preview_row_bounds(const SongPreviewRenderSnapshot&,void*,void*,
+    PreviewSelectedRowBounds&) noexcept { return false; }
+}
 
 #include <algorithm>
 #include <chrono>

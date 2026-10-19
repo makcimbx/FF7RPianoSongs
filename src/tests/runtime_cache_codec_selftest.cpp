@@ -18,9 +18,9 @@ namespace {
 
 using namespace ff7rp::pipeline;
 
-constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '6'};
+constexpr char kMagic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '7'};
 constexpr char kFormat14Magic[8] = {'F', '7', 'R', 'P', 'R', 'T', '1', '4'};
-constexpr std::uint32_t kFormat = 16;
+constexpr std::uint32_t kFormat = 17;
 
 bool expect(const bool condition, const char* message) {
     if (!condition) std::cerr << message << '\n';
@@ -385,10 +385,10 @@ bool test_chord_voicing_cache() {
     if (!expect(!decode_runtime_cache(corrupt, kMagic, kFormat, &decoded) && decoded.config.title == "sentinel",
             "checksummed unverified sound was accepted or partially published")) return false;
     auto stale = bytes;
-    stale[7] = '5';
-    stale[8] = 15;
+    stale[7] = '6';
+    stale[8] = 16;
     put64(stale, stale.size() - 8u, fnv1a64_append(kFnv1a64OffsetBasis, stale.data(), stale.size() - 8u));
-    if (!expect(!decode_runtime_cache(stale, kMagic, kFormat, &decoded), "format-15 cache acquired format-16 authority")) return false;
+    if (!expect(!decode_runtime_cache(stale, kMagic, kFormat, &decoded), "format-16 cache acquired format-17 authority")) return false;
 
     auto extended = playable_extended_oracle_song();
     extended.config.chord_voicings = song.config.chord_voicings;
@@ -412,8 +412,9 @@ int main() {
     // Format 16 deliberately appends a uint32 empty-voicing count to each of
     // this fixture's three configurations (+12 bytes), and changes the envelope
     // version and dependent hashes. The value constructors remain unchanged;
-    // these observed format-16 bytes are also checked by decode/re-encode below.
-    if (!expect_parent_oracle(comprehensive_oracle_song(), 2862u, 0x4236b33b4cb5476eull, "comprehensive")) return 1;
+    // Format 17 adds a trailing optional preview field (+1 byte when absent).
+    // These bytes are also checked by decode/re-encode below.
+    if (!expect_parent_oracle(comprehensive_oracle_song(), 2863u, 0x68a1f13785fd0d55ull, "comprehensive")) return 1;
     const LoadedSong legacy_diagnostic = diagnostic_tail_oracle_song();
     std::vector<std::uint8_t> legacy_diagnostic_bytes;
     if (!expect(!encode_runtime_cache(legacy_diagnostic, kMagic, kFormat, &legacy_diagnostic_bytes),
@@ -515,11 +516,11 @@ int main() {
         !expect(encode_runtime_cache(source, kMagic, kFormat, &bytes), "encode failed")) return 1;
 
     const std::uint64_t hash = fnv1a64_append(kFnv1a64OffsetBasis, bytes.data(), bytes.size());
-    // Format 16 adds an empty-map uint32 to the root and profile (+8 bytes).
+    // Format 17 appends the absent-preview marker (+1 byte).
     // Pin the observed envelope/hash while retaining semantic and corruption
     // checks below for the unchanged representative chart.
-    if (!expect(bytes.size() == 1724u, "encoded byte count changed") ||
-        !expect(hash == 0xe11f4f2721b90a61ull, "encoded byte fixture changed")) {
+    if (!expect(bytes.size() == 1725u, "encoded byte count changed") ||
+        !expect(hash == 0xe047cdc8ff3aae71ull, "encoded byte fixture changed")) {
         std::cerr << "actual bytes=" << bytes.size() << " hash=0x" << std::hex << hash << '\n';
         return 1;
     }

@@ -6,6 +6,7 @@
 #include <cstring>
 #include <iostream>
 #include <map>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -29,6 +30,8 @@ struct Fixture {
     int object_count = 0;
     na::Address drift = 0; unsigned drift_reads = 0;
     std::size_t reads = 0;
+    na::Address watched = 0;
+    std::size_t watched_reads = 0;
     na::Address unreadable = 0;
     void (*after_read)(Fixture&, na::Address, std::size_t) noexcept = nullptr;
     na::Address alloc(std::size_t size) {
@@ -43,6 +46,7 @@ struct Fixture {
     static bool read(void* context, na::Address address, void* out, std::size_t size) noexcept {
         auto& f = *static_cast<Fixture*>(context);
         ++f.reads;
+        if(address==f.watched)++f.watched_reads;
         if (address == f.unreadable) return false;
         auto it = f.memory.upper_bound(address); if (it == f.memory.begin()) return false; --it;
         if (address - it->first > it->second.size() || size > it->second.size() - (address - it->first)) return false;
@@ -170,12 +174,40 @@ struct Fixture {
 };
 
 #ifndef FF7RP_NATIVE_AUDIO_BINDING_FIXTURE_ONLY
+namespace {
+bool track_capture_allocations=false;
+std::size_t capture_allocations=0,capture_bytes=0;
+std::size_t fail_capture_allocation=static_cast<std::size_t>(-1);
+}
+// Only the standalone binding test replaces the nothrow array allocation seam.
+void* operator new[](std::size_t bytes,const std::nothrow_t&) noexcept {
+    if(track_capture_allocations) {
+        const auto index=capture_allocations++;capture_bytes+=bytes;
+        if(index==fail_capture_allocation)return nullptr;
+    }
+    try{return ::operator new[](bytes);}catch(...){return nullptr;}
+}
 int main() {
     assert(na::native_audio_layout(ff7r::piano::core::generated::kBuildId));
     assert(!na::native_audio_layout("unknown"));
     assert(!na::native_audio_layout(Fixture::older?"ff7rebirth-steam-win64-6a16ced2":"ff7rebirth-steam-win64-68fd6fde"));
     using F = na::BindingFailure; using P = na::BindingPhase;
     static_assert(sizeof(na::BindingDiagnostic) <= 192);
+    { Fixture f;na::CohortBindings b;
+      track_capture_allocations=true;capture_allocations=capture_bytes=0;
+      const auto result=f.capture(b);track_capture_allocations=false;assert(result);
+      // Small cohorts no longer allocate four full 12 MiB capture arrays.
+      assert(capture_allocations==4 && capture_bytes==4*2048*96);
+      std::cout<<"small capture allocations="<<capture_allocations<<" bytes="<<capture_bytes<<'\n';
+    }
+    for(std::size_t allocation:{0u,1u,3u}) {
+      Fixture f;na::CohortBindings b;
+      track_capture_allocations=true;capture_allocations=capture_bytes=0;fail_capture_allocation=allocation;
+      const auto result=f.capture(b);track_capture_allocations=false;fail_capture_allocation=static_cast<std::size_t>(-1);
+      assert(!result && !b.captured());
+      assert(result.failure==F::Budget || result.failure==F::Read);
+      assert(f.capture(b)); // No native mutation or terminal latch on an initial allocation failure.
+    }
     for(unsigned role=0;role<3;++role) {
       Fixture f;na::CohortBindings b;const na::Address tables[]{rva::BgmListObjectVtable,rva::ScoreInfoObjectVtable,rva::PianoScoreObjectVtable};
       f.put(f.base+tables[role]+Fixture::append_slot,na::Address{});
@@ -321,11 +353,25 @@ int main() {
     for(const int count:{65,static_cast<int>(na::kNativeAudioEntryLimit)}) {
       Fixture f;
       for(unsigned role=0;role<3;++role)for(unsigned group=0;group<3;++group)f.fill_group(role,group,count);
-      na::CohortBindings b;const auto result=f.capture(b);
-      if(!result)std::cerr<<na::binding_failure_name(result.failure)<<" role "<<int(result.role)<<'\n';
-      assert(result);assert(b.validate(f.access(),P::BeforeBridge));
-      // Even the last bounded entry is authenticated, never silently truncated.
       na::Address payload=0;assert(Fixture::read(&f,f.manager(2)+32,&payload,8));
+      f.watched=payload+(count-1)*16;
+      track_capture_allocations=true;capture_allocations=capture_bytes=0;
+      na::CohortBindings b;const auto result=f.capture(b);
+      track_capture_allocations=false;
+      if(!result)std::cerr<<na::binding_failure_name(result.failure)<<" role "<<int(result.role)<<'\n';
+      assert(result && f.watched_reads==4);
+      if(count==static_cast<int>(na::kNativeAudioEntryLimit)) {
+          assert(capture_allocations>4); // Both record and cohort storage grow on demand.
+          track_capture_allocations=true;capture_allocations=capture_bytes=0;fail_capture_allocation=2;
+          const auto exhausted=b.validate(f.access(),P::BeforeBridge);
+          track_capture_allocations=false;fail_capture_allocation=static_cast<std::size_t>(-1);
+          assert(exhausted.failure==F::Budget || exhausted.failure==F::Read);
+      }
+      f.watched_reads=0;assert(b.validate(f.access(),P::BeforeBridge));assert(f.watched_reads==4);
+      f.drift=f.watched;f.drift_reads=0;
+      const auto drifting=b.validate(f.access(),P::BeforeBridge);assert(drifting.failure==F::Drift);
+      assert(std::string_view(drifting.diagnostic.stage)=="record_reread");f.drift=0;
+      // Even the last bounded entry is authenticated, never silently truncated.
       f.put(payload+(count-1)*16+4,8);assert(b.validate(f.access(),P::BeforeBridge).failure==F::RegistryWeak);
     }
     for(unsigned role=0;role<3;++role)for(unsigned group=0;group<3;++group) {
