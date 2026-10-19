@@ -12,7 +12,8 @@ tested artifacts, not a new public release. Public version history remains in
   and no native or custom personal-record replacement after any assisted play.
   Native note timing and actual score/rank calculation are retained for stock
   and custom songs. Its first focused run failed: custom songs were absent
-  from the list. The candidate has been rolled back and is not gameplay-qualified.
+  from the list. That candidate was rolled back; the corrected candidate later
+  passed the bounded human check below, not full gameplay or release qualification.
 - Independent scoped reviews found no blockers in the marker lifetime, copied
   input authority, nested/concurrent result shadows, optional-hook degradation,
   sound ownership or older-build catalog additions. The sound helper resolves
@@ -60,14 +61,25 @@ tested artifacts, not a new public release. Public version history remains in
   The human authorized a corrected-candidate installation after these checks;
   no automatic-note, audible-feedback or record-preservation success is claimed.
   No diagnostic product binary or release package was installed.
-- The corrected candidate is now owned by prepared session
+- The corrected candidate is now owned by kept session
   `native-proxy-20261019T164143Z-1eeab49b65e746e791bba976376246e7`.
   The temporary previous-version restoration session above was rolled back
   without a gameplay run before this installation. Both artifacts, receipts,
   score baseline and recovery plan are retained in
   `%LOCALAPPDATA%/FF7RPianoSongs/captures/autoplay-adoption-fix-20261019T164115Z-57055649`.
-  First human check is custom-song visibility; autoplay gameplay, post-exit
-  collection and disposition remain pending.
+  The human reported that autoplay works very well and the game was closed.
+  Post-exit collection verifies successful custom catalog adoption with no
+  `callback_gate_not_exclusive` recurrence. The log records custom Amadeus chart
+  activation, three logical play generations, on/off transitions and an assisted
+  final play reaching results then returning to the list. No error/fatal or
+  feedback-failure marker appears in this log. The custom scores INI is byte-identical
+  to the pre-run snapshot; this does not establish completed-custom-play or stock
+  personal-best preservation. Per-song timing, audible signal distinction, exact
+  input-device coverage and native record behavior were not separately confirmed.
+  The session was collected and finalized `Keep` with its bounded manual report;
+  the reviewed development proxy remains installed and rollback evidence retained.
+  This is a successful focused development check, not release qualification or
+  gameplay qualification for the older build.
 
 ## Second-play chart rejection investigation (2026-10-19)
 
