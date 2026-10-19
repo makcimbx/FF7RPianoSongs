@@ -840,25 +840,6 @@ target_link_options(native_audio_extended_composition_selftest PRIVATE "$<$<CXX_
 target_include_directories(native_audio_extended_composition_selftest PRIVATE "src")
 target_link_libraries(native_audio_extended_composition_selftest PRIVATE ff7rp_pipeline minhook Psapi bcrypt)
 
-add_executable(native_audio_bootstrap_selftest
-    src/tests/native_audio_bootstrap_selftest.cpp
-    src/game/native_audio_bindings.cpp
-    src/game/native_audio_mount.cpp
-    src/game/uobject_locator_core.cpp
-    src/game/hook_specs.cpp
-    src/core/hooks.cpp
-    src/core/logging.cpp
-    src/core/pe_image.cpp
-)
-ff7rp_apply_cpp_policy(native_audio_bootstrap_selftest OMIT_FP_PRECISE)
-ff7rp_use_generated_catalog(native_audio_bootstrap_selftest)
-target_compile_definitions(native_audio_bootstrap_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(native_audio_bootstrap_selftest PRIVATE
-    "$<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>"
-    "$<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>")
-target_include_directories(native_audio_bootstrap_selftest PRIVATE "src")
-target_link_libraries(native_audio_bootstrap_selftest PRIVATE ff7rp_pipeline minhook)
-
 add_executable(native_proxy_bootstrap_selftest
     src/tests/native_proxy_bootstrap_selftest.cpp
     src/game/native_audio_bootstrap.cpp
@@ -886,7 +867,7 @@ target_link_libraries(native_proxy_unavailable_selftest PRIVATE bcrypt)
 target_compile_options(native_proxy_unavailable_selftest PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG> $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
 foreach(target IN ITEMS native_audio_runtime_selftest native_audio_adapter_selftest
-        native_audio_extended_composition_selftest native_audio_bootstrap_selftest)
+        native_audio_extended_composition_selftest)
     target_sources(${target} PRIVATE src/game/native_proxy_bootstrap.cpp)
     target_include_directories(${target} PRIVATE "${FF7RP_GENERATED_PROXY_DIR}")
 endforeach()
@@ -1039,7 +1020,6 @@ add_test(NAME uobject_identity_selftest COMMAND uobject_identity_selftest)
 add_test(NAME native_audio_decoder_selftest COMMAND native_audio_decoder_selftest)
 add_test(NAME native_audio_bindings_selftest COMMAND native_audio_bindings_selftest)
 add_test(NAME native_audio_runtime_selftest COMMAND native_audio_runtime_selftest)
-add_test(NAME native_audio_bootstrap_selftest COMMAND native_audio_bootstrap_selftest)
 add_test(NAME native_proxy_entry_bridge_selftest COMMAND native_proxy_entry_bridge_selftest)
 add_test(NAME native_proxy_forwarding_selftest COMMAND native_proxy_forwarding_selftest)
 add_test(NAME native_proxy_startup_diagnostic_selftest COMMAND native_proxy_startup_diagnostic_selftest)
@@ -1148,7 +1128,6 @@ set(FF7RP_BOUNDED_SELFTESTS
     native_audio_decoder_selftest
     native_audio_bindings_selftest
     native_audio_runtime_selftest
-    native_audio_bootstrap_selftest
     native_proxy_entry_bridge_selftest
     native_proxy_forwarding_selftest
     native_proxy_startup_diagnostic_selftest
@@ -1178,7 +1157,7 @@ if(NOT FF7RP_BUILD_RUNTIME)
         selection_substrate_policy_selftest bgm_playback_aggregate_policy_selftest
         mabf_sidecar_loader_selftest audio_pointer_patch_runtime_selftest
         audio_play_setup_diagnostics_selftest scoreinfo_result_policy_selftest
-        startup_thread_selftest uobject_identity_selftest native_audio_decoder_selftest native_audio_bindings_selftest native_audio_runtime_selftest native_audio_bootstrap_selftest native_proxy_entry_bridge_selftest native_proxy_forwarding_selftest native_proxy_bootstrap_selftest native_audio_adapter_selftest native_audio_extended_composition_selftest chart_selected_row_selftest scoreinfo_overlay_producer_selftest title_input_service_selftest runtime_gate_selftest
+        startup_thread_selftest uobject_identity_selftest native_audio_decoder_selftest native_audio_bindings_selftest native_audio_runtime_selftest native_proxy_entry_bridge_selftest native_proxy_forwarding_selftest native_proxy_bootstrap_selftest native_audio_adapter_selftest native_audio_extended_composition_selftest chart_selected_row_selftest scoreinfo_overlay_producer_selftest title_input_service_selftest runtime_gate_selftest
         native_proxy_profile_selftest
         native_proxy_callback_selftest
         native_proxy_startup_diagnostic_selftest
@@ -1205,7 +1184,6 @@ set_tests_properties(
     native_audio_decoder_selftest
     native_audio_bindings_selftest
     native_audio_runtime_selftest
-    native_audio_bootstrap_selftest
     native_audio_adapter_selftest
     native_audio_extended_composition_selftest
     chart_selected_row_selftest

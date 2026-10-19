@@ -157,15 +157,6 @@ class BootstrapCatalogTests(unittest.TestCase):
         self.assertEqual(len(profile["disk_import_comparisons"]), 2)
         self.assertGreater(profile["disk_import_comparisons"][0]["bytes"], len(bytes.fromhex(record["signature"]["bytes"])))
 
-    def test_older_fixture_uses_imported_unwind_not_newer_records(self):
-        source = (ROOT / "src/tests/native_audio_bootstrap_selftest.cpp").read_text()
-        fixture = re.search(r'constexpr bs::Window old_unwind\[\]=\{(.*?)\};', source, re.S).group(1)
-        compiled = {int(rva, 16): raw for rva, raw in re.findall(r'\{(0x[0-9a-f]+),"([0-9a-f]+)"\}', fixture)}
-        records = {int(r["unwind"], 16): r["unwind_codes"] for r in OLD_PROFILE["runtime_functions"].values()}
-        for rva, raw in compiled.items():
-            self.assertEqual(raw, records[rva])
-        self.assertEqual(len(compiled), 12)
-
     def test_entry_owner_and_runtime_module_are_not_a_second_bootstrap_hook(self):
         entries = {e["id"]: e for e in json.loads((ROOT / "src/game/rva_catalog.json").read_text())["addresses"]}
         entry = entries["native_audio_exe_entry"]

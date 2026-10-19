@@ -1585,12 +1585,12 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::test_target_native_assets().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Generated-MIDI v23 ranks partial LH carriers by root/context. This one-note fixture
+        // Generated-MIDI v25 grades the fast RH step by level. This one-note fixture
         // retains its chart semantic hash, manifest size, and all six labels;
         // only the policy-dependent cache key and manifest digest change.
         // Pipeline v48 and binary format 16 are unchanged.
-        expected_cache_key = 0x92878db6835140d0ull;
-        expected_normalized_manifest_digest = 0x8ad95b93f6f60353ull;
+        expected_cache_key = 0xca5fdb9396478964ull;
+        expected_normalized_manifest_digest = 0xbdc8a65ce076dfd6ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
@@ -2799,7 +2799,7 @@ int test_synthetic_reviewed_profiles_for_policy(const std::filesystem::path& roo
         if (difficulty <= previous_difficulty || difficulty > 6 ||
             profile.diagnostics.selected_actions != profile.chart.notes.size() ||
             profile.diagnostics.scheduled_rows != profile.chart.notes.size() ||
-            (difficulty == 1 && profile.chart.notes.size() != 157)) {
+            (difficulty == 1 && profile.chart.notes.size() != 152)) {
             return fail("synthetic reviewed Lv." + std::to_string(difficulty) +
                 " label or row count changed (difficulty=" +
                 std::to_string(profile.config.difficulty) + ", chart=" +

@@ -116,6 +116,18 @@ times **and** on the quantized native-frame distance, using the same determinist
 comparison epsilon. Both sides of a dual row and protected-final neighbors obey
 both checks; rounding cannot shorten an admitted gap below its existing floor.
 
+Per-hand floors (RH / LH seconds, Lv1..Lv6): 0.35/3.0, 0.30/1.5, 0.25/0.8,
+0.20/0.6, 0.15/0.5, 0.15/0.45. They are calibrated toward the stock minima (RH
+25..14 frames, LH 0.17..0.8 s outside Lv1-2) rather than raw motor limits, so easy
+labels thin fast passages instead of bursting. Additionally, two RH roots closer
+than 0.25 s (source or frame distance) must be a repeat or within the level's
+fast step: 4 semitones through Lv4, 7 at Lv5, 12 at Lv6. Stock charts make only
+3 of 107 such fast changes beyond two KeyAssign letters and no fast octave jumps;
+one fixed step for Lv4..Lv6 left dense leaping sources (Everlasting Summer) with
+identical Lv4/Lv5/Lv6 actions, so the step widens with the label. This is a stock
+authoring rule over source pitch, not recovered stick geometry, and applies
+wherever RH spacing is checked.
+
 After beam selection, a bounded representative-root repair may replace **one**
 internal, unprotected RH-only input with an already admitted fresh RH candidate.
 It preserves required-action count, boundary inputs, first/last RH inputs, all
@@ -201,7 +213,7 @@ whole-through-sixteenth value keeps precedence. Nonmatching or heterogeneous
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. This derivation is covered by
-`midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers:v23`.
+`midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right:v25`.
 The policy identity rebuilds generated MIDI caches without changing authored JSON
 semantics or the binary cache layout. Complete enriched rows pass the existing
 compiler and event-plan topology/physical limits; oversized profiles are omitted,

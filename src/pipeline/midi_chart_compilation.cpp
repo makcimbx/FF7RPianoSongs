@@ -107,6 +107,7 @@ struct Profile {
     };
     std::array<SkillRoute, 2> routes{};
     std::size_t route_count = 0;
+    int fast_right_semitones = 4;
 };
 
 enum class ChordQuality : std::size_t {
@@ -192,18 +193,18 @@ Profile profile_for_difficulty(const int difficulty) {
     const Route owa{{5, 10, 19, 39, 73}, 17, 4.25, 58, 13.0, 8, 8,
         12.0, 36.0, 5, 6, 0.12, 13.5, 13.5, 0.99, 6.0, 9.0, "OneWingedAngel", 1.15};
     switch (difficulty) {
-    case 1: return {0.11, 1.00, 3.00, 4.50, 0.38, 78.0, 0.06,
+    case 1: return {0.35, 1.00, 3.00, 4.50, 0.38, 78.0, 0.06,
         2.80, 3.35, {journey, {}}, 1};
-    case 2: return {0.11, 0.90, 2.00, 3.00, 0.36, 90.0, 0.06,
+    case 2: return {0.30, 0.90, 1.50, 2.25, 0.36, 90.0, 0.06,
         3.00, 3.55, {tifa, {}}, 1};
-    case 3: return {0.09, 0.72, 1.50, 2.25, 0.30, 104.0, 0.06,
+    case 3: return {0.25, 0.72, 0.80, 1.50, 0.30, 104.0, 0.06,
         4.25, 5.30, {barret, synco}, 2};
-    case 4: return {0.08, 0.58, 1.25, 1.75, 0.24, 120.0, 0.06,
+    case 4: return {0.20, 0.58, 0.60, 1.25, 0.24, 120.0, 0.06,
         5.05, 5.75, {difficult, aerith}, 2};
-    case 5: return {0.08, 0.45, 1.10, 1.50, 0.18, 138.0, 0.06,
-        5.20, 6.00, {fighters, {}}, 1};
-    case 6: return {0.08, 0.35, 0.90, 1.00, 0.12, 158.0, 0.06,
-        5.40, 6.25, {owa, {}}, 1};
+    case 5: return {0.15, 0.45, 0.50, 1.00, 0.18, 138.0, 0.06,
+        5.20, 6.00, {fighters, {}}, 1, 7};
+    case 6: return {0.15, 0.35, 0.45, 0.75, 0.12, 158.0, 0.06,
+        5.40, 6.25, {owa, {}}, 1, 12};
     default: return {};
     }
 }
@@ -1752,6 +1753,20 @@ bool action_spacing_permitted(const double a_seconds, const double b_seconds,
         static_cast<double>(std::abs(a_frame - b_frame)) / 60.0 + kComparisonEpsilon >= seconds_floor;
 }
 
+// Stock charts change RH roots within 15 frames only by a repeat or a step of
+// at most a major third (about two KeyAssign letters); faster far or octave
+// jumps read as noise. Lv5/Lv6 widen the step so dense sources still grow past
+// Lv4. This is a stock authoring rule, not stick geometry.
+constexpr double kFastRightSeconds = 0.25;
+
+bool hand_spacing_permitted(const Profile& profile, const bool right, const Attack& a, const Attack& b,
+    const long long a_frame, const long long b_frame) {
+    const double seconds_floor = right ? profile.right_seconds : profile.chord_seconds;
+    if (!action_spacing_permitted(a.start, b.start, a_frame, b_frame, seconds_floor)) return false;
+    return !right || action_spacing_permitted(a.start, b.start, a_frame, b_frame, kFastRightSeconds) ||
+        std::abs(a.event.source.pitch - b.event.source.pitch) <= profile.fast_right_semitones;
+}
+
 struct IncrementalCandidate {
     long long frame = 0;
     OutputRow row;
@@ -1875,14 +1890,13 @@ InsertionSemantics analyze_incremental_insertion(
     for (const bool right : {true, false}) {
         if (!(right ? candidate.row.has_right : candidate.row.has_left)) continue;
         const Attack& candidate_attack = right ? candidate.row.right : candidate.row.left;
-        const double spacing = right ? profile.right_seconds : profile.chord_seconds;
         for (std::size_t index = position; index > 0;) {
             const IncrementalRow& row = rows[--index];
             const bool same_hand = right ? row.second->has_right : row.second->has_left;
             if (!same_hand) continue;
             const Attack& existing = right ? row.second->right : row.second->left;
-            if (!action_spacing_permitted(candidate_attack.start, existing.start,
-                candidate.frame, row.first, spacing)) return result;
+            if (!hand_spacing_permitted(profile, right, candidate_attack, existing,
+                candidate.frame, row.first)) return result;
             break;
         }
 
@@ -1891,8 +1905,8 @@ InsertionSemantics analyze_incremental_insertion(
             const bool same_hand = right ? row.second->has_right : row.second->has_left;
             if (!same_hand) continue;
             const Attack& existing = right ? row.second->right : row.second->left;
-            if (!action_spacing_permitted(candidate_attack.start, existing.start,
-                candidate.frame, row.first, spacing)) return result;
+            if (!hand_spacing_permitted(profile, right, candidate_attack, existing,
+                candidate.frame, row.first)) return result;
             break;
         }
     }
@@ -2043,12 +2057,11 @@ bool insertion_obeys_profile_spacing(
     for (const bool right : {true, false}) {
         if (!(right ? candidate.row.has_right : candidate.row.has_left)) continue;
         const Attack& attack = right ? candidate.row.right : candidate.row.left;
-        const double seconds_floor = right ? profile.right_seconds : profile.chord_seconds;
         for (const auto& entry : rows) {
             if (&entry.second == removed) continue;
             if ((right && !entry.second.has_right) || (!right && !entry.second.has_left)) continue;
             const Attack& existing = right ? entry.second.right : entry.second.left;
-            if (!action_spacing_permitted(attack.start, existing.start, candidate.frame, entry.first, seconds_floor)) {
+            if (!hand_spacing_permitted(profile, right, attack, existing, candidate.frame, entry.first)) {
                 return false;
             }
         }
@@ -3106,8 +3119,8 @@ MidiChartCompilationResult compile_normalized_midi_chart(
             // initial row; reserve its RH spacing before pruning beam states.
             if (action.right && !action.final_right && final_voice &&
                 baseline_rows.count(native_frame(final_voice->start)) == 0 &&
-                !action_spacing_permitted(action.attack.start, final_voice->start,
-                    frame, native_frame(final_voice->start), profile.right_seconds)) continue;
+                !hand_spacing_permitted(profile, true, action.attack, *final_voice,
+                    frame, native_frame(final_voice->start))) continue;
             IncrementalCandidate candidate;
             candidate.frame = frame;
             candidate.row = make_row(frame, action);

@@ -240,7 +240,7 @@ std::vector<unsigned char> profile_group_fixture_midi_bytes(const int fast_spaci
     for (int index = 0; index < 12; ++index) {
         add_note(&melody, 1920 + index * 960, 240, 67 + index % 5, 84);
     }
-    const std::vector<int> fast_pitches = fast_spacing_ticks == 105 ?
+    const std::vector<int> fast_pitches = fast_spacing_ticks == 192 ?
         std::vector<int>{60, 62} : std::vector<int>{60, 62, 64, 65};
     for (std::size_t index = 0; index < fast_pitches.size(); ++index) {
         add_note(&melody, 14420 + static_cast<int>(index) * fast_spacing_ticks,
@@ -544,12 +544,12 @@ struct Expected {
 };
 
 constexpr std::array<Expected, 15> expected{{
-    {"manual-lv1", 5624942181862413287ull, 0, ""},
-    {"manual-lv2", 6870984845381300190ull, 0, ""},
-    {"manual-lv3", 12551535923768744583ull, 0, ""},
-    {"manual-lv4", 5670263482831599819ull, 0, ""},
-    {"manual-lv5", 12533206831081390320ull, 0, ""},
-    {"manual-lv6", 2063125170046023327ull, 0, ""},
+    {"manual-lv1", 15514463849437608941ull, 0, ""},
+    {"manual-lv2", 9492125906049534780ull, 0, ""},
+    {"manual-lv3", 15013873499567766913ull, 0, ""},
+    {"manual-lv4", 10917211618482601854ull, 0, ""},
+    {"manual-lv5", 7646414565513663348ull, 0, ""},
+    {"manual-lv6", 3223207770486926164ull, 0, ""},
     // Preference cases are checked semantically below: the former hashes
     // included statistics from the removed hard retention-pruning policy.
     {"baseline-lv1", 0, 0, ""},
@@ -558,7 +558,7 @@ constexpr std::array<Expected, 15> expected{{
     {"baseline-lv4", 0, 0, ""},
     {"baseline-lv5", 0, 0, ""},
     {"baseline-lv6", 0, 0, ""},
-    {"automatic-alignment", 10563661697807204685ull, 0, ""},
+    {"automatic-alignment", 13042654001342481729ull, 0, ""},
     {"timing-domain-empty", 3095648943021463551ull, 7,
         "MIDI generation produced no chart rows inside the lead-in/audio timing domain"},
     {"baseline-witness-error", 8598688527783776924ull, 7,
@@ -660,12 +660,13 @@ int test_assignment_switch_penalty() {
 
 int test_native_frame_spacing(const std::filesystem::path& root) {
     using namespace ff7rp::pipeline;
-    // Source gaps 77/960s satisfy .08s, but frame 131 -> 135 is only 4/60s.
+    // Lv6 floors are whole frames (RH 9, LH 27), so rounding can only lengthen a
+    // gap: frame 130 -> 139 satisfies .15s, but the 143/960s source gap does not.
     const std::vector<std::vector<PhysicalFrame>> cases{
-        {{-120,{72},1,8}, {10,{72},110,8,8}, {15,{73},110,8,5}, {120,{74},110,8}},
-        {{-120,{72},1,8}, {10,{72},127,8,8}, {15,{72,36,40,43},110,8,5}},
-        // LH frame distance 54 satisfies .9s, but the original source gap does not.
-        {{0,{72},110,8}, {10,{72,36,40,43},110,8,7}, {64,{72,36,40,43},110,8,2}, {120,{72},110,8}}};
+        {{-120,{72},1,8}, {10,{72},110,8,7}, {19,{73},110,8,6}, {120,{74},110,8}},
+        {{-120,{72},1,8}, {10,{72},127,8,7}, {19,{72,36,40,43},110,8,6}},
+        // LH frame distance 27 satisfies .45s, but the original source gap does not.
+        {{0,{72},110,8}, {10,{72,36,40,43},110,8,7}, {37,{72,36,40,43},110,8,2}, {120,{72},110,8}}};
     for (std::size_t index = 0; index < cases.size(); ++index) {
         const auto path = root / ("native-frame-spacing-" + std::to_string(index) + ".mid");
         const auto bytes = physical_frame_midi_bytes(cases[index]);
@@ -688,13 +689,13 @@ int test_native_frame_spacing(const std::filesystem::path& root) {
             const long long frame = std::llround(row.beat * 30.0);
             for (const std::size_t hand : {0u,1u}) {
                 if (hand == 0 ? row.pitch.empty() : row.chord_id.empty()) continue;
-                if (frame - previous[hand] < (hand == 0 ? 5 : 54))
+                if (frame - previous[hand] < (hand == 0 ? 9 : 27))
                     return fail("emitted native frame spacing violated the existing hand floor");
                 previous[hand] = frame;
             }
         }
         if ((index == 0 && selected.stats.selected_actions != 3) ||
-            (index == 1 && (previous[0] != 135 || selected.stats.merged_events != 1 || selected.stats.selected_actions != 3)) ||
+            (index == 1 && (previous[0] != 139 || selected.stats.merged_events != 1 || selected.stats.selected_actions != 3)) ||
             (index == 2 && selected.stats.left_events != 1))
             return fail("source/frame spacing fixture did not exercise RH, dual tail, or source-only LH rejection: " + std::to_string(index) +
                 " tail=" + std::to_string(previous[0]) + " merged=" + std::to_string(selected.stats.merged_events) +
@@ -775,8 +776,8 @@ int test_representative_root_repair(const std::filesystem::path& root) {
         !no_repair("repair-no-removable.mid", {{0,{72},100,8},{480,{72},100,8}}, 2) ||
         !no_repair("repair-before-leadin.mid", frames, 4, 4.5) ||
         !no_repair("repair-no-feasible-spacing.mid", {{-120,{72},127,480},{0,{72},100,8},
-            {8,{72},100,8},{12,{72},100,8},{16,{72},100,8},{24,{72},100,8},
-            {32,{72},100,8},{480,{72},100,8}}, 7))
+            {16,{72},100,8},{24,{72},100,8},{32,{72},100,8},{48,{72},100,8},
+            {64,{72},100,8},{480,{72},100,8}}, 7))
         return fail("representative repair invented an onset or bypassed a boundary/spacing constraint");
 
     // Eight 64-sound exact groups fit 512 rows. The useful replacement needs 65.
@@ -819,8 +820,8 @@ int test_switch_utility_selection(const std::filesystem::path& root) {
         const auto path = root / ("switch-utility-" + std::to_string(velocity) + ".mid");
         // The weak preceding source equalizes the two alternatives' rhythmic
         // evidence; this isolates small salience advantages from switch cost.
-        const auto bytes = physical_frame_midi_bytes({{-120,{72},1,8}, {5,{72},40,8},
-            {10,{73},velocity,velocity == 127 ? 480 : 8}, {11,{72},100,8}, {16,{72},100,8}});
+        const auto bytes = physical_frame_midi_bytes({{-120,{72},1,8}, {10,{72},40,8},
+            {20,{73},velocity,velocity == 127 ? 480 : 8}, {22,{72},100,8}, {32,{72},100,8}});
         std::ofstream stream(path, std::ios::binary);
         stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
         auto config = config_for(6);
@@ -831,7 +832,7 @@ int test_switch_utility_selection(const std::filesystem::path& root) {
         const std::string expected = velocity == 127 ? "C#5" : "C5";
         if (!selected.status.ok() || selected.stats.selected_actions != 2 ||
             canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes) ||
-            selected.notes.front().pitch != expected || std::llround(selected.notes.back().beat * 30.0) != 136)
+            selected.notes.front().pitch != expected || std::llround(selected.notes.back().beat * 30.0) != 152)
             return fail("soft switch utility failed near/equal salience or overruled a strong musical anchor: " + std::to_string(velocity) +
                 " actions=" + std::to_string(selected.stats.selected_actions) + " first=" +
                 (selected.notes.empty() ? "empty" : selected.notes.front().pitch + "@" + std::to_string(std::llround(selected.notes.front().beat * 30.0))) +
@@ -1115,6 +1116,34 @@ int test_lh_source_witnesses() {
     return 0;
 }
 
+int test_graded_fast_right_leaps(const std::filesystem::path& root) {
+    // Sparse C5->G5 pairs 0.2 s apart: Lv4 keeps only one note of each fifth
+    // leap, Lv5 may take both, so a harder level is not a copy of Lv4.
+    std::vector<MidiEvent> melody{{0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}}};
+    for (int pair = 0; pair < 8; ++pair) {
+        add_note(&melody, 1920 + pair * 1920, 90, 72, 100);
+        add_note(&melody, 1920 + pair * 1920 + 192, 90, 79, 100);
+    }
+    std::vector<unsigned char> file{'M', 'T', 'h', 'd', 0, 0, 0, 6};
+    append_u16(&file, 0); append_u16(&file, 1); append_u16(&file, 480);
+    append_midi_track(&file, std::move(melody));
+    const auto path = root / "graded-fast-right.mid";
+    std::ofstream stream(path, std::ios::binary);
+    stream.write(reinterpret_cast<const char*>(file.data()), file.size()); stream.close();
+    std::array<std::size_t, 2> right{};
+    for (const int difficulty : {4, 5}) {
+        auto config = config_for(difficulty);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        const auto observed = generate(path, WavAudio{}, config);
+        if (!observed.status.ok()) return fail("graded fast-right fixture did not generate");
+        for (const auto& note : observed.notes) right[difficulty - 4] += !note.pitch.empty();
+    }
+    if (right[1] <= right[0])
+        return fail("Lv5 did not widen fast RH leaps: lv4=" + std::to_string(right[0]) +
+            " lv5=" + std::to_string(right[1]));
+    return 0;
+}
+
 int test_lone_partial_carrier_name(const std::filesystem::path& root) {
     using namespace ff7rp::pipeline;
     // Lone C3 has no root carrier. Lexical order used to name it A dim; a plain
@@ -1239,7 +1268,7 @@ int test_exact_note_values(const std::filesystem::path& root) {
                     std::to_string(ppq) + " row " + std::to_string(index));
         }
     }
-    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v23"))
+    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v25"))
         return fail("new exact MIDI notation did not invalidate generated policy caches");
     return 0;
 }
@@ -1346,6 +1375,7 @@ int main(int argc, char** argv) {
     if (test_lh_source_witnesses() != 0) return 1;
     if (test_reduced_bass_context(temporary.path()) != 0) return 1;
     if (test_lone_partial_carrier_name(temporary.path()) != 0) return 1;
+    if (test_graded_fast_right_leaps(temporary.path()) != 0) return 1;
     if (test_representative_root_repair(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--repair-only") return 0;
     if (test_assignment_switch_penalty() != 0 || test_native_frame_spacing(temporary.path()) != 0 ||
@@ -1463,7 +1493,7 @@ int main(int argc, char** argv) {
         stream.write(reinterpret_cast<const char*>(fixture.data()), static_cast<std::streamsize>(fixture.size()));
         return path;
     };
-    const std::filesystem::path profile_group_path = write_group_fixture("profile-group.mid", 105);
+    const std::filesystem::path profile_group_path = write_group_fixture("profile-group.mid", 192);
     const std::filesystem::path multi_follower_path = write_group_fixture("multi-follower-group.mid", 35);
     const auto write_physical_fixture = [&](const char* name, const std::vector<PhysicalFrame>& frames,
                                              const std::vector<std::pair<int, int>>& meters = {}) {
@@ -2092,7 +2122,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers:v23") {
+        != "midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right:v25") {
         return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));
