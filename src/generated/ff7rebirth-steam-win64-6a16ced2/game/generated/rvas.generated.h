@@ -205,5 +205,10 @@ inline constexpr uintptr_t WidgetVisibilitySetter = 0x00889f6c;
 inline constexpr uintptr_t PianoListRestoreSelection = 0x039b0ff0;
 inline constexpr uintptr_t PianoListRestoreSelectionCaller = 0x039b8cae;
 inline constexpr uintptr_t ScoreInfoListItemCall = 0x039a8ceb;
+inline constexpr uintptr_t PianoAutoplayMatcher = 0x039a5c88;
+inline constexpr uintptr_t PianoAutoplayAdvancer = 0x039ba584;
+inline constexpr uintptr_t PianoAutoplayTerminalizer = 0x039a6758;
+inline constexpr uintptr_t PianoAutoplayControllerTick = 0x039ba4fc;
+inline constexpr uintptr_t PianoAutoplayStateTable = 0x05bc25f0;
 
 } // namespace ff7r::piano::game::rva

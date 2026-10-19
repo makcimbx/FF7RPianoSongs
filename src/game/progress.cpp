@@ -1,4 +1,5 @@
 #include "game/progress.h"
+#include "game/autoplay.h"
 
 #include "core/hooks.h"
 #include "game/module_hooks.h"
@@ -68,6 +69,9 @@ uintptr_t to_rva(void* caller_address)
 
 int __fastcall score_calculate_detour(void* context, void* counters)
 {
+    autoplay_observe_native_phase();
+    const auto* result_scope = AutoplayResultScope::active();
+    const bool assisted_before = autoplay_assisted() || (result_scope && result_scope->suppress());
     auto callback = non_audio_hook_gate().try_enter();
     const uintptr_t caller_rva = callback ? to_rva(_ReturnAddress()) : 0;
     const PlaybackSnapshot playback_before = callback
@@ -77,7 +81,7 @@ int __fastcall score_calculate_detour(void* context, void* counters)
         && core::safe_copy_bytes(
             counters, native_counters.data(), sizeof(native_counters));
     const int result = g_original_score_calculate ? g_original_score_calculate(context, counters) : 0;
-    if (!callback) return result;
+    if (!callback || assisted_before || autoplay_assisted()) return result;
     const PlaybackSnapshot playback_after = registry().playback_snapshot();
     const bool playback_relation_exact
         = score_calculation_playback_relation_exact(
@@ -143,14 +147,27 @@ uintptr_t __fastcall progress_lookup_detour(void* arg0, void* arg1, void* arg2, 
     auto callback = non_audio_hook_gate().try_enter();
     void* caller = _ReturnAddress();
     const uintptr_t original = g_original_progress_lookup ? g_original_progress_lookup(arg0, arg1, arg2, arg3) : 0;
-    if (!callback) return original;
+    const uintptr_t caller_rva = to_rva(caller);
+    auto* result_scope = AutoplayResultScope::active();
+    const bool result_consumer = rva::ProgressLookupDisplayCaller2 != 0
+        && caller_rva == rva::ProgressLookupDisplayCaller2 && result_scope;
+    const auto native_record = [&]() -> uintptr_t {
+        if (!result_consumer || !result_scope->suppress() || !original) return original;
+        std::array<std::uint8_t, 16> seed{};
+        if (!core::safe_copy_bytes(reinterpret_cast<void*>(original), seed.data(), seed.size())) {
+            core::log(core::LogLevel::Error, "[autoplay] stage=result_shadow status=fatal reason=unreadable_native_record");
+            __fastfail(FAST_FAIL_FATAL_APP_EXIT);
+        }
+        return reinterpret_cast<uintptr_t>(result_scope->redirect(seed.data()));
+    };
+    // Gate rejection cannot let an assisted result write the native record.
+    if (!callback) return native_record();
     const SelectionSnapshot selection = registry().selection_snapshot();
     const SongDescriptor* song = selection.song;
-    const uintptr_t caller_rva = to_rva(caller);
     if (!song || g_scores_ini_path.empty()
         || !progress_lookup_display_caller_allowed(
             caller_rva, kProgressLookupCallerRvas)) {
-        return original;
+        return native_record();
     }
 
     ProgressRecord progress{};
@@ -158,13 +175,17 @@ uintptr_t __fastcall progress_lookup_detour(void* arg0, void* arg1, void* arg2, 
     {
         std::lock_guard<std::mutex> lock(g_progress_mutex);
         progress = load_progress(*song, g_scores_ini_path, selection.profile);
-        g_progress_state_overlay.fill(0);
+        std::array<uint8_t, 16> seed{};
         if (progress.played) {
             const uint16_t flags = 0xc000u;
-            std::memcpy(g_progress_state_overlay.data(), &flags, sizeof(flags));
-            std::memcpy(g_progress_state_overlay.data() + 8, &progress.high_score, sizeof(progress.high_score));
+            std::memcpy(seed.data(), &flags, sizeof(flags));
+            std::memcpy(seed.data() + 8, &progress.high_score, sizeof(progress.high_score));
         }
-        overlay = reinterpret_cast<uintptr_t>(g_progress_state_overlay.data());
+        if (result_consumer) overlay = reinterpret_cast<uintptr_t>(result_scope->redirect(seed.data()));
+        else {
+            g_progress_state_overlay = seed;
+            overlay = reinterpret_cast<uintptr_t>(g_progress_state_overlay.data());
+        }
     }
 
     static std::atomic_int s_logs{0};

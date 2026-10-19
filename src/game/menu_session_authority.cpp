@@ -1,4 +1,5 @@
 #include "game/menu_session_authority.h"
+#include "game/autoplay.h"
 #include "game/catalog_adoption.h"
 #include "game/mandatory_hook_transaction.h"
 #include "game/menu_focus_restore.h"
@@ -314,7 +315,10 @@ void terminal_detour(void* controller, ControllerFn original,
 }
 
 void __fastcall exit_detour(void* controller) noexcept { terminal_detour(controller, g_original_exit, SelectionActivationTerminalReason::State5Exit); }
-void __fastcall destructor_detour(void* controller) noexcept { terminal_detour(controller, g_original_destructor, SelectionActivationTerminalReason::ControllerDestructor); }
+void __fastcall destructor_detour(void* controller) noexcept {
+    autoplay_revoke_controller(controller);
+    terminal_detour(controller, g_original_destructor, SelectionActivationTerminalReason::ControllerDestructor);
+}
 
 } // namespace
 

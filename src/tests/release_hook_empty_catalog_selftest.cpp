@@ -1,4 +1,5 @@
 #include "game/runtime.h"
+#include "game/autoplay.h"
 #include "game/module_hooks.h"
 #include "game/native_audio_runtime.h"
 
@@ -7,11 +8,13 @@
 #include <iostream>
 
 namespace {
-std::array<int, 13> installed{};
+std::array<int, 14> installed{};
 std::size_t installed_count = 0;
 std::size_t shutdown_count = 0;
 std::size_t identity_clear_count = 0;
 bool native_shutdown_ready = false;
+bool ticks_quiesced = false;
+unsigned audio_shutdown_calls = 0;
 bool native_install_ready = true;
 void (*initializer_notification)() noexcept = nullptr;
 bool initializer_notified = false;
@@ -56,6 +59,9 @@ bool install_title_hooks(const HookInstallContext&) { return record(4); }
 bool install_chart_patch_hooks(const HookInstallContext&) { return record(5); }
 bool install_note_count_hooks(const HookInstallContext&) { return record(6); }
 bool install_chord_voicing_hooks(const HookInstallContext&) { return record(11); }
+bool install_autoplay_hooks(const HookInstallContext&) { return record(12); }
+core::HookShutdownResult shutdown_autoplay() { return shutdown_ok(); }
+bool quiesce_autoplay_controller_ticks() { return ticks_quiesced; }
 core::HookShutdownResult shutdown_chord_voicing() { return shutdown_ok(); }
 bool install_duration_hooks(const HookInstallContext&) { return record(7); }
 bool install_progress_hooks(const HookInstallContext&) { return record(8); }
@@ -70,12 +76,12 @@ core::HookShutdownResult shutdown_chart_patch() { return shutdown_ok(); }
 core::HookShutdownResult shutdown_note_count() { return shutdown_ok(); }
 core::HookShutdownResult shutdown_duration() { return shutdown_ok(); }
 core::HookShutdownResult shutdown_progress() { return shutdown_ok(); }
-bool shutdown_audio_sead() { return true; }
+bool shutdown_audio_sead() { ++audio_shutdown_calls; return true; }
 }
 
 int main()
 {
-    const std::array<int, 13> expected{-1, 0, 1, 2, 3, 4, 5, 6, 11, 7, 8, 9, 10};
+    const std::array<int, 14> expected{-1, 0, 1, 2, 3, 4, 5, 6, 11, 12, 7, 8, 9, 10};
     if (!ff7r::piano::game::install_release_hooks(nullptr, initializer_complete)
         || installed_count != expected.size() || installed != expected) {
         std::cerr << "release_hook_empty_catalog_selftest: empty-catalog install skipped a required module\n";
@@ -87,6 +93,12 @@ int main()
     }
     initializer_notification();
     if (!initializer_notified) return 1;
+    if (ff7r::piano::game::shutdown_release_hooks() || audio_shutdown_calls
+        || shutdown_count || identity_clear_count) {
+        std::cerr << "release_hook_empty_catalog_selftest: enclosing tick lost borrowed services\n";
+        return 1;
+    }
+    ticks_quiesced = true;
     if (ff7r::piano::game::shutdown_release_hooks() || shutdown_count || identity_clear_count) {
         std::cerr << "release_hook_empty_catalog_selftest: pending native work lost borrowed services\n";
         return 1;

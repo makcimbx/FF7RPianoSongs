@@ -1,4 +1,6 @@
 #include "game/title.h"
+#include "game/autoplay.h"
+#include "core/toggle_feedback.h"
 
 #include "core/hooks.h"
 #include "game/audio_sead.h"
@@ -41,6 +43,7 @@ using PlayerInputInputKeyFn = bool(__fastcall*)(void* player_input, const void* 
 std::once_flag g_xinput_resolve_once;
 std::vector<XInputGetStateFn> g_xinput_get_states;
 DifficultyInputMergeState g_difficulty_input_state;
+AutoplayInputEdge g_autoplay_input_edge;
 DifficultyEventProviderState g_difficulty_event_providers;
 bool g_difficulty_input_eligible = false;
 std::atomic_bool g_difficulty_input_thread_running{false};
@@ -335,8 +338,12 @@ void resolve_xinput_get_state()
     core::log(core::LogLevel::Info, "[title] difficulty_input status=xinput_unavailable keyboard=enabled");
 }
 
-DifficultyInputProviderFacts sample_difficulty_input()
+DifficultyInputProviderFacts sample_difficulty_input(bool& autoplay_held)
 {
+    const int function_key = autoplay_function_key();
+    autoplay_held = function_key > 0 && function_key <= 12
+        && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0
+        && (GetAsyncKeyState(VK_F1 + function_key - 1) & 0x8000) != 0;
     DifficultyInputProviderFacts state = g_difficulty_event_providers.snapshot();
     state.decrement.keyboard_held = (GetAsyncKeyState(VK_LEFT) & 0x8000) != 0;
     state.increment.keyboard_held = (GetAsyncKeyState(VK_RIGHT) & 0x8000) != 0;
@@ -350,6 +357,8 @@ DifficultyInputProviderFacts sample_difficulty_input()
         for (DWORD user_index = 0; user_index < XUSER_MAX_COUNT; ++user_index) {
             XINPUT_STATE xinput_state{};
             if (get_state(user_index, &xinput_state) == ERROR_SUCCESS) {
+                constexpr WORD sticks = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB;
+                autoplay_held = autoplay_held || (xinput_state.Gamepad.wButtons & sticks) == sticks;
                 state.decrement.xinput_held = state.decrement.xinput_held
                     || (xinput_state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT) != 0;
                 state.increment.xinput_held = state.increment.xinput_held
@@ -362,7 +371,23 @@ DifficultyInputProviderFacts sample_difficulty_input()
 
 void poll_dynamic_difficulty_input_impl()
 {
-    const DifficultyInputProviderFacts current = sample_difficulty_input();
+    const auto seat = autoplay_seated_token();
+    bool autoplay_held = false;
+    const DifficultyInputProviderFacts current = sample_difficulty_input(autoplay_held);
+    DWORD foreground_process = 0;
+    const HWND focused_window = GetForegroundWindow();
+    if (focused_window) GetWindowThreadProcessId(focused_window, &foreground_process);
+    const bool focused = focused_window && foreground_process == GetCurrentProcessId();
+    if (g_autoplay_input_edge.update(autoplay_held, focused && seat != 0)) {
+        bool enabled = false;
+        if (autoplay_toggle(seat, enabled)) {
+            core::log(core::LogLevel::Info, enabled
+                ? "[autoplay] stage=toggle status=enabled" : "[autoplay] stage=toggle status=disabled");
+            if (!core::play_toggle_feedback(enabled)) {
+                core::log(core::LogLevel::Error, "[autoplay] stage=feedback status=failed");
+            }
+        }
+    }
     const DifficultyInputEdges edges = g_difficulty_input_state.update(current);
     const bool decrement_edge = edges.decrement;
     const bool increment_edge = edges.increment;
@@ -782,7 +807,9 @@ void __fastcall detail_update_detour(void* context)
 {
     auto callback = non_audio_hook_gate().try_enter();
     if (g_original_detail_update) {
+        autoplay_observe_native_phase();
         ScoreInfoPianoDetailUpdateScope scoreinfo_result_scope;
+        AutoplayResultScope autoplay_result_scope(autoplay_assisted());
         g_original_detail_update(context);
     }
     if (!callback) return;
@@ -1201,6 +1228,7 @@ core::HookShutdownResult shutdown_title()
         core::teardown_operation(g_detail_update_hook),
     }, [] {
         if (!stop_difficulty_input_thread()) return false;
+        if (!core::stop_toggle_feedback()) return false;
         return uninstall_difficulty_window_hook();
     }, [] {
         g_original_player_input_key = nullptr;
@@ -1213,6 +1241,7 @@ core::HookShutdownResult shutdown_title()
         g_last_title_population_context.store(nullptr, std::memory_order_release);
         g_original_detail_update = nullptr;
         g_difficulty_input_state.reset();
+        g_autoplay_input_edge = {};
         g_difficulty_input_eligible = false;
         g_exe_module = nullptr;
     });

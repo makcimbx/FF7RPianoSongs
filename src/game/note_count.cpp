@@ -1,4 +1,5 @@
 #include "game/note_count.h"
+#include "game/autoplay.h"
 
 #include "core/hooks.h"
 #include "core/pe_image.h"
@@ -786,6 +787,7 @@ void __fastcall chart_update_detour(void* wrapper, float delta_seconds, void* ar
     auto callback = non_audio_hook_gate().try_enter();
     if (!chord_voicing_chart_update_allowed(wrapper)) return;
     if (g_original_chart_update) {
+        AutoplayChartScope autoplay_scope(wrapper, arg3, arg4, static_cast<bool>(callback));
         g_original_chart_update(wrapper, delta_seconds, arg3, arg4);
     }
     if (!callback) return;

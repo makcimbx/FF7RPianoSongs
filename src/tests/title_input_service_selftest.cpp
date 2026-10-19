@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <Xinput.h>
 
 namespace {
 bool deferred=false,fail_thread=false,fail_window=false,fail_raw=false,fail_restore=false,fail_names=false;
@@ -14,6 +15,16 @@ unsigned posts=0,window_messages=0;
 ULONG raw_hat=6;
 unsigned threads=0,waits=0,closes=0,windows=0,raw_adds=0,raw_removes=0,names=0,original_keys=0,hooks=0;
 LONG_PTR window_proc=1;
+bool ctrl=false, function=false, foreground=true, fail_feedback_stop=false, accept_toggle=true;
+int configured_key=8;
+std::uint64_t seat_token=0;
+unsigned toggles=0,feedback=0,feedback_stops=0;
+WORD controller_buttons[4]{};
+SHORT WINAPI async_key(int key) {return ((key==VK_CONTROL && ctrl)
+    || (key==VK_F1+configured_key-1 && configured_key && function))?SHORT(-32768):0;}
+HWND WINAPI foreground_window(){return foreground?reinterpret_cast<HWND>(3):nullptr;}
+DWORD WINAPI window_process(HWND,LPDWORD process){*process=GetCurrentProcessId();return 1;}
+DWORD WINAPI xinput(DWORD user,XINPUT_STATE* state){state->Gamepad.wButtons=controller_buttons[user];return ERROR_SUCCESS;}
 void require(bool value,const char* text) {if(!value)throw std::runtime_error(text);}
 HANDLE WINAPI create_thread(LPSECURITY_ATTRIBUTES,SIZE_T,LPTHREAD_START_ROUTINE,LPVOID,DWORD,LPDWORD) {
     require(deferred,"early CreateThread");++threads;return fail_thread?nullptr:reinterpret_cast<HANDLE>(2);
@@ -62,7 +73,13 @@ BOOL WINAPI test_register_raw_devices(PCRAWINPUTDEVICE devices,UINT count,UINT) 
 #define GetRawInputDeviceInfoW raw_info
 #define HidP_GetUsageValue hat_value
 #define FF7RP_TITLE_INPUT_SERVICE_SELFTEST
+#define GetAsyncKeyState async_key
+#define GetForegroundWindow foreground_window
+#define GetWindowThreadProcessId window_process
 #include "game/title.cpp"
+#undef GetAsyncKeyState
+#undef GetForegroundWindow
+#undef GetWindowThreadProcessId
 #undef CreateThread
 #undef WaitForSingleObject
 #undef CloseHandle
@@ -80,6 +97,14 @@ using namespace ff7r::piano::game;
 // Unrelated UI/audio paths must not be reached by this startup/entry test.
 namespace ff7r::piano::game {
 core::HookCallbackGate& non_audio_hook_gate() {static core::HookCallbackGate gate;return gate;}
+int autoplay_function_key() noexcept {return configured_key;}
+std::uint64_t autoplay_seated_token() noexcept {return seat_token;}
+bool autoplay_toggle(std::uint64_t token,bool& enabled) noexcept {
+    if(!accept_toggle || !token || token!=seat_token)return false;
+    enabled=(++toggles%2)!=0;return true;
+}
+bool autoplay_assisted() noexcept {return true;}
+void autoplay_observe_native_phase() noexcept {}
 bool revoke_selection_audio_activation_for_menu_session(const SelectionSnapshot&,std::uint64_t) noexcept {std::abort();}
 bool custom_audio_route_idle_for_menu_input() noexcept {std::abort();}
 bool custom_audio_playback_clock(double&) noexcept {std::abort();}
@@ -93,10 +118,14 @@ bool refresh_active_list_item_ui(const SelectionSnapshot&,const ListItemUiRefres
 MenuSessionSnapshot capture_ready_menu_session() noexcept {std::abort();}
 MenuSessionSnapshot capture_menu_callback_session() noexcept {std::abort();}
 bool menu_session_generation_exact(std::uint64_t,bool) noexcept {std::abort();}
-ScoreInfoPianoDetailUpdateScope::ScoreInfoPianoDetailUpdateScope() noexcept {std::abort();}
-ScoreInfoPianoDetailUpdateScope::~ScoreInfoPianoDetailUpdateScope(){std::abort();}
+ScoreInfoPianoDetailUpdateScope::ScoreInfoPianoDetailUpdateScope() noexcept {}
+ScoreInfoPianoDetailUpdateScope::~ScoreInfoPianoDetailUpdateScope(){}
 bool scoreinfo_overlay_row_matches_playback(const void*,const PlaybackSnapshot&){std::abort();}
 bool refresh_active_scoreinfo_overlay_profile(){std::abort();}
+}
+namespace ff7r::piano::core {
+bool play_toggle_feedback(bool enabled) {++feedback;require(enabled==(toggles%2!=0),"feedback direction");return true;}
+bool stop_toggle_feedback(){++feedback_stops;require(!g_difficulty_input_thread,"sound stopped before poller");return !fail_feedback_stop;}
 }
 namespace {
 bool __fastcall original_key(void*,const void*,int32_t,float,bool) {++original_keys;return true;}
@@ -122,14 +151,55 @@ void reset() {
     for(auto& value:g_native_piano_direction_names)value=0;
     g_test_install_title_hook=&install_hook;g_test_fname_ctor=&name_ctor;
     non_audio_hook_gate().open();
+    ctrl=function=false;foreground=true;configured_key=8;seat_token=0;
+    fail_feedback_stop=false;accept_toggle=true;toggles=feedback=feedback_stops=0;
+    std::memset(controller_buttons,0,sizeof(controller_buttons));
+    g_autoplay_input_edge={};g_difficulty_input_state.reset();
 }
 void install() {
     require(install_title_hooks({module()}),"hook publication");
     require(hooks==4 && !names && !threads && !windows && !raw_adds,"early install performed service work");
 }
+void autoplay_input_tests() {
+    reset();
+    // Resolve real providers once, then replace with the deterministic same-controller fixture.
+    std::call_once(g_xinput_resolve_once,resolve_xinput_get_state);
+    g_xinput_get_states={&xinput};
+    poll_dynamic_difficulty_input_impl();
+    ctrl=function=true;poll_dynamic_difficulty_input_impl();
+    require(!toggles && !feedback,"standing toggle");
+    seat_token=1;poll_dynamic_difficulty_input_impl();require(!toggles,"held through seat entry");
+    ctrl=false;poll_dynamic_difficulty_input_impl();ctrl=true;poll_dynamic_difficulty_input_impl();
+    require(toggles==1 && feedback==1,"immediate seated keyboard");
+    poll_dynamic_difficulty_input_impl();require(toggles==1,"held retrigger");
+    function=false;poll_dynamic_difficulty_input_impl();function=true;accept_toggle=false;
+    poll_dynamic_difficulty_input_impl();require(feedback==1,"rejected toggle sounded");
+    accept_toggle=true;function=false;poll_dynamic_difficulty_input_impl();
+    function=true;foreground=false;poll_dynamic_difficulty_input_impl();foreground=true;
+    poll_dynamic_difficulty_input_impl();require(toggles==1,"held focus entry");
+    configured_key=0;ctrl=function=false;
+    controller_buttons[0]=XINPUT_GAMEPAD_LEFT_THUMB;controller_buttons[1]=XINPUT_GAMEPAD_RIGHT_THUMB;
+    poll_dynamic_difficulty_input_impl();require(toggles==1,"cross-controller chord");
+    controller_buttons[0]|=XINPUT_GAMEPAD_RIGHT_THUMB;poll_dynamic_difficulty_input_impl();
+    require(toggles==2 && feedback==2,"same-controller deactivation feedback");
+    controller_buttons[0]=controller_buttons[1]=0;poll_dynamic_difficulty_input_impl();
+    configured_key=12;ctrl=function=true;poll_dynamic_difficulty_input_impl();
+    require(toggles==3 && feedback==3,"configured F key");
+    function=false;poll_dynamic_difficulty_input_impl();configured_key=0;function=true;
+    poll_dynamic_difficulty_input_impl();require(toggles==3,"keyboard disabled");
+    configured_key=13;poll_dynamic_difficulty_input_impl();require(toggles==3,"F13 unsupported");
+}
+void __fastcall result_consumer(void*) {
+    auto* scope=AutoplayResultScope::active();require(scope && scope->suppress(),"outer shadow absent on rejected gate");
+    std::array<std::uint8_t,16> record{};
+    require(scope->redirect(record.data())!=record.data(),"outer result shadow aliases record");
+}
 }
 int main() {
     try {
+        autoplay_input_tests();
+        reset();non_audio_hook_gate().close();g_original_detail_update=result_consumer;
+        detail_update_detour(nullptr);require(!AutoplayResultScope::active(),"outer shadow leaked");
         reset();install();
         FNameValue key{101,0};
         require(player_input_key_detour(nullptr,&key,0,1,true) && original_keys==1,"early input original");
@@ -202,6 +272,11 @@ int main() {
         reset();install();deferred=true;fail_thread=true;fail_restore=true;
         require(!start_title_input_service(module()) && g_game_window,"failed restoration ownership lost");
         fail_restore=false;require(shutdown_title().ok() && window_proc==1,"retained window cleanup");
+        reset();install();deferred=true;require(start_title_input_service(module()),"sound-stop setup");
+        fail_feedback_stop=true;
+        require(!shutdown_title().ok() && g_original_detail_update && !g_difficulty_input_thread,
+            "sound stop failure lost hook ownership");
+        fail_feedback_stop=false;require(shutdown_title().ok(),"retained sound ownership cleanup");
         std::cout<<"title input service selftest passed\n";return 0;
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}
 }

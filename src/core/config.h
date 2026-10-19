@@ -11,6 +11,7 @@ struct Config {
     LogLevel log_level = LogLevel::Info;
     bool rebuild_audio_cache = false;
     int transcription_threads = 4;
+    int autoplay_function_key = 8;
 };
 
 Config load_config(const std::wstring& ini_path);

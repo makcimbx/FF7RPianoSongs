@@ -30,6 +30,9 @@ Config load_config(const std::wstring& ini_path)
     config.rebuild_audio_cache = GetPrivateProfileIntW(L"Advanced", L"RebuildAudioCache", 0, ini_path.c_str()) != 0;
     config.transcription_threads = std::clamp(
         static_cast<int>(GetPrivateProfileIntW(L"Advanced", L"TranscriptionThreads", 4, ini_path.c_str())), 1, 64);
+    const int autoplay_key = static_cast<int>(GetPrivateProfileIntW(
+        L"Autoplay", L"KeyboardFunctionKey", 8, ini_path.c_str()));
+    config.autoplay_function_key = autoplay_key >= 0 && autoplay_key <= 12 ? autoplay_key : 8;
 
     wchar_t level[32]{};
     GetPrivateProfileStringW(L"General", L"LogLevel", L"info", level, static_cast<DWORD>(std::size(level)), ini_path.c_str());

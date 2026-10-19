@@ -5,6 +5,9 @@
 #include "game/module_hooks.h"
 #include "game/native_array_publication.h"
 #include "startup/startup_cache_progress.h"
+// Exercise the actual enclosing detour as well as the native adoption boundary.
+#include "game/autoplay.cpp"
+#include "game/hook_specs.cpp"
 
 #include <array>
 #include <condition_variable>
@@ -85,7 +88,7 @@ game::SongDescriptor song(int number)
     return value;
 }
 
-game::CatalogAdoptionResult attempt(void* widget = &f)
+game::CatalogAdoptionResult native_attempt(void* widget)
 {
     f.binding_calls = 0;
     auto callback = game::non_audio_hook_gate().try_enter();
@@ -94,6 +97,21 @@ game::CatalogAdoptionResult attempt(void* widget = &f)
         &f, widget, f.identity, callback);
     game::observe_catalog_adoption_result(result);
     return result;
+}
+
+thread_local void* tick_widget = nullptr;
+thread_local game::CatalogAdoptionResult tick_result = game::CatalogAdoptionResult::Blocked;
+bool __fastcall native_list_open_tick(void*, float)
+{
+    tick_result = native_attempt(tick_widget);
+    return true;
+}
+
+game::CatalogAdoptionResult attempt(void* widget = &f)
+{
+    tick_widget = widget;
+    game::tick_detour(nullptr, 0.0f);
+    return tick_result;
 }
 
 bool exact_restore_fixture()
@@ -387,6 +405,8 @@ int main()
             && !initial_readiness.catalog_update_pending,
         "initial empty active catalog readiness was not explicit");
     game::non_audio_hook_gate().open();
+    game::g_tick_gate.open();
+    game::g_original_tick = native_list_open_tick;
     game::audio_production_open_callback_admission();
 
     const auto old_registry = game::registry().registry_snapshot();

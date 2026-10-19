@@ -5,6 +5,70 @@ tested artifacts, not a new public release. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
+## Autoplay development (2026-10-19)
+
+- The Integration candidate implements a seated-only toggle with configurable
+  Ctrl+F-key input, same-XInput-controller stick clicks, distinct on/off sounds,
+  and no native or custom personal-record replacement after any assisted play.
+  Native note timing and actual score/rank calculation are retained for stock
+  and custom songs. Its first focused run failed: custom songs were absent
+  from the list. The candidate has been rolled back and is not gameplay-qualified.
+- Independent scoped reviews found no blockers in the marker lifetime, copied
+  input authority, nested/concurrent result shadows, optional-hook degradation,
+  sound ownership or older-build catalog additions. The sound helper resolves
+  the genuine System32 WinMM API without importing the supported proxy basename.
+  Focused tests cover these policies and failure paths; actual device audibility,
+  automatic notes and personal-record preservation still need human validation.
+- Both catalog builds have statically recovered optional autoplay contracts;
+  [1.004 evidence](../analysis/AutoplayRuntimeEvidence-1.004.md) is independently
+  recovered, PE/signature-correlated import evidence, not an authenticated older
+  disk or gameplay run. ASI/proxy builds and the nine selected tests pass for
+  both catalog builds; the default build is restored in the build directory.
+  Final DLL import inspection confirms no WinMM/waveOut imports in either
+  default-build product. Complete
+  optional-hook rollback leaves the rest of the product functional; retained
+  hook ownership still fails closed. This is focused Integration evidence,
+  not release qualification.
+- Static contracts are retained in [runtime evidence](../analysis/AutoplayRuntimeEvidence.md)
+  and [record-suppression evidence](../analysis/AutoplayRecordSuppressionEvidence.md).
+  A human-authorized, non-mutating [Frida observation](../analysis/AutoplayRuntimeObservation-20261019.md)
+  covered stock-list entry, pause/continue, replay through the list and standing
+  up on the default build. It confirms that a retained chart is not gameplay
+  authority; it does not qualify automatic notes, scores or another build.
+- That observational run exited normally without changing the installed proxy.
+  Subsequently, the human authorized installing the reviewed autoplay candidate
+  while the game was closed. Prepared session
+  `native-proxy-20261019T155834Z-622c330c08694682a501ed11565325c1`
+  owned that candidate proxy; the product ASI remained disabled. The prior session was
+  collected and rolled back before preparation, not overwritten. Both proxy
+  binaries, reviewed receipts and the prior-version recovery plan are retained
+  under `%LOCALAPPDATA%/FF7RPianoSongs/captures/autoplay-integration-20261019T155755Z-541c7300`.
+  The human reported missing custom songs. The log shows completed song loading
+  and repeated catalog-adoption rejection at `callback_gate_not_exclusive`.
+  After human exit, the session was collected and rolled back; the exact previous
+  proxy was restored through prepared session
+  `native-proxy-20261019T163007Z-e5344e5c7ab447ecadd1eb90c09e401f`.
+  The product ASI remains disabled. The failed candidate/log and prior bytes remain
+  retained. Root cause: the new enclosing controller tick held the shared callback
+  lease across native forwarding, so nested list adoption was never its sole
+  owner. The correction isolates tick lifetime accounting and drains it before
+  dependent service teardown, without weakening adoption's concurrency check.
+  Independent concurrency review found no blockers. Corrected ASI/proxy builds
+  pass for both catalog builds; the three correction tests plus catalog audit
+  pass for the older build, and ten selected tests pass with the default restored.
+  Final default DLL inspection again confirms no WinMM/waveOut imports.
+  The human authorized a corrected-candidate installation after these checks;
+  no automatic-note, audible-feedback or record-preservation success is claimed.
+  No diagnostic product binary or release package was installed.
+- The corrected candidate is now owned by prepared session
+  `native-proxy-20261019T164143Z-1eeab49b65e746e791bba976376246e7`.
+  The temporary previous-version restoration session above was rolled back
+  without a gameplay run before this installation. Both artifacts, receipts,
+  score baseline and recovery plan are retained in
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/autoplay-adoption-fix-20261019T164115Z-57055649`.
+  First human check is custom-song visibility; autoplay gameplay, post-exit
+  collection and disposition remain pending.
+
 ## Second-play chart rejection investigation (2026-10-19)
 
 - A reported same-song replay after a difficulty change rejected the final selected-row capture. The old `selected_provider_changed` marker also covered capture failure; its zero output does not prove provider drift or a catalog-republication defect. Earlier captures and audio admission succeeded.
@@ -12,7 +76,7 @@ tested artifacts, not a new public release. Public version history remains in
 - The diagnostic proxy session `native-proxy-20261019T130912Z-1ce0c5f8fea440aaa8502a33396912df` was collected and rolled back after a subsequent startup failure. The rollback restored its prior product ASI. This supersedes the installed-artifact disposition below, not its historical acceptance evidence.
 - Original replay log/DLL, source snapshots, reviewed receipt and focused test output are retained under `%LOCALAPPDATA%/FF7RPianoSongs/captures/replay-chart-20261019T155547`. A new startup log is retained under the sibling `cache-setup-failure-20261019T164851` directory: GU object-count growth during a binding uniqueness scan produced `gu_header_drift`, terminal native bindings failure, and repository publication rejection.
 - The startup recovery candidate treats only readable, unchanged-storage count growth with unique scanned candidates as `IncompleteSnapshot`, not success. Initial authentication remains pending for the next existing updater; acquisitions and registration are not repeated. Ambiguity, storage drift and post-bridge failures still fail closed. Independent review passed; bindings, runtime, adapter, selected-row and extended-composition selftests pass, including repeated deferral, recovery and an ambiguous appended tail.
-- The reviewed candidate proxy is installed through prepared session `native-proxy-20261019T135529Z-20c6d22425cf49119954c19e8ad602db`; its source/binary/receipt/test evidence is in the startup-failure capture directory above. The product ASI is disabled. Live startup recovery is not yet verified, the original replay failure remains unresolved, and no Release qualification is claimed. Forced reproduction is not required.
+- The reviewed recovery proxy was installed through session `native-proxy-20261019T135529Z-20c6d22425cf49119954c19e8ad602db`; its source/binary/receipt/test evidence is in the startup-failure capture directory above. That session was later collected and rolled back for the authorized autoplay installation above; its proxy was preserved for recovery. The original replay failure remains unresolved, and no Release qualification is claimed. Forced reproduction is not required.
 
 ## Offline MIDI generation investigation (2026-10-18)
 

@@ -326,6 +326,26 @@ compatibility is claimed across different game targets.
 - Runtime registry snapshots outlive callbacks that can observe them.
 - Piano-list activity is owned by a monotonic menu-session generation. Open, shared close, state exit, and controller destruction form one mandatory hook transaction; stale generations cannot submit profile input, refresh UI, or claim activation ownership.
 - Profile-direction input is sampled as explicit held facts per keyboard, PlayerInput, WindowProc, RawInput/HID, async-gamepad, and XInput provider. A merged direction emits only its aggregate released-to-held edge and rearms only after aggregate release, so overlapping reports for one physical hold cannot submit multiple profile changes. Authoritative focus loss, application deactivation, device removal, and teardown clear all event-backed PlayerInput, WindowProc-key, and RawInput/HID facts; sampled keyboard, async-gamepad, and XInput facts remain independent. Native forwarding, opposite-direction policy, callback admission, and missing-provider fallback remain unchanged.
+- Autoplay is optional: unavailable contracts or a fully rolled-back hook failure
+  leave existing product hooks usable. Its coupled actuator hooks publish authority
+  only after their complete transaction succeeds; uncertain rollback remains fatal
+  to startup rather than advertising safe degradation.
+- Autoplay input consumes copied seated generations, never retained native pointers.
+  The enclosing controller tick has separate lifetime accounting and releases shared
+  admission before native forwarding, preserving nested catalog-adoption exclusivity.
+  Tick disable/drain must finish before dependent service teardown; failure retains
+  those services for a later shutdown attempt.
+  Chart admission is synchronous inside the owned controller/update path and honors
+  custom chart readiness. Only pending parentless required actions receive a scoped
+  native automatic marker. Introduced markers restore before terminal callbacks;
+  discharged journals never access event storage afterward. Native timing, results,
+  callbacks and follower propagation remain native-owned.
+- Assistance is sticky for one logical play, including toggle-off and result phases.
+  Assisted score calculations bypass custom persistence; the existing outer native
+  result consumer owns an independent writable record shadow through its complete
+  synchronous borrow. Nested and concurrent result consumers cannot share shadows.
+  Actual calculated score and rank remain unchanged; quest/reward effects are not
+  intercepted. New play generations reset assistance, not chart-address changes.
 - Cache-overlay `Ready` means discovery and artifact preparation are fully settled. It does not mean that the loader thread mutated game objects or the active registry. Rendering consumes one fixed-size O(1) startup snapshot and does not scan repository or catalog storage.
 - Catalog adoption continues to emit already-computed prepared, deferred, and adopted count events through a startup-owned process-lifetime observer for internal readiness state. The startup overlay never renders active/current-menu counts, adoption/deferred state, count transitions, or reopen guidance. During Loading it shows processed/total and ready counts and uses typed stage plus active-worker facts to distinguish ordinary cache validation from actual rebuilding. Repository settlement produces one bounded `Piano songs ready` notice and then hides on the cosmetic deadline regardless of adoption or menu lifecycle.
 - During Loading, `ready on reopen` is the count accepted into a pending immutable prefix. A menu that is already open, and any playback started from it, retain their prior catalog identity until the existing quiescent pre-open transaction adopts a newer prefix.

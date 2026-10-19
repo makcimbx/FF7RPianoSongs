@@ -939,6 +939,34 @@ target_link_options(scoreinfo_overlay_producer_selftest PRIVATE "$<$<CXX_COMPILE
 target_include_directories(scoreinfo_overlay_producer_selftest PRIVATE "src")
 target_link_libraries(scoreinfo_overlay_producer_selftest PRIVATE minhook Psapi)
 
+add_executable(config_selftest src/tests/config_selftest.cpp src/core/config.cpp)
+ff7rp_apply_cpp_policy(config_selftest)
+target_compile_definitions(config_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(config_selftest PRIVATE "src")
+
+add_executable(toggle_feedback_selftest src/tests/toggle_feedback_selftest.cpp)
+ff7rp_apply_cpp_policy(toggle_feedback_selftest)
+target_compile_definitions(toggle_feedback_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(toggle_feedback_selftest PRIVATE "src")
+
+add_executable(autoplay_runtime_selftest
+    src/tests/autoplay_runtime_selftest.cpp
+    src/game/hook_specs.cpp src/core/pe_image.cpp src/core/hooks.cpp src/core/logging.cpp)
+ff7rp_apply_cpp_policy(autoplay_runtime_selftest)
+ff7rp_use_generated_catalog(autoplay_runtime_selftest)
+target_compile_definitions(autoplay_runtime_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(autoplay_runtime_selftest PRIVATE "src")
+target_link_libraries(autoplay_runtime_selftest PRIVATE minhook Psapi)
+
+add_executable(autoplay_progress_selftest
+    src/tests/autoplay_progress_selftest.cpp src/game/song_registry.cpp
+    src/core/pe_image.cpp src/core/hooks.cpp src/core/logging.cpp src/game/hook_specs.cpp)
+ff7rp_apply_cpp_policy(autoplay_progress_selftest)
+ff7rp_use_generated_catalog(autoplay_progress_selftest)
+target_compile_definitions(autoplay_progress_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(autoplay_progress_selftest PRIVATE "src")
+target_link_libraries(autoplay_progress_selftest PRIVATE minhook Psapi)
+
 add_executable(title_input_service_selftest
     src/tests/title_input_service_selftest.cpp
     src/game/profile_list_coordinator.cpp
@@ -969,6 +997,14 @@ if(NOT FF7RP_BUILD_RUNTIME)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/src/tests/offline_configuration_selftest.cmake)
 endif()
 if(FF7RP_BUILD_RUNTIME)
+add_test(NAME config_selftest COMMAND config_selftest)
+add_test(NAME autoplay_runtime_selftest COMMAND autoplay_runtime_selftest)
+add_test(NAME autoplay_progress_selftest COMMAND autoplay_progress_selftest)
+set_tests_properties(autoplay_progress_selftest PROPERTIES TIMEOUT 60)
+set_tests_properties(autoplay_runtime_selftest PROPERTIES TIMEOUT 60)
+set_tests_properties(config_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME toggle_feedback_selftest COMMAND toggle_feedback_selftest)
+set_tests_properties(toggle_feedback_selftest PROPERTIES TIMEOUT 60)
 add_test(NAME rva_catalog_check
     COMMAND "${Python3_EXECUTABLE}" "${FF7RP_RVA_GENERATOR}" --check
         --temp-dir "${CMAKE_CURRENT_BINARY_DIR}/rva_catalog_ctest"

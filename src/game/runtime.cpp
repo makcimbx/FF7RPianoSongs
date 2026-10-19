@@ -1,4 +1,5 @@
 #include "game/runtime.h"
+#include "game/autoplay.h"
 
 #include "core/logging.h"
 #include "game/hook_specs.h"
@@ -65,6 +66,7 @@ bool install_release_hooks(HMODULE exe_module, void (*native_initialized)() noex
         && install_chart_patch_hooks(context)
         && install_note_count_hooks(context)
         && install_chord_voicing_hooks(context)
+        && install_autoplay_hooks(context)
         && install_duration_hooks(context)
         && install_progress_hooks(context)
         && install_audio_sead_hooks(context)
@@ -83,6 +85,10 @@ bool install_release_hooks(HMODULE exe_module, void (*native_initialized)() noex
 
 bool shutdown_release_hooks()
 {
+    if (!quiesce_autoplay_controller_ticks()) {
+        core::log(core::LogLevel::Error, "[hooks] shutdown status=deferred controller_tick=retained");
+        return false;
+    }
     const bool audio_ok = shutdown_audio_sead();
     const bool native_audio_ok = native_audio::shutdown_native_audio_runtime();
     if (!audio_ok || !native_audio_ok) {
@@ -97,6 +103,7 @@ bool shutdown_release_hooks()
     };
     const auto progress_result = shutdown_progress();
     collect("progress", progress_result);
+    collect("autoplay", shutdown_autoplay());
     const auto duration_result = shutdown_duration();
     collect("duration", duration_result);
     const auto note_count_result = shutdown_note_count();

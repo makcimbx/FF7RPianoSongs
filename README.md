@@ -75,6 +75,21 @@ and the full settings/chord reference.
 - Older score sections ending in `.difficulty.<number>` are retained but not imported automatically: their names can also belong to another song. New scores use separate song/profile identities; ambiguous old records require manual attribution.
 - If a song is missing, it was rejected safely. Check `End/Binaries/Win64/FF7RPianoSongs.log` for the reason.
 
+### Autoplay
+
+In the song list or during a song, including pause, press **Ctrl+F8** or click
+**both sticks (L3+R3) on the same XInput controller** to toggle autoplay. Release
+the combination before pressing it again. A rising tone means enabled; a falling
+tone means disabled. The shortcut does nothing outside the piano or while the
+game is unfocused; standing up switches autoplay off.
+
+Autoplay uses native note timing for both default and custom songs. Turning it
+off leaves future notes under manual control. If autoplay was used at any point
+in a play, its result is still displayed but personal records are not saved.
+If autoplay's optional hooks cannot be verified, it stays unavailable without
+disabling the rest of the mod. Development qualification is tracked in
+[Current Status](docs/CurrentStatus.md#autoplay-development-2026-10-19).
+
 ## Settings
 
 Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
@@ -83,6 +98,7 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | --- | --- | --- |
 | `General.Enabled` | `0` or nonzero | Disables or enables the mod. |
 | `General.LogLevel` | `debug`, `info`, `error` | Sets log detail. Default: `info`. |
+| `Autoplay.KeyboardFunctionKey` | `0`-`12` | Ctrl+F1 through Ctrl+F12; default `8` (Ctrl+F8). `0` disables the keyboard shortcut, not L3+R3. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
 | `Advanced.TranscriptionThreads` | `1`-`64` | CPU threads for transcribing the piano of a song without `song.mid`. Default: `4`. |
 

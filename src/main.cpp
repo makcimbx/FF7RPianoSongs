@@ -1,4 +1,5 @@
 #include "core/config.h"
+#include "game/autoplay.h"
 #include "core/fail_closed_boundary.h"
 #include "core/hooks.h"
 #include "core/logging.h"
@@ -204,6 +205,7 @@ DWORD startup_worker_body()
 
     const std::wstring ini_path = dll_dir + L"\\FF7RPianoSongs.ini";
     const core::Config config = core::load_config(ini_path);
+    game::configure_autoplay_input(config.autoplay_function_key);
     core::set_log_level(config.log_level);
     const bool transcription = ff7rp::transcription::register_muscriptor_transcriber(
         std::filesystem::path(dll_dir) / ff7rp::transcription::kMuscriptorModelFileName,
