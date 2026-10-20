@@ -2,12 +2,23 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-20
+
 ### Improvements
 
 - Redesigned the startup song-cache overlay in the native menu style: Cloud rides an
   animated chocobo along the progress track toward a Gysahl Green. It shows how many
   songs are checked, ready, and skipped, plus the time left while songs are rebuilt,
   and fades out after the ready notice.
+- Count native-audio admission failures as skipped songs, rather than reporting
+  an empty Music folder when no prepared song can be admitted.
+
+### Validation limits
+
+- Fresh visual checks of the redesigned loading overlay, exact packaged-artifact
+  gameplay and the full per-build manual matrix are not established. The owner
+  explicitly accepts these gaps for 0.3.1; see `docs/CurrentStatus.md` in the
+  source repository. Automated checks do not qualify the in-game appearance.
 
 ## 0.3.0 - 2026-10-20
 

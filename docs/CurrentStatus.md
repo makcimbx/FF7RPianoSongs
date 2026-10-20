@@ -5,6 +5,19 @@ limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
+## 0.3.1 release disposition (2026-10-20)
+
+- This patch redesigns only the startup song-cache overlay and its progress
+  projection: an animated chocobo carrying Cloud, checked/ready/skipped counts,
+  rebuilding-time estimates and a fading ready notice. Packaging remains the
+  standalone DLL with the transcription model and separate game-build archives.
+- The owner explicitly accepts missing fresh visual checks of the new overlay,
+  exact-ZIP gameplay and the full per-build manual matrix for **0.3.1**. Prior
+  development reports and the 0.3.0 disposition do not qualify these new artifacts.
+- Automated Release checks, independent review, clean source identity and
+  transactional packaging remain required. This decision grants no installation,
+  launch or publication authority; no new in-game qualification is claimed.
+
 ## 0.3.0 release disposition (2026-10-20)
 
 - The release packages use the standalone proxy DLL, with separate archives for
@@ -347,5 +360,5 @@ catalog and publication tests pass for the built targets. Installed-source
 short/long generation also passed with immutable cache reuse and distinct
 per-build output. Mapped native-call doubles do not replace real engine execution.
 The historical development checks above are not qualification of a new package.
-The 0.3.0 manual-coverage decision is recorded separately above; a new archive
+Version-scoped manual-coverage decisions are recorded separately above; a new archive
 still requires its own clean identity and the canonical validation workflow.

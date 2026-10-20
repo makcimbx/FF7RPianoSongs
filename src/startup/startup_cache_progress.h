@@ -46,6 +46,7 @@ public:
 
     void begin(std::size_t candidate_count) noexcept;
     void observe(const ff7rp::pipeline::SongRepositoryProgress& progress) noexcept;
+    void admission_rejected() noexcept;
     void publishing() noexcept;
     void available_on_reopen(std::size_t song_count) noexcept;
     void catalog_prepared(std::size_t song_count) noexcept;

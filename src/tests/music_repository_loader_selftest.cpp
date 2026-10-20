@@ -453,6 +453,7 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
         std::vector<std::size_t> offered_counts;
         std::vector<std::string> admitted_ids;
         bool admitted_rows_unresolved = true;
+        ff7r::piano::startup::StartupCacheProgress progressive_progress;
         ff7r::piano::startup::ProgressiveRepositoryCallbacks callbacks;
         callbacks.on_descriptor_admission = [&](ff7r::piano::game::SongDescriptor& descriptor) {
             auto artifacts = std::make_shared<ff7rp::pipeline::NativeAudioArtifactSet>();
@@ -474,12 +475,27 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
             return true;
         };
         const auto state = ff7r::piano::startup::run_progressive_repository_test_sequence(
-            3, {{progressive_plan({"alpha", "bravo", "charlie"}), 3, true}}, callbacks);
+            3, {{progressive_plan({"alpha", "bravo", "charlie"}), 3, true}}, callbacks,
+            &progressive_progress);
         ok &= require(admitted_ids == std::vector<std::string>{"alpha", "charlie"}
                 && admitted_rows_unresolved
                 && offered_counts == std::vector<std::size_t>{1, 2}
-                && state.valid_song_count == 2,
+                && state.valid_song_count == 2
+                && progressive_progress.snapshot().failed_candidates == 1,
             "failed sidecar admission blocked a later valid song or resolved a row offline");
+    }
+    {
+        ff7r::piano::startup::StartupCacheProgress progressive_progress;
+        ff7r::piano::startup::ProgressiveRepositoryCallbacks callbacks;
+        callbacks.on_descriptor_admission = [](auto&) { return false; };
+        const auto state = ff7r::piano::startup::run_progressive_repository_test_sequence(
+            2, {{progressive_plan({"alpha", "bravo"}), 2, true}}, callbacks,
+            &progressive_progress);
+        const auto snapshot = progressive_progress.snapshot();
+        ok &= require(state.phase == ProgressivePhase::Settled && state.valid_song_count == 0
+                && snapshot.phase == CachePhase::Ready && snapshot.candidate_count == 2
+                && snapshot.failed_candidates == 2,
+            "all native admission rejections must count as skipped, not an empty repository");
     }
     {
         ff7r::piano::startup::StartupCacheProgress progressive_progress;

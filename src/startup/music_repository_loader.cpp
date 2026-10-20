@@ -91,10 +91,13 @@ public:
 
     bool admit_descriptor(game::SongDescriptor& descriptor) const noexcept
     {
+        bool admitted = false;
         try {
-            return !callbacks_.on_descriptor_admission
+            admitted = !callbacks_.on_descriptor_admission
                 || callbacks_.on_descriptor_admission(descriptor);
-        } catch (...) { return false; }
+        } catch (...) {}
+        if (!admitted && progress_) progress_->admission_rejected();
+        return admitted;
     }
 
     void observe(const std::vector<game::SongDescriptor>& descriptors,

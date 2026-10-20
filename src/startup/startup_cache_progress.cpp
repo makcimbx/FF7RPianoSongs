@@ -126,6 +126,15 @@ void StartupCacheProgress::observe(
     }
 }
 
+void StartupCacheProgress::admission_rejected() noexcept
+{
+    try {
+        std::lock_guard lock(mutex_);
+        if (state_.phase == StartupCachePhase::Loading) ++state_.failed_candidates;
+    } catch (...) {
+    }
+}
+
 void StartupCacheProgress::refresh_estimates_locked() noexcept
 {
     state_.estimates_available = false;

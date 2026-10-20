@@ -338,7 +338,7 @@ bool StartupCacheOverlayRenderer::render(void* viewport, void* canvas,
         const wchar_t* headline = L"Piano Songs: Looking for songs";
         if (state.phase == Phase::Ready) {
             headline = L"Piano Songs: Ready!";
-            if (state.published_song_count == 0 && state.failed_candidates == 0) {
+            if (state.candidate_count == 0) {
                 std::swprintf(counts.data(), counts.size(), L"No songs found in the Music folder");
             } else {
                 std::swprintf(counts.data(), counts.size(), L"%zu song%ls ready to play",

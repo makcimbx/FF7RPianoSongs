@@ -605,13 +605,29 @@ int main()
         "Loading must count each skipped song once");
     skipped_progress.observe({2, ff7rp::pipeline::SongLoadProgressStage::Complete,
         ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
+    skipped_progress.admission_rejected();
     skipped_progress.publishing();
     skipped_progress.ready(1);
     skipped.text.clear();
     ok &= require(skipped_renderer.render(viewport, canvas, epoch) && skipped.text ==
         std::vector<std::wstring>({L"Piano Songs: Ready!",
-            L"1 song ready to play  |  1 skipped (see FF7RPianoSongs.log)", L""}),
-        "Ready must report skipped songs with singular wording");
+            L"1 song ready to play  |  2 skipped (see FF7RPianoSongs.log)", L""}),
+        "Ready must include preparation and admission failures with singular ready wording");
+
+    startup::StartupCacheProgress rejected_progress;
+    rejected_progress.begin(1);
+    rejected_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
+    rejected_progress.admission_rejected();
+    rejected_progress.publishing();
+    rejected_progress.ready(0);
+    Capture rejected;
+    game::StartupCacheOverlayRenderer rejected_renderer(rejected_progress, native_read,
+        rejected.draw_text());
+    ok &= require(rejected_renderer.render(viewport, canvas, epoch) && rejected.text ==
+        std::vector<std::wstring>({L"Piano Songs: Ready!",
+            L"0 songs ready to play  |  1 skipped (see FF7RPianoSongs.log)", L""}),
+        "all admission failures must report skipped songs, not an empty Music folder");
 
     Capture celebration;
     game::StartupCacheOverlayRenderer celebration_renderer(skipped_progress, native_read,
