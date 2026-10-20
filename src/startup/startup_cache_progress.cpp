@@ -116,6 +116,9 @@ void StartupCacheProgress::observe(
             candidate_complete_[candidate_index] = true;
             if (state_.active_candidate_count != 0) --state_.active_candidate_count;
             ++state_.completed_candidates;
+            if (progress.outcome == ff7rp::pipeline::SongLoadTerminalOutcome::Failed) {
+                ++state_.failed_candidates;
+            }
         }
         refresh_latest_stage_locked();
         refresh_estimates_locked();

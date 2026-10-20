@@ -107,6 +107,62 @@ bool close_float(const float left, const float right)
     return std::fabs(left - right) < 0.001f;
 }
 
+bool same_color(const game::runtime_layouts::FLinearColor& left,
+    const game::runtime_layouts::FLinearColor& right)
+{
+    return close_float(left.r, right.r) && close_float(left.g, right.g) &&
+        close_float(left.b, right.b) && close_float(left.a, right.a);
+}
+
+// Every tile must be an untextured alpha-blended rectangle inside the panel.
+bool tiles_inside(const std::vector<TileCall>& tiles, void* fcanvas, const float x,
+    const float y, const float width, const float height)
+{
+    return std::all_of(tiles.begin(), tiles.end(), [&](const TileCall& tile) {
+        return tile.canvas == fcanvas && tile.texture == nullptr && tile.alpha_blend &&
+            close_float(tile.u, 0.0f) && close_float(tile.v, 0.0f) &&
+            close_float(tile.size_u, 1.0f) && close_float(tile.size_v, 1.0f) &&
+            tile.width > 0.0f && tile.height > 0.0f && tile.x >= x && tile.y >= y &&
+            tile.x + tile.width <= x + width && tile.y + tile.height <= y + height;
+    });
+}
+
+// Leftmost chocobo feather, i.e. where the sprite is currently running.
+float chocobo_x(const std::vector<TileCall>& tiles)
+{
+    float left = 1e9f;
+    for (const auto& tile : tiles) {
+        if (same_color(tile.color, {1.0f, 0.625f, 0.025f, 1.0f})) left = std::min(left, tile.x);
+    }
+    return left;
+}
+
+struct Capture {
+    std::vector<TileCall> tiles;
+    std::vector<std::wstring> text;
+
+    game::OverlayDrawText draw_text()
+    {
+        return [this](void*, float, float, const wchar_t* value, void*,
+            const game::runtime_layouts::FLinearColor*) {
+            text.emplace_back(value);
+            return int32_t{1};
+        };
+    }
+
+    game::OverlayDrawTile draw_tile()
+    {
+        return [this](void* observed_canvas, float x, float y, float width, float height,
+            float u, float v, float size_u, float size_v,
+            const game::runtime_layouts::FLinearColor* color, const void* texture,
+            bool alpha_blend) {
+            tiles.push_back({observed_canvas, x, y, width, height, u, v,
+                size_u, size_v, *color, texture, alpha_blend});
+            return true;
+        };
+    }
+};
+
 } // namespace
 
 int main()
@@ -199,103 +255,89 @@ int main()
     const auto epoch = std::chrono::steady_clock::time_point{};
 
     startup::StartupCacheProgress starting_progress;
-    std::vector<std::wstring> starting_text;
+    Capture starting;
     game::StartupCacheOverlayRenderer starting_renderer(starting_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            starting_text.emplace_back(text);
-            return int32_t{1};
-        });
+        starting.draw_text());
     ok &= require(starting_renderer.render(viewport, canvas, epoch) &&
-        starting_text == std::vector<std::wstring>({
-            L"FF7RPianoSongs: Preparing piano songs",
-            L"Processed 0/0 | Ready 0",
-            L"Discovering Music folders"}) && !contains_catalog_ux(starting_text),
+        starting.text == std::vector<std::wstring>({
+            L"Piano Songs: Looking for songs",
+            L"Scanning the Music folder",
+            L""}) && !contains_catalog_ux(starting.text),
         "Starting must use bounded player-facing cache vocabulary");
 
     startup::StartupCacheProgress zero_progress;
     zero_progress.begin(2);
-    std::vector<TileCall> zero_tiles;
+    Capture zero;
     std::vector<int> zero_order;
-    std::vector<std::wstring> zero_text;
     game::StartupCacheOverlayRenderer zero_renderer(zero_progress, native_read,
         [&](void*, float, float, const wchar_t* text, void*,
             const game::runtime_layouts::FLinearColor*) {
-            zero_order.push_back(20 + static_cast<int>(zero_text.size()));
-            zero_text.emplace_back(text);
+            zero_order.push_back(2);
+            zero.text.emplace_back(text);
             return int32_t{0};
         },
         [&](void* observed_canvas, float x, float y, float width, float height,
             float u, float v, float size_u, float size_v,
             const game::runtime_layouts::FLinearColor* color, const void* texture,
             bool alpha_blend) {
-            zero_order.push_back(10 + static_cast<int>(zero_tiles.size()));
-            zero_tiles.push_back({observed_canvas, x, y, width, height, u, v,
+            zero_order.push_back(1);
+            zero.tiles.push_back({observed_canvas, x, y, width, height, u, v,
                 size_u, size_v, *color, texture, alpha_blend});
             return true;
         });
-    ok &= require(zero_renderer.render(viewport, canvas, epoch) && zero_tiles.size() == 2 &&
-        zero_text.size() == 4 && zero_order == std::vector<int>({10, 11, 20, 21, 22, 23}),
-        "Loading must submit all four text lines even when native layout metrics are zero");
-    ok &= require(close_float(zero_tiles[0].x, 1212.0f) && close_float(zero_tiles[0].y, 16.0f) &&
-        close_float(zero_tiles[0].width, 680.0f) && close_float(zero_tiles[0].height, 132.0f) &&
-        close_float(zero_tiles[1].x, 1228.0f) && close_float(zero_tiles[1].y, 132.0f) &&
-        close_float(zero_tiles[1].width, 648.0f) && close_float(zero_tiles[1].height, 6.0f),
-        "panel and progress track geometry must stay bounded and deterministic");
-    ok &= require(zero_tiles[0].canvas == fcanvas && zero_tiles[0].texture == nullptr &&
-        zero_tiles[1].texture == nullptr && zero_tiles[0].alpha_blend &&
-        zero_tiles[1].alpha_blend && close_float(zero_tiles[0].u, 0.0f) &&
-        close_float(zero_tiles[0].v, 0.0f) && close_float(zero_tiles[0].size_u, 1.0f) &&
-        close_float(zero_tiles[0].size_v, 1.0f) &&
-        close_float(zero_tiles[0].color.r, 0.02f) &&
-        close_float(zero_tiles[0].color.g, 0.03f) &&
-        close_float(zero_tiles[0].color.b, 0.05f) &&
-        close_float(zero_tiles[0].color.a, 0.72f) &&
-        close_float(zero_tiles[1].color.r, 0.15f) &&
-        close_float(zero_tiles[1].color.g, 0.18f) &&
-        close_float(zero_tiles[1].color.b, 0.24f) &&
-        close_float(zero_tiles[1].color.a, 0.85f),
-        "rectangle calls must use native white texture UVs and proven alpha semantics");
-    ok &= require(zero_text[0] == L"FF7RPianoSongs: Checking song caches" &&
-            zero_text[1] == L"Processed 0/2 | Ready 0" &&
-            zero_text[2] == L"Validating existing caches - 0%" && zero_text[3].empty() &&
-            !contains_catalog_ux(zero_text)
-            && zero_text[1].size() < game::kStartupCacheOverlayTextCapacity,
+    ok &= require(zero_renderer.render(viewport, canvas, epoch) && zero.text.size() == 3 &&
+        zero.tiles.size() > 3 && zero.tiles.size() < 256 &&
+        std::is_sorted(zero_order.begin(), zero_order.end()),
+        "Loading must draw every tile before all three text lines even when text metrics are zero");
+    ok &= require(close_float(zero.tiles[0].x, 1332.0f) && close_float(zero.tiles[0].y, 16.0f) &&
+        close_float(zero.tiles[0].width, 560.0f) && close_float(zero.tiles[0].height, 150.0f) &&
+        close_float(zero.tiles[2].x, 1348.0f) && close_float(zero.tiles[2].y, 148.0f) &&
+        close_float(zero.tiles[2].width, 508.0f) && close_float(zero.tiles[2].height, 4.0f) &&
+        tiles_inside(zero.tiles, fcanvas, 1332.0f, 16.0f, 560.0f, 150.0f),
+        "panel, track, and sprite geometry must stay bounded and deterministic");
+    ok &= require(same_color(zero.tiles[0].color, {0.64f, 0.49f, 0.22f, 1.0f}) &&
+        same_color(zero.tiles[1].color, {0.012f, 0.024f, 0.30f, 0.94f}) &&
+        same_color(zero.tiles[2].color, {0.03f, 0.07f, 0.45f, 1.0f}),
+        "the panel must use the native FF7R gold trim, navy fill, and groove colors");
+    ok &= require(zero.text[0] == L"Piano Songs: Checking songs" &&
+            zero.text[1] == L"0 of 2 songs checked  |  0 ready" &&
+            zero.text[2] == L"Verifying cached songs - 0%" && !contains_catalog_ux(zero.text),
         "startup without a menu must show only bounded cache initialization facts");
+    const auto first_frame = zero.tiles;
+    zero.tiles.clear();
+    ok &= require(zero_renderer.render(viewport, canvas, epoch + std::chrono::milliseconds(110)) &&
+        zero.tiles.size() != first_frame.size() &&
+        close_float(chocobo_x(zero.tiles), chocobo_x(first_frame)),
+        "the chocobo must run in place over time while progress is unchanged");
+    zero_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
+    const auto eased = zero_progress.snapshot();
+    const float eased_target = 508.0f * static_cast<float>(eased.completed_stage_units) /
+        static_cast<float>(eased.total_stage_units);
+    zero.tiles.clear();
+    ok &= require(zero_renderer.render(viewport, canvas, epoch + std::chrono::milliseconds(210)) &&
+        eased_target > 0.0f && zero.tiles[3].width > 0.0f &&
+        zero.tiles[3].width < eased_target * 0.5f &&
+        chocobo_x(zero.tiles) > chocobo_x(first_frame),
+        "progress jumps must ease the fill and chocobo forward instead of teleporting");
 
     startup::StartupCacheProgress partial_progress;
     partial_progress.begin(2);
     partial_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::DecodingAudio});
     partial_progress.available_on_reopen(1);
-    std::vector<TileCall> partial_tiles;
-    std::vector<std::wstring> partial_text;
+    Capture partial;
     game::StartupCacheOverlayRenderer partial_renderer(partial_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            partial_text.emplace_back(text);
-            return int32_t{1};
-        },
-        [&](void* observed_canvas, float x, float y, float width, float height,
-            float u, float v, float size_u, float size_v,
-            const game::runtime_layouts::FLinearColor* color, const void* texture,
-            bool alpha_blend) {
-            partial_tiles.push_back({observed_canvas, x, y, width, height, u, v,
-                size_u, size_v, *color, texture, alpha_blend});
-            return true;
-        });
+        partial.draw_text(), partial.draw_tile());
     ok &= require(partial_renderer.render(viewport, canvas, epoch) &&
-        partial_tiles.size() == 3 && partial_tiles[2].width > 0.0f &&
-        partial_tiles[2].width < partial_tiles[1].width &&
-        partial_tiles[2].texture == nullptr && partial_tiles[2].alpha_blend &&
-        close_float(partial_tiles[2].color.r, 0.20f) &&
-        close_float(partial_tiles[2].color.g, 0.70f) &&
-        close_float(partial_tiles[2].color.b, 1.0f) &&
-        close_float(partial_tiles[2].color.a, 0.95f) && partial_text.size() == 4 &&
-        partial_text[0] == L"FF7RPianoSongs: Rebuilding song cache" &&
-        partial_text[1] == L"Processed 0/2 | Ready 1" &&
-        partial_text[2].find(L"Decoding song audio") != std::wstring::npos &&
-        partial_text[3] == L"Per song: calculating... | Total: calculating..." &&
-        !contains_catalog_ux(partial_text),
+        partial.tiles.size() > 3 && partial.tiles[3].width > 0.0f &&
+        partial.tiles[3].width < partial.tiles[2].width &&
+        same_color(partial.tiles[3].color, {0.12f, 0.66f, 0.94f, 1.0f}) &&
+        partial.text.size() == 3 &&
+        partial.text[0] == L"Piano Songs: Building new songs" &&
+        partial.text[1] == L"0 of 2 songs checked  |  1 ready" &&
+        partial.text[2].starts_with(L"Decoding song audio - ") &&
+        partial.text[2].ends_with(L" - estimating time left") &&
+        !contains_catalog_ux(partial.text),
         "partial startup progress must distinguish rebuilding without catalog guidance");
 
     startup::StartupCacheProgress between_song_progress;
@@ -304,18 +346,14 @@ int main()
     between_song_progress.catalog_adopted(1);
     between_song_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::Complete,
         ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
-    std::vector<std::wstring> between_song_text;
+    Capture between_song;
     game::StartupCacheOverlayRenderer between_song_renderer(between_song_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            between_song_text.emplace_back(text);
-            return int32_t{1};
-        });
+        between_song.draw_text());
     ok &= require(between_song_renderer.render(viewport, canvas, epoch) &&
-        between_song_text.size() == 4 &&
-        between_song_text[0] == L"FF7RPianoSongs: Checking song caches" &&
-        between_song_text[2].find(L"Validating existing caches") != std::wstring::npos &&
-        !contains_catalog_ux(between_song_text),
+        between_song.text.size() == 3 &&
+        between_song.text[0] == L"Piano Songs: Checking songs" &&
+        between_song.text[2].starts_with(L"Verifying cached songs") &&
+        !contains_catalog_ux(between_song.text),
         "a gap between candidates must be presented as ordinary cache checking");
 
     startup::StartupCacheProgress background_lifecycle_progress;
@@ -326,49 +364,32 @@ int main()
         {0, ff7rp::pipeline::SongLoadProgressStage::GeneratingChart});
     background_lifecycle_progress.catalog_prepared(2);
     background_lifecycle_progress.catalog_adoption_deferred();
-    std::vector<std::wstring> background_lifecycle_text;
+    Capture background_lifecycle;
     game::StartupCacheOverlayRenderer background_lifecycle_renderer(
-        background_lifecycle_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            background_lifecycle_text.emplace_back(text);
-            return int32_t{1};
-        });
+        background_lifecycle_progress, native_read, background_lifecycle.draw_text());
     ok &= require(background_lifecycle_renderer.render(viewport, canvas, epoch) &&
-        background_lifecycle_text.size() == 4 &&
-        background_lifecycle_text[0] == L"FF7RPianoSongs: Rebuilding song cache" &&
-        background_lifecycle_text[1] == L"Processed 0/3 | Ready 2" &&
-        background_lifecycle_text[3] ==
-            L"Per song: calculating... | Total: calculating..." &&
-        !contains_catalog_ux(background_lifecycle_text),
+        background_lifecycle.text.size() == 3 &&
+        background_lifecycle.text[0] == L"Piano Songs: Building new songs" &&
+        background_lifecycle.text[1] == L"0 of 3 songs checked  |  2 ready" &&
+        background_lifecycle.text[2].ends_with(L" - estimating time left") &&
+        !contains_catalog_ux(background_lifecycle.text),
         "internal catalog lifecycle must not affect startup overlay vocabulary");
 
     startup::StartupCacheProgress full_progress;
     full_progress.begin(2);
     full_progress.publishing();
-    std::vector<TileCall> full_tiles;
-    std::vector<std::wstring> publishing_text;
+    Capture full;
     game::StartupCacheOverlayRenderer full_renderer(full_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            publishing_text.emplace_back(text);
-            return int32_t{1};
-        },
-        [&](void* observed_canvas, float x, float y, float width, float height,
-            float u, float v, float size_u, float size_v,
-            const game::runtime_layouts::FLinearColor* color, const void* texture,
-            bool alpha_blend) {
-            full_tiles.push_back({observed_canvas, x, y, width, height, u, v,
-                size_u, size_v, *color, texture, alpha_blend});
-            return true;
-        });
-    ok &= require(full_renderer.render(viewport, canvas, epoch) && full_tiles.size() == 3 &&
-        close_float(full_tiles[2].width, full_tiles[1].width) &&
-        publishing_text == std::vector<std::wstring>({
-            L"FF7RPianoSongs: Preparing piano songs",
-            L"Processed 2/2 | Ready 0",
-            L"Finalizing song cache"}) && !contains_catalog_ux(publishing_text),
-        "Publishing and Ready progress must render a clamped 100 percent fill");
+        full.draw_text(), full.draw_tile());
+    ok &= require(full_renderer.render(viewport, canvas, epoch) && full.tiles.size() > 3 &&
+        close_float(full.tiles[3].width, full.tiles[2].width) &&
+        chocobo_x(full.tiles) > chocobo_x(first_frame) + 400.0f &&
+        tiles_inside(full.tiles, fcanvas, 1332.0f, 16.0f, 560.0f, 150.0f) &&
+        full.text == std::vector<std::wstring>({
+            L"Piano Songs: Almost done",
+            L"2 of 2 songs checked  |  0 ready",
+            L"Finishing up"}) && !contains_catalog_ux(full.text),
+        "Publishing must render a full track with the chocobo at the Gysahl Green");
 
     auto queue_now = epoch;
     startup::StartupCacheProgress queue_eta([&] { return queue_now; });
@@ -384,19 +405,16 @@ int main()
         seven_unresolved.estimated_total_remaining_seconds == 420,
         "seven unresolved candidates on two workers must estimate about seven minutes");
     queue_eta.observe({1, ff7rp::pipeline::SongLoadProgressStage::Inspecting});
-    std::vector<std::wstring> warm_validation_text;
+    Capture warm_validation;
     game::StartupCacheOverlayRenderer warm_validation_renderer(queue_eta, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            warm_validation_text.emplace_back(text);
-            return int32_t{1};
-        });
+        warm_validation.draw_text());
     ok &= require(queue_eta.snapshot().estimates_available &&
         warm_validation_renderer.render(viewport, canvas, epoch) &&
-        warm_validation_text.size() == 4 &&
-        warm_validation_text[0] == L"FF7RPianoSongs: Checking song caches" &&
-        warm_validation_text[2].find(L"Validating existing caches") != std::wstring::npos &&
-        warm_validation_text[3].empty() && !contains_catalog_ux(warm_validation_text),
+        warm_validation.text.size() == 3 &&
+        warm_validation.text[0] == L"Piano Songs: Checking songs" &&
+        warm_validation.text[2].starts_with(L"Verifying cached songs") &&
+        warm_validation.text[2].find(L"left") == std::wstring::npos &&
+        !contains_catalog_ux(warm_validation.text),
         "ordinary warm validation must hide a persisted cold-rebuild estimate");
     queue_now += std::chrono::seconds(1);
     queue_eta.observe({1, ff7rp::pipeline::SongLoadProgressStage::Complete,
@@ -502,20 +520,15 @@ int main()
         time_only.estimated_total_remaining_seconds ==
             event_updated.estimated_total_remaining_seconds,
         "clock advancement and snapshot alone must alter neither estimates nor readiness");
-    std::vector<std::wstring> eta_text;
-    game::StartupCacheOverlayRenderer eta_renderer(eta_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            eta_text.emplace_back(text);
-            return int32_t{1};
-        });
+    Capture eta;
+    game::StartupCacheOverlayRenderer eta_renderer(eta_progress, native_read, eta.draw_text());
     ok &= require(eta_renderer.render(viewport, canvas, eta_now) &&
-        !eta_renderer.hidden() && eta_text.size() == 4 &&
-        eta_text[0] == L"FF7RPianoSongs: Rebuilding song cache" &&
-        eta_text[2].find(L"Building game audio cache") != std::wstring::npos &&
-        eta_text[3] == L"Per song: approx. 55 sec | Total: approx. 55 sec" &&
-        !contains_catalog_ux(eta_text),
-        "Loading must retain bounded rebuild estimates without catalog-internal state");
+        !eta_renderer.hidden() && eta.text.size() == 3 &&
+        eta.text[0] == L"Piano Songs: Building new songs" &&
+        eta.text[2].starts_with(L"Converting audio for the game - ") &&
+        eta.text[2].ends_with(L" - about 55 sec left") &&
+        !contains_catalog_ux(eta.text),
+        "Loading must show the remaining rebuild time without catalog-internal state");
 
     auto bounded_now = epoch;
     startup::StartupCacheProgress bounded_eta([&] { return bounded_now; });
@@ -562,19 +575,59 @@ int main()
     startup::StartupCacheProgress failed_progress;
     failed_progress.begin(2);
     failed_progress.failed();
-    std::vector<std::wstring> failed_text;
+    Capture failed;
     game::StartupCacheOverlayRenderer failed_renderer(failed_progress, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            failed_text.emplace_back(text);
-            return int32_t{1};
-        });
+        failed.draw_text(), failed.draw_tile());
     ok &= require(failed_renderer.render(viewport, canvas, epoch) &&
-        failed_text == std::vector<std::wstring>({
-            L"FF7RPianoSongs: Song cache setup failed",
-            L"Processed 0/2 | Ready 0",
-            L"See FF7RPianoSongs.log for details"}) && !contains_catalog_ux(failed_text),
-        "Failed must use bounded player-facing cache vocabulary");
+        failed.text == std::vector<std::wstring>({
+            L"Piano Songs: Setup failed",
+            L"0 of 2 songs checked  |  0 ready",
+            L"See FF7RPianoSongs.log for details"}) && !contains_catalog_ux(failed.text) &&
+        !failed.tiles.empty() && close_float(failed.tiles[0].color.r, 0.60f) &&
+        close_float(failed.tiles[0].color.g, 0.06f),
+        "Failed must use bounded player-facing vocabulary and an error trim");
+
+    startup::StartupCacheProgress skipped_progress;
+    skipped_progress.begin(3);
+    skipped_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Failed});
+    skipped_progress.observe({0, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Failed});
+    skipped_progress.observe({1, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
+    skipped_progress.available_on_reopen(1);
+    Capture skipped;
+    game::StartupCacheOverlayRenderer skipped_renderer(skipped_progress, native_read,
+        skipped.draw_text());
+    ok &= require(skipped_progress.snapshot().failed_candidates == 1 &&
+        skipped_renderer.render(viewport, canvas, epoch) && skipped.text.size() == 3 &&
+        skipped.text[1] == L"2 of 3 songs checked  |  1 ready  |  1 skipped",
+        "Loading must count each skipped song once");
+    skipped_progress.observe({2, ff7rp::pipeline::SongLoadProgressStage::Complete,
+        ff7rp::pipeline::SongLoadTerminalOutcome::Succeeded});
+    skipped_progress.publishing();
+    skipped_progress.ready(1);
+    skipped.text.clear();
+    ok &= require(skipped_renderer.render(viewport, canvas, epoch) && skipped.text ==
+        std::vector<std::wstring>({L"Piano Songs: Ready!",
+            L"1 song ready to play  |  1 skipped (see FF7RPianoSongs.log)", L""}),
+        "Ready must report skipped songs with singular wording");
+
+    Capture celebration;
+    game::StartupCacheOverlayRenderer celebration_renderer(skipped_progress, native_read,
+        celebration.draw_text(), celebration.draw_tile());
+    ok &= require(celebration_renderer.render(viewport, canvas, epoch) &&
+        celebration.text.size() == 4 && celebration.text[3] == L"Kweh!" &&
+        close_float(celebration.tiles[0].color.a, 1.0f) &&
+        tiles_inside(celebration.tiles, fcanvas, 1332.0f, 16.0f, 560.0f, 150.0f),
+        "Ready must celebrate once the chocobo reaches the Gysahl Green");
+    celebration.text.clear();
+    celebration.tiles.clear();
+    ok &= require(celebration_renderer.render(viewport, canvas,
+            epoch + std::chrono::milliseconds(2300)) &&
+        celebration.text.empty() && !celebration.tiles.empty() &&
+        close_float(celebration.tiles[0].color.a, 0.25f) && !celebration_renderer.hidden(),
+        "Ready must fade out without drawing opaque text shadows");
 
     std::vector<std::wstring> drawn;
     game::StartupCacheOverlayRenderer renderer(progress,
@@ -591,25 +644,30 @@ int main()
         "an unavailable DrawTile helper must select text-only rendering immediately");
     ok &= require(!renderer.render(nullptr, nullptr, epoch) && drawn.empty() && renderer.enabled(),
         "missing native objects must retain state without disabling the overlay");
-    ok &= require(renderer.render(viewport, canvas, epoch) && drawn.size() == 4,
-        "a valid Loading frame must draw exactly four bounded text lines");
+    ok &= require(renderer.render(viewport, canvas, epoch) && drawn.size() == 3,
+        "a valid Loading frame must draw exactly three bounded text lines");
 
     progress.publishing();
     progress.ready(2);
     progress.catalog_adoption_deferred();
     drawn.clear();
     ok &= require(renderer.render(viewport, canvas, epoch + std::chrono::seconds(5)) &&
-        drawn.size() == 3 && drawn[0] == L"FF7RPianoSongs: Piano songs ready" &&
-        drawn[1].empty() && drawn[2].empty() && !contains_catalog_ux(drawn) &&
-        !renderer.hidden(),
+        drawn == std::vector<std::wstring>({
+            L"Piano Songs: Ready!", L"2 songs ready to play", L""}) &&
+        !contains_catalog_ux(drawn) && !renderer.hidden(),
         "repository settlement before any menu must show a bounded completion notice only");
     drawn.clear();
     ok &= require(renderer.render(viewport, canvas,
             epoch + std::chrono::seconds(6) + std::chrono::milliseconds(999)) &&
         drawn.size() == 3 && !renderer.hidden(),
-        "completion notice must remain visible until its cosmetic deadline");
+        "completion notice must remain readable until its fade begins");
     drawn.clear();
-    ok &= require(!renderer.render(viewport, canvas, epoch + std::chrono::seconds(7)) &&
+    ok &= require(renderer.render(viewport, canvas,
+            epoch + std::chrono::seconds(7) + std::chrono::milliseconds(300)) &&
+        drawn.empty() && !renderer.hidden(),
+        "a fading completion notice must drop text before its shadow outweighs the panel");
+    ok &= require(!renderer.render(viewport, canvas,
+            epoch + std::chrono::seconds(7) + std::chrono::milliseconds(400)) &&
         renderer.hidden() && drawn.empty(),
         "completion notice must hide even when a catalog refresh remains pending");
     progress.catalog_adopted(2);
@@ -617,6 +675,8 @@ int main()
     ok &= require(aligned.active_song_count == 2 && !aligned.catalog_update_pending,
         "successful adoption must align active and prepared counts");
 
+    const std::vector<std::wstring> ready_two({
+        L"Piano Songs: Ready!", L"2 songs ready to play", L""});
     startup::StartupCacheProgress ready_pending;
     ready_pending.begin(2);
     ready_pending.catalog_prepared(1);
@@ -624,36 +684,24 @@ int main()
     ready_pending.catalog_prepared(2);
     ready_pending.publishing();
     ready_pending.ready(2);
-    std::vector<std::wstring> ready_pending_text;
+    Capture ready_pending_capture;
     game::StartupCacheOverlayRenderer ready_pending_renderer(ready_pending, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            ready_pending_text.emplace_back(text);
-            return int32_t{1};
-        });
+        ready_pending_capture.draw_text());
     ok &= require(ready_pending_renderer.render(viewport, canvas, epoch) &&
-        ready_pending_text.size() == 3 &&
-        ready_pending_text[0] == L"FF7RPianoSongs: Piano songs ready" &&
-        ready_pending_text[1].empty() && ready_pending_text[2].empty() &&
-        !contains_catalog_ux(ready_pending_text) &&
-        !ready_pending_renderer.render(viewport, canvas, epoch + std::chrono::seconds(2)) &&
+        ready_pending_capture.text == ready_two &&
+        !ready_pending_renderer.render(viewport, canvas,
+            epoch + std::chrono::milliseconds(2400)) &&
         ready_pending_renderer.hidden(),
         "Ready with pending adoption must show one bounded catalog-neutral notice");
 
     ready_pending.catalog_adopted(2);
-    std::vector<std::wstring> ready_aligned_text;
+    Capture ready_aligned;
     game::StartupCacheOverlayRenderer ready_aligned_renderer(ready_pending, native_read,
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            ready_aligned_text.emplace_back(text);
-            return int32_t{1};
-        });
+        ready_aligned.draw_text());
     ok &= require(ready_aligned_renderer.render(viewport, canvas, epoch) &&
-        ready_aligned_text.size() == 3 &&
-        ready_aligned_text[0] == L"FF7RPianoSongs: Piano songs ready" &&
-        ready_aligned_text[1].empty() && ready_aligned_text[2].empty() &&
-        !contains_catalog_ux(ready_aligned_text) &&
-        !ready_aligned_renderer.render(viewport, canvas, epoch + std::chrono::seconds(2)) &&
+        ready_aligned.text == ready_two &&
+        !ready_aligned_renderer.render(viewport, canvas,
+            epoch + std::chrono::milliseconds(2400)) &&
         ready_aligned_renderer.hidden(),
         "Ready with aligned adoption must show the same bounded catalog-neutral notice");
 
@@ -661,21 +709,13 @@ int main()
     already_ready.begin(0);
     already_ready.publishing();
     already_ready.ready(0);
-    std::vector<std::wstring> delayed_text;
-    game::StartupCacheOverlayRenderer delayed(already_ready,
-        [&](void* base, uintptr_t offset, void* output, std::size_t size) {
-            return native.read(base, offset, output, size);
-        },
-        [&](void*, float, float, const wchar_t* text, void*,
-            const game::runtime_layouts::FLinearColor*) {
-            delayed_text.emplace_back(text);
-            return int32_t{1};
-        });
+    Capture delayed_capture;
+    game::StartupCacheOverlayRenderer delayed(already_ready, native_read,
+        delayed_capture.draw_text());
     ok &= require(!delayed.render(nullptr, nullptr, epoch + std::chrono::seconds(20)) &&
         delayed.render(viewport, canvas, epoch + std::chrono::seconds(30)) &&
-        delayed_text.size() == 3 &&
-        delayed_text[0] == L"FF7RPianoSongs: Piano songs ready" &&
-        !contains_catalog_ux(delayed_text),
+        delayed_capture.text == std::vector<std::wstring>({
+            L"Piano Songs: Ready!", L"No songs found in the Music folder", L""}),
         "loading completed before Canvas readiness must show Ready on the first valid frame");
 
     int zero_metric_calls = 0;

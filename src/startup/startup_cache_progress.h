@@ -22,6 +22,7 @@ struct StartupCacheProgressSnapshot {
     StartupCachePhase phase = StartupCachePhase::Starting;
     std::size_t candidate_count = 0;
     std::size_t completed_candidates = 0;
+    std::size_t failed_candidates = 0;
     std::size_t active_candidate_count = 0;
     std::size_t completed_stage_units = 0;
     std::size_t total_stage_units = 0;

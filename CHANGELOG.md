@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Improvements
+
+- Redesigned the startup song-cache overlay in the native menu style: Cloud rides an
+  animated chocobo along the progress track toward a Gysahl Green. It shows how many
+  songs are checked, ready, and skipped, plus the time left while songs are rebuilt,
+  and fades out after the ready notice.
+
 ## 0.3.0 - 2026-10-20
 
 ### New features

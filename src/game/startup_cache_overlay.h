@@ -13,7 +13,8 @@
 namespace ff7r::piano::game {
 
 inline constexpr std::size_t kStartupCacheOverlayTextCapacity = 192;
-inline constexpr float kStartupCacheOverlayPanelWidth = 680.0f;
+inline constexpr float kStartupCacheOverlayPanelWidth = 560.0f;
+inline constexpr float kStartupCacheOverlayPanelHeight = 150.0f;
 
 using PostRenderFn = void(__fastcall*)(void* viewport, void* canvas);
 using DrawShadowedStringFn = int32_t(__fastcall*)(void* fcanvas, float x, float y,
@@ -51,6 +52,8 @@ private:
     bool hidden_ = false;
     bool ready_drawn_ = false;
     std::chrono::steady_clock::time_point hide_deadline_{};
+    double shown_fraction_ = -1.0;
+    std::chrono::steady_clock::time_point last_frame_{};
     startup::StartupCacheProgressSnapshot last_snapshot_{};
 };
 
