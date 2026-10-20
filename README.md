@@ -91,7 +91,7 @@ off leaves future notes under manual control. If autoplay was used at any point
 in a play, its result is still displayed but personal records are not saved.
 If autoplay's optional hooks cannot be verified, it stays unavailable without
 disabling the rest of the mod. Development qualification is tracked in
-[Current Status](docs/CurrentStatus.md#autoplay-development-2026-10-19).
+[Current Status](https://github.com/makcimbx/FF7RPianoSongs/blob/main/docs/CurrentStatus.md#autoplay-development-2026-10-19).
 
 ### Song previews
 
@@ -108,7 +108,7 @@ The mod prepares an excerpt of up to 20 seconds with short fades and a waveform
 from its actual sound. Automatic selection favors sustained activity away from
 the edges, not necessarily a chorus or the musically best passage. The separate
 preview stream does not use the game's music-volume mixer. Development progress
-and untested scope are recorded in [Current Status](docs/CurrentStatus.md#song-preview-development-2026-10-19).
+and untested scope are recorded in [Current Status](https://github.com/makcimbx/FF7RPianoSongs/blob/main/docs/CurrentStatus.md#song-preview-development-2026-10-19).
 
 ## Settings
 
