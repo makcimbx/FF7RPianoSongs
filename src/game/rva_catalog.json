@@ -4205,7 +4205,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00cc1d04",
+        "signature": {"bytes": "45 33 c0 4c 89 01 48 8b 15 3f fc 50 08 48 89 51 08 48 85 d2 74 1c 8b 42 08 85 c0 74 19 ff c0 89 42 08 4c 39 41 08 74 0a 48 8b 05 15 fc 50 08 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered from /ff7rebirth_.exe-1.004; imported PE timestamp/image/checksum match canonical build. Exact 48-byte getter covers both RIP loads: controller disp+09/end+0d, root disp+2b/end+2f. Contiguous shared globals; signed strong count controller+08. No full imported-file hash, uniqueness scan or older runtime qualification; no getter invocation or reference mutation."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x009d7ea4",
         "signature": {"bytes": "45 33 c0 4c 89 01 48 8b 15 4f 1b 63 08 48 89 51 08 48 85 d2 74 1c 8b 42 08 85 c0 74 19 ff c0 89 42 08 4c 39 41 08 74 0a 48 8b 05 25 1b 63 08 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 researcher authenticated live Frida bytes and independent Ghidra source. Exact 48-byte getter gate includes controller RIP load at +06 (disp +09, end +0d) and pointer RIP load at +28 (disp +2b, end +2f); both decoded targets must equal cataloged globals. Strong count is signed int32 controller+08, never weak+0c. No refcount acquisition or native getter call."}]
@@ -4216,7 +4220,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00c95cc0",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 41 56 b8 80 03 00 00 e8 55 92 41 01 48 2b e0 c5 f8", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import, canonical PE-header correlation only. SEndRootOverlay naming/publication at 0x010eab8c and writer stores independently confirm +318/+31c origin, +320/+324 render extent, +328/+32c output extent, +330 viewport scale. Static evidence, not older disk authentication or gameplay qualification."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x00b0ed18",
         "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 57 41 56 41 57 b8 80 03 00 00 e8 4f ce 65 01 48 2b e0 c5 f8 29 b4", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature plus independent Ghidra source establishes SEndRootOverlay fields +318/+31c origin, +320/+324 UI-render extent, +328/+32c output extent, +330 viewport scale. Borrow only during game-thread PostRender; root paint geometry itself is zero/default and not an anchor."}]
@@ -4227,7 +4235,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00a68140",
+        "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 db 6d 64 01 48 2b e0 49 8b f0 4d 8b c8 4c 8b", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import, canonical PE-header correlation only. Reads root layout and calls helper0x00cc216c via render-extent accessor0x00cc1c68 and reference scale. Confirms inverse output=origin+outputExtent/2+(ui-renderExtent/2)*(viewportScale/uiScale), without extra DPI. Static-only; retain zero-origin/Canvas checks and optional failure isolation."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x00f7080c",
         "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 50 00 00 00 e8 5f b3 1f 01 48 2b e0 49 8b f0 4d 8b c8 4c 8b", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish inverse native transform output=origin+outputExtent/2+(ui-renderExtent/2)*(viewportScale/uiScale). No extra Windows DPI or ordinary LocalToViewport. Initial drawing capability admits zero-origin/full borrowed Canvas extent only."}]
@@ -4238,7 +4250,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x009f52b0",
+        "signature": {"bytes": "c5 fa 6f 1d 48 d4 6a 05 c5 fa 10 25 c4 d3 6a 05 48 89 4c 24 10 c5 fa 10 54 24 10 c5 f8 28 c2 c5", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import, canonical PE-header correlation only. Native conversion helper calls this scale calculation; uiScale=max(.01,min(renderWidth/1920,renderHeight/1080)) agrees with consumed layout. No older live scaling/visual validation or image-wide uniqueness claim."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x00bc7998",
         "signature": {"bytes": "c5 fa 6f 1d 70 1d 34 05 c5 fa 10 25 58 1d 34 05 48 89 4c 24 10 c5 fa 10 54 24 10 c5 f8 28 c2 c5", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish uiScale=max(.01,min(renderWidth/1920,renderHeight/1080)); native render-space geometry is not ordinary Slate viewport pixels."}]
@@ -4249,7 +4265,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x0158d178",
+        "signature": {"bytes": "48 89 5c 24 10 57 b8 20 00 00 00 e8 a8 1d b2 00 48 2b e0 48 83 b9 e8 00 00 00 00 75 45 48 8b 99", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import through GetCachedGeometry registration0x069f03b0/thunk0x04cf09e8 and 56-byte copier0x008c1fcc. Confirms preferred widget pair+e8/+f0, fallback+d8/+e0 and controller strong+08/weak+0c; conservative positive strong count remains valid. PE-header correlation only, no reference acquisition or older gameplay evidence."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x01600438",
         "signature": {"bytes": "48 89 5c 24 10 57 b8 20 00 00 00 e8 38 b7 b6 00 48 2b e0 48 83 b9 e8 00 00 00 00 75 45 48 8b 99", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live signature and independent Ghidra establish widget preferred shared pair +e8/+f0 then fallback +d8/+e0. Require nonnull pointer/controller and positive signed strong count+08; borrowed reads do not acquire/release references. Tick geometry+c8 is not the anchor."}]
@@ -4260,7 +4280,11 @@
       "validation": {"policy": "signature"}, "install_policy": "signature_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00c2860c",
+        "signature": {"bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 08 ff ff ff b8 f8 01 00 00 e8 05 69 48 01 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import, canonical PE-header correlation only. Paint+90/tick+c8 are56 bytes; incoming LTRB cull+100 is not effective clipping. Parent pair+38/+40 is weak: assignment0x0123e320 increments weak+0c, release0x00c29aac decrements it; require positive strong+08. Transform0x02173014/cull0x008c2168 confirm size0/4 and a,b,c,d,tx,ty+1c..30. No older live ancestry/visual evidence; bounded failed reads hide only the indicator."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x00dd40d4",
         "signature": {"bytes": "40 55 53 56 57 41 54 41 55 41 56 41 57 48 8d ac 24 08 ff ff ff b8 f8 01 00 00 e8 8d 7a 39 01 48", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 live/static correlation establishes paint geometry+90 length56 (size+0/+4, affine a,b,c,d,tx,ty at +1c..+30); transform all four corners. Incoming cull+100 length16 is LTRB, not full effective clip. Parent weak pair+38/+40 requires positive STRONG count+08 and bounded ancestry to authenticated root. Live selected/list/root at ancestry nodes0/4/13. Hide partial scrolling; keep badge inside inherited cull, not horizontally clipped to list frame."}]
@@ -4271,7 +4295,10 @@
       "validation": {"policy": "data_reference"}, "install_policy": "data_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x091d1948", "signature": null,
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import: getter+28 signed RIP load targets this root pointer; extended48-byte signature gates the load. Constructor0x010eab8c publishes SEndRootOverlay here. Contiguous pointer/controller pair; PE-header correlation only, no older runtime qualification."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x090099f8", "signature": null,
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live/static getter RIP target at +28; seven-byte load is covered by extended48-byte getter signature. Contiguous root shared pair pointer,controller; recheck pair and positive strong count before/after borrowed snapshot."}]
       }}
@@ -4281,7 +4308,10 @@
       "validation": {"policy": "data_reference"}, "install_policy": "data_only",
       "status": "production", "hook_owner": null, "hook_spec": null,
       "consumers": ["src/game/song_preview_anchor_runtime.cpp"],
-      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+      "builds": {"ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x091d1950", "signature": null,
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-20 independently recovered older import: getter+06 signed RIP load targets root controller eight bytes after pointer. Signed strong+08 must be positive; weak+0c is not liveness. Static PE-header-correlated evidence only; no native getter call/reference mutation or older runtime qualification."}]
+      }, "ff7rebirth-steam-win64-6a16ced2": {
         "rva": "0x09009a00", "signature": null,
         "evidence": [{"type": "authenticated_research_handoff", "path": "src/game/song_preview_anchor.h", "detail": "2026-10-19 authenticated live/static getter RIP target at +06; signed strong count+08 must be positive. Weak count+0c is never lifetime proof; no reference mutation or native getter invocation."}]
       }}

@@ -151,6 +151,17 @@ int main()
         }
         std::string_view failure;
         require(validate_preview_anchor_gate(gate,read,failure) && failure.empty(),"all gates + signed RIP targets");
+        for (std::size_t i=0;i<gate.verifiers.size();++i) {
+            auto incomplete=gate; incomplete.verifiers[i]={};
+            require(!validate_preview_anchor_gate(incomplete,read,failure),"any absent optional verifier hides geometry");
+        }
+        const PreviewAnchorRead throwing_read=[](auto,auto,auto)->bool {
+            throw std::runtime_error("injected optional geometry read failure");
+        };
+        require(!validate_preview_anchor_gate(gate,throwing_read,failure),"gate read exceptions stay inside optional UI");
+        require(!read_preview_anchor(source,throwing_read,[]{return true;},2560,1440,out)
+            && out.row.width==0,"layout read exceptions clear badge without escaping");
+        require(validate_preview_anchor_gate(gate,read,failure),"failed optional checks do not poison subsequent validation");
         for (const auto& v:gate.verifiers) {
             memory.put(v.address,static_cast<std::uint8_t>(v.bytes[0]^1));
             require(!validate_preview_anchor_gate(gate,read,failure),"each corrupted signature disables optional geometry");

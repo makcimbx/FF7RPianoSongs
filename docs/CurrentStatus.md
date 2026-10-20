@@ -1,9 +1,26 @@
 # Current Status
 
-Updated 2026-10-19. This page describes the current development worktree and
+Updated 2026-10-20. This page describes the current development worktree and
 tested artifacts, not a new public release. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## Older-build preview anchor (2026-10-20)
+
+- Independently recovered the preview geometry verifiers, root globals and getter
+  RIP references from the imported 1.004 program. Imported PE identity matches the
+  catalog; the consumed widget, controller, geometry, parent and root layouts and
+  coordinate conversion agree with the current reader. Exact per-build values
+  and static evidence remain in the canonical RVA catalog.
+- All entries remain optional, without hooks or native calls. Missing or
+  mismatching gates, failed reads and inadmissible layouts hide only the badge;
+  geometry admission is not a preview-audio, menu or gameplay prerequisite.
+- Catalog generation/check, proxy compilation and focused anchor, preview-runtime
+  and startup-overlay tests passed for both declared builds; source-document
+  audits passed too. Independent review found no concrete defects and confirmed
+  unchanged default-build mappings and optional-failure isolation. The build was
+  returned to the default catalog. No fresh full imported-file hash, older live
+  run or visual qualification is claimed. The installed proxy is unchanged.
 
 ## Song preview development (2026-10-19)
 
@@ -34,8 +51,8 @@ tested artifacts, not a new public release. Public version history remains in
   rebuilding earlier song caches; gameplay audio generation is unchanged.
 - Authenticated read-only live observation and foreground scrolling correlated
   the selected row with the game's root-overlay coordinate conversion. The
-  catalog-gated badge follows that row on the default build; unsupported builds
-  and unqualified layouts hide it rather than using guessed coordinates.
+  catalog-gated badge follows that row on the default build; absent or mismatching
+  gates and unqualified layouts hide it rather than using guessed coordinates.
 - Focused pipeline, descriptor, configuration, policy, audio, renderer, anchor,
   input/startup and native compatibility tests pass, as do the source-document
   audit and diff check. The production proxy built successfully without WinMM
