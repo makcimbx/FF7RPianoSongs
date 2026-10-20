@@ -35,34 +35,7 @@ $OutDir = Join-Path $Root "dist"
 New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-$CachePath = Join-Path $BuildDir "CMakeCache.txt"
-
-function Get-FileSha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
-}
-
-function Get-TextSha256([string]$Text) {
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
-        return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace("-", "").ToLowerInvariant()
-    } finally {
-        $sha.Dispose()
-    }
-}
-
-function Get-ProductionInputPaths {
-    # Use the same inventory as Development/package verification, including the
-    # production MASM adapter. Keep imported helper scope local to this call.
-    . (Join-Path $Root "tools/build_provenance.ps1")
-    return @(Get-ProductionInputRelativePaths $Root)
-}
-
-function Get-CMakeCacheValue([string]$Name) {
-    $line = Get-Content -LiteralPath $CachePath | Where-Object { $_ -match "^$([regex]::Escape($Name)):[^=]*=" } | Select-Object -First 1
-    if (!$line) { return "" }
-    return ($line -split "=", 2)[1]
-}
+. (Join-Path $Root "tools/build_provenance.ps1")
 
 function Get-ConfiguredCompilerPath {
     $compilerFile = Get-ChildItem -LiteralPath (Join-Path $BuildDir "CMakeFiles") `
@@ -75,70 +48,6 @@ function Get-ConfiguredCompilerPath {
     return $match.Groups[1].Value
 }
 
-function Write-BuildProvenance {
-    $dll = Join-Path $BuildDir "bin/$Configuration/FF7RPianoSongs.dll"
-    if (!(Test-Path -LiteralPath $dll -PathType Leaf)) { throw "Built DLL is missing: $dll" }
-    if (!(Test-Path -LiteralPath $CachePath -PathType Leaf)) { throw "CMake cache is missing: $CachePath" }
-
-    $compiler = Get-ConfiguredCompilerPath
-    if (!(Test-Path -LiteralPath $compiler -PathType Leaf)) {
-        throw "Configured C++ compiler is missing: $compiler"
-    }
-    $cmake = (Get-Command cmake -ErrorAction Stop).Source
-    $generatedReleaseHeader = Join-Path $BuildDir "generated/release_identity.generated.h"
-    if (!(Test-Path -LiteralPath $generatedReleaseHeader -PathType Leaf)) {
-        throw "Generated release identity header is missing"
-    }
-    $catalogId = Get-CMakeCacheValue "FF7RP_GAME_BUILD"
-    if (!$catalogId) { throw "CMake cache does not record the selected FF7 Rebirth game build" }
-    $inputs = @()
-    foreach ($relative in Get-ProductionInputPaths) {
-        $absolute = Join-Path $Root $relative
-        if (!(Test-Path -LiteralPath $absolute -PathType Leaf)) {
-            throw "Production build input is missing: $relative"
-        }
-        $inputs += [ordered]@{ path = $relative; sha256 = Get-FileSha256 $absolute }
-    }
-    $inputIdentity = (($inputs | ForEach-Object { "$($_.path)`t$($_.sha256)`n" }) -join "")
-    $record = [ordered]@{
-        schema = "ff7rpianosongs.build-provenance.v3"
-        configuration = $Configuration
-        dll = [ordered]@{
-            path = "bin/$Configuration/FF7RPianoSongs.dll"
-            sha256 = Get-FileSha256 $dll
-        }
-        toolchain = [ordered]@{
-            visualStudioInstallationPath = $VsPath
-            compilerPath = $compiler
-            compilerVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($compiler).FileVersion
-            compilerSha256 = Get-FileSha256 $compiler
-            cmakePath = $cmake
-            cmakeVersion = (& $cmake --version | Select-Object -First 1)
-            cmakeSha256 = Get-FileSha256 $cmake
-            generator = Get-CMakeCacheValue "CMAKE_GENERATOR"
-            generatorPlatform = Get-CMakeCacheValue "CMAKE_GENERATOR_PLATFORM"
-            generatorToolset = Get-CMakeCacheValue "CMAKE_GENERATOR_TOOLSET"
-        }
-        cmake = [ordered]@{
-            cachePath = "CMakeCache.txt"
-            cacheSha256 = Get-FileSha256 $CachePath
-        }
-        releaseIdentity = [ordered]@{
-            catalogId = $catalogId
-            authorityPath = "release.json"
-            authoritySha256 = Get-FileSha256 (Join-Path $Root "release.json")
-            generatedHeaderPath = "generated/release_identity.generated.h"
-            generatedHeaderSha256 = Get-FileSha256 $generatedReleaseHeader
-        }
-        productionInputs = $inputs
-        productionInputSetSha256 = Get-TextSha256 $inputIdentity
-    }
-    $path = Join-Path (Split-Path -Parent $dll) "FF7RPianoSongs.provenance.json"
-    [System.IO.File]::WriteAllText(
-        $path,
-        (($record | ConvertTo-Json -Depth 8) + "`n"),
-        [System.Text.UTF8Encoding]::new($false))
-}
 # Pass the default explicitly so a prior catalog selection cannot survive in CMakeCache.
 $Catalog = Get-Content -LiteralPath (Join-Path $Root "src/game/rva_catalog.json") -Raw | ConvertFrom-Json
 if (!$CatalogBuildId) { $CatalogBuildId = [string]$Catalog.default_build }
@@ -177,8 +86,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
 
-if ($BuildsArtifact) {
-    Write-BuildProvenance
+foreach ($builtTarget in @("FF7RPianoSongs", "FF7RPianoSongsProxy")) {
+    if ($Target.Count -eq 0 -or $Target -contains $builtTarget) {
+        Write-ProductBuildProvenance -InputRoot $Root -BuildRoot $BuildDir `
+            -Configuration $Configuration -Target $builtTarget `
+            -VisualStudioInstallationPath $VsPath `
+            -CompilerPath (Get-ConfiguredCompilerPath) `
+            -CMakePath (Get-Command cmake -ErrorAction Stop).Source
+    }
 }
 
 try {

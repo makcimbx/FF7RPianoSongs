@@ -198,15 +198,14 @@ if ($SkipBuild) {
         -Target "release_audit_tool" -Parallel $Parallel -CatalogBuildId $ReleaseCatalogId
 } else {
     & (Join-Path $Root "build.ps1") -Configuration $Configuration `
-        -Target @("FF7RPianoSongs", "release_audit_tool") -Parallel $Parallel -CatalogBuildId $ReleaseCatalogId
+        -Target @("FF7RPianoSongsProxy", "release_audit_tool") -Parallel $Parallel -CatalogBuildId $ReleaseCatalogId
 }
 if ($LASTEXITCODE -ne 0) {
     throw "Build script failed with exit code $LASTEXITCODE"
 }
 
-$Artifact = Join-Path $Root "dist/FF7RPianoSongs.asi"
-$BuiltDll = Join-Path $Root "build/bin/$Configuration/FF7RPianoSongs.dll"
-$ProvenancePath = Join-Path $Root "build/bin/$Configuration/FF7RPianoSongs.provenance.json"
+$Artifact = Join-Path $Root "build/proxy/$Configuration/FF7RPianoSongsProxy.dll"
+$ProvenancePath = Join-Path $Root "build/proxy/$Configuration/FF7RPianoSongsProxy.provenance.json"
 $Ini = Join-Path $Root "FF7RPianoSongs.example.ini"
 $Model = Join-Path $Root "build/models/muscriptor-small-f16.gguf"
 $AuditCandidates = @(
@@ -301,19 +300,18 @@ function Assert-BuildProvenanceAdversePathSelfTests {
     }
 }
 
-Assert-BuildProvenance $Root $BuiltDll $ProvenancePath $Configuration `
-    (Get-ProductionInputRelativePaths $Root) (Join-Path $Root "build")
+Assert-BuildProvenance $Root $Artifact $ProvenancePath $Configuration `
+    (Get-ProductionInputRelativePaths $Root "FF7RPianoSongsProxy") (Join-Path $Root "build") "FF7RPianoSongsProxy"
 $BuiltCatalogId = [string](Get-Content -LiteralPath $ProvenancePath -Raw |
     ConvertFrom-Json).releaseIdentity.catalogId
 if ($BuiltCatalogId -cne $ReleaseCatalogId) {
     throw "The built artifact targets game build '$BuiltCatalogId', but '$ReleaseCatalogId' is being packaged"
 }
 Assert-BuildProvenanceAdversePathSelfTests
-Assert-FilesEqual -Source $BuiltDll -Destination $Artifact
 
 function Get-ExpectedPackageInventory {
     $inventory = @(
-        "$BinaryRelative/FF7RPianoSongs.asi",
+        "$BinaryRelative/D3DCOMPILER_43.dll",
         "$BinaryRelative/FF7RPianoSongs.ini",
         "$BinaryRelative/muscriptor-small-f16.gguf",
         "release.json"
@@ -323,18 +321,18 @@ function Get-ExpectedPackageInventory {
 }
 
 function Assert-PackageTree {
-    param([string]$Candidate, [string]$ExpectedAsiPath = $Artifact)
+    param([string]$Candidate, [string]$ExpectedArtifactPath = $Artifact)
     & $AuditTool $Root --staged-docs $Candidate
     if ($LASTEXITCODE -ne 0) {
         throw "Release audit failed for '$Candidate' with exit code $LASTEXITCODE"
     }
     $binaryRoot = Join-Path $Candidate $BinaryRelative
-    $candidateAsi = Join-Path $binaryRoot "FF7RPianoSongs.asi"
-    if (!(Test-Path -LiteralPath $candidateAsi -PathType Leaf)) {
-        throw "Package ASI is missing: '$candidateAsi'"
+    $candidateDll = Join-Path $binaryRoot "D3DCOMPILER_43.dll"
+    if (!(Test-Path -LiteralPath $candidateDll -PathType Leaf)) {
+        throw "Package proxy DLL is missing: '$candidateDll'"
     }
-    if (![string]::IsNullOrEmpty($ExpectedAsiPath)) {
-        Assert-FilesEqual -Source $ExpectedAsiPath -Destination $candidateAsi
+    if (![string]::IsNullOrEmpty($ExpectedArtifactPath)) {
+        Assert-FilesEqual -Source $ExpectedArtifactPath -Destination $candidateDll
     }
     Assert-FilesEqual -Source $Ini -Destination (Join-Path $binaryRoot "FF7RPianoSongs.ini")
     Assert-FilesEqual -Source $Model -Destination (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
@@ -378,10 +376,10 @@ function Assert-ReleaseTree {
         if (![string]::IsNullOrEmpty($PackageCandidate)) {
             Assert-DirectoryTreesEqual $PackageCandidate $extract
         }
-        $packageAsi = Join-Path (Join-Path $extract $BinaryRelative) "FF7RPianoSongs.asi"
-        $publishedRecord = Assert-PublishedBuildProvenance $Root $publishedProvenance $packageAsi `
-            $Authority (Get-ProductionInputRelativePaths $Root)
-        $null = Assert-ReleaseIdentity $identityPath $Authority $archive $packageAsi $publishedProvenance `
+        $packageDll = Join-Path (Join-Path $extract $BinaryRelative) "D3DCOMPILER_43.dll"
+        $publishedRecord = Assert-PublishedBuildProvenance $Root $publishedProvenance $packageDll `
+            $Authority (Get-ProductionInputRelativePaths $Root "FF7RPianoSongsProxy")
+        $null = Assert-ReleaseIdentity $identityPath $Authority $archive $packageDll $publishedProvenance `
             (Join-Path $extract "release.json") "" $SourceCommit `
             $publishedRecord.releaseIdentity.generatedHeaderSha256
     } finally {
@@ -413,7 +411,7 @@ $packageStaging = Join-Path $Root ".package.staging-$publicationToken"
 $releaseStaging = Join-Path $Root ".release.staging-$publicationToken"
 $binaryRoot = Join-Path $packageStaging $BinaryRelative
 try {
-    Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "FF7RPianoSongs.asi")
+    Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "D3DCOMPILER_43.dll")
     Copy-ValidatedFile $Ini (Join-Path $binaryRoot "FF7RPianoSongs.ini")
     Copy-ValidatedFile $Model (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
     Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $packageStaging "release.json")

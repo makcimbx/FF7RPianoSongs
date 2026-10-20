@@ -38,9 +38,10 @@ try {
         [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
         [IO.File]::WriteAllText($path, "$relative`n")
     }
-    $asi = Join-Path $fixture "package/End/Binaries/Win64/FF7RPianoSongs.asi"
-    [IO.File]::WriteAllBytes($asi, [byte[]](0, 1, 2, 3, 255))
+    $dll = Join-Path $fixture "package/End/Binaries/Win64/D3DCOMPILER_43.dll"
+    [IO.File]::WriteAllBytes($dll, [byte[]](0, 1, 2, 3, 255))
     [IO.File]::WriteAllText((Join-Path $fixture "package/End/Binaries/Win64/FF7RPianoSongs.ini"), "[General]`n")
+    [IO.File]::WriteAllText((Join-Path $fixture "package/End/Binaries/Win64/muscriptor-small-f16.gguf"), "fixture model`n")
     $provenance = Join-Path $fixture "provenance.json"
     $generatedHeader = Join-Path $fixture "release_identity.generated.h"
     [IO.File]::WriteAllText($generatedHeader, "synthetic generated release identity`n")
@@ -49,7 +50,7 @@ try {
     $fixtureProvenance = [ordered]@{
         schema = "ff7rpianosongs.build-provenance.v3"
         configuration = "Release"
-        dll = [ordered]@{ path = "bin/Release/FF7RPianoSongs.dll"; sha256 = Get-ReleaseFileSha256 $asi }
+        dll = [ordered]@{ path = "proxy/Release/FF7RPianoSongsProxy.dll"; sha256 = Get-ReleaseFileSha256 $dll }
         toolchain = [ordered]@{
             visualStudioInstallationPath = "fixture"; compilerPath = "fixture-compiler"
             compilerVersion = "fixture"; compilerSha256 = "1" * 64
@@ -70,8 +71,8 @@ try {
     $commit = "0123456789abcdef0123456789abcdef01234567"
     $catalogA = "ff7rebirth-steam-win64-6a16ced2"
     $catalogB = "ff7rebirth-steam-win64-68fd6fde"
-    $a = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-a") $asi $provenance $generatedHeader $commit $catalogA
-    $b = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-b") $asi $provenance $generatedHeader $commit $catalogA
+    $a = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-a") $dll $provenance $generatedHeader $commit $catalogA
+    $b = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $fixture "out-b") $dll $provenance $generatedHeader $commit $catalogA
     foreach ($name in @($a.Archive, $a.Checksum, $a.Identity, $a.Provenance)) {
         $peer = Join-Path (Join-Path $fixture "out-b") (Split-Path -Leaf $name)
         if ((Get-ReleaseFileSha256 $name) -ne (Get-ReleaseFileSha256 $peer)) {
@@ -90,27 +91,47 @@ try {
         }
     } finally { $archive.Dispose() }
     $expectedInventory = @(
-        "CHANGELOG.md", "End/Binaries/Win64/FF7RPianoSongs.asi",
-        "End/Binaries/Win64/FF7RPianoSongs.ini", "LICENSE", "README.md",
+        "CHANGELOG.md", "End/Binaries/Win64/D3DCOMPILER_43.dll",
+        "End/Binaries/Win64/FF7RPianoSongs.ini", "End/Binaries/Win64/muscriptor-small-f16.gguf", "LICENSE", "README.md",
         "THIRD_PARTY_NOTICES.md", "docs/SongFormat.md", "release.json"
     ) | Sort-Object
+    $packageSource = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $PSScriptRoot) "package_dist.ps1"))
+    $tokens = $null; $parseErrors = $null
+    $packageAst = [Management.Automation.Language.Parser]::ParseInput($packageSource, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count) { throw "package_dist.ps1 did not parse" }
+    $inventoryFunction = $packageAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Get-ExpectedPackageInventory"
+    }, $true)
+    if (!$inventoryFunction) { throw "Package inventory authority was not found" }
+    $scriptInventory = @(& {
+        $BinaryRelative = "End/Binaries/Win64"
+        $DocumentMappings = @($publicDocuments | ForEach-Object { [pscustomobject]@{ Destination = $_ } })
+        . ([scriptblock]::Create($inventoryFunction.Extent.Text))
+        Get-ExpectedPackageInventory
+    })
+    if (($scriptInventory -join "`n") -cne ($expectedInventory -join "`n")) {
+        throw "Canonical package inventory does not match the proxy archive inventory"
+    }
     if (($actualInventory -join "`n") -ne ($expectedInventory -join "`n")) {
         throw "Release archive order or exact minimal public inventory changed"
     }
     if (@($actualInventory | Where-Object {
         $_ -match '(^|/)(analysis|build|\.cache|examples|tools)(/|$)' -or
-        $_ -match '\.(mid|midi|mp3|flac|wav|bin|pdb|dll)$'
+        $_ -match '\.(mid|midi|mp3|flac|wav|bin|pdb|asi)$' -or
+        ($_ -match '\.dll$' -and $_ -cne "End/Binaries/Win64/D3DCOMPILER_43.dll")
     }).Count -ne 0) { throw "Release archive contains music, cache, analysis, build, or developer artifacts" }
     $identity = Get-Content -LiteralPath $a.Identity -Raw | ConvertFrom-Json
     if ($identity.product -ne "FF7RPianoSongs" -or $identity.platform -ne "win64" -or $identity.license -ne "MIT" -or
         $identity.archive.sha256 -ne (Get-ReleaseFileSha256 $a.Archive) -or
-        $identity.asi_sha256 -ne (Get-ReleaseFileSha256 $asi) -or
+        $identity.schema -cne "ff7rpianosongs.release-identity.v3" -or
+        $identity.artifact.path -cne "End/Binaries/Win64/D3DCOMPILER_43.dll" -or
+        $identity.artifact.sha256 -ne (Get-ReleaseFileSha256 $dll) -or
         $identity.provenance_sha256 -ne (Get-ReleaseFileSha256 $provenance) -or
         $identity.release_authority_sha256 -ne (Get-ReleaseFileSha256 (Join-Path $fixture "release.json")) -or
         $identity.generated_release_header_sha256 -ne (Get-ReleaseFileSha256 $generatedHeader) -or
         $identity.source_commit -ne $commit) { throw "Release identity hashes or commit are incorrect" }
     $authority = Get-ReleaseAuthority $fixture $catalogA
-    $null = Assert-ReleaseIdentity $a.Identity $authority $a.Archive $asi $provenance `
+    $null = Assert-ReleaseIdentity $a.Identity $authority $a.Archive $dll $provenance `
         (Join-Path $fixture "release.json") $generatedHeader $commit
     $identityJson = Get-Content -LiteralPath $a.Identity -Raw
     $identityMutationPath = Join-Path $fixture "mutated.release.json"
@@ -118,7 +139,9 @@ try {
         "wrong-product", "wrong-platform", "wrong-license", "wrong-catalog", "wrong-version", "wrong-source",
         "uppercase-source", "short-source", "long-source", "malformed-source",
         "missing-archive-file", "missing-archive-hash", "extra-archive-field", "wrong-archive-file",
-        "wrong-archive-hash", "wrong-asi-hash", "wrong-provenance-hash", "wrong-authority-hash", "wrong-header-hash",
+        "wrong-archive-hash", "wrong-artifact-hash", "wrong-artifact-path", "missing-artifact-path",
+        "missing-artifact-hash", "extra-artifact-field", "nonstring-artifact-path", "legacy-identity",
+        "wrong-provenance-hash", "wrong-authority-hash", "wrong-header-hash",
         "uppercase-hash", "short-hash", "long-hash", "malformed-hash", "extra-top-level", "missing-top-level",
         "nonstring-schema", "nonstring-product", "nonstring-version", "nonstring-platform", "nonstring-license",
         "nonstring-catalog", "nonstring-source", "nonstring-archive-file"
@@ -140,12 +163,22 @@ try {
             "extra-archive-field" { $badIdentity.archive | Add-Member extra "forbidden" }
             "wrong-archive-file" { $badIdentity.archive.file = "other.zip" }
             "wrong-archive-hash" { $badIdentity.archive.sha256 = (("0" * 64) -join "") }
-            "wrong-asi-hash" { $badIdentity.asi_sha256 = (("0" * 64) -join "") }
+            "wrong-artifact-hash" { $badIdentity.artifact.sha256 = (("0" * 64) -join "") }
+            "wrong-artifact-path" { $badIdentity.artifact.path = "End/Binaries/Win64/FF7RPianoSongs.asi" }
+            "missing-artifact-path" { $badIdentity.artifact.PSObject.Properties.Remove("path") }
+            "missing-artifact-hash" { $badIdentity.artifact.PSObject.Properties.Remove("sha256") }
+            "extra-artifact-field" { $badIdentity.artifact | Add-Member extra "forbidden" }
+            "nonstring-artifact-path" { $badIdentity.artifact.path = $true }
+            "legacy-identity" {
+                $badIdentity.schema = "ff7rpianosongs.release-identity.v2"
+                $badIdentity | Add-Member asi_sha256 $badIdentity.artifact.sha256
+                $badIdentity.PSObject.Properties.Remove("artifact")
+            }
             "wrong-provenance-hash" { $badIdentity.provenance_sha256 = (("0" * 64) -join "") }
             "wrong-authority-hash" { $badIdentity.release_authority_sha256 = (("0" * 64) -join "") }
             "wrong-header-hash" { $badIdentity.generated_release_header_sha256 = (("0" * 64) -join "") }
             "uppercase-hash" { $badIdentity.archive.sha256 = (("A" * 64) -join "") }
-            "short-hash" { $badIdentity.asi_sha256 = (("a" * 63) -join "") }
+            "short-hash" { $badIdentity.artifact.sha256 = (("a" * 63) -join "") }
             "long-hash" { $badIdentity.provenance_sha256 = (("a" * 65) -join "") }
             "malformed-hash" { $badIdentity.generated_release_header_sha256 = (("g" * 64) -join "") }
             "extra-top-level" { $badIdentity | Add-Member unexpected "forbidden" }
@@ -162,7 +195,7 @@ try {
         [IO.File]::WriteAllText($identityMutationPath, ($badIdentity | ConvertTo-Json -Depth 5))
         $accepted = $false
         try {
-            $null = Assert-ReleaseIdentity $identityMutationPath $authority $a.Archive $asi $provenance `
+            $null = Assert-ReleaseIdentity $identityMutationPath $authority $a.Archive $dll $provenance `
                 (Join-Path $fixture "release.json") $generatedHeader $commit
             $accepted = $true
         } catch {}
@@ -220,6 +253,24 @@ try {
         if ($accepted) { throw "Malformed release metadata was accepted: $mutation" }
     }
     [IO.File]::WriteAllText((Join-Path $fixture "release.json"), $releaseJson)
+    foreach ($mutation in @("legacy-dll-path", "wrong-dll-hash", "wrong-catalog", "wrong-source-hash", "wrong-input-set")) {
+        $bad = Get-Content -LiteralPath $provenance -Raw | ConvertFrom-Json
+        switch ($mutation) {
+            "legacy-dll-path" { $bad.dll.path = "bin/Release/FF7RPianoSongs.dll" }
+            "wrong-dll-hash" { $bad.dll.sha256 = "0" * 64 }
+            "wrong-catalog" { $bad.releaseIdentity.catalogId = $catalogB }
+            "wrong-source-hash" { $bad.productionInputs[0].sha256 = "0" * 64 }
+            "wrong-input-set" { $bad.productionInputSetSha256 = "0" * 64 }
+        }
+        $badPath = Join-Path $fixture "mutated.provenance.json"
+        [IO.File]::WriteAllText($badPath, ($bad | ConvertTo-Json -Depth 8))
+        $accepted = $false
+        try {
+            $null = Assert-PublishedBuildProvenance $fixture $badPath $dll $authority @("release.json")
+            $accepted = $true
+        } catch {}
+        if ($accepted) { throw "Malformed published build provenance was accepted: $mutation" }
+    }
     $selected = Get-ReleaseAuthority $fixture $catalogA
     if ($selected.game_build -cne "1.005" -or
         $selected.archive_basename -cne "FF7RPianoSongs-0.1.0-win64-ff7r1.005") {
@@ -247,10 +298,15 @@ try {
         $extract = Join-Path $testRoot "extract-$([Guid]::NewGuid().ToString('N'))"
         try {
             [IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extract)
-            $archiveAsi = Join-Path $extract "End/Binaries/Win64/FF7RPianoSongs.asi"
-            $record = Assert-PublishedBuildProvenance $fixture $provenancePath $archiveAsi `
+            $files = @(Get-ChildItem -LiteralPath $extract -File -Recurse -Force |
+                ForEach-Object { [IO.Path]::GetRelativePath($extract, $_.FullName).Replace('\', '/') } | Sort-Object)
+            if (($files -join "`n") -cne ($expectedInventory -join "`n")) {
+                throw "Retained target package inventory differs: $basename"
+            }
+            $archiveDll = Join-Path $extract "End/Binaries/Win64/D3DCOMPILER_43.dll"
+            $record = Assert-PublishedBuildProvenance $fixture $provenancePath $archiveDll `
                 $targetAuthority @("release.json")
-            $null = Assert-ReleaseIdentity $identityPath $targetAuthority $archivePath $archiveAsi $provenancePath `
+            $null = Assert-ReleaseIdentity $identityPath $targetAuthority $archivePath $archiveDll $provenancePath `
                 (Join-Path $extract "release.json") "" $commit $record.releaseIdentity.generatedHeaderSha256
         } finally {
             if (Test-Path -LiteralPath $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
@@ -264,7 +320,7 @@ try {
     $targetAName = "FF7RPianoSongs-0.1.0-win64-ff7r1.005"
     $targetBName = "FF7RPianoSongs-0.1.0-win64-ff7r1.004"
     $null = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $stageA $targetAName) `
-        $asi $provenance $generatedHeader $commit $catalogA
+        $dll $provenance $generatedHeader $commit $catalogA
     Move-Item -LiteralPath $stageA -Destination $surface
     [IO.Directory]::CreateDirectory($stageB) | Out-Null
     $validateFixtureTarget = { param($candidate, $basename) Assert-FixtureTarget $candidate $basename }
@@ -274,7 +330,7 @@ try {
     $fixtureProvenanceB.releaseIdentity.catalogId = $catalogB
     [IO.File]::WriteAllText($provenanceB, ($fixtureProvenanceB | ConvertTo-Json -Depth 8))
     $null = New-ReleaseArtifacts $fixture (Join-Path $fixture "package") (Join-Path $stageB $targetBName) `
-        $asi $provenanceB $generatedHeader $commit $catalogB
+        $dll $provenanceB $generatedHeader $commit $catalogB
     foreach ($name in @($targetAName, $targetBName)) { Assert-FixtureTarget (Join-Path $stageB $name) $name }
     $finalDirectories = @(Get-ChildItem -LiteralPath $stageB -Directory -Force | ForEach-Object Name | Sort-Object)
     $expectedDirectories = @($targetAName, $targetBName) | Sort-Object
@@ -284,12 +340,22 @@ try {
 
     $surfaceWitness = @(Get-ChildItem -LiteralPath $surface -File -Recurse -Force | Sort-Object FullName |
         ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($surface, $_.FullName))" }) -join "`n"
-    foreach ($rejection in @("stale", "foreign", "mismatched")) {
+    foreach ($rejection in @("stale", "foreign", "mismatched", "previous-version", "legacy-provenance")) {
         $badSurface = Join-Path $fixture "bad-$rejection"
         Copy-Item -LiteralPath $surface -Destination $badSurface -Recurse
         switch ($rejection) {
             "stale" { Remove-Item -LiteralPath (Join-Path $badSurface "$targetAName/$targetAName.provenance.json") }
             "foreign" { [IO.Directory]::CreateDirectory((Join-Path $badSurface "foreign-target")) | Out-Null }
+            "previous-version" {
+                Move-Item -LiteralPath (Join-Path $badSurface $targetAName) `
+                    -Destination (Join-Path $badSurface "FF7RPianoSongs-0.0.9-win64-ff7r1.005")
+            }
+            "legacy-provenance" {
+                $path = Join-Path $badSurface "$targetAName/$targetAName.provenance.json"
+                $badRecord = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                $badRecord.dll.path = "bin/Release/FF7RPianoSongs.dll"
+                [IO.File]::WriteAllText($path, ($badRecord | ConvertTo-Json -Depth 8))
+            }
             "mismatched" {
                 $badIdentityPath = Join-Path $badSurface "$targetAName/$targetAName.release.json"
                 $badIdentity = Get-Content -LiteralPath $badIdentityPath -Raw | ConvertFrom-Json

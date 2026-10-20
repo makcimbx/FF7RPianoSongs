@@ -18,7 +18,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
 
-    # One ASI supports one game build, so every supported build is validated end to end.
+    # One product DLL supports one game build; validate each declared target end to end.
     # `catalog_id` selects the generated tree (build.ps1 -CatalogBuildId); `game_build`
     # selects the release.json target (package_dist.ps1). Supporting another build is a
     # data-only edit here once rva_catalog.json and release.json declare it.

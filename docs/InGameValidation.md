@@ -1,6 +1,13 @@
 # In-Game Validation
 
-Use this matrix only for focused manual qualification on a supported executable. One ASI supports one game build, so every scenario is qualified per game build with the artifact compiled for it. Evidence collected on one game build does not carry to another; a newly cataloged build inherits no qualification. Automated agents must not launch the game. After explicit human authorization they may use the repository runtime-gate tool for transactional ASI installation, evidence collection, keep, and rollback. A human tester controls saves, launch, input, and game state.
+Use this matrix only for focused manual qualification on a supported executable. One DLL or ASI supports one game build, so every scenario is qualified per game build with the artifact compiled for it. Evidence collected on one game build does not carry to another; a newly cataloged build inherits no qualification. Automated agents must not launch the game. After explicit human authorization they may use the repository runtime-gate tool for transactional ASI installation, evidence collection, keep, and rollback. A human tester controls saves, launch, input, and game state.
+
+The current release is the standalone proxy DLL. Player installation follows
+[README](../README.md#install); authorized development DLL sessions follow the
+[proxy procedure](BuildAndRelease.md#single-normal-import-proxy-experiment).
+The ASI runtime-gate preconditions and session commands below apply only to that
+alternative edition, not to the current proxy package. The gameplay matrix and
+exact-artifact evidence requirements apply to both editions.
 
 ## Preconditions
 

@@ -1,9 +1,32 @@
 # Current Status
 
-Updated 2026-10-20. This page describes the current development worktree and
-tested artifacts, not a new public release. Public version history remains in
+Updated 2026-10-20. This page describes the current implementation, release
+limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## 0.3.0 release disposition (2026-10-20)
+
+- The release packages use the standalone proxy DLL, with separate archives for
+  the game builds declared in `release.json`. The alternative ASI is not bundled.
+  Package identity, checksums and build provenance belong to the generated
+  release sidecars; no publication or new game installation is implied.
+- The product owner reports having tested the current development version:
+  "everything works." No exact artifact hash, per-build scope, input-device
+  inventory or completed scenario matrix was supplied with that report. It
+  supersedes pending user feedback, not the historical logs or their bounded scope.
+- The owner explicitly accepts the absence of fresh exact-ZIP gameplay and full
+  per-build manual qualification for **0.3.0**. This includes older-build startup
+  and gameplay, preview alignment/audio and native-controller controls, autoplay
+  record preservation, and the complete native audio/chart transition matrix.
+  Automated checks and the general positive report do not establish those claims.
+- The earlier same-song replay/profile-change rejection below has no independently
+  attributed fix or exact-artifact reproduction result. Retain it as a historical
+  unresolved report, not a newly demonstrated release failure or a verified fix.
+  The positive user report does not establish a targeted regression pass.
+- This version-scoped manual-coverage decision does not waive automated build,
+  test, audit, provenance or transactional package failures. Canonical Release
+  validation is still required before a new archive is claimed complete.
 
 ## Older-build preview anchor (2026-10-20)
 
@@ -323,5 +346,6 @@ The affected producer, decoder, startup, native runtime, adapter, chart/profile,
 catalog and publication tests pass for the built targets. Installed-source
 short/long generation also passed with immutable cache reuse and distinct
 per-build output. Mapped native-call doubles do not replace real engine execution.
-No full new Release/package qualification is claimed. A new release requires
-its own clean identity and the canonical validation workflow.
+The historical development checks above are not qualification of a new package.
+The 0.3.0 manual-coverage decision is recorded separately above; a new archive
+still requires its own clean identity and the canonical validation workflow.

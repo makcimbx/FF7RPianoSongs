@@ -26,7 +26,7 @@ function Write-FixtureRecord {
 }
 
 function New-ProvenanceFixture {
-    param([string]$Root)
+    param([string]$Root, [string]$Target = "FF7RPianoSongs")
 
     New-Item -ItemType Directory -Path $Root | Out-Null
     foreach ($file in ([ordered]@{
@@ -41,19 +41,24 @@ function New-ProvenanceFixture {
         "src/game/chord_voicing_bridge.asm" = "; fixture production adapter`n"
         "src/game/chord_voicing_bridge_harness.asm" = "; excluded test adapter`n"
         "tools/generate_rva_catalog.py" = "# fixture generator input`n"
+        "tools/generate_native_proxy_profile.py" = "# fixture proxy generator`n"
+        "src/proxy/entry_thunk.asm" = "; fixture proxy entry`n"
+        "src/proxy/forwarding_thunks.asm" = "; fixture proxy forwarding`n"
+        "src/proxy/forwarding.def" = "EXPORTS`n"
         "src/pipeline/source.cpp" = "// fixture source input`n"
         "src/pipeline/source.hpp" = "// fixture header input`n"
         "src/tests/excluded.cpp" = "// excluded test input`n"
         "src/tools/excluded.cpp" = "// excluded tool input`n"
-        "bin/Release/FF7RPianoSongs.dll" = "fixture dll`n"
+        "build/bin/Release/FF7RPianoSongs.dll" = "fixture dll`n"
+        "build/proxy/Release/FF7RPianoSongsProxy.dll" = "fixture proxy dll`n"
         "compiler.exe" = "fixture compiler`n"
-        "build/CMakeCache.txt" = "fixture cache`n"
+        "build/CMakeCache.txt" = "FF7RP_GAME_BUILD:STRING=ff7rebirth-steam-win64-6a16ced2`nCMAKE_GENERATOR:INTERNAL=fixture`nCMAKE_GENERATOR_PLATFORM:INTERNAL=x64`nCMAKE_GENERATOR_TOOLSET:INTERNAL=fixture`n"
         "build/generated/release_identity.generated.h" = "fixture generated release`n"
     }).GetEnumerator()) {
         Set-FixtureFile -Root $Root -RelativePath $file.Key -Contents $file.Value
     }
 
-    $inputs = @(Get-ProductionInputRelativePaths $Root)
+    $inputs = @(Get-ProductionInputRelativePaths $Root $Target)
     foreach ($required in @("cmake/apply_source_patch.cmake", "cmake/midifile-running-status.patch",
             "cmake/muscriptor-avx2.patch",
             "src/game/chord_voicing_bridge.asm")) {
@@ -64,6 +69,12 @@ function New-ProvenanceFixture {
     if ($inputs -ccontains "src/game/chord_voicing_bridge_harness.asm") {
         throw "Production input inventory included the test-only MASM harness"
     }
+    foreach ($proxyInput in @("tools/generate_native_proxy_profile.py", "src/proxy/entry_thunk.asm",
+            "src/proxy/forwarding_thunks.asm", "src/proxy/forwarding.def")) {
+        if (($inputs -ccontains $proxyInput) -ne ($Target -eq "FF7RPianoSongsProxy")) {
+            throw "Target-specific production input inventory is incorrect: $Target / $proxyInput"
+        }
+    }
     $inputRecords = @($inputs | ForEach-Object {
         [pscustomobject][ordered]@{
             path = $_
@@ -71,7 +82,8 @@ function New-ProvenanceFixture {
         }
     })
     $inputIdentity = ($inputRecords | ForEach-Object { "$($_.path)`t$($_.sha256)`n" }) -join ""
-    $dllPath = Join-Path $Root "bin/Release/FF7RPianoSongs.dll"
+    $dllRelative = Get-BuildDllRelativePath "Release" $Target
+    $dllPath = Join-Path (Join-Path $Root "build") $dllRelative
     $compilerPath = Join-Path $Root "compiler.exe"
     $cmakePath = (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source
     $recordPath = Join-Path $Root "FF7RPianoSongs.provenance.json"
@@ -79,7 +91,7 @@ function New-ProvenanceFixture {
         schema = "ff7rpianosongs.build-provenance.v3"
         configuration = "Release"
         dll = [pscustomobject][ordered]@{
-            path = "bin/Release/FF7RPianoSongs.dll"
+            path = $dllRelative
             sha256 = Get-FileSha256 $dllPath
         }
         toolchain = [pscustomobject][ordered]@{
@@ -112,6 +124,7 @@ function New-ProvenanceFixture {
 
     return [pscustomobject]@{
         Root = $Root
+        Target = $Target
         DllPath = $dllPath
         RecordPath = $recordPath
         CacheRoot = Join-Path $Root "build"
@@ -125,7 +138,7 @@ function Invoke-FixtureValidation {
 
     Assert-BuildProvenance -InputRoot $Fixture.Root -DllPath $Fixture.DllPath `
         -RecordPath $Fixture.RecordPath -ExpectedConfiguration "Release" `
-        -ExpectedInputs $Fixture.ExpectedInputs -CacheRoot $Fixture.CacheRoot
+        -ExpectedInputs $Fixture.ExpectedInputs -CacheRoot $Fixture.CacheRoot -Target $Fixture.Target
 }
 
 $adverseCases = @(
@@ -297,30 +310,59 @@ $completed = $false
 try {
     $validFixture = New-ProvenanceFixture -Root (Join-Path $testRoot "valid")
     Invoke-FixtureValidation -Fixture $validFixture
+
+    foreach ($target in @("FF7RPianoSongs", "FF7RPianoSongsProxy")) {
+        $writerFixture = New-ProvenanceFixture -Root (Join-Path $testRoot "writer-$target") -Target $target
+        Write-ProductBuildProvenance -InputRoot $writerFixture.Root -BuildRoot $writerFixture.CacheRoot `
+            -Configuration "Release" -Target $target -VisualStudioInstallationPath "fixture" `
+            -CompilerPath $writerFixture.Record.toolchain.compilerPath -CMakePath $writerFixture.Record.toolchain.cmakePath
+        $writerFixture.RecordPath = Join-Path (Split-Path -Parent $writerFixture.DllPath) "$target.provenance.json"
+        Invoke-FixtureValidation $writerFixture
+        $otherTarget = if ($target -eq "FF7RPianoSongs") { "FF7RPianoSongsProxy" } else { "FF7RPianoSongs" }
+        $accepted = $false
+        try {
+            Assert-BuildProvenance $writerFixture.Root $writerFixture.DllPath $writerFixture.RecordPath `
+                "Release" $writerFixture.ExpectedInputs $writerFixture.CacheRoot $otherTarget
+            $accepted = $true
+        } catch {}
+        if ($accepted) { throw "Build provenance accepted the wrong artifact target: $target" }
+    }
+    foreach ($proxyInput in @("tools/generate_native_proxy_profile.py", "src/proxy/entry_thunk.asm",
+            "src/proxy/forwarding_thunks.asm", "src/proxy/forwarding.def")) {
+        $path = Join-Path $writerFixture.Root $proxyInput
+        $original = [IO.File]::ReadAllText($path)
+        [IO.File]::AppendAllText($path, "drift")
+        $accepted = $false
+        try { Invoke-FixtureValidation $writerFixture; $accepted = $true } catch {}
+        [IO.File]::WriteAllText($path, $original)
+        if ($accepted) { throw "Proxy-only production source drift was accepted: $proxyInput" }
+    }
     [System.IO.File]::AppendAllText(
         (Join-Path $validFixture.Root "src/game/chord_voicing_bridge_harness.asm"), "; test-only drift")
     Invoke-FixtureValidation -Fixture $validFixture
 
-    for ($index = 0; $index -lt $adverseCases.Count; ++$index) {
-        $case = $adverseCases[$index]
-        $fixture = New-ProvenanceFixture -Root (Join-Path $testRoot ("case-{0:D2}" -f $index))
-        Invoke-FixtureValidation -Fixture $fixture
-        & $case.Mutate $fixture $fixture.Record
-        Write-FixtureRecord -Path $fixture.RecordPath -Record $fixture.Record
-
-        $rejection = $null
-        try {
+    foreach ($target in @("FF7RPianoSongs", "FF7RPianoSongsProxy")) {
+        for ($index = 0; $index -lt $adverseCases.Count; ++$index) {
+            $case = $adverseCases[$index]
+            $fixture = New-ProvenanceFixture -Root (Join-Path $testRoot ("case-$target-{0:D2}" -f $index)) -Target $target
             Invoke-FixtureValidation -Fixture $fixture
-        } catch {
-            $rejection = $_
-        }
-        if ($null -eq $rejection) {
-            throw "Adverse case '$($case.Name)' was accepted"
-        }
-        # The validator exposes throw-based rejection, not public reason codes.
-        # Keep incidental command/StrictMode errors from counting as rejection.
-        if ($rejection.CategoryInfo.Category -ne [System.Management.Automation.ErrorCategory]::OperationStopped) {
-            throw "Adverse case '$($case.Name)' raised an unexpected error: $rejection"
+            & $case.Mutate $fixture $fixture.Record
+            Write-FixtureRecord -Path $fixture.RecordPath -Record $fixture.Record
+
+            $rejection = $null
+            try {
+                Invoke-FixtureValidation -Fixture $fixture
+            } catch {
+                $rejection = $_
+            }
+            if ($null -eq $rejection) {
+                throw "Adverse case '$($case.Name)' was accepted for $target"
+            }
+            # The validator exposes throw-based rejection, not public reason codes.
+            # Keep incidental command/StrictMode errors from counting as rejection.
+            if ($rejection.CategoryInfo.Category -ne [System.Management.Automation.ErrorCategory]::OperationStopped) {
+                throw "Adverse case '$($case.Name)' raised an unexpected error for ${target}: $rejection"
+            }
         }
     }
     $completed = $true
@@ -331,5 +373,5 @@ try {
 }
 
 if ($completed) {
-    Write-Output "Build provenance self-test passed ($($adverseCases.Count) adverse cases)."
+    Write-Output "Build provenance self-test passed (both target writers, proxy input drift, and $($adverseCases.Count) adverse cases per target)."
 }

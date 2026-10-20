@@ -1,5 +1,5 @@
 # Build And Release
-<!-- current-release-version: 0.2.3 -->
+<!-- current-release-version: 0.3.0 -->
 
 This is the canonical repository workflow. Commands are run from the repository
 root in PowerShell; no parent repository is required.
@@ -14,7 +14,7 @@ root in PowerShell; no parent repository is required.
   are not checked into this repository. muscriptor.cpp and its ggml are fetched
   the same way for audio transcription. Runtime configuration also downloads the
   pinned 209 MB `muscriptor-small-f16.gguf` into `build/models/` and verifies its
-  SHA256; `package_dist.ps1` ships it beside the ASI.
+  SHA256; `package_dist.ps1` ships it beside the standalone proxy DLL.
 
 An offline-only build needs MSVC, CMake, and the pinned miniaudio/midifile
 dependencies (Git/network on first population). It does not need MASM,
@@ -304,17 +304,17 @@ Use [Current Status](CurrentStatus.md) for the reviewed artifact disposition and
 After a successful Release build and CTest run, stage transactionally with:
 
 ```powershell
-./package_dist.ps1 -Configuration Release -SkipBuild
+./package_dist.ps1 -Configuration Release -SkipBuild -GameBuild <game-version>
 ```
 
-Omit `-SkipBuild` when the script should build the production ASI and audit tool itself. A successful production build writes `FF7RPianoSongs.provenance.json` beside the DLL. The record binds the DLL hash to the configuration, compiler and CMake executables, CMake cache identity, and deterministic production input hashes.
+Omit `-SkipBuild` when the script should build the production proxy DLL and audit tool itself. A successful production proxy build writes its provenance JSON beside the DLL. The record binds the DLL hash to the configuration, compiler and CMake executables, CMake cache identity, and deterministic production input hashes. The package installs that DLL as `End/Binaries/Win64/D3DCOMPILER_43.dll`; it does not contain the alternative ASI edition.
 
-`-SkipBuild` still refreshes the audit tool, but it does not rebuild the production ASI. It accepts the existing DLL only when that provenance record exactly matches the current DLL, toolchain, CMake configuration, and production inputs. Timestamps are not evidence of build currency. Changes limited to package documentation do not invalidate the DLL because those files are not compilation inputs.
+`-SkipBuild` still refreshes the audit tool, but it does not rebuild the production proxy. It accepts the existing DLL only when that provenance record exactly matches the current DLL, toolchain, CMake configuration, and production inputs. Timestamps are not evidence of build currency. Changes limited to package documentation do not invalidate the DLL because those files are not compilation inputs.
 
 Production inputs include the generated tree of every declared build, so editing one build's
-catalog data invalidates the provenance of an already built ASI for a different build. Rebuild
+catalog data invalidates the provenance of an already built DLL for a different build. Rebuild
 each supported build after any catalog change; do not package a DLL whose provenance predates
-it. The provenance record also names the build identity the ASI was compiled for, which is what
+it. The provenance record also names the build identity the DLL was compiled for, which is what
 the runtime gate compares against the installed executable.
 
 `package_dist.ps1` is the full package authority. It reads and validates
@@ -323,15 +323,15 @@ It reads the closed schema-v2 `package-docs.json` registry, requires every
 canonical role and source, derives the slim packaged subset from `distribution`,
 and verifies source/staged documentation, binary/document byte parity, exact
 inventory, provenance, hashes, adverse paths, and rollback behavior before
-replacing `package/`. Besides the ASI, only the pinned transcription model is
+replacing `package/`. Besides the proxy DLL, only the pinned transcription model is
 copied from `build/`. No music examples, caches, PDBs, other build products, analysis,
 or developer tools are copied. Do not add a second document list.
 
 `release.json` declares one target per supported game build. Each target names its game
 version, the executable catalog identity that build is compiled against, and an archive
 basename derived as `<product>-<version>-<platform>-ff7r<game-version>`, so the 1.005 artifact
-publishes as `FF7RPianoSongs-0.2.3-win64-ff7r1.005`. Stage one archive per game build,
-selecting the same build the ASI was compiled for. `-GameBuild` here takes the target's game
+publishes as `FF7RPianoSongs-0.3.0-win64-ff7r1.005`. Stage one archive per game build,
+selecting the same build the DLL was compiled for. `-GameBuild` here takes the target's game
 version and is required once more than one target exists:
 
 ```powershell
@@ -340,7 +340,7 @@ version and is required once more than one target exists:
 
 The same command then creates `release/<archive-basename>/<archive-basename>.zip` with a
 sorted inventory and fixed ZIP timestamps, plus its `.zip.sha256`, `.release.json`, and
-`.provenance.json` sidecars. The identity sidecar binds the archive, ASI, published
+`.provenance.json` sidecars. The identity sidecar binds the archive, proxy DLL, published
 build-provenance record, supported executable catalog identity, version, and clean source
 commit. Sidecars remain outside the ZIP to avoid a self-referential archive hash. Repeated
 generation from identical package bytes is byte-for-byte deterministic.
@@ -350,12 +350,12 @@ the exact selected-target staging tree, while `release/` is one aggregate public
 each successful run replaces the selected target and retains every previously produced sibling
 target. Before retention, each sibling is validated fail closed against the current release
 authority and clean commit, its declared directory and sidecar names, exact inventory, archive
-and checksum, packaged files, ASI hash, build-provenance catalog and production-input identity,
+and checksum, packaged files, DLL hash, build-provenance catalog and production-input identity,
 and release identity. An undeclared entry or a stale, malformed, foreign, or mismatched sibling
 aborts staging without replacing either prior publication surface. After all declared targets
 have been staged, `release/` must contain exactly one validated directory per declared target.
 
-Archives for different game builds carry visually identical `FF7RPianoSongs.asi` files that
+Archives for different game builds carry identically named `D3DCOMPILER_43.dll` files that
 differ only in the build they were compiled against. The startup gate fails closed on a
 mismatch and reports the executable identity it expected against the one it observed, so a
 wrong install is self-diagnosing rather than silent. Publish the game version in the archive
@@ -378,9 +378,15 @@ Automated tests cannot prove list/UI/chart/audio integration. Use [In-Game Valid
 
 ### Transactional runtime gate
 
+This is the **alternative ASI edition's** installer, not an installer for the
+standalone DLL release. Its `Packaged` mode expects a legacy ASI package and must
+not be used with the current proxy package. For current player installation use
+[README](../README.md#install); for an authorized development DLL experiment use
+the separate [proxy procedure](#single-normal-import-proxy-experiment) below.
+
 After the checks required by the selected work mode pass, prepare an explicitly
 authorized manual session with the product-owned runtime-gate tool. The default
-`Packaged` mode validates and installs the staged package artifact:
+`Packaged` mode validates and installs a legacy staged ASI artifact:
 
 ```powershell
 $session = ./tools/runtime_gate.ps1 `

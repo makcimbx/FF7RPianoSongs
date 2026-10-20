@@ -34,7 +34,12 @@ function Get-TextSha256([string]$Text) {
     }
 }
 
-function Get-ProductionInputRelativePaths([string]$InputRoot) {
+function Get-ProductionInputRelativePaths {
+    param(
+        [string]$InputRoot,
+        [ValidateSet("FF7RPianoSongs", "FF7RPianoSongsProxy")]
+        [string]$Target = "FF7RPianoSongs"
+    )
     $relative = [System.Collections.Generic.List[string]]::new()
     foreach ($path in @("CMakeLists.txt", "build.ps1", "release.json",
             "cmake/apply_source_patch.cmake", "cmake/midifile-running-status.patch", "cmake/muscriptor-avx2.patch",
@@ -44,6 +49,12 @@ function Get-ProductionInputRelativePaths([string]$InputRoot) {
     }
     # The production MASM adapter is explicit above: its adjacent _harness.asm
     # belongs only to the self-test target and is not a DLL production input.
+    if ($Target -eq "FF7RPianoSongsProxy") {
+        foreach ($path in @("tools/generate_native_proxy_profile.py", "src/proxy/entry_thunk.asm",
+                "src/proxy/forwarding_thunks.asm", "src/proxy/forwarding.def")) {
+            $relative.Add($path)
+        }
+    }
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $InputRoot "src") -Recurse -File) {
         $path = [System.IO.Path]::GetRelativePath($InputRoot, $file.FullName).Replace('\', '/')
         if ($path.StartsWith("src/tests/") -or $path.StartsWith("src/tools/")) {
@@ -56,6 +67,73 @@ function Get-ProductionInputRelativePaths([string]$InputRoot) {
     return @($relative | Sort-Object -Unique)
 }
 
+function Get-BuildDllRelativePath {
+    param(
+        [string]$Configuration,
+        [ValidateSet("FF7RPianoSongs", "FF7RPianoSongsProxy")]
+        [string]$Target = "FF7RPianoSongs"
+    )
+    if ($Target -eq "FF7RPianoSongsProxy") { return "proxy/$Configuration/FF7RPianoSongsProxy.dll" }
+    return "bin/$Configuration/FF7RPianoSongs.dll"
+}
+
+function Write-ProductBuildProvenance {
+    param(
+        [string]$InputRoot, [string]$BuildRoot, [string]$Configuration,
+        [ValidateSet("FF7RPianoSongs", "FF7RPianoSongsProxy")]
+        [string]$Target = "FF7RPianoSongs",
+        [string]$VisualStudioInstallationPath,
+        [string]$CompilerPath, [string]$CMakePath
+    )
+    $dllRelative = Get-BuildDllRelativePath $Configuration $Target
+    $dll = Join-Path $BuildRoot $dllRelative
+    $cache = Join-Path $BuildRoot "CMakeCache.txt"
+    $header = Join-Path $BuildRoot "generated/release_identity.generated.h"
+    foreach ($required in @($dll, $cache, $header, $CompilerPath, $CMakePath)) {
+        if (!(Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "Required build provenance input is missing: $required"
+        }
+    }
+    $cacheValues = @{}
+    foreach ($line in Get-Content -LiteralPath $cache) {
+        if ($line -match '^([^#/:][^:]*):[^=]*=(.*)$') { $cacheValues[$Matches[1]] = $Matches[2] }
+    }
+    if (!$cacheValues["FF7RP_GAME_BUILD"]) { throw "CMake cache does not record the selected FF7 Rebirth game build" }
+    $inputs = @(Get-ProductionInputRelativePaths $InputRoot $Target | ForEach-Object {
+        [ordered]@{ path = $_; sha256 = Get-FileSha256 (Join-Path $InputRoot $_) }
+    })
+    $inputIdentity = ($inputs | ForEach-Object { "$($_.path)`t$($_.sha256)`n" }) -join ""
+    $record = [ordered]@{
+        schema = "ff7rpianosongs.build-provenance.v3"
+        configuration = $Configuration
+        dll = [ordered]@{ path = $dllRelative; sha256 = Get-FileSha256 $dll }
+        toolchain = [ordered]@{
+            visualStudioInstallationPath = $VisualStudioInstallationPath
+            compilerPath = $CompilerPath
+            compilerVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($CompilerPath).FileVersion
+            compilerSha256 = Get-FileSha256 $CompilerPath
+            cmakePath = $CMakePath
+            cmakeVersion = (& $CMakePath --version | Select-Object -First 1)
+            cmakeSha256 = Get-FileSha256 $CMakePath
+            generator = [string]$cacheValues["CMAKE_GENERATOR"]
+            generatorPlatform = [string]$cacheValues["CMAKE_GENERATOR_PLATFORM"]
+            generatorToolset = [string]$cacheValues["CMAKE_GENERATOR_TOOLSET"]
+        }
+        cmake = [ordered]@{ cachePath = "CMakeCache.txt"; cacheSha256 = Get-FileSha256 $cache }
+        releaseIdentity = [ordered]@{
+            authorityPath = "release.json"
+            authoritySha256 = Get-FileSha256 (Join-Path $InputRoot "release.json")
+            catalogId = [string]$cacheValues["FF7RP_GAME_BUILD"]
+            generatedHeaderPath = "generated/release_identity.generated.h"
+            generatedHeaderSha256 = Get-FileSha256 $header
+        }
+        productionInputs = $inputs
+        productionInputSetSha256 = Get-TextSha256 $inputIdentity
+    }
+    $path = Join-Path (Split-Path -Parent $dll) "$Target.provenance.json"
+    [IO.File]::WriteAllText($path, (($record | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+}
+
 function Assert-BuildProvenance {
     param(
         [string]$InputRoot,
@@ -63,7 +141,9 @@ function Assert-BuildProvenance {
         [string]$RecordPath,
         [string]$ExpectedConfiguration,
         [string[]]$ExpectedInputs,
-        [string]$CacheRoot
+        [string]$CacheRoot,
+        [ValidateSet("FF7RPianoSongs", "FF7RPianoSongsProxy")]
+        [string]$Target = "FF7RPianoSongs"
     )
     foreach ($required in @($DllPath, $RecordPath)) {
         if (!(Test-Path -LiteralPath $required -PathType Leaf)) {
@@ -79,7 +159,7 @@ function Assert-BuildProvenance {
         throw "Build provenance schema or configuration does not match the requested artifact"
     }
     Assert-ExactProperties $record.dll @("path", "sha256") "Build provenance DLL"
-    if ($record.dll.path -ne "bin/$ExpectedConfiguration/FF7RPianoSongs.dll" -or
+    if ($record.dll.path -ne (Get-BuildDllRelativePath $ExpectedConfiguration $Target) -or
         $record.dll.sha256 -ne (Get-FileSha256 $DllPath)) {
         throw "Built DLL does not match its provenance record"
     }

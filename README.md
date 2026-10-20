@@ -1,7 +1,7 @@
 # FF7RPianoSongs
-<!-- current-release-version: 0.2.3 -->
+<!-- current-release-version: 0.3.0 -->
 
-**Version 0.2.3** · Windows x64 · MIT
+**Version 0.3.0** · Windows x64 · MIT
 
 [![Windows CI](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml/badge.svg)](https://github.com/makcimbx/FF7RPianoSongs/actions/workflows/windows-ci.yml)
 
@@ -23,7 +23,7 @@ by Square Enix.
 ## Install
 
 1. Exit the game.
-2. Copy `D3DCOMPILER_43.dll` and `FF7RPianoSongs.ini` from the package into `End/Binaries/Win64/`.
+2. Copy `D3DCOMPILER_43.dll` and `FF7RPianoSongs.ini` from the package into `End/Binaries/Win64/`. Also copy `muscriptor-small-f16.gguf` if you want to generate notes from piano audio without MIDI.
 3. Remove or move out any previous `FF7RPianoSongs.asi` or other copy of this mod's DLL. Do not overwrite another mod's proxy; see the alternatives below.
 4. Put each song in `End/Binaries/Win64/Music/<Song Name>/`.
 5. Start the game. Valid songs appear in the piano-song list.
@@ -60,7 +60,10 @@ x64 ASI loader and `FF7RPianoSongs.asi` beside the executable. Do not rename an 
 to a proxy DLL or install both editions together.
 
 The package contains no music. To make your first song, put matching audio and MIDI in a song
-folder; the mod creates a starter `song.json` if it is missing. Audio alone cannot generate notes.
+folder; the mod creates a starter `song.json` if it is missing. For a piano recording without
+MIDI or explicit notes, the bundled model can transcribe the audio into `song.mid` on first load.
+Transcription needs an AVX2/FMA-capable CPU and can take several minutes; it is not a general
+multi-instrument transcription feature. Supplied MIDI or explicit notes do not need transcription.
 For hand-authored charts, automatic note runs, partial chords, and alternate C inputs, start with
 the bundled [Song Format guide](docs/SongFormat.md#start-here). It includes complete JSON examples
 and the full settings/chord reference.
@@ -163,8 +166,9 @@ the game is running. Source changes produce separate content identities.
 **A song is missing or changed after an edit**
 
 - Check the fixed names and limits in [Song Format](docs/SongFormat.md).
-- Keep one main audio file, not both `song.wav` and `song.mp3`. Supply matching MIDI or explicit
-  JSON notes. Optional mode recordings must have exactly the same decoded duration as the main audio.
+- Keep one main audio file, not both `song.wav` and `song.mp3`. Supply matching MIDI, explicit
+  JSON notes, or the transcription model for a piano recording without notes. Optional mode
+  recordings must have exactly the same decoded duration as the main audio.
 - Exit the game before editing files or deleting that song's `.cache/`, then retry.
 - Temporarily set `General.LogLevel=debug`, reproduce once, then restore `info`.
 - `prepared` and native `ready` log entries establish artifact/runtime admission,

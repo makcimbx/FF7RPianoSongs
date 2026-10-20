@@ -9,7 +9,11 @@ Choose one way to make a song:
 
 - **Generate from MIDI:** put your audio and matching MIDI in a song folder. Use the
   [MIDI-backed song example](#midi-backed-song), or let the mod create `song.json` on its first load.
-  The mod chooses notes and difficulty levels; it does not convert audio into MIDI.
+  The mod chooses notes and difficulty levels from the supplied MIDI.
+- **Generate from piano audio:** install the bundled transcription model beside the
+  mod DLL and supply a piano recording without MIDI or explicit notes. The mod
+  writes `song.mid` on first load, then generates difficulties from it. See
+  [transcription requirements](#midi-backed-songs).
 - **Write the gameplay yourself:** use the [minimal explicit chart](#minimal-explicit-chart), then
   add entries to `notes`. You need audio, but no MIDI. This is also how to port a hand-authored chart
   from another mod; that mod's original arrays are not accepted directly.
@@ -58,7 +62,8 @@ Each audio file must be nonempty, no larger than 512 MiB, and no longer than 10 
 The mod converts supported audio to 48 kHz stereo; you do not need to supply HCA or MABF files.
 
 If `song.json` is absent, the mod creates a starter file using the folder name as the title,
-without a `metronome` field; clicks are disabled by default. You still need matching MIDI, or must add your own notes.
+without a `metronome` field; clicks are disabled by default. Supply matching MIDI,
+explicit notes, or the transcription model for a piano recording without notes.
 An existing file is not replaced, even if it contains errors.
 
 ## Root object
@@ -83,7 +88,7 @@ a list of settings you must fill in. All numbers must be finite.
 | `loudness_peak_ceiling_dbfs` | number | optional; default `-1` | -6 to 0 dBFS (peak limit for normalization). More negative leaves more headroom. |
 | `gain_envelope` | array | optional; absent means unity/no envelope | 1–64 gain-point objects; see below. |
 | `metronome` | object | optional; see defaults below | Closed metronome object; see below. |
-| `notes` | array | optional | Your playable notes. Nonempty; cannot coexist with `profiles`. If neither is present, MIDI is required. |
+| `notes` | array | optional | Your playable notes. Nonempty; cannot coexist with `profiles`. If neither is present, MIDI is supplied or transcribed from piano audio. |
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
 | `chord_voicings` | object | optional; omitted means stock chord sounds | Song-wide replacements for chord sounds; requires explicit `notes` or `profiles` and the matching mod for game 1.004 or 1.005. See “Custom chord sounds”. |
 | `diagnostic_extended_chart_fixture` | boolean | obsolete; omit | Accepted for old files, but has no effect. It does not unlock longer charts. |

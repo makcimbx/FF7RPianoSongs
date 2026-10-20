@@ -144,7 +144,7 @@ function Assert-ReleaseLowercaseSha256([object]$Value, [string]$Description) {
 function Assert-ReleaseIdentity {
     param(
         [string]$IdentityPath, [object]$ReleaseAuthority,
-        [string]$ArchivePath, [string]$AsiPath, [string]$ProvenancePath,
+        [string]$ArchivePath, [string]$ArtifactPath, [string]$ProvenancePath,
         [string]$ReleaseAuthorityPath, [string]$GeneratedReleaseHeaderPath,
         [string]$SourceCommit, [string]$ExpectedGeneratedReleaseHeaderSha256 = ""
     )
@@ -153,10 +153,13 @@ function Assert-ReleaseIdentity {
     Assert-ReleaseExactProperties $identity @(
         "schema", "product", "version", "platform", "license",
         "supported_executable_catalog_id", "source_commit", "archive",
-        "asi_sha256", "provenance_sha256", "release_authority_sha256",
+        "artifact", "provenance_sha256", "release_authority_sha256",
         "generated_release_header_sha256") "Release identity"
     if ($null -eq $identity.archive) { throw "Release identity archive object is missing" }
     Assert-ReleaseExactProperties $identity.archive @("file", "sha256") "Release identity archive"
+    Assert-ReleaseExactProperties $identity.artifact @("path", "sha256") "Release identity artifact"
+    $identity.artifact.path = Assert-ReleaseString $identity.artifact.path "Release identity artifact path"
+    Assert-ReleaseLowercaseSha256 $identity.artifact.sha256 "Release identity artifact sha256"
     foreach ($field in @("schema", "product", "version", "platform", "license", "supported_executable_catalog_id", "source_commit")) {
         $identity.$field = Assert-ReleaseString $identity.$field "Release identity $field"
     }
@@ -165,7 +168,7 @@ function Assert-ReleaseIdentity {
     if ($identity.source_commit -isnot [string] -or $identity.source_commit -notmatch '^[0-9a-f]{40}$') {
         throw "Release identity source commit must be exactly 40 lowercase hexadecimal characters"
     }
-    foreach ($hashField in @("asi_sha256", "provenance_sha256", "release_authority_sha256", "generated_release_header_sha256")) {
+    foreach ($hashField in @("provenance_sha256", "release_authority_sha256", "generated_release_header_sha256")) {
         Assert-ReleaseLowercaseSha256 $identity.$hashField "Release identity $hashField"
     }
     Assert-ReleaseLowercaseSha256 $identity.archive.sha256 "Release identity archive sha256"
@@ -176,7 +179,7 @@ function Assert-ReleaseIdentity {
         Assert-ReleaseLowercaseSha256 $ExpectedGeneratedReleaseHeaderSha256 "Expected generated release header sha256"
         $ExpectedGeneratedReleaseHeaderSha256
     }
-    if ($identity.schema -cne "ff7rpianosongs.release-identity.v2" -or
+    if ($identity.schema -cne "ff7rpianosongs.release-identity.v3" -or
         $identity.product -cne $ReleaseAuthority.product -or
         $identity.version -cne $ReleaseAuthority.version -or
         $identity.platform -cne $ReleaseAuthority.platform -or
@@ -186,7 +189,8 @@ function Assert-ReleaseIdentity {
         $identity.archive.file -cne $archiveName -or
         $identity.archive.file -cne "$($ReleaseAuthority.archive_basename).zip" -or
         $identity.archive.sha256 -cne (Get-ReleaseFileSha256 $ArchivePath) -or
-        $identity.asi_sha256 -cne (Get-ReleaseFileSha256 $AsiPath) -or
+        $identity.artifact.path -cne "End/Binaries/Win64/D3DCOMPILER_43.dll" -or
+        $identity.artifact.sha256 -cne (Get-ReleaseFileSha256 $ArtifactPath) -or
         $identity.provenance_sha256 -cne (Get-ReleaseFileSha256 $ProvenancePath) -or
         $identity.release_authority_sha256 -cne (Get-ReleaseFileSha256 $ReleaseAuthorityPath) -or
         $identity.generated_release_header_sha256 -cne $generatedHeaderHash) {
@@ -197,7 +201,7 @@ function Assert-ReleaseIdentity {
 
 function Assert-PublishedBuildProvenance {
     param(
-        [string]$Root, [string]$ProvenancePath, [string]$AsiPath,
+        [string]$Root, [string]$ProvenancePath, [string]$ArtifactPath,
         [object]$ReleaseAuthority, [string[]]$ExpectedProductionInputs
     )
     try { $record = Get-Content -LiteralPath $ProvenancePath -Raw | ConvertFrom-Json }
@@ -211,9 +215,9 @@ function Assert-PublishedBuildProvenance {
     }
     Assert-ReleaseExactProperties $record.dll @("path", "sha256") "Published build provenance DLL"
     Assert-ReleaseLowercaseSha256 $record.dll.sha256 "Published build provenance DLL sha256"
-    if ($record.dll.path -cne "bin/Release/FF7RPianoSongs.dll" -or
-        $record.dll.sha256 -cne (Get-ReleaseFileSha256 $AsiPath)) {
-        throw "Published ASI does not match its build provenance"
+    if ($record.dll.path -cne "proxy/Release/FF7RPianoSongsProxy.dll" -or
+        $record.dll.sha256 -cne (Get-ReleaseFileSha256 $ArtifactPath)) {
+        throw "Published proxy DLL does not match its build provenance"
     }
     Assert-ReleaseExactProperties $record.toolchain @(
         "visualStudioInstallationPath", "compilerPath", "compilerVersion", "compilerSha256",
@@ -345,7 +349,7 @@ function New-ReleaseArtifacts {
         [string]$Root,
         [string]$PackageRoot,
         [string]$OutputDirectory,
-        [string]$AsiPath,
+        [string]$ArtifactPath,
         [string]$ProvenancePath,
         [string]$GeneratedReleaseHeaderPath,
         [string]$SourceCommit,
@@ -361,7 +365,7 @@ function New-ReleaseArtifacts {
     $checksumPath = "$archivePath.sha256"
     [System.IO.File]::WriteAllText($checksumPath, "$archiveHash  $archiveName`n", [System.Text.UTF8Encoding]::new($false))
     $identity = [ordered]@{
-        schema = "ff7rpianosongs.release-identity.v2"
+        schema = "ff7rpianosongs.release-identity.v3"
         product = $release.product
         version = $release.version
         platform = $release.platform
@@ -369,7 +373,10 @@ function New-ReleaseArtifacts {
         supported_executable_catalog_id = $release.supported_executable_catalog_id
         source_commit = $SourceCommit
         archive = [ordered]@{ file = $archiveName; sha256 = $archiveHash }
-        asi_sha256 = Get-ReleaseFileSha256 $AsiPath
+        artifact = [ordered]@{
+            path = "End/Binaries/Win64/D3DCOMPILER_43.dll"
+            sha256 = Get-ReleaseFileSha256 $ArtifactPath
+        }
         provenance_sha256 = Get-ReleaseFileSha256 $ProvenancePath
         release_authority_sha256 = Get-ReleaseFileSha256 (Join-Path $Root "release.json")
         generated_release_header_sha256 = Get-ReleaseFileSha256 $GeneratedReleaseHeaderPath

@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-20
+
+### New features
+
+- Switched the default distribution to a standalone `D3DCOMPILER_43.dll` containing
+  the complete mod and its loader. A separate ASI loader is no longer required.
+  Supported alternative DLL names are listed in the player guide; install only
+  one copy and remove the previous product ASI when upgrading.
+- Replaced stock-audio source substitution with per-song native audio containers
+  and registrations. The game now owns playback, pause and stop transitions;
+  generated containers are cached automatically outside the game directory.
+- Added audio-to-MIDI transcription for piano recordings without `song.mid` or
+  explicit JSON notes. The bundled muscriptor model generates `song.mid` once;
+  subsequent loads reuse it. Existing authored notes and supplied MIDI take priority.
+- Added autoplay for stock and custom songs, toggled with Ctrl+F8 or same-controller
+  L3+R3 while seated at the piano. Assisted plays still show their score and rank,
+  but do not replace personal records, even if autoplay is disabled before finishing.
+- Added custom-song previews: automatic after a short highlight dwell, manual
+  Ctrl+F7/R3 control, and manual/off settings. A fading row-attached badge shows
+  song time, excerpt position and an equalizer; preview stops before gameplay,
+  on menu exit or focus loss. Native controller stick clicks also support devices
+  read directly by the game, such as DualSense without XInput emulation.
+
+### Improvements and fixes
+
+- Improved generated MIDI charts with source-exact left-hand accompaniment,
+  simultaneous two-hand inputs and better source-note coverage. Difficulty timing
+  and fast register changes now use stock-derived constraints; these changes do
+  not guarantee lower fatigue or retain every source note.
+- Disabled the metronome in newly created song templates by default.
+- Separated saved-score identities by song and profile to prevent INI-name
+  collisions. Ambiguous legacy `.difficulty.<number>` records remain in the old
+  INI for manual recovery rather than being assigned to the wrong song.
+- Improved startup recovery when the native object registry grows during initial
+  authentication, without accepting ambiguous or changed-storage snapshots.
+- Rejected excessively nested song JSON and authored note onsets beyond the
+  source audio, including on first preparation rather than only cache reload.
+- Corrected nested list-adoption contention introduced by autoplay's controller
+  callback, and added more specific chart-selection rejection diagnostics.
+- Added separate native-audio, autoplay and preview contracts for game builds
+  1.004 and 1.005. Each archive still supports only its named game build.
+- Song caches rebuild automatically as needed; keep source songs and scores.
+  The first preparation, especially audio transcription, can take longer.
+
+### Validation limits
+
+- The product owner reports that the current development version was tested and
+  works. This is not a per-scenario or per-build report for the newly generated
+  archives. The owner accepts missing exact packaged-artifact gameplay and the
+  full per-build manual matrix for this version; see `docs/CurrentStatus.md`
+  in the source repository. Preview audio uses a separate stream, not the game's
+  music-volume mixer. Live unload/reload remains unsupported.
+
 ## 0.2.3 - 2026-09-24
 
 - Expanded the exact game-derived chord inventory from 64 to all 170 assignments for
