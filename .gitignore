@@ -23,6 +23,10 @@
 
 # User-authored local songs and their derived caches are not source artifacts.
 /examples/*/
+!/examples/Themes/
+/examples/Themes/*
+!/examples/Themes/steins-gate/
+!/examples/Themes/evangelion/
 /examples/**/.cache/
 /imports/
 

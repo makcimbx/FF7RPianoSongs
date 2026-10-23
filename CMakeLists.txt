@@ -304,7 +304,7 @@ ff7rp_use_generated_catalog(FF7RPianoSongsProxy)
 target_include_directories(FF7RPianoSongsProxy PRIVATE src "${FF7RP_PROXY_GENERATED_DIR}"
     "${FF7RP_RELEASE_GENERATED_DIR}" "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
 target_compile_definitions(FF7RPianoSongsProxy PRIVATE FF7RP_OWNED_PROXY WIN32_LEAN_AND_MEAN NOMINMAX)
-target_link_libraries(FF7RPianoSongsProxy PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid)
+target_link_libraries(FF7RPianoSongsProxy PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid ole32 windowscodecs)
 if(MSVC)
     target_link_options(FF7RPianoSongsProxy PRIVATE /INCREMENTAL:NO)
 endif()
@@ -324,7 +324,7 @@ ff7rp_apply_cpp_policy(FF7RPianoSongs)
 target_compile_definitions(FF7RPianoSongs PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(FF7RPianoSongs PRIVATE "src" "${FF7RP_RELEASE_GENERATED_DIR}" "${FF7RP_PROXY_GENERATED_DIR}"
     "${miniaudio_SOURCE_DIR}" "${midifile_SOURCE_DIR}/include")
-target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid)
+target_link_libraries(FF7RPianoSongs PRIVATE ff7rp_transcription ff7rp_pipeline minhook midifile user32 hid ole32 windowscodecs)
 ff7rp_use_generated_catalog(FF7RPianoSongs)
 
 add_executable(native_proxy_entry_bridge_selftest
@@ -492,6 +492,7 @@ ff7rp_use_generated_catalog(piano_page_selection_guard_selftest)
 add_executable(list_catalog_transaction_selftest
     src/tests/list_catalog_transaction_selftest.cpp
     src/game/list_patch.cpp
+    src/game/menu_theme_metrics.cpp
     src/game/menu_session_state.cpp
     src/game/song_registry.cpp
     src/game/native_array_publication.cpp
@@ -945,10 +946,74 @@ target_link_options(scoreinfo_overlay_producer_selftest PRIVATE "$<$<CXX_COMPILE
 target_include_directories(scoreinfo_overlay_producer_selftest PRIVATE "src")
 target_link_libraries(scoreinfo_overlay_producer_selftest PRIVATE minhook Psapi)
 
-add_executable(config_selftest src/tests/config_selftest.cpp src/core/config.cpp)
+add_executable(config_selftest src/tests/config_selftest.cpp src/core/config.cpp src/core/theme.cpp)
 ff7rp_apply_cpp_policy(config_selftest)
 target_compile_definitions(config_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(config_selftest PRIVATE "src")
+target_link_libraries(config_selftest PRIVATE ole32 windowscodecs)
+
+add_executable(theme_selftest src/tests/theme_selftest.cpp src/core/theme.cpp)
+ff7rp_apply_cpp_policy(theme_selftest)
+target_compile_definitions(theme_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(theme_selftest PRIVATE "src")
+target_link_libraries(theme_selftest PRIVATE ole32 windowscodecs)
+
+add_executable(menu_theme_plan_selftest src/tests/menu_theme_plan_selftest.cpp
+    src/game/menu_theme_plan.cpp src/core/theme.cpp)
+ff7rp_apply_cpp_policy(menu_theme_plan_selftest)
+target_compile_definitions(menu_theme_plan_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(menu_theme_plan_selftest PRIVATE "src")
+target_link_libraries(menu_theme_plan_selftest PRIVATE ole32 windowscodecs)
+
+add_executable(menu_theme_native_selftest src/tests/menu_theme_native_selftest.cpp
+    src/core/pe_image.cpp src/core/version_gate.cpp src/game/uobject_locator_core.cpp
+    src/game/menu_theme_metrics.cpp)
+add_dependencies(menu_theme_native_selftest check_rva_catalog)
+ff7rp_apply_cpp_policy(menu_theme_native_selftest)
+ff7rp_use_generated_catalog(menu_theme_native_selftest)
+target_compile_definitions(menu_theme_native_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(menu_theme_native_selftest PRIVATE "src")
+
+add_executable(menu_theme_observation_selftest src/tests/menu_theme_observation_selftest.cpp
+    src/core/pe_image.cpp src/core/version_gate.cpp src/game/uobject_locator_core.cpp
+    src/game/menu_theme_metrics.cpp)
+add_dependencies(menu_theme_observation_selftest check_rva_catalog)
+ff7rp_apply_cpp_policy(menu_theme_observation_selftest)
+ff7rp_use_generated_catalog(menu_theme_observation_selftest)
+target_compile_definitions(menu_theme_observation_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(menu_theme_observation_selftest PRIVATE "src")
+
+add_executable(menu_theme_runtime_selftest src/tests/menu_theme_runtime_selftest.cpp
+    src/core/hooks.cpp src/game/uobject_locator_core.cpp src/game/menu_theme_metrics.cpp)
+add_dependencies(menu_theme_runtime_selftest check_rva_catalog)
+ff7rp_apply_cpp_policy(menu_theme_runtime_selftest)
+ff7rp_use_generated_catalog(menu_theme_runtime_selftest)
+target_compile_definitions(menu_theme_runtime_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(menu_theme_runtime_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/Gy>")
+target_link_options(menu_theme_runtime_selftest PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/OPT:REF;/INCREMENTAL:NO>")
+target_include_directories(menu_theme_runtime_selftest PRIVATE "src")
+target_link_libraries(menu_theme_runtime_selftest PRIVATE minhook User32)
+
+add_executable(menu_theme_palette_selftest src/tests/menu_theme_palette_selftest.cpp
+    src/core/hooks.cpp src/core/pe_image.cpp src/game/menu_theme_metrics.cpp)
+ff7rp_apply_cpp_policy(menu_theme_palette_selftest)
+ff7rp_use_generated_catalog(menu_theme_palette_selftest)
+target_compile_definitions(menu_theme_palette_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(menu_theme_palette_selftest PRIVATE "src"
+    "$<TARGET_PROPERTY:minhook,INTERFACE_INCLUDE_DIRECTORIES>")
+target_link_libraries(menu_theme_palette_selftest PRIVATE User32)
+
+add_executable(menu_theme_metrics_selftest src/tests/menu_theme_metrics_selftest.cpp
+    src/game/menu_theme_metrics.cpp)
+ff7rp_apply_cpp_policy(menu_theme_metrics_selftest)
+target_compile_definitions(menu_theme_metrics_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
+    FF7RP_MENU_THEME_METRICS_SELFTEST=1)
+target_include_directories(menu_theme_metrics_selftest PRIVATE "src")
+
+add_executable(executable_mapping_selftest src/tests/executable_mapping_selftest.cpp)
+ff7rp_apply_cpp_policy(executable_mapping_selftest)
+target_compile_definitions(executable_mapping_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(executable_mapping_selftest PRIVATE "src")
 
 add_executable(toggle_feedback_selftest src/tests/toggle_feedback_selftest.cpp)
 ff7rp_apply_cpp_policy(toggle_feedback_selftest)
@@ -962,6 +1027,13 @@ foreach(preview_test IN ITEMS song_preview_policy_selftest preview_audio_selftes
     target_include_directories(${preview_test} PRIVATE "src")
 endforeach()
 target_sources(song_preview_runtime_selftest PRIVATE src/game/song_registry.cpp)
+add_executable(preview_game_volume_selftest src/tests/preview_game_volume_selftest.cpp
+    src/game/preview_game_volume.cpp src/core/pe_image.cpp src/core/version_gate.cpp)
+ff7rp_apply_cpp_policy(preview_game_volume_selftest)
+ff7rp_use_generated_catalog(preview_game_volume_selftest)
+target_compile_definitions(preview_game_volume_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(preview_game_volume_selftest PRIVATE "src")
+add_test(NAME preview_game_volume_selftest COMMAND preview_game_volume_selftest)
 target_sources(song_preview_overlay_selftest PRIVATE src/game/song_preview_overlay.cpp)
 target_sources(song_preview_anchor_selftest PRIVATE src/game/song_preview_anchor.cpp src/game/song_preview_overlay.cpp)
 
@@ -985,6 +1057,7 @@ target_link_libraries(autoplay_progress_selftest PRIVATE minhook Psapi)
 
 add_executable(title_input_service_selftest
     src/tests/title_input_service_selftest.cpp
+    src/game/menu_theme_metrics.cpp
     src/game/profile_list_coordinator.cpp
     src/game/song_registry.cpp
     src/game/hook_specs.cpp
@@ -1014,6 +1087,22 @@ if(NOT FF7RP_BUILD_RUNTIME)
 endif()
 if(FF7RP_BUILD_RUNTIME)
 add_test(NAME config_selftest COMMAND config_selftest)
+add_test(NAME theme_selftest COMMAND theme_selftest)
+set_tests_properties(theme_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME menu_theme_plan_selftest COMMAND menu_theme_plan_selftest)
+set_tests_properties(menu_theme_plan_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME menu_theme_native_selftest COMMAND menu_theme_native_selftest)
+set_tests_properties(menu_theme_native_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME menu_theme_metrics_selftest COMMAND menu_theme_metrics_selftest)
+set_tests_properties(menu_theme_metrics_selftest PROPERTIES TIMEOUT 60 LABELS functional)
+add_test(NAME executable_mapping_selftest COMMAND executable_mapping_selftest)
+set_tests_properties(executable_mapping_selftest PROPERTIES TIMEOUT 60 LABELS functional)
+add_test(NAME menu_theme_observation_selftest COMMAND menu_theme_observation_selftest)
+set_tests_properties(menu_theme_observation_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME menu_theme_runtime_selftest COMMAND menu_theme_runtime_selftest)
+set_tests_properties(menu_theme_runtime_selftest PROPERTIES TIMEOUT 60)
+add_test(NAME menu_theme_palette_selftest COMMAND menu_theme_palette_selftest)
+set_tests_properties(menu_theme_palette_selftest PROPERTIES TIMEOUT 60)
 add_test(NAME autoplay_runtime_selftest COMMAND autoplay_runtime_selftest)
 add_test(NAME autoplay_progress_selftest COMMAND autoplay_progress_selftest)
 set_tests_properties(autoplay_progress_selftest PROPERTIES TIMEOUT 60)
@@ -1176,6 +1265,11 @@ add_test(NAME tracked_binary_audit
 add_test(NAME documentation_audit
     COMMAND release_audit_tool "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+add_test(NAME menu_theme_perf_report_selftest
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tools/test_menu_theme_perf_report.py"
+        --metrics-selftest "$<TARGET_FILE:menu_theme_metrics_selftest>"
+)
+set_tests_properties(menu_theme_perf_report_selftest PROPERTIES TIMEOUT 60 LABELS "tooling")
 endif()
 
 set(FF7RP_BOUNDED_SELFTESTS

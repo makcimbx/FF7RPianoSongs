@@ -1,0 +1,70 @@
+{
+  "purpose": "Read-only exact menu-ready event observation, never texture-creation authority",
+  "profiles": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "program": "ff7rebirth_.exe-9457d4",
+      "project_program": "/ff7rebirth_.exe-1.005",
+      "evidence_type": "static_disk_contract",
+      "disk_authenticated": true,
+      "disk_sha256_matches_catalog": true,
+      "disk_sites_equal_and_unique": true,
+      "sites_unique_in_import": true,
+      "globals": {
+        "native_game_thread_initialized": {"rva":"0x08f40619","bytes":1},
+        "native_game_thread_id": {"rva":"0x08f40620","bytes":4},
+        "native_garbage_collecting": {"rva":"0x0871e6f4","bytes":4},
+        "native_uobject_exit_purge": {"rva":"0x08f40650","bytes":1}
+      },
+      "sites": {
+        "native_game_thread_publish_site": {"rva":"0x027e64e6","prefix":"44882d2ca1750689052da17506"},
+        "native_gc_flag_exchange_site": {"rva":"0x00bb8c6c","prefix":"8705825ab6074438258f0739087509"},
+        "native_exit_purge_publish_site": {"rva":"0x0450846f","prefix":"c605da81a30401e8891c6bfc"},
+        "native_uobject_thread_role_site": {"rva":"0x00b1f5ac","prefix":"40383566104208488bf9488b44245048894120488b44245848894118c7410cffffffff488951100f84a913a60165488b042558000000ba98030000488b08833c0a020f94c0"}
+      }
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "program": "ff7rebirth_.exe",
+      "project_program": "/ff7rebirth_.exe-1.004",
+      "evidence_type": "static_import_contract",
+      "disk_authenticated": false,
+      "disk_verification": "not_performed",
+      "sites_unique_in_import": true,
+      "globals": {
+        "native_game_thread_initialized": {"rva":"0x0910ce51","bytes":1},
+        "native_game_thread_id": {"rva":"0x0910ce58","bytes":4},
+        "native_garbage_collecting": {"rva":"0x088eb074","bytes":4},
+        "native_uobject_exit_purge": {"rva":"0x0910ce79","bytes":1}
+      },
+      "sites": {
+        "native_game_thread_publish_site": {"rva":"0x02b5aa49","prefix":"44882d01245b06890502245b06"},
+        "native_gc_flag_exchange_site": {"rva":"0x00e0d04c","prefix":"870522e0ad074438259f8b30087509"},
+        "native_exit_purge_publish_site": {"rva":"0x04789253","prefix":"c6051f3c980401e88d4068fc"},
+        "native_uobject_thread_role_site": {"rva":"0x00a44f68","prefix":"403835e27e6c08488bf9488b44245048894120488b44245848894118c7410cffffffff488951100f84cd9fed0165488b042558000000ba98030000488b08833c0a020f94c0"}
+      }
+    }
+  },
+  "rip_references": [
+    {"site":"native_game_thread_publish_site","displacement":3,"end":7,"target":"native_game_thread_initialized"},
+    {"site":"native_game_thread_publish_site","displacement":9,"end":13,"target":"native_game_thread_id"},
+    {"site":"native_gc_flag_exchange_site","displacement":2,"end":6,"target":"native_garbage_collecting"},
+    {"site":"native_exit_purge_publish_site","displacement":2,"end":7,"target":"native_uobject_exit_purge"},
+    {"site":"native_uobject_thread_role_site","displacement":3,"end":7,"target":"native_game_thread_initialized"}
+  ],
+  "tls": {
+    "contract":"current-thread GS:[0x58] -> native TLS vector literal slot 0 -> DWORD block+0x398",
+    "slot":0,
+    "role_offset":"0x398",
+    "expected_role":2,
+    "verifier_tail_offset":45,
+    "verifier_tail":"65488b042558000000ba98030000488b08833c0a020f94c0",
+    "no_dll_tls_or_pe_tls_index_fallback":true
+  },
+  "constraints": [
+    "All windows end on complete instructions, are signature-only and noncallable; no hooks installed at them.",
+    "Mutable globals have no value signature. GC flag is actual native collection scope, not request or interval.",
+    "ExitPurge is late: transient package is cleared/unrooted first. Early-exit latch and complete reentrancy exclusion are not qualified.",
+    "Raw FName IDs and zero-serial item membership are diagnostic facts only, not class-name/lifetime authority.",
+    "Stable before/after observations do not establish continuous outside-GC, shutdown exclusion, safe construction or GPU readiness.",
+    "No runtime observation or native mutation was performed for this static artifact."
+  ]
+}

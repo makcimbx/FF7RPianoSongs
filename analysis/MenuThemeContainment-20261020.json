@@ -1,0 +1,39 @@
+{
+  "scope": "Static-only panel-slot containment and bounded native class-ancestry reader; no new callable or runtime authority",
+  "profiles": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "program": "ff7rebirth_.exe-9457d4",
+      "evidence_type": "static_disk_contract",
+      "detail": "Imported metadata and unique complete-instruction windows checked against authenticated canonical disk image; no runtime qualification.",
+      "addresses": {
+        "native_panel_widget_class": {"rva": "0x0916ac40", "width": 8},
+        "native_panel_slot_class": {"rva": "0x0916ac20", "width": 8},
+        "native_panel_widget_class_read_site": {"rva": "0x01299aa4", "prefix": "b888000000e8d220ed00482be0488b058811ed0733c94885c0"},
+        "native_panel_slot_class_read_site": {"rva": "0x04abc3f0", "prefix": "b888000000e886f76afd482be0488b051ce86a0433c94885c0"},
+        "native_class_ancestry_site": {"rva": "0x019581f0", "prefix": "4885d2741d486342384c8d42303b41387f10488bd0488b41304c3904d07503b001c332c0c3"}
+      },
+      "property_records": {"Widget.Slot": "0x146260af0", "PanelSlot.Parent": "0x1462517a0", "PanelSlot.Content": "0x146251770", "PanelWidget.Slots": "0x146251b10", "Slots.ObjectInner": "0x146251b40"}
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "program": "ff7rebirth_.exe",
+      "evidence_type": "static_import_contract",
+      "detail": "Independently recovered older metadata and unique complete-instruction windows; imported PE matches catalog, authentic older disk comparison and runtime validation not performed.",
+      "addresses": {
+        "native_panel_widget_class": {"rva": "0x0932e978", "width": 8},
+        "native_panel_slot_class": {"rva": "0x0932e9e8", "width": 8},
+        "native_panel_widget_class_read_site": {"rva": "0x0121b544", "prefix": "b888000000e8e239e900482be0488b052034110833c94885c0"},
+        "native_panel_slot_class_read_site": {"rva": "0x04cd7ae8", "prefix": "b888000000e83e743dfd482be0488b05ec6e650433c94885c0"},
+        "native_class_ancestry_site": {"rva": "0x00885740", "prefix": "4885d2741d486342384c8d42303b41387f10488bd0488b41304c3904d07503b001c332c0c3"}
+      },
+      "property_records": {"Widget.Slot": "0x1463d5070", "PanelSlot.Parent": "0x1463c63b8", "PanelSlot.Content": "0x1463c6360", "PanelWidget.Slots": "0x1463c6720", "Slots.ObjectInner": "0x1463c6820"}
+    }
+  },
+  "contract": {
+    "class_slot_reference": {"disp32_offset": 16, "instruction_end": 20, "policy": "Authenticate immutable window and signed RIP target; published mutable UClass pointer must be nonnull, current registry/class/package checked. Never invoke getter to initialize null."},
+    "ancestry": {"array_offset": "0x30", "last_index_offset": "0x38", "stride": 8, "comparison": "baseIndex=i32(base+0x38); require policy-bounded nonnegative baseIndex<=actualLast; ptr(ptr(actual+0x30)+8*baseIndex)==base+0x30 (address, not stored pointer or base object)", "reread": "Object class, base-slot pointer, both indices, actual array pointer and selected entry must remain unchanged alongside containment edges. Native predicate is evidence-only, not invoked."},
+    "base_classes": "Actual native UClass identities PanelWidget and PanelSlot under /Script/UMG, with current metaclass/package/registry checks, not matching names alone; PanelWidget derives Widget.",
+    "fields": {"Widget.Slot": "0x28", "PanelSlot.Parent": "0x28", "PanelSlot.Content": "0x30", "PanelWidget.Slots": "0x108", "Slots.count": "0x110", "Slots.capacity": "0x114", "Slots.stride": 8, "kind": "ordinary Object 0x12, Array 0x16 with ordinary Object inner"},
+    "path": "Bounded child.Slot -> slot.Parent walk must verify slot.Content==child and forward parent.Slots[index]==slot, ending only at current tree.RootWidget. Root equality succeeds without requiring root.Slot null. Reject null/cycles/invalid arrays/exhausted bounds; reread every identity/field/header/index and current tree/root/positive receiver/target/session after construction and before mutation after reentrant calls.",
+    "limits": "Bounds are reader policy, not recovered engine maxima. Backwards links, names, zero serials and snapshots alone supply no pin or authority; no borrowed path retained across callbacks. First replacement still requires qualified owning callback and owner authorization."
+  }
+}

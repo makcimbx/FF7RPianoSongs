@@ -93,11 +93,12 @@ bool played_frames(Stream& s, std::uint64_t& frames)
 }
 }
 
-bool play_preview_audio(std::vector<std::int16_t>&& samples) noexcept
+bool play_preview_audio(std::vector<std::int16_t>&& samples, float gain) noexcept
 {
     auto& s = stream();
     std::lock_guard lock(s.mutex);
-    if (s.failed || samples.empty() || samples.size() % 2
+    if (s.failed || !std::isfinite(gain) || gain < 0.0f || gain > 1.0f
+        || samples.empty() || samples.size() % 2
         || samples.size() > 48000u * 20u * 2u) return false;
     if (!load_api(s) || !stop(s)) { s.failed = true; return false; }
     WAVEFORMATEX format{};
@@ -113,6 +114,8 @@ bool play_preview_audio(std::vector<std::int16_t>&& samples) noexcept
         return false;
     }
     s.samples = std::move(samples);
+    for (auto& sample : s.samples)
+        sample = static_cast<std::int16_t>(std::lround(sample * double(gain)));
     s.header = {};
     s.header.lpData = reinterpret_cast<char*>(s.samples.data());
     s.header.dwBufferLength = static_cast<DWORD>(s.samples.size() * sizeof(std::int16_t));

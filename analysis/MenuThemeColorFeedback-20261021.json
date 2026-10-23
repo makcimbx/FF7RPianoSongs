@@ -1,0 +1,45 @@
+{
+  "scope": "Native animation color read-back and separation of untinted UObject source from themed Slate presentation",
+  "profile": "ff7rebirth-steam-win64-6a16ced2",
+  "program": "ff7rebirth_.exe-9457d4",
+  "evidence_type": "static_disk_contract",
+  "identity": "Fresh installed executable hash matched the canonical catalog; newly followed reader windows matched imported bytes.",
+  "native_read_path": {
+    "channel_evaluator_va": "140f234c8",
+    "actuator_vtable_va": "145dfd4e0",
+    "current_value_virtual_offset": "28",
+    "current_value_reader_va": "144a1d680",
+    "type_dispatch_va": "144a0d1e0",
+    "linear_reader_va": "143193168",
+    "slate_color_reader_va": "1431931b0",
+    "binding_resolution_va": ["140b570f0", "140a39c44"],
+    "finding": "The LinearColor reader copies the current 16 bytes from the resolved UObject property. Binding resolution caches do not provide a protective untinted RGB copy. Channels have an independently evaluated validity mask."
+  },
+  "canvas_separation": {
+    "setter_catalog_id": "end_canvas_panel_set_content_color",
+    "setter_va": "140e8e95c",
+    "uobject_rgba_offset": "120",
+    "slate_rgba_offset": "2e0",
+    "slate_constant_marker_offset": "2f0",
+    "slate_delegate_offset": "2f8",
+    "finding": "Setter independently copies input into UObject and Slate; Slate color retains no pointer to the UObject field. Post-setter untinted property-only write-back does not itself refresh or undo themed Slate."
+  },
+  "implementation_contract": [
+    "Capture genuine incoming source before transformation or consuming ownership transfer.",
+    "After themed native setter returns, require current invocation/revision, callback authority and subject identity before writing latest genuine source to documented UObject property only.",
+    "LinearColor uses a checked 16-byte write; owning SlateColor uses existing native owning assignment, never memcpy.",
+    "Do not invoke the color setter or Slate refresh for source write-back.",
+    "Invocation/reentrancy provenance distinguishes genuine updates from adapter calls; do not infer channels from RGB equality or force stock colors.",
+    "An outer invocation must not overwrite a newer genuine nested update or forwarded-update invalidation.",
+    "Keep direct image-family opacity interception and the full owning Bottom attribute restoration protocol."
+  ],
+  "limits": [
+    "Exact blending-cache miss/reuse behavior for the observed live animation was not traced; not every alpha sample is claimed to reread the property.",
+    "Previously contaminated initial/preanimated caches cannot be reconstructed from this remedy; manual validation needs a clean untinted baseline.",
+    "Setter-internal reentrancy may expose transient themed property values before post-return write-back.",
+    "Text setters independently own Slate attributes, but this does not qualify arbitrary custom accessors or unresearched properties.",
+    "Bottom property write-back does not clear Slate bottom activation; Original requires the existing complete unset/bound attribute restoration.",
+    "Older reader/cache counterparts were not newly qualified; existing older setter contracts remain separately attributed.",
+    "No new callable, native invocation, live mutation or visual qualification resulted from this research."
+  ]
+}

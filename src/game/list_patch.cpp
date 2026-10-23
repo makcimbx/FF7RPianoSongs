@@ -4,6 +4,9 @@
 
 #include "core/hooks.h"
 #include "core/logging.h"
+#include "game/menu_theme_runtime.h"
+#include "game/menu_theme_metrics.h"
+#include <intrin.h>
 #include "core/pe_image.h"
 #include "game/hook_specs.h"
 #include "game/audio_sead.h"
@@ -80,6 +83,20 @@ std::atomic_bool g_catalog_terminal_failure{false};
 core::RawRvaHook g_on_setup_item_body_hook;
 OnSetupItemBodyFn g_original_on_setup_item_body = nullptr;
 HMODULE g_exe_module = nullptr;
+menu_theme_runtime::RowSetupObserver g_theme_row_observer = nullptr;
+menu_theme_runtime::RowSetupRetired g_theme_row_retired = nullptr;
+std::atomic_uint64_t g_theme_setup_generation{0};
+struct ThemeRowFrame {
+    const void* return_slot; void* caller; void* context; void* row;
+    std::int32_t index; std::uint64_t setup;
+    MenuSessionSnapshot session;
+    const core::HookCallbackGate::Lease* lease;
+    bool after = false, retired = false;
+    bool refresh = false;
+    const SelectionSnapshot* expected = nullptr;
+    const ListItemUiRefreshTarget* target = nullptr;
+};
+thread_local ThemeRowFrame* g_theme_row_frame = nullptr;
 #ifdef FF7RP_LIST_CATALOG_SELFTEST
 ListCatalogIdentityValidator g_test_identity = nullptr;
 NativeArrayTupleFaultInjection g_test_fault{};
@@ -417,6 +434,22 @@ bool prepare_list_setup_view(ListSetupView& view)
 
 void __fastcall on_setup_item_body_detour(void* context, void* item_widget, int32_t index)
 {
+    menu_theme_metrics::Span measured(menu_theme_metrics::Metric::RowSetupHook);
+    auto theme_lease = g_theme_row_observer ? non_audio_hook_gate().try_enter() : core::HookCallbackGate::Lease{};
+    ThemeRowFrame theme{_AddressOfReturnAddress(), _ReturnAddress(), context, item_widget, index,
+        g_theme_setup_generation.fetch_add(1) + 1, g_theme_row_observer ? capture_menu_callback_session() : MenuSessionSnapshot{}, &theme_lease};
+    auto* const parent = g_theme_row_frame;
+    if (parent) parent->retired = true;
+    g_theme_row_frame = &theme;
+    struct RetireThemeFrame {
+        ThemeRowFrame& frame; ThemeRowFrame* parent;
+        ~RetireThemeFrame() { frame.retired = true; if (g_theme_row_retired) g_theme_row_retired(&frame); g_theme_row_frame = parent; }
+    } retire_theme_frame{theme, parent};
+    if (g_theme_row_observer && theme_lease)
+        g_theme_row_observer(&theme, context, item_widget, index, theme.setup, false, theme_lease, menu_theme_runtime::RowSetupSource::NativeSetup);
+    // The coordinator owns its existing lease; don't change sole-callback
+    // admission by holding a second lease through its original/setup work.
+    theme_lease = {};
     ListReturnCallbacks list;
     list.ingress_context = context;
     list.ingress_widget = item_widget;
@@ -425,9 +458,11 @@ void __fastcall on_setup_item_body_detour(void* context, void* item_widget, int3
     list.prepare = [](ListSetupView& view) { return prepare_list_setup_view(view); };
     list.original_setup = [](const ListSetupView& view) {
         ScopedSongRenderContext render(view.identity.setup_selection);
-        if (g_original_on_setup_item_body)
+        if (g_original_on_setup_item_body) {
+            menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::RowSetupOriginal);
             g_original_on_setup_item_body(view.ingress_context, view.ingress_widget,
                 view.ingress_index);
+        }
     };
     list.cleanup_audio = [](const ListSetupView& view) {
         return release_audio_route_on_piano_list_return(
@@ -441,6 +476,10 @@ void __fastcall on_setup_item_body_detour(void* context, void* item_widget, int3
     };
     ProfileListCallbacks profile = make_profile_list_callbacks();
     (void)profile_list_coordinator().run_list_return(list, profile);
+    if (g_theme_row_observer && !theme.retired) theme_lease = non_audio_hook_gate().try_enter();
+    theme.after = true;
+    if (g_theme_row_observer && theme_lease && !theme.retired)
+        g_theme_row_observer(&theme, context, item_widget, index, theme.setup, true, theme_lease, menu_theme_runtime::RowSetupSource::NativeSetup);
 }
 
 bool capture_active_list_item_ui_target_impl(const SelectionSnapshot& expected,
@@ -476,12 +515,25 @@ bool validate_active_list_item_ui_target_impl(const SelectionSnapshot& expected,
         && current.widget_identity.serial_number == target.widget_identity.serial_number;
 }
 
-bool refresh_active_list_item_ui_impl(const SelectionSnapshot& expected,
+__declspec(noinline) bool refresh_active_list_item_ui_impl(const SelectionSnapshot& expected,
     const ListItemUiRefreshTarget& target)
 {
+    menu_theme_metrics::Span measured(menu_theme_metrics::Metric::OwnedRefreshHook);
     auto callback = non_audio_hook_gate().try_enter();
     if (!callback || !g_original_on_setup_item_body
         || !validate_active_list_item_ui_target_impl(expected, target)) return false;
+
+    ThemeRowFrame theme{_AddressOfReturnAddress(), _ReturnAddress(), target.context, target.widget, target.visible_index,
+        g_theme_setup_generation.fetch_add(1) + 1, g_theme_row_observer ? capture_menu_callback_session() : MenuSessionSnapshot{}, &callback};
+    theme.refresh = true; theme.expected = &expected; theme.target = &target;
+    auto* const parent = g_theme_row_frame;
+    if (parent) parent->retired = true;
+    g_theme_row_frame = &theme;
+    struct RetireRefreshFrame {
+        ThemeRowFrame& frame; ThemeRowFrame* parent;
+        ~RetireRefreshFrame() { frame.retired = true; if (g_theme_row_retired) g_theme_row_retired(&frame); g_theme_row_frame = parent; }
+    } retire_theme{theme, parent};
+    if (g_theme_row_observer) g_theme_row_observer(&theme, target.context, target.widget, target.visible_index, theme.setup, false, callback, menu_theme_runtime::RowSetupSource::OwnedRefresh);
 
     int32_t source_count = kVanillaPianoSongCount;
     PianoListArrayView list_view{};
@@ -491,9 +543,14 @@ bool refresh_active_list_item_ui_impl(const SelectionSnapshot& expected,
     SelectionSnapshot render = expected;
     render.base_slot = std::clamp(expected.song->base_slot, 0, source_count);
     ScopedSongRenderContext active_setup(render);
-    g_original_on_setup_item_body(target.context, target.widget, target.visible_index);
+    {
+        menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::OwnedRefreshOriginal);
+        g_original_on_setup_item_body(target.context, target.widget, target.visible_index);
+    }
     (void)apply_custom_rank_text(target.widget, *render.song, render.profile,
         target.visible_index);
+    theme.after = true;
+    if (g_theme_row_observer && !theme.retired) g_theme_row_observer(&theme, target.context, target.widget, target.visible_index, theme.setup, true, callback, menu_theme_runtime::RowSetupSource::OwnedRefresh);
     return true;
 }
 
@@ -522,6 +579,31 @@ bool install_raw_hook(const HookInstallContext& context, const char* spec_name, 
 }
 
 } // namespace
+
+void menu_theme_runtime::bind_owned_row_setup(RowSetupObserver observer, RowSetupRetired retired) noexcept { g_theme_row_observer = observer; g_theme_row_retired = retired; }
+bool menu_theme_runtime::qualify_owned_row_setup(const void* opaque, const MenuSessionSnapshot& session,
+    void* row, std::int32_t index, std::uint64_t setup, bool after) noexcept
+{
+    menu_theme_metrics::Span owner_check(menu_theme_metrics::Metric::QualifyRowOwner);
+    const auto* frame = g_theme_row_frame;
+    if (!frame || opaque != frame || frame->retired || frame->row != row || frame->index != index
+        || !setup || frame->setup != setup || frame->after != after || !frame->lease || !*frame->lease
+        || !non_audio_hook_gate().accepting() || !same_menu_session(frame->session, session, false)
+        || (session.widget && frame->context != session.widget)) return false;
+    void* caller = nullptr;
+    HMODULE source = g_exe_module;
+    if (frame->refresh) {
+        if (!frame->expected || !frame->target || frame->target->widget != row || frame->target->context != frame->context
+            || frame->target->visible_index != index || !validate_active_list_item_ui_target_impl(*frame->expected, *frame->target)) return false;
+        MEMORY_BASIC_INFORMATION own{};
+        if (VirtualQuery(reinterpret_cast<const void*>(&refresh_active_list_item_ui_impl), &own, sizeof(own)) != sizeof(own)
+            || own.Type != MEM_IMAGE) return false;
+        source = static_cast<HMODULE>(own.AllocationBase); // Real module refresh frame, not invented game/open provenance.
+    }
+    const auto address = reinterpret_cast<std::uintptr_t>(frame->caller);
+    return core::safe_copy_bytes(frame->return_slot, &caller, sizeof(caller)) && caller == frame->caller
+        && core::is_executable_image_address(source, address, true);
+}
 
 class PreparedPianoListCatalog final {
 public:

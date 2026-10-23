@@ -15,6 +15,9 @@ std::atomic_uint64_t tick{0};
 std::atomic_bool menu_ready{true}, list_ready{true}, playing{false}, fail_stop{false}, faded{false};
 std::atomic_uint plays{0};
 std::atomic_int last_clip{0};
+std::atomic<float> settings_gain{0.5f}, played_gain{-1};
+std::atomic_bool settings_ready{true}, change_session_on_sample{false};
+std::atomic_uint64_t session_generation{1};
 std::mutex loader_mutex;
 std::condition_variable loader_event;
 unsigned loads = 0, permits = 0, publications = 0;
@@ -35,6 +38,7 @@ void release_load(unsigned count)
 #undef GetTickCount64
 
 namespace ff7rp::pipeline {
+float native_music_fixed_gain() noexcept { return 0.8f * 0.535f; }
 Status read_song_preview_pcm(const SongPreviewArtifact& artifact, std::vector<std::int16_t>* samples)
 {
     std::unique_lock lock(loader_mutex);
@@ -55,9 +59,9 @@ void log(LogLevel, const std::string& line)
         std::lock_guard lock(loader_mutex); ++publications; loader_event.notify_all();
     }
 }
-bool play_preview_audio(std::vector<std::int16_t>&& samples) noexcept
+bool play_preview_audio(std::vector<std::int16_t>&& samples, float gain) noexcept
 {
-    ++plays; last_clip = samples.front(); playing = true; return true;
+    ++plays; last_clip = samples.front(); played_gain = gain; playing = true; return true;
 }
 bool stop_preview_audio() noexcept
 {
@@ -72,14 +76,20 @@ bool fade_preview_audio() noexcept
 PreviewAudioPosition preview_audio_position() noexcept { return {playing.load(), false, 5, 240}; }
 }
 namespace ff7r::piano::game {
+PreviewGameVolume capture_preview_game_volume() noexcept
+{
+    if (change_session_on_sample.exchange(false)) ++session_generation;
+    return settings_ready ? PreviewGameVolume{PreviewGameVolumeState::Ready, settings_gain.load()}
+        : PreviewGameVolume{PreviewGameVolumeState::NotReady};
+}
 MenuSessionSnapshot capture_ready_menu_session() noexcept
 {
     MenuSessionSnapshot result;
-    if (menu_ready) { result.generation = 1; result.phase = MenuSessionPhase::Ready; }
+    if (menu_ready) { result.generation = session_generation; result.phase = MenuSessionPhase::Ready; }
     return result;
 }
 bool menu_session_generation_exact(std::uint64_t generation, bool) noexcept
-{ return menu_ready && generation == 1; }
+{ return menu_ready && generation == session_generation; }
 ProfileListCoordinator& profile_list_coordinator() { static ProfileListCoordinator value; return value; }
 ProfileListCoordinatorState ProfileListCoordinator::state() const noexcept
 { return list_ready ? ProfileListCoordinatorState::Ready : ProfileListCoordinatorState::ListWaitingReadiness; }
@@ -124,6 +134,7 @@ int main()
         game::poll_song_preview(true, false, false); require(!plays);
         release_load(2); await([] { return publications == 1; });
         game::poll_song_preview(true, false, false); require(plays == 1 && last_clip == 2);
+        require(played_gain == 0.5f * ff7rp::pipeline::native_music_fixed_gain());
         require(game::song_preview_position().played_frames == 5);
         const auto active_render = game::capture_song_preview_render_snapshot();
         require(bool(active_render) && active_render.selection.visible_index == 6
@@ -143,7 +154,9 @@ int main()
         tick = 999999; game::poll_song_preview(true, false, false); require(plays == 1);
         game::poll_song_preview(true, true, false); release_load(4);
         await([] { return publications == 2; });
+        settings_gain = 0;
         game::poll_song_preview(true, true, false); require(plays == 2 && last_clip == 3);
+        require(played_gain == 0); // Config zero is a valid mute, not unavailable.
         game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
         require(!playing && faded); // Manual toggle fades out, no replay loop.
         tick += 399; game::poll_song_preview(true, false, false); require(faded);
@@ -168,11 +181,26 @@ int main()
         game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
         release_load(6); await([] { return publications == 4; });
         game::poll_song_preview(true, true, false); require(playing && plays == 3);
+        require(game::cancel_song_preview("settings_test"));
+        game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
+        release_load(7); await([] { return publications == 5; });
+        settings_ready = false; game::poll_song_preview(true, true, false);
+        require(!playing && plays == 3 && !game::runtime().driver_failed);
+        settings_ready = true;
+        game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
+        release_load(8); await([] { return publications == 6; });
+        change_session_on_sample = true; game::poll_song_preview(true, true, false);
+        require(!playing && plays == 3 && !game::runtime().driver_failed);
+        game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
+        release_load(9); await([] { return publications == 7; });
+        settings_gain = 0.25f; game::poll_song_preview(true, true, false);
+        require(playing && plays == 4
+            && played_gain == 0.25f * ff7rp::pipeline::native_music_fixed_gain());
         fail_stop = true;
         require(!game::cancel_song_preview("driver_cancel_failure") && playing);
         game::registry().set_active_selection(6, 0);
         game::poll_song_preview(true, false, false); game::poll_song_preview(true, true, false);
-        require(plays == 3); // Failure retains ownership and permanently denies new starts.
+        require(plays == 4); // Failure retains ownership and permanently denies new starts.
         fail_stop = false; require(game::cancel_song_preview("test_cleanup"));
         game::shutdown_song_preview(); loader.join();
         std::cout << "song preview runtime selftest passed\n";

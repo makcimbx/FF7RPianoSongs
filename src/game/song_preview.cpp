@@ -3,6 +3,8 @@
 #include "core/logging.h"
 #include "game/menu_session_authority.h"
 #include "game/profile_list_coordinator.h"
+#include "game/preview_game_volume.h"
+#include "pipeline/native_music_export.h"
 #include "game/song_preview_policy.h"
 #include "game/song_registry.h"
 #include "pipeline/song_preview.h"
@@ -180,8 +182,17 @@ void poll_song_preview(bool focused, bool manual_held, bool autoplay_chord_held)
             else (void)stop_locked(r, "manual_toggle", true);
         } else if (r.policy.dwell(GetTickCount64())) request_locked(r, selection);
         if (r.policy.phase() == PreviewPhase::Ready) {
+            const auto volume = capture_preview_game_volume();
+            // A missing settings snapshot rejects this attempt, not the audio driver.
+            if (!volume || !menu_session_generation_exact(session.generation, true)
+                || !registry().selection_matches(selection)) {
+                (void)stop_locked(r, "settings_unavailable");
+                event("start", "unavailable", "game_settings");
+                return;
+            }
             r.fade_deadline = 0;
-            const bool started = core::play_preview_audio(std::move(r.ready));
+            const bool started = core::play_preview_audio(std::move(r.ready),
+                volume.gain * ff7rp::pipeline::native_music_fixed_gain());
             r.policy.started(started);
             r.spectrum = std::move(r.ready_spectrum);
             r.ready_spectrum.clear();

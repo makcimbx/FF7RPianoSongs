@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cwchar>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -102,6 +103,22 @@ int main()
         fail_load = true; require(!play_preview_audio(clip())); fail_load = false; reset_failure();
         fail_exports = true; require(!play_preview_audio(clip())); fail_exports = false; reset_failure();
         fail_open = true; require(!play_preview_audio(clip())); fail_open = false; reset_failure();
+        const std::vector<std::int16_t> extremes{-32768, 32767, -1, 1, 0, 2000};
+        require(play_preview_audio(std::vector<std::int16_t>(extremes), 0.5f));
+        const auto* attenuated = reinterpret_cast<const std::int16_t*>(borrowed->lpData);
+        require(std::vector<std::int16_t>(attenuated, attenuated + extremes.size())
+            == std::vector<std::int16_t>({-16384, 16384, -1, 1, 0, 1000}));
+        const auto* retained = borrowed->lpData;
+        for (float gain : {-0.1f, 1.1f, std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::infinity()}) {
+            require(!play_preview_audio(clip(), gain) && queued && borrowed->lpData == retained);
+        }
+        require(stop_preview_audio());
+        require(play_preview_audio(std::vector<std::int16_t>(extremes), 0.0f));
+        const auto* muted = reinterpret_cast<const std::int16_t*>(borrowed->lpData);
+        require(std::vector<std::int16_t>(muted, muted + extremes.size())
+            == std::vector<std::int16_t>(extremes.size(), 0));
+        require(stop_preview_audio());
         require(play_preview_audio(clip()) && queued);
         const auto* data = borrowed->lpData;
         position = 125;

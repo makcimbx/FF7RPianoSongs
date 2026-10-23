@@ -367,7 +367,10 @@ class NativeCachedResourceCatalogTest(unittest.TestCase):
         for identifier, policy in RETIRED_AUDIO_BINDINGS.items():
             with self.subTest(identifier=identifier):
                 entry = entries[identifier]
-                self.assertEqual(entry["consumers"], ["tools/test_native_cached_resource_catalog.py"])
+                consumers = ["tools/test_native_cached_resource_catalog.py"]
+                if identifier == "static_construct_object":
+                    consumers.append("src/game/menu_theme_native.cpp")
+                self.assertEqual(entry["consumers"], consumers)
                 self.assertEqual(entry["install_policy"], policy)
                 self.assertEqual(entry["requirement"], "research")
                 self.assertEqual(entry["status"], "research")

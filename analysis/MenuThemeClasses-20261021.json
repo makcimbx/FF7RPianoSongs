@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "purpose": "Read-only published-class and active-row ownership contracts; not lifetime or mutation authority",
+  "profiles": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "program": "ff7rebirth_.exe-9457d4",
+      "evidence_type": "static_disk_contract",
+      "disk_authenticated": true,
+      "classes": {
+        "UserWidget": ["0x00dd0aa8", "0x0916aeb0", "ceb03901", "f4a33908"],
+        "WidgetTree": ["0x027d1c60", "0x0916b030", "169f99ff", "bc939906"],
+        "EndImage": ["0x0167a7a8", "0x090f5a60", "ce13af00", "a4b2a707"],
+        "EndPieImage": ["0x0164d650", "0x090f74e0", "26e5b100", "7c9eaa07"],
+        "EndTiledImage": ["0x01941664", "0x090f8098", "12a58200", "206a7b07"],
+        "EndImageSet": ["0x0161efac", "0x090f5a20", "cacbb400", "606aad07"],
+        "EndButton": ["0x015c1670", "0x090f2980", "06a5ba00", "fc12b307"],
+        "EndTextBlock": ["0x013bf09c", "0x090f8068", "dacada00", "b88fd307"],
+        "EndCanvasPanel": ["0x0155ede0", "0x090f2a60", "96cdc000", "6c3cb907"],
+        "EndVirtualScrollBox": ["0x017c99b4", "0x090f83c8", "c2219a00", "00ea9207"],
+        "EndListBox": ["0x018b0e5c", "0x090f5bf0", "1aad8b00", "804d8407"]
+      },
+      "active_array_metadata": {
+        "EndVirtualScrollBox": ["0x146132ec0", "0x146132e90"],
+        "EndListBox": ["0x1460cea68", "0x1460ce9d8"]
+      },
+      "piano_initializer_va": "0x1439a6a9c"
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "program": "ff7rebirth_.exe",
+      "evidence_type": "static_import_contract",
+      "disk_authenticated": false,
+      "disk_verification": "not_performed",
+      "classes": {
+        "UserWidget": ["0x008d6af0", "0x0932ec28", "36847d01", "2481a508"],
+        "WidgetTree": ["0x02b49a10", "0x0932ed78", "165556ff", "54537e06"],
+        "EndImage": ["0x01623810", "0x092bc660", "16b7a800", "3c8ec907"],
+        "EndPieImage": ["0x01594af4", "0x092be0b8", "32a4b100", "b095d207"],
+        "EndTiledImage": ["0x018c85c4", "0x092bec10", "62697e00", "38669f07"],
+        "EndImageSet": ["0x01598a94", "0x092bc650", "9264b100", "a83bd207"],
+        "EndButton": ["0x015327bc", "0x092b9570", "6ac7b700", "a06dd807"],
+        "EndTextBlock": ["0x013fa120", "0x092bec40", "064ecb00", "0c4bec07"],
+        "EndCanvasPanel": ["0x015492ec", "0x092b9650", "3a5cb600", "5003d707"],
+        "EndVirtualScrollBox": ["0x017349b8", "0x092befa0", "6ea59700", "d4a5b807"],
+        "EndListBox": ["0x0185a548", "0x092bc7e8", "de498500", "8c22a607"]
+      },
+      "active_array_metadata": {
+        "EndVirtualScrollBox": ["0x1462cb3f0", "0x1462cb420"],
+        "EndListBox": ["0x146266968", "0x146266998"]
+      },
+      "piano_initializer_va": "0x143c4d6c0"
+    }
+  },
+  "reference": {
+    "row_format": ["reference_rva", "slot_rva", "call_disp_le", "slot_disp_le"],
+    "prefix_template": "b888000000e8{call_disp_le}482be0488b05{slot_disp_le}33c94885c0",
+    "length": 25,
+    "rip_displacement_offset": 16,
+    "rip_instruction_end": 20,
+    "verification": "Each complete-instruction prefix has exactly one imported match; all default prefixes also uniquely match authenticated disk .text",
+    "end_image_reference_reuses": "end_image_static_class",
+    "new_slot_id": "theme_class_<snake_case_class>",
+    "new_reference_id": "theme_class_<snake_case_class>_reference",
+    "policies": "Slots are data_reference/data_only; reference bodies signature/signature_only, never invoked"
+  },
+  "class_contract": {
+    "UMG": ["UserWidget", "WidgetTree"],
+    "EndGame": ["EndImage", "EndPieImage", "EndTiledImage", "EndImageSet", "EndButton", "EndTextBlock", "EndCanvasPanel", "EndVirtualScrollBox", "EndListBox"],
+    "parents": {
+      "EndImage": "Widget", "EndPieImage": "Widget", "EndTiledImage": "Widget", "EndImageSet": "Widget",
+      "EndTextBlock": "Widget", "EndVirtualScrollBox": "Widget", "EndListBox": "Widget",
+      "EndCanvasPanel": "PanelWidget", "EndButton": "ContentWidget", "ContentWidget": "PanelWidget"
+    },
+    "end_image_native_size": "0x1e8 in BOTH builds; prior default 0x200 detail was incorrect (0x200 is EndPieImage)",
+    "admission": "Authenticate immutable reference and signed RIP target, require existing nonnull published class with registry/class/script-package identity, apply qualified fast ancestry, reread slot and metadata. Names alone are insufficient. Never initialize a null getter. Class publication is not a target lifetime lease."
+  },
+  "current_rows": {
+    "EndVirtualScrollBox": {"music_list_weak_offset": "0x3c8", "active_array_offset": "0x8d8", "cached_array_offset": "0x8e8"},
+    "EndListBox": {"music_list_weak_offset": "0x410", "active_array_offset": "0x188", "cached_array_offset": "0x198"},
+    "array": {"data": 0, "count": 8, "capacity": 12, "stride": 8, "property_kind": "0x16 Array, inner 0x12 ordinary strong Object declared UWidget"},
+    "logical_index": "Arrays store pointers only. Song rows retain actual existing setup-hook row/logical-index/session/setup-generation association; pool position is NOT logical index. Uniform SpeedIcon styling needs current membership, not a song index. Invalidate prior association on every rebind.",
+    "validation": "Positive current MusicList and list/row handles; current active array (never CachedWidgets) member plus class, header and member rereads. Each row owns its current WidgetTree via qualified strong fields; SpeedIcon belongs to an admitted current speed row. Preserve native SelectedIndex policy.",
+    "limits": "No independent persistent row logical-index field established; no GUObjectArray scan; current callback authority and full strong containment remain required."
+  },
+  "speed_row_lifecycle": {
+    "profiles": {
+      "ff7rebirth-steam-win64-6a16ced2": {
+        "program": "ff7rebirth_.exe-9457d4", "evidence_type": "static_disk_contract",
+        "speed_update_va": "0x1439c21c8", "selection_caller_va": "0x1439a84e4", "selection_call_va": "0x1439a8648",
+        "speed_key_caller_va": "0x1439a6d68", "speed_key_call_va": "0x1439a6ebf"
+      },
+      "ff7rebirth-steam-win64-68fd6fde": {
+        "program": "ff7rebirth_.exe", "evidence_type": "static_import_contract", "disk_verification": "not_performed",
+        "speed_update_va": "0x143c68af0", "selection_caller_va": "0x143c4f130", "selection_call_va": "0x143c4f284",
+        "speed_key_caller_va": "0x143c4d998", "speed_key_call_va": "0x143c4daef"
+      }
+    },
+    "update": "Resolve current weak SpeedList, native speed ordinal and SpeedIcon, check EndImageSet ancestry, set native SelectedIndex 2/1/0. Does not assign/rebuild Images, WidgetTree or ContentWidgets; native child lookup may populate its cache.",
+    "default_setup_witness": {
+      "refresh_items_va": "0x1409719f8", "refresh_item_va": "0x1437a5ed0", "create_reuse_va": "0x140971184",
+      "setup_va": "0x140971ab0", "callback_va": "0x140971c40", "row_resolution_va": "0x1409250e4",
+      "delegate_dispatch_va": "0x141958b30", "delegate_offset": "0x148", "payload_row": 0, "payload_ordinal": 8,
+      "scope": "Actual speed ordinal, NOT song index or necessarily active-array position. Evidence witnesses only, not qualified new callables."
+    },
+    "checkpoints": "Initial Ready, after the existing owned selection original, and already-qualified theme application boundaries. The owned selection body encloses selection-to-speed-update. piano_detail_update is a different function and does not establish this provenance.",
+    "uniform_binding": "Associate menu generation, current positive SpeedList/row identity and current tree with a locally named membership epoch. Enumerate active strong ContentWidgets, not CachedWidgets; resolve/recheck header/member/tree before writes, retire missing subjects and reconcile replacements. Preserve native Images header/transforms/SelectedIndex. No logical song index or row-state classification is needed.",
+    "limits": "Independent Blueprint RefreshItems is not proven enclosed by the song-row setup hook. Re-resolve at qualified checkpoints; never reuse raw retained row pointers as authority or label a local epoch native setup generation. No new hook or runtime call was qualified by this research."
+  }
+}

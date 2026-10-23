@@ -1,0 +1,135 @@
+{
+  "build_id": "ff7rebirth-steam-win64-68fd6fde",
+  "status": "static_import_contract",
+  "source": {
+    "program": "ff7rebirth_.exe",
+    "project_program_path": "/ff7rebirth_.exe-1.004",
+    "identity_catalog": "src/game/rva_catalog.json",
+    "imported_pe_matches_catalog": true,
+    "older_disk_authenticated": false,
+    "runtime_validated": false,
+    "queries_used_explicit_program": true
+  },
+  "signature_contract": "Prefixes are exact bytes, instruction-complete and unique in the explicit older import .text. Catalog masks must contain one x per byte. No older disk equality or runtime qualification is claimed.",
+  "proposed_addresses": {
+    "end_image_find_named_child": {
+      "rva": "0x00962be4",
+      "prefix": "48 89 5c 24 18 48 89 74 24 20 57 b8 30 00 00 00 e8 37 c3 74 01 48 2b e0 4c 8b 02 48 8d b9 d0 02 00 00",
+      "contract": "RCX=cache-owning EndUserWidget, RDX=borrowed FName64 pointer, RAX=borrowed EndImage or null. Own WidgetTree lookup and EndImage ancestry check occur on miss; receiver+0x2d0 caches even null, and hit does not recheck class. Therefore this is a mutating callable, not read-only inspection. Independently verify current menu receiver, actual returned class/name/identity/owner and admission after the call. Explicit older Icon_New caller 0x143c4f960; unique instruction-complete older imported prefix, no older disk equality or runtime validation."
+    },
+    "end_image_static_class": {
+      "rva": "0x01623810",
+      "prefix": "b8 88 00 00 00 e8 16 b7 a8 00 48 2b e0 48 8b 05 3c 8e c9 07 33 c9 48 85 c0"
+    },
+    "native_slate_brush_construct": {
+      "rva": "0x00e6ee50",
+      "prefix": "48 8d 05 a1 27 95 04 48 89 01 b8 00 00 00 42 89 41 08 48 89 41 0c 33 c0"
+    },
+    "native_slate_brush_destroy": {
+      "rva": "0x00e708c0",
+      "prefix": "40 53 b8 20 00 00 00 e8 64 e6 23 01 48 2b e0 48 8d 05 22 0d 95 04 48 8b d9"
+    },
+    "native_slate_brush_set_resource": {
+      "rva": "0x00c2f69c",
+      "prefix": "40 53 b8 30 00 00 00 e8 88 f8 47 01 48 2b e0 48 39 51 48 74 2c 48 89 51 48"
+    },
+    "end_image_set_brush": {
+      "rva": "0x016225bc",
+      "prefix": "48 89 5c 24 08 57 b8 40 00 00 00 e8 64 c9 a8 00 48 2b e0 48 8d b9 08 01 00 00"
+    },
+    "native_texture2d_create_transient": {
+      "rva": "0x051a8dc8",
+      "prefix": "48 89 5c 24 10 48 89 6c 24 18 48 89 74 24 20 57 41 54 41 55 41 56 41 57 b8 30 00 00 00 e8 46 61 f0 fc"
+    },
+    "native_bulk_data_materialize": {
+      "rva": "0x0169e654",
+      "prefix": "40 53 b8 20 00 00 00 e8 d0 08 a1 00 48 2b e0 48 8b d9 e8 9d e3 3a ff 48 83 7b 08 00"
+    },
+    "native_bulk_data_unlock": {
+      "rva": "0x0106aa10",
+      "prefix": "40 53 b8 20 00 00 00 e8 14 45 04 01 48 2b e0 f6 41 20 08 48 8b d9 c6 41 24 00"
+    },
+    "native_texture2d_update_resource": {
+      "rva": "0x00c1f380",
+      "prefix": "48 89 5c 24 10 48 89 74 24 18 57 b8 50 00 00 00 e8 9b fb 48 01 48 2b e0"
+    },
+    "native_transient_package": {
+      "rva": "0x09115c28",
+      "prefix": null,
+      "contract": "Writable eight-byte slot in zero-filled .data virtual tail; never signature the pointer value. Authenticate registry-backed Package named /Engine/Transient, null Outer and internal RootSet; reread before construction. Initializer 0x1447893f8, package creation 0x140d89350, Package getter 0x140d8b1f8, shutdown 0x1447890b0."
+    },
+    "end_canvas_panel_set_content_color": {
+      "rva": "0x00cd02bc",
+      "prefix": "40 53 b8 50 00 00 00 e8 68 ec 3d 01 48 2b e0 48 8b 99 48 01 00 00 c5 f8 10 02"
+    },
+    "end_button_set_background_color": {
+      "rva": "0x00863490",
+      "prefix": "40 53 b8 60 00 00 00 e8 94 ba 84 01 48 2b e0 48 8b 99 48 04 00 00 33 c0"
+    },
+    "end_text_block_set_outline_color": {
+      "rva": "0x01074158",
+      "prefix": "40 53 b8 50 00 00 00 e8 cc ad 03 01 48 2b e0 c5 f8 10 02 c5 fa 7f 81 c0 01 00 00"
+    },
+    "end_image_set_static_class": {
+      "rva": "0x01598a94",
+      "prefix": "b8 88 00 00 00 e8 92 64 b1 00 48 2b e0 48 8b 05 a8 3b d2 07 33 c9 48 85 c0"
+    },
+    "end_image_set_set_color": {
+      "rva": "0x00861510",
+      "prefix": "b8 38 00 00 00 e8 16 da 84 01 48 2b e0 c5 f8 10 02 c5 fa 7f 81 18 01 00 00"
+    },
+    "end_image_set_set_selected_index": {
+      "rva": "0x00861e94",
+      "reuse_catalog_id": "widget_visibility_setter",
+      "contract": "Existing canonical entry has a historical name and signature_only policy. Reuse its address identity, not a duplicate catalog ID; the name does not establish UWidget visibility semantics or authorize a new call.",
+      "prefix": "b8 28 00 00 00 e8 92 d0 84 01 48 2b e0 89 91 3c 01 00 00 48 8b 89 60 01 00 00"
+    }
+  },
+  "existing_constructor": {
+    "id": "static_construct_object",
+    "catalog_prefix_rechecked": true,
+    "contract": "Existing catalog entry, not a duplicate. Construction parameters size 0x40: Class00, Outer08, FName10, publicFlags18, internalFlags1c, bool20/21, Template28, InstanceGraph30, ExternalPackage38. Chain 0x140a44330 -> 0x140a446d8 -> 0x140a44f40 consumes public 0x80 and sets internal RootSet 0x40000000; fresh holder flags 0xc0."
+  },
+  "native_contract": {
+    "panel_slot_containment": {
+      "widget_slot": {"offset": "0x28", "property_record": "0x1463d5070", "kind": "Object 0x12"},
+      "slot_parent": {"offset": "0x28", "property_record": "0x1463c63b8", "kind": "Object 0x12"},
+      "slot_content": {"offset": "0x30", "property_record": "0x1463c6360", "kind": "Object 0x12"},
+      "panel_slots": {"offset": "0x108", "count": "0x110", "capacity": "0x114", "stride": 8, "property_record": "0x1463c6720", "kind": "Array 0x16; ordinary Object inner 0x12 at record 0x1463c6820"},
+      "class_params_and_arrays": {"Widget": "0x145fa5290 / 0x1463d4bf0", "PanelSlot": "0x145fa2c50 / 0x1463c6390", "PanelWidget": "0x145fa2a20 / 0x1463c6750"},
+      "class_contract": "Require actual PanelSlot and PanelWidget ancestry; PanelWidget derives Widget, size 0x120; PanelSlot size 0x38.",
+      "native_child_access_anchor": "0x140970340 bounds count at panel+0x110, loads pointer Slots[index] with stride 8 and returns slot+0x30; evidence only, not a new callable.",
+      "validation": "Bounded child.Slot -> slot.Parent walk must check slot.Content==child and current parent.Slots[index]==slot, terminating only at current tree.RootWidget. Root equality succeeds without requiring root.Slot null. Reject nulls, cycles, invalid arrays or exhausted bounds; reread all recorded identity/field/header/index edges, current tree/root and positive receiver/target identities/session after construction and before mutation after reentrant calls.",
+      "limit": "Forward strong RootWidget/Slots/Content membership explains target retention, not backwards links alone; no borrowed path survives callback. Ancillary zero serials remain diagnostic-only. Import-only metadata; checker not yet implemented or runtime-qualified."
+    },
+    "current_widget_tree": {
+      "receiver_property": "Inherited UUserWidget.WidgetTree, strong Object property kind 0x12, pointer at +0x1d8; not WeakObject kind 0x0e.",
+      "receiver_property_record": "0x1463cfc10",
+      "receiver_registration": "0x1406c43e0 -> 0x144ce8b40 -> class params 0x145fa4440; properties 0x1463cf870, count 25",
+      "tree_property": "UWidgetTree.RootWidget, strong Object pointer at +0x28; native WidgetTree size 0x30.",
+      "tree_property_record": "0x1463dd0b8",
+      "tree_class_params": "0x145fa64e0; properties 0x1463dd0e8, count 1",
+      "validation": "Positive current receiver/target handles and qualified synchronous callback; target.Outer==tree, tree.Outer==receiver, receiver.WidgetTree==tree. Recheck tuple (receiver.WidgetTree, tree.RootWidget, target.Outer, tree.Outer), owner/session generation and positive identities after lookup, immediately before mutation and after reentrant native operations. Reject replaced tree without restoring through a stale target.",
+      "limit": "Current reflected owner reference explains retention of a zero-serial tree, not a weak lease. Outer does not prove target containment/strong retention. No runtime AllWidgets collection: conceptual AllWidgets is editor-only. EndImage+0x1d8 is unrelated Slate state; do not apply receiver layout there. Import-only, no older disk/runtime claim."
+    },
+    "end_image": "Parent Widget, native size 0x1e8 (NOT default profile size 0x200), Brush+0x108, null Slate pair+0x1d8/+0x1e0. Strong ResourceObject at Brush+0x48. Owning SetBrush copy helper 0x140e753dc.",
+    "brush": "Size 0x88, alignment 8, zero storage before ctor. Resource+0x48, cached pair+0x70/+0x78. Resource-only setter does not root or reset UV. Native destruction releases owners, not storage.",
+    "factory": "ECX width, EDX height, R8D format, R9 FName64 -> RAX Texture2D. Format 2 independently confirmed B8G8R8A8. Creates one mip, unlocks, no UpdateResource. Checked width*height*4 <= INT32_MAX and exact BGRA input; native OOM may be fatal.",
+    "mip_capacity_correction": "One mip means count=1, NOT capacity=1. Factory 1451A8DC8 calls growth helper 1407DA0DC; native first growth requests at least four pointer slots (32 bytes), then allocator size quantization determines capacity=QuantizeSize(32,0)/8 >=4. Consumer reads only pointer index zero, never iterates/allocates using capacity; recheck header stability across materialization. Independently recovered older import-only evidence; no older disk/runtime claim.",
+    "texture_update_vtable_slot": "0x2d8",
+    "texture_update_vtable_evidence": "Constructor vtable 0x1457adcc0 corroborates direct target; do NOT use default profile slot 0x2e0.",
+    "upload_layout": "Texture+0x138 platform: width0,height4,format0xc,mipArray0x18,count0x20,capacity0x24. Mip: width0,height4,bulk0x10,data0x18,uint64 bytes0x20,flags0x30,lockByte0x34.",
+    "upload_order": "Precreate rooted holder; factory; immediately retain texture through holder Brush without yield; validate fresh layout; materialize bulk; reread; lockByte=2; exact BGRA copy; native Unlock; exactly one UpdateResource. No switch-time reupload or destruction.",
+    "palette": "Borrowed 16-byte LinearColor: Canvas stored+0x120/Slate+0x148; Button+0x3a8/+0x448; Text outline+0x1c0/+0x220; ImageSet+0x118/+0x160. Not consuming SlateColor.",
+    "image_set": "Parent Widget, native size0x170; Images TArray+0x108, Color+0x118, SelectedIndex+0x13c, Slate+0x160. EndMenuImage size0xb0/alignment8: Brush0, RenderTransform0x88, Pivot0xa4. Metadata 0x145dffce0 -> 0x146261480; inner getter 0x143f555d8 -> 0x147007030, properties 0x146283780.",
+    "animation_layout": "WidgetAnimation MovieScene+0x60/bindings+0x68; widget binding stride0x24, WidgetName0, SlotName8, GUID0x10, root byte0x20. MovieScene bindings+0x70, stride0x30: GUID0,FString name0x10,track array0x20. PropertyTrack PropertyBinding+0x80, Sections+0x98; property binding size0x14, both property and path are FName at0/8, not FString. Arrays data0/count8/capacity0xc.",
+    "animation_evidence": "Class0x145fa52e0, properties0x1463d5300, MovieScene0x1463d53c0; widget binding0x14704f970 and bool setter0x1418d5b70; object bindings0x14639fe20/struct0x14703c4c0; property binding0x1463b9640/struct0x14703c100; sections0x1463b9690."
+  },
+  "not_qualified": [
+    "Older disk hash/equality and runtime behavior",
+    "ColorSection channel/key layouts",
+    "EndButton WidgetStyle brush slots",
+    "Pie/Tiled/ImageSet synchronization bodies",
+    "Runtime callback/thread/GC phase and native resource lifetime validation"
+  ]
+}

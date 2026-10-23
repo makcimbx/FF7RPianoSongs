@@ -1,4 +1,5 @@
 #include "core/config.h"
+#include "game/menu_theme_runtime.h"
 #include "game/autoplay.h"
 #include "game/song_preview.h"
 #include "core/fail_closed_boundary.h"
@@ -309,6 +310,7 @@ DWORD startup_worker_body()
     }
 
     game::configure_song_preview(config.preview_mode, config.preview_function_key);
+    game::menu_theme_runtime::configure(exe, std::filesystem::path(dll_dir) / L"Themes", ini_path, config);
     game::configure_extended_chart_capability(exe);
     game::configure_catalog_readiness_observer(
         {&g_startup_cache_progress, catalog_readiness_changed});

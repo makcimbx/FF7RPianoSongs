@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 from typing import Any
@@ -292,6 +293,365 @@ class MultiBuildCatalogTests(unittest.TestCase):
         self.assertIn(f'"{omitted_id}"', rendered_signatures_present)
         rendered_hooks_present = generator.render_hook_specs(entries, present_build_id).decode("ascii")
         self.assertIn(omitted_entry["cpp_symbol"], rendered_hooks_present)
+
+
+class MenuThemeCatalogTests(unittest.TestCase):
+    def test_bottom_attribute_mapping_and_borrowed_abi_match_static_evidence(self) -> None:
+        catalog = json.loads(generator.CATALOG_PATH.read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        evidence_path = "analysis/MenuThemeBottomAttribute-20261021.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        self.assertEqual(len(evidence["abi"]), 3)
+        self.assertEqual(evidence["layout"]["attribute_bytes"], 64)
+        self.assertEqual(evidence["layout"]["color_bytes"], 40)
+        self.assertIn("does not consume input", evidence["abi"]["end_text_slate_set_bottom_attribute"])
+        self.assertIn("initialized destination", evidence["abi"]["native_slate_color_attribute_assign"])
+        self.assertIn("without freeing caller storage", evidence["abi"]["native_slate_color_attribute_destroy"])
+        for build_id, profile in evidence["profiles"].items():
+            self.assertEqual(set(profile["functions"]), set(evidence["abi"]))
+            for entry_id, (rva, raw) in profile["functions"].items():
+                with self.subTest(build=build_id, entry=entry_id):
+                    entry = entries[entry_id]
+                    self.assertEqual(entry["cpp_symbol"], "".join(part.capitalize() for part in entry_id.split("_")))
+                    self.assertEqual(entry["kind"], "function")
+                    self.assertEqual(entry["subsystem"], "menu_theme_palette")
+                    self.assertEqual(entry["requirement"], "research")
+                    self.assertEqual(entry["status"], "research")
+                    self.assertEqual(entry["validation"], {"policy": "signature"})
+                    self.assertEqual(entry["install_policy"], "callable")
+                    self.assertIsNone(entry["hook_owner"])
+                    self.assertIsNone(entry["hook_spec"])
+                    self.assertEqual(entry["consumers"], ["src/game/menu_theme_palette.cpp"])
+                    self.assertEqual(set(entry["builds"]), set(evidence["profiles"]))
+                    actual = entry["builds"][build_id]
+                    self.assertEqual(int(actual["rva"], 16), int(rva, 16))
+                    prefix = bytes.fromhex(raw)
+                    self.assertEqual(actual["signature"], {
+                        "bytes": prefix.hex(" "), "mask": "x" * len(prefix)})
+                    attribution = actual["evidence"]
+                    self.assertIsInstance(attribution, list)
+                    self.assertTrue(attribution)
+                    self.assertEqual(attribution[0]["type"], profile["evidence_type"])
+                    self.assertEqual(attribution[0]["path"], evidence_path)
+                    self.assertIn(evidence["abi"][entry_id], attribution[0]["detail"])
+                    self.assertIn("64-byte attribute, not 40-byte SlateColor", attribution[0]["detail"])
+                    self.assertEqual(sum(
+                        build_id in other["builds"]
+                        and int(other["builds"][build_id]["rva"], 16) == int(rva, 16)
+                        for other in entries.values()), 1)
+
+    def test_published_class_maps_and_signed_rip_targets_match_evidence(self) -> None:
+        # Mapping checks stay useful while independently owned consumers are landing;
+        # the normal generator tests still enforce the complete consumer validation.
+        catalog = json.loads(generator.CATALOG_PATH.read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        evidence_path = "analysis/MenuThemeClasses-20261021.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        recipe = evidence["reference"]
+        alias = recipe["end_image_reference_reuses"]
+        self.assertEqual(alias, "end_image_static_class")
+        self.assertNotIn("theme_class_end_image_reference", entries)
+        expected_ids = set()
+        for build_id, profile in evidence["profiles"].items():
+            for name, (reference_rva, slot_rva, call_disp, slot_disp) in profile["classes"].items():
+                with self.subTest(build=build_id, native_class=name):
+                    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+                    slot_id = f"theme_class_{snake}"
+                    reference_id = alias if name == "EndImage" else f"{slot_id}_reference"
+                    expected_ids.add(slot_id)
+                    if reference_id != alias:
+                        expected_ids.add(reference_id)
+                    slot = entries[slot_id]
+                    reference = entries[reference_id]
+                    self.assertEqual(slot["cpp_symbol"], f"ThemeClass{name}")
+                    self.assertEqual(slot["kind"], "global")
+                    self.assertEqual(slot["validation"], {"policy": "data_reference"})
+                    self.assertEqual(slot["install_policy"], "data_only")
+                    self.assertIsNone(slot["builds"][build_id]["signature"])
+                    self.assertEqual(int(slot["builds"][build_id]["rva"], 16), int(slot_rva, 16))
+                    if reference_id != alias:
+                        self.assertEqual(reference["cpp_symbol"], f"ThemeClass{name}Reference")
+                        self.assertEqual(reference["kind"], "call_site")
+                        self.assertEqual(reference["install_policy"], "signature_only")
+                    else:
+                        # The retained holder-creation callable keeps its one owner;
+                        # published-class admission only authenticates its bytes.
+                        self.assertEqual(reference["install_policy"], "callable")
+                    self.assertEqual(reference["validation"], {"policy": "signature"})
+                    for entry in (slot, reference):
+                        self.assertEqual(set(entry["builds"]), set(evidence["profiles"]))
+                        self.assertEqual(entry["requirement"], "research")
+                        self.assertEqual(entry["status"], "research")
+                        self.assertIsNone(entry["hook_owner"])
+                        self.assertIsNone(entry["hook_spec"])
+                        self.assertEqual(entry["consumers"], ["src/game/menu_theme_native.cpp"])
+                        attribution = entry["builds"][build_id]["evidence"]
+                        self.assertIsInstance(attribution, list)
+                        self.assertTrue(attribution)
+                        self.assertEqual(attribution[0]["type"], profile["evidence_type"])
+                        if entry is not reference or reference_id != alias or build_id == catalog["default_build"]:
+                            self.assertEqual(attribution[0]["path"], evidence_path)
+                    actual = reference["builds"][build_id]
+                    self.assertEqual(int(actual["rva"], 16), int(reference_rva, 16))
+                    prefix = bytes.fromhex(recipe["prefix_template"].format(
+                        call_disp_le=call_disp, slot_disp_le=slot_disp))
+                    self.assertEqual(len(prefix), recipe["length"])
+                    self.assertEqual(actual["signature"], {
+                        "bytes": prefix.hex(" "), "mask": "x" * len(prefix)})
+                    offset = recipe["rip_displacement_offset"]
+                    displacement = int.from_bytes(prefix[offset:offset + 4], "little", signed=True)
+                    target = int(actual["rva"], 16) + recipe["rip_instruction_end"] + displacement
+                    self.assertEqual(target, int(slot_rva, 16))
+                    # The alias must not conceal a second ID at the same address.
+                    for rva in (reference_rva, slot_rva):
+                        self.assertEqual(sum(
+                            build_id in entry["builds"]
+                            and int(entry["builds"][build_id]["rva"], 16) == int(rva, 16)
+                            for entry in entries.values()), 1)
+        self.assertEqual({entry_id for entry_id in entries if entry_id.startswith("theme_class_")},
+                         expected_ids)
+        default_detail = entries[alias]["builds"][catalog["default_build"]]["evidence"][0]["detail"]
+        self.assertIn("native size 0x1e8 in BOTH builds", default_detail)
+        self.assertIn("0x200 belongs to independently qualified EndPieImage", default_detail)
+
+    def test_full_style_contracts_have_exact_prefixes_and_independent_build_attribution(self) -> None:
+        catalog = json.loads(generator.CATALOG_PATH.read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        evidence_path = "analysis/MenuThemeStyles-20261021.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        self.assertEqual(len(evidence["functions"]), 30)
+        self.assertEqual(set(evidence["older_functions"]), set(evidence["functions"]))
+        for entry_id, expected in evidence["functions"].items():
+            with self.subTest(entry=entry_id):
+                entry = entries[entry_id]
+                self.assertEqual(entry["cpp_symbol"], "".join(part.capitalize() for part in entry_id.split("_")))
+                self.assertEqual(entry["kind"], "function")
+                self.assertEqual(entry["validation"], {"policy": "signature"})
+                self.assertEqual(entry["requirement"], "research")
+                self.assertEqual(entry["status"], "research")
+                expected_builds = {evidence["build_id"], evidence["older_build_id"]}
+                self.assertEqual(set(entry["builds"]), expected_builds)
+                for build_id in expected_builds:
+                    actual = entry["builds"][build_id]
+                    default = build_id == evidence["build_id"]
+                    contract = expected if default else evidence["older_functions"][entry_id]
+                    self.assertEqual(int(actual["rva"], 16), int(contract["rva"], 16))
+                    prefix = bytes.fromhex(contract["prefix"])
+                    self.assertEqual(actual["signature"], {
+                        "bytes": prefix.hex(" "), "mask": "x" * len(prefix)})
+                    attribution = actual["evidence"]
+                    self.assertIsInstance(attribution, list)
+                    self.assertTrue(attribution)
+                    self.assertEqual(attribution[0]["type"],
+                                     evidence["evidence_type"] if default else evidence["older_evidence_type"])
+                    self.assertEqual(attribution[0]["path"], evidence_path)
+                    self.assertTrue(attribution[0]["detail"])
+                    if default:
+                        self.assertIn(expected["abi"], attribution[0]["detail"])
+                    else:
+                        detail = attribution[0]["detail"]
+                        self.assertIn(evidence["older_program"], detail)
+                        self.assertIn("older_layout_verification", detail)
+                        self.assertIn("no older disk/runtime qualification", detail)
+                        if "registered_thunk_rva" in contract:
+                            self.assertIn(contract["registered_thunk_rva"], detail)
+                            self.assertNotEqual(int(actual["rva"], 16),
+                                                int(contract["registered_thunk_rva"], 16))
+                        if entry_id in ("end_tiled_image_synchronize", "end_image_set_synchronize"):
+                            self.assertIn("0x2a8", detail)
+                            self.assertIn("0x2b0", detail)
+                            self.assertIn("direct target", detail)
+        tint = evidence["layout"]["SlateBrushTint"]
+        brush_detail = entries["native_slate_brush_assign"]["builds"][evidence["older_build_id"]]["evidence"][0]["detail"]
+        self.assertIn("layout.SlateBrushTint", brush_detail)
+        self.assertIn(f"+{tint['offset']}", brush_detail)
+        self.assertIn(f"size {tint['size']}", brush_detail)
+
+    def test_palette_hook_ownership_follows_actual_property_and_opacity_contracts(self) -> None:
+        catalog = json.loads(generator.CATALOG_PATH.read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        source = (generator.ROOT / "src/game/menu_theme_palette.cpp").read_text(encoding="utf-8")
+        array = source.split("constexpr Contract contracts[] = {", 1)[1].split("};", 1)[0]
+        contracts = re.findall(
+            r'\{"([a-z_]+)", Property::\w+, (0x[0-9a-f]+), (true|false), (true|false)\}', array)
+        self.assertEqual(len(contracts), 17)
+        self.assertEqual(sum(opacity == "false" for _, _, _, opacity in contracts), 11)
+        self.assertEqual(sum(opacity == "true" for _, _, _, opacity in contracts), 6)
+        hook_ids = {entry_id for entry_id, _, _, _ in contracts}
+        self.assertEqual({entry["id"] for entry in entries.values()
+                          if entry["hook_owner"] == "menu_theme_palette"}, hook_ids)
+        previous_max = max(entry["hook_spec"]["order"] for entry in entries.values()
+                           if entry["hook_spec"] and entry["id"] not in hook_ids)
+        evidence = json.loads((generator.ROOT / "analysis/MenuThemeStyles-20261021.json").read_text(encoding="utf-8"))
+        for index, (entry_id, offset, owning, opacity) in enumerate(contracts):
+            with self.subTest(entry=entry_id):
+                entry = entries[entry_id]
+                self.assertEqual(entry["subsystem"], "menu_theme_palette")
+                self.assertEqual(entry["install_policy"], "optional_hook")
+                self.assertEqual(entry["hook_owner"], "menu_theme_palette")
+                self.assertEqual(entry["consumers"], ["src/game/menu_theme_palette.cpp"])
+                self.assertEqual(entry["hook_spec"], {
+                    "name": entry_id, "order": previous_max + 1 + index,
+                    "required_for_release_startup": False})
+                contract = evidence["functions"][entry_id]
+                if opacity == "false":
+                    self.assertEqual(int(contract["field"], 16), int(offset, 16))
+                    self.assertIn("consuming SlateColor" if owning == "true" else "borrowed LinearColor",
+                                  contract["abi"])
+                else:
+                    self.assertIn("XMM1 float", contract["abi"])
+        for entry_id in set(evidence["functions"]) - hook_ids:
+            with self.subTest(helper=entry_id):
+                entry = entries[entry_id]
+                self.assertEqual(entry["install_policy"], "callable")
+                self.assertIsNone(entry["hook_owner"])
+                self.assertIsNone(entry["hook_spec"])
+                consumers = ["src/game/menu_theme_native.cpp"]
+                if entry_id.startswith("native_slate_color_"):
+                    if entry_id != "native_slate_color_assign":
+                        consumers.clear()
+                    consumers.append("src/game/menu_theme_palette.cpp")
+                self.assertEqual(entry["consumers"], consumers)
+
+    def test_containment_read_contract_matches_static_evidence(self) -> None:
+        catalog, _, _ = generator.load_and_validate_catalog()
+        evidence_path = "analysis/MenuThemeContainment-20261020.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        reference = evidence["contract"]["class_slot_reference"]
+        for build_id, profile in evidence["profiles"].items():
+            for entry_id, expected in profile["addresses"].items():
+                with self.subTest(entry=entry_id, build=build_id):
+                    entry = entries[entry_id]
+                    actual = entry["builds"][build_id]
+                    self.assertEqual(entry["subsystem"], "menu_theme_containment")
+                    self.assertIsNone(entry["hook_owner"])
+                    self.assertIsNone(entry["hook_spec"])
+                    self.assertEqual(entry["install_policy"],
+                                     "data_only" if entry["kind"] == "global" else "signature_only")
+                    self.assertEqual(int(actual["rva"], 16), int(expected["rva"], 16))
+                    self.assertEqual(actual["evidence"][0]["type"], profile["evidence_type"])
+                    self.assertEqual(actual["evidence"][0]["path"], evidence_path)
+                    if "prefix" in expected:
+                        raw = bytes.fromhex(expected["prefix"])
+                        self.assertEqual(bytes.fromhex(actual["signature"]["bytes"]), raw)
+                        self.assertEqual(actual["signature"]["mask"], "x" * len(raw))
+                    else:
+                        self.assertIsNone(actual["signature"])
+                        self.assertEqual(expected["width"], 8)
+            for role in ("panel_widget", "panel_slot"):
+                site = profile["addresses"][f"native_{role}_class_read_site"]
+                offset = reference["disp32_offset"]
+                raw = bytes.fromhex(site["prefix"])
+                displacement = int.from_bytes(raw[offset:offset + 4], "little", signed=True)
+                target = int(site["rva"], 16) + reference["instruction_end"] + displacement
+                self.assertEqual(target, int(profile["addresses"][f"native_{role}_class"]["rva"], 16))
+
+    def test_observation_sites_are_read_only_and_reference_their_globals(self) -> None:
+        catalog, _, _ = generator.load_and_validate_catalog()
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        observer = [entry for entry in entries.values()
+                    if entry["subsystem"] == "menu_theme_observation"]
+        self.assertTrue(observer)
+        for entry in observer:
+            self.assertIsNone(entry["hook_owner"])
+            self.assertIsNone(entry["hook_spec"])
+            self.assertEqual(entry["status"], "research")
+            self.assertEqual(entry["install_policy"],
+                             "data_only" if entry["kind"] == "global" else "signature_only")
+
+        references = (
+            ("native_game_thread_publish_site", 3, 7, "native_game_thread_initialized"),
+            ("native_game_thread_publish_site", 9, 13, "native_game_thread_id"),
+            ("native_gc_flag_exchange_site", 2, 6, "native_garbage_collecting"),
+            ("native_exit_purge_publish_site", 2, 7, "native_uobject_exit_purge"),
+            ("native_uobject_thread_role_site", 3, 7, "native_game_thread_initialized"),
+        )
+        for site_id, displacement_offset, instruction_end, target_id in references:
+            for build_id, site in entries[site_id]["builds"].items():
+                with self.subTest(site=site_id, build=build_id):
+                    raw = bytes.fromhex(site["signature"]["bytes"])
+                    displacement = int.from_bytes(raw[displacement_offset:displacement_offset + 4],
+                                                  "little", signed=True)
+                    target = int(site["rva"], 16) + instruction_end + displacement
+                    self.assertEqual(target, int(entries[target_id]["builds"][build_id]["rva"], 16))
+
+    def test_observation_mapping_and_literal_tls_match_static_evidence(self) -> None:
+        catalog, _, _ = generator.load_and_validate_catalog()
+        evidence_path = "analysis/MenuThemeObservation-20261020.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        tls = evidence["tls"]
+        self.assertEqual(tls["slot"], 0)
+        self.assertTrue(tls["no_dll_tls_or_pe_tls_index_fallback"])
+        for build_id, profile in evidence["profiles"].items():
+            for entry_id, expected in (profile["globals"] | profile["sites"]).items():
+                with self.subTest(entry=entry_id, build=build_id):
+                    actual = entries[entry_id]["builds"][build_id]
+                    self.assertEqual(int(actual["rva"], 16), int(expected["rva"], 16))
+                    self.assertEqual(actual["evidence"][0]["type"], profile["evidence_type"])
+                    self.assertEqual(actual["evidence"][0]["path"], evidence_path)
+                    if "prefix" in expected:
+                        raw = bytes.fromhex(expected["prefix"])
+                        self.assertEqual(bytes.fromhex(actual["signature"]["bytes"]), raw)
+                        self.assertEqual(actual["signature"]["mask"], "x" * len(raw))
+                    else:
+                        self.assertIsNone(actual["signature"])
+            role = entries["native_uobject_thread_role_site"]["builds"][build_id]
+            raw = bytes.fromhex(role["signature"]["bytes"])
+            self.assertEqual(raw[tls["verifier_tail_offset"]:], bytes.fromhex(tls["verifier_tail"]))
+
+    def test_older_bridge_mapping_matches_retained_static_evidence(self) -> None:
+        catalog, _, _ = generator.load_and_validate_catalog()
+        evidence_path = "analysis/MenuThemeNative-OlderBuild-20261020.json"
+        evidence = json.loads((generator.ROOT / evidence_path).read_text(encoding="utf-8"))
+        build_id = evidence["build_id"]
+        entries = {entry["id"]: entry for entry in catalog["addresses"]}
+        bridge = [entry for entry in entries.values()
+                  if entry["subsystem"] == "menu_theme_native"
+                  and entry["id"] in evidence["proposed_addresses"]]
+        self.assertTrue(bridge)
+        for entry in bridge:
+            with self.subTest(entry=entry["id"]):
+                expected = evidence["proposed_addresses"][entry["id"]]
+                actual = entry["builds"][build_id]
+                self.assertEqual(int(actual["rva"], 16), int(expected["rva"], 16))
+
+                self.assertEqual(actual["evidence"][0]["type"], "static_import_contract")
+                self.assertEqual(actual["evidence"][0]["path"], evidence_path)
+                if expected["prefix"] is None:
+                    self.assertIsNone(actual["signature"])
+                    self.assertEqual(entry["install_policy"], "data_only")
+                else:
+                    prefix = bytes.fromhex(expected["prefix"])
+                    self.assertEqual(bytes.fromhex(actual["signature"]["bytes"]), prefix)
+                    self.assertEqual(actual["signature"]["mask"], "x" * len(prefix))
+        for proposed_id, expected in evidence["proposed_addresses"].items():
+            if "reuse_catalog_id" in expected:
+                self.assertNotIn(proposed_id, entries)
+                actual = entries[expected["reuse_catalog_id"]]["builds"][build_id]
+                self.assertEqual(int(actual["rva"], 16), int(expected["rva"], 16))
+
+    def test_fresh_texture_policy_matches_native_bool_metadata(self) -> None:
+        catalog, _, _ = generator.load_and_validate_catalog()
+        path = "analysis/MenuThemeTexturePolicy-20261021.json"
+        evidence = json.loads((generator.ROOT / path).read_text(encoding="utf-8"))
+        setter = evidence["setter"]
+        entry = next(item for item in catalog["addresses"] if item["id"] == setter["id"])
+        self.assertEqual(entry["install_policy"], "callable")
+        self.assertIsNone(entry["hook_owner"])
+        self.assertIsNone(entry["hook_spec"])
+        self.assertEqual(evidence["properties"]["SRGB"]["mask"], "0x01")
+        self.assertEqual(evidence["properties"]["bNotOfflineProcessed"]["mask"], "0x10")
+        for build_id, expected in setter["profiles"].items():
+            with self.subTest(build=build_id):
+                actual = entry["builds"][build_id]
+                self.assertEqual(int(actual["rva"], 16), int(expected["rva"], 16))
+                raw = bytes.fromhex(actual["signature"]["bytes"])
+                self.assertEqual(raw, bytes.fromhex(setter["prefix"]))
+                self.assertEqual(actual["signature"]["mask"], "x" * len(raw))
+                self.assertEqual(actual["evidence"][0]["type"], expected["evidence_type"])
+                self.assertEqual(actual["evidence"][0]["path"], path)
 
 
 if __name__ == "__main__":

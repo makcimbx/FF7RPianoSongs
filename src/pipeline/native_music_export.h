@@ -17,6 +17,8 @@ struct NativeMusicCueTiming {
 // Older output explicitly selects nonstreaming/loading/channel fields and uses
 // the qualified StoreEntry exponent-zero profile: prefix160 + bank + suffix40.
 enum class NativeMusicExportProfile { Current1005, Older1004 };
+// Fixed asset and Music-record gains retained by both custom-piano profiles.
+float native_music_fixed_gain() noexcept;
 NativeMusicExportResult build_native_music_export(
     const std::vector<std::uint8_t>& source_export,
     const std::vector<std::uint8_t>& replacement_mabf, const NativeMusicCueTiming&,

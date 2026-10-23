@@ -1,6 +1,8 @@
 #include "game/title.h"
 #include "game/autoplay.h"
 #include "game/song_preview.h"
+#include "game/menu_theme_runtime.h"
+#include "game/menu_theme_metrics.h"
 #include "core/toggle_feedback.h"
 
 #include "core/hooks.h"
@@ -55,6 +57,7 @@ std::atomic_uint32_t g_native_dpad_right_name{0};
 std::atomic_bool g_native_dpad_logged{false};
 std::atomic_uint32_t g_native_left_thumb_name{0};
 std::atomic_uint32_t g_native_right_thumb_name{0};
+std::atomic_uint32_t g_native_left_trigger_name{0}, g_native_right_trigger_name{0};
 std::atomic_bool g_native_thumb_logged{false};
 constexpr std::array<const wchar_t*, 8> kNativePianoDirectionNames{
     L"Gamepad_LeftStick_Up", L"Gamepad_LeftStick_Down", L"Gamepad_LeftStick_Left", L"Gamepad_LeftStick_Right",
@@ -68,8 +71,11 @@ std::array<std::atomic_uint32_t, 8> g_native_piano_direction_names{};
 NativePianoInputDiagnosticAdmission g_native_piano_input_diagnostic_admission;
 DiagnosticEmissionBudget g_difficulty_input_diagnostic_budget{kDifficultyInputDiagnosticLimit};
 constexpr UINT kDifficultyUiRefreshMessage = WM_APP + 0x4f7;
+constexpr UINT kThemeInputMessage = WM_APP + 0x4f8;
 HWND g_game_window = nullptr;
 WNDPROC g_previous_window_proc = nullptr;
+// Publication only; message authority additionally checks the actual live subclass.
+std::atomic<HWND> g_theme_window{nullptr};
 std::atomic<void*> g_last_title_population_context{nullptr};
 
 enum class DifficultyWindowAttachment { Pending, Attached, Failed };
@@ -89,6 +95,11 @@ PianoDetailUpdateFn g_original_detail_update = nullptr;
 PianoTitlePopulationFn g_original_title_population = nullptr;
 TitleViewConverterFn g_original_title_converter = nullptr;
 PlayerInputInputKeyFn g_original_player_input_key = nullptr;
+void (*g_theme_entry)() noexcept = nullptr;
+int (*g_theme_key)() noexcept = nullptr;
+void (*g_theme_poll)(bool, bool, bool, bool) noexcept = nullptr;
+void (*g_theme_focus_lost)() noexcept = nullptr;
+void (*g_theme_dispatch)(const void*, std::uint64_t, const core::HookCallbackGate::Lease&) noexcept = nullptr;
 
 std::mutex g_title_text_mutex;
 OwnedTitleText g_live_title;
@@ -97,6 +108,21 @@ enum class TitleInputServiceState { Uninstalled, HooksPublished, Starting, Activ
 std::atomic<TitleInputServiceState> g_input_service_state{TitleInputServiceState::Uninstalled};
 std::mutex g_input_service_mutex;
 bool g_raw_input_registration_attempted=false;
+struct ThemeDispatchFrame {
+    HWND window;
+    std::uint64_t ticket;
+    MenuSessionSnapshot owner;
+    const core::HookCallbackGate::Lease& lease;
+    DWORD thread = GetCurrentThreadId();
+    bool retired = false;
+    bool preparation = false;
+};
+thread_local ThemeDispatchFrame* g_theme_dispatch_frame = nullptr;
+std::atomic_bool g_theme_dispatch_active{false};
+void theme_callback_entered() noexcept {
+    if (g_theme_dispatch_frame) g_theme_dispatch_frame->retired = true;
+    if (g_theme_entry) g_theme_entry();
+}
 #ifdef FF7RP_TITLE_INPUT_SERVICE_SELFTEST
 bool (*g_test_install_title_hook)(const char*,void**)=nullptr;
 FNameCtorFn g_test_fname_ctor=nullptr;
@@ -177,6 +203,15 @@ bool resolve_native_dpad_names()
         core::log(core::LogLevel::Info,
             "[title] difficulty_input status=native_thumbstick_unavailable fallback=xinput");
     }
+    if (g_theme_poll) {
+        uint32_t left_trigger = 0, right_trigger = 0;
+        if (construct_fname_id(L"Gamepad_LeftTrigger", left_trigger)
+            && construct_fname_id(L"Gamepad_RightTrigger", right_trigger)) {
+            g_native_left_trigger_name.store(left_trigger, std::memory_order_release);
+            g_native_right_trigger_name.store(right_trigger, std::memory_order_release);
+        } else core::log(core::LogLevel::Info,
+            "[title] theme_input status=native_trigger_unavailable fallback=xinput");
+    }
     for (size_t index = 0; index < kNativePianoDirectionNames.size(); ++index) {
         if (g_native_piano_direction_names[index].load(std::memory_order_acquire) != 0) {
             continue;
@@ -255,6 +290,7 @@ void log_native_piano_press(
 
 bool __fastcall player_input_key_detour(void* player_input, const void* key, int32_t event_type, float amount, bool gamepad)
 {
+    theme_callback_entered();
     auto callback = non_audio_hook_gate().try_enter();
     if (!callback) {
         return g_original_player_input_key
@@ -277,6 +313,11 @@ bool __fastcall player_input_key_detour(void* player_input, const void* key, int
                     core::log(core::LogLevel::Info,
                         "[title] difficulty_input status=native_thumbstick_ready source=player_input_input_key");
                 }
+            }
+            if (comparison_id == g_native_left_trigger_name.load(std::memory_order_acquire)
+                || comparison_id == g_native_right_trigger_name.load(std::memory_order_acquire)) {
+                g_difficulty_event_providers.update_trigger(
+                    comparison_id == g_native_left_trigger_name.load(std::memory_order_relaxed), event_type);
             }
             for (size_t index = 0; index < g_native_piano_direction_names.size(); ++index) {
                 if (comparison_id == g_native_piano_direction_names[index].load(std::memory_order_acquire)) {
@@ -361,7 +402,8 @@ void resolve_xinput_get_state()
 }
 
 DifficultyInputProviderFacts sample_difficulty_input(
-    bool& autoplay_held, bool& preview_held, bool& preview_chord_held)
+    bool& autoplay_held, bool& preview_held, bool& preview_chord_held,
+    bool& theme_previous, bool& theme_next)
 {
     const int function_key = autoplay_function_key();
     autoplay_held = function_key > 0 && function_key <= 12
@@ -384,6 +426,9 @@ DifficultyInputProviderFacts sample_difficulty_input(
         for (DWORD user_index = 0; user_index < XUSER_MAX_COUNT; ++user_index) {
             XINPUT_STATE xinput_state{};
             if (get_state(user_index, &xinput_state) == ERROR_SUCCESS) {
+                const bool l3 = (xinput_state.Gamepad.wButtons & XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+                theme_previous = theme_previous || (l3 && xinput_state.Gamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
+                theme_next = theme_next || (l3 && xinput_state.Gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
                 constexpr WORD sticks = XINPUT_GAMEPAD_LEFT_THUMB | XINPUT_GAMEPAD_RIGHT_THUMB;
                 autoplay_held = autoplay_held || (xinput_state.Gamepad.wButtons & sticks) == sticks;
                 preview_chord_held = preview_chord_held
@@ -400,6 +445,8 @@ DifficultyInputProviderFacts sample_difficulty_input(
     // PlayerInput also sees controllers XInput cannot, such as a Bluetooth DualSense.
     const bool l3 = g_difficulty_event_providers.left_thumbstick_held();
     const bool r3 = g_difficulty_event_providers.right_thumbstick_held();
+    theme_previous = theme_previous || (l3 && g_difficulty_event_providers.left_trigger_held());
+    theme_next = theme_next || (l3 && g_difficulty_event_providers.right_trigger_held());
     autoplay_held = autoplay_held || (l3 && r3);
     preview_chord_held = preview_chord_held || (l3 && r3);
     preview_held = preview_held || (r3 && !l3);
@@ -412,12 +459,19 @@ void poll_dynamic_difficulty_input_impl()
     bool autoplay_held = false;
     bool preview_held = false;
     bool preview_chord_held = false;
+    bool theme_previous = false, theme_next = false;
     const DifficultyInputProviderFacts current = sample_difficulty_input(
-        autoplay_held, preview_held, preview_chord_held);
+        autoplay_held, preview_held, preview_chord_held, theme_previous, theme_next);
     DWORD foreground_process = 0;
     const HWND focused_window = GetForegroundWindow();
     if (focused_window) GetWindowThreadProcessId(focused_window, &foreground_process);
     const bool focused = focused_window && foreground_process == GetCurrentProcessId();
+    if (g_theme_poll && g_theme_key) {
+        const int key = g_theme_key();
+        const bool held = key >= 1 && key <= 12 && (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+            && (GetAsyncKeyState(VK_F1 + key - 1) & 0x8000);
+        g_theme_poll(focused, held, theme_previous, theme_next);
+    }
     poll_song_preview(focused, preview_held, preview_chord_held);
     if (g_autoplay_input_edge.update(autoplay_held, focused && seat != 0)) {
         bool enabled = false;
@@ -583,6 +637,7 @@ void update_raw_hid_dpad(LPARAM lparam)
 
 LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam)
 {
+    theme_callback_entered();
     auto callback = non_audio_hook_gate().try_enter();
     if (!callback) {
         return g_previous_window_proc ? CallWindowProcW(g_previous_window_proc, window, message, wparam, lparam)
@@ -591,6 +646,18 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
     if(g_input_service_state.load(std::memory_order_acquire)!=TitleInputServiceState::Active)
         return g_previous_window_proc ? CallWindowProcW(g_previous_window_proc,window,message,wparam,lparam)
             : DefWindowProcW(window,message,wparam,lparam);
+    if (message == kThemeInputMessage) {
+        if (g_theme_dispatch && !g_theme_dispatch_frame && (lparam == 0 || lparam == 1) && wparam) {
+            ThemeDispatchFrame frame{window, static_cast<std::uint64_t>(wparam), capture_ready_menu_session(), callback};
+            frame.preparation = lparam == 1;
+            g_theme_dispatch_frame = &frame;
+            g_theme_dispatch_active.store(true, std::memory_order_release);
+            g_theme_dispatch(&frame, frame.ticket, callback);
+            frame.retired = true; g_theme_dispatch_frame = nullptr;
+            g_theme_dispatch_active.store(false, std::memory_order_release);
+        }
+        return 0;
+    }
     if (message == WM_INPUT) {
         update_raw_hid_dpad(lparam);
     } else if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN) {
@@ -605,10 +672,12 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
         else if (wparam == VK_GAMEPAD_DPAD_RIGHT)
             g_difficulty_event_providers.update_window_key(false, false);
     } else if (message == WM_KILLFOCUS) {
+        if (g_theme_focus_lost) g_theme_focus_lost();
         (void)cancel_song_preview("focus_loss");
         g_difficulty_event_providers.reset_for_focus_loss();
         reset_native_piano_input_diagnostic_held();
     } else if (message == WM_ACTIVATEAPP && wparam == FALSE) {
+        if (g_theme_focus_lost) g_theme_focus_lost();
         (void)cancel_song_preview("application_loss");
         g_difficulty_event_providers.reset_for_application_loss();
         reset_native_piano_input_diagnostic_held();
@@ -658,12 +727,14 @@ DifficultyWindowAttachment install_difficulty_window_hook()
         core::log(core::LogLevel::Info,
             "[title] difficulty_input status=raw_input_registered usages=joystick,gamepad");
     }
+    g_theme_window.store(window, std::memory_order_release);
     core::log(core::LogLevel::Info, "[title] difficulty_profile ui_refresh=window_hook_ready");
     return DifficultyWindowAttachment::Attached;
 }
 
 bool uninstall_difficulty_window_hook()
 {
+    g_theme_window.store(nullptr, std::memory_order_release);
     if(g_raw_input_registration_attempted) {
         const RAWINPUTDEVICE devices[]={{0x01,0x04,RIDEV_REMOVE,nullptr},{0x01,0x05,RIDEV_REMOVE,nullptr}};
         if(!RegisterRawInputDevices(devices,static_cast<UINT>(std::size(devices)),sizeof(RAWINPUTDEVICE)))return false;
@@ -1052,6 +1123,51 @@ bool is_writable_range(void* address, size_t size)
 
 } // namespace
 
+void menu_theme_runtime::bind_owned_input(void (*entered)() noexcept,
+    int (*key)() noexcept, void (*sample)(bool, bool, bool, bool) noexcept, void (*lost)() noexcept,
+    void (*dispatch)(const void*, std::uint64_t, const core::HookCallbackGate::Lease&) noexcept) noexcept
+{
+    g_theme_entry = entered;
+    g_theme_key = key; g_theme_poll = sample; g_theme_focus_lost = lost; g_theme_dispatch = dispatch;
+}
+bool menu_theme_runtime::post_input(std::uint64_t ticket, bool preparation) noexcept
+{
+    std::unique_lock lock(g_input_service_mutex, std::try_to_lock);
+    return lock.owns_lock() && ticket && g_input_service_state.load() == TitleInputServiceState::Active
+        && g_game_window && g_previous_window_proc && g_theme_window.load(std::memory_order_acquire) == g_game_window
+        && PostMessageW(g_game_window, kThemeInputMessage, static_cast<WPARAM>(ticket), preparation ? 1 : 0);
+}
+bool menu_theme_runtime::preparation_dispatch_active() noexcept
+{
+    return g_theme_dispatch_active.load(std::memory_order_acquire);
+}
+void menu_theme_runtime::wake_preparation_after_ready() noexcept
+{
+    if (g_theme_dispatch_frame || preparation_dispatch_active()
+        || g_input_service_state.load() != TitleInputServiceState::Active) return;
+    const auto ticket = reserve_preparation_continuation();
+    if (ticket && !post_preparation_continuation(ticket)) cancel_preparation_continuation(ticket);
+}
+bool menu_theme_runtime::qualify_owned_dispatch(const void* opaque, std::uint64_t ticket,
+    const MenuSessionSnapshot& owner, bool preparation) noexcept
+{
+    menu_theme_metrics::Span owner_check(menu_theme_metrics::Metric::QualifyDispatchOwner);
+    // Only identity with the PRIVATE current WndProc stack permits dereferencing opaque.
+    const auto* frame = g_theme_dispatch_frame;
+    if (!frame || opaque != frame || frame->retired || frame->ticket != ticket || frame->preparation != preparation || !frame->lease
+        || frame->thread != GetCurrentThreadId() || !same_menu_session(frame->owner, owner)) return false;
+    if (g_input_service_state.load() != TitleInputServiceState::Active
+        || !non_audio_hook_gate().accepting() || frame->window != g_theme_window.load(std::memory_order_acquire)
+        || reinterpret_cast<WNDPROC>(GetWindowLongPtrW(frame->window, GWLP_WNDPROC)) != difficulty_window_proc) return false;
+    DWORD process = 0;
+    if (GetWindowThreadProcessId(frame->window, &process) != frame->thread || process != GetCurrentProcessId()) return false;
+    const HWND focused = GetForegroundWindow(); process = 0;
+    if (focused) GetWindowThreadProcessId(focused, &process);
+    return (preparation || (focused && process == GetCurrentProcessId())) && g_theme_dispatch_frame == frame && !frame->retired
+        && frame->window == g_theme_window.load(std::memory_order_acquire)
+        && g_input_service_state.load() == TitleInputServiceState::Active && non_audio_hook_gate().accepting();
+}
+
 ProfileListCallbacks make_profile_list_callbacks()
 {
     ProfileListCallbacks callbacks;
@@ -1283,6 +1399,8 @@ core::HookShutdownResult shutdown_title()
         g_native_dpad_logged.store(false, std::memory_order_release);
         g_native_left_thumb_name.store(0, std::memory_order_release);
         g_native_right_thumb_name.store(0, std::memory_order_release);
+        g_native_left_trigger_name.store(0, std::memory_order_release);
+        g_native_right_trigger_name.store(0, std::memory_order_release);
         g_native_thumb_logged.store(false, std::memory_order_release);
         for (auto& direction : g_native_piano_direction_names) direction.store(0, std::memory_order_release);
         g_original_title_converter = nullptr;

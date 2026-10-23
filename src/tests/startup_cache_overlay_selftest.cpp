@@ -168,6 +168,21 @@ struct Capture {
 int main()
 {
     bool ok = true;
+    // The production fade retains the shown generation/selection, but must
+    // refresh its value colors and reject retired/new-owner mailbox snapshots.
+    game::menu_theme_plan::PreviewPalette faded_palette;
+    auto custom_preview = faded_palette; custom_preview.linear[0] = {.2f, .1f, .3f, .4f}; custom_preview.overrides = 1;
+    game::publish_song_preview_palette(41, custom_preview);
+    ok &= require(game::preview_badge_palette(game::capture_song_preview_palette(), 41, faded_palette)
+        && faded_palette == custom_preview, "current fading selection uses committed Preview values");
+    game::publish_song_preview_palette(41, {});
+    ok &= require(game::preview_badge_palette(game::capture_song_preview_palette(), 41, faded_palette)
+        && faded_palette == game::menu_theme_plan::PreviewPalette{}, "Original updates colors even while selection fades");
+    game::retire_song_preview_palette(41);
+    ok &= require(!game::preview_badge_palette(game::capture_song_preview_palette(), 41, faded_palette), "close revokes old badge fade");
+    game::publish_song_preview_palette(42, custom_preview);
+    ok &= require(!game::preview_badge_palette(game::capture_song_preview_palette(), 41, faded_palette), "new session cannot color old fade");
+    game::publish_song_preview_palette(0, {});
     static_assert(std::is_trivially_copyable_v<startup::StartupCacheProgressSnapshot>);
     static_assert(sizeof(startup::StartupCacheProgressSnapshot) <= 128,
         "overlay snapshot must remain a fixed bounded O(1) value");

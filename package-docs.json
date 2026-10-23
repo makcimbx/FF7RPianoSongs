@@ -5,6 +5,7 @@
     { "role": "first-party-license", "distribution": "package", "source": "LICENSE", "destination": "LICENSE" },
     { "role": "third-party-notices", "distribution": "package", "source": "THIRD_PARTY_NOTICES.md", "destination": "THIRD_PARTY_NOTICES.md" },
     { "role": "song-format", "distribution": "package", "source": "docs/SongFormat.md", "destination": "docs/SongFormat.md" },
+    { "role": "themes-guide", "distribution": "package", "source": "ThemesGuide.md", "destination": "ThemesGuide.md" },
     { "role": "changelog", "distribution": "package", "source": "CHANGELOG.md", "destination": "CHANGELOG.md" },
     { "role": "in-game-validation", "distribution": "repository", "source": "docs/InGameValidation.md" },
     { "role": "release-status", "distribution": "repository", "source": "docs/CurrentStatus.md" },

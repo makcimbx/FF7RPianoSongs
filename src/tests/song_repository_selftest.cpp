@@ -3514,6 +3514,16 @@ int test_audio_transcription_fallback(const std::filesystem::path& root) {
         return fail("failed to write transcription fixture");
     }
 
+    ff7rp::pipeline::set_audio_transcriber({});
+    ff7rp::pipeline::LoadedSong song;
+    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    if (status.code != ff7rp::pipeline::StatusCode::NotFound ||
+        std::filesystem::exists(song_directory / "song.mid") ||
+        std::filesystem::exists(song_directory / "song.mid.partial") ||
+        std::filesystem::exists(song_directory / ".cache" / "runtime.bin")) {
+        return fail("audio without MIDI or a transcriber must fail without publishing artifacts");
+    }
+
     int calls = 0;
     std::size_t sample_count = 0;
     bool empty = true;
@@ -3530,8 +3540,7 @@ int test_audio_transcription_fallback(const std::filesystem::path& root) {
     });
     struct Reset { ~Reset() { ff7rp::pipeline::set_audio_transcriber({}); } } reset;
 
-    ff7rp::pipeline::LoadedSong song;
-    auto status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
     if (status.ok() || std::filesystem::exists(song_directory / "song.mid") ||
         std::filesystem::exists(song_directory / "song.mid.partial")) {
         return fail("empty transcription must fail without leaving song.mid");
@@ -3549,9 +3558,15 @@ int test_audio_transcription_fallback(const std::filesystem::path& root) {
         return fail("transcription did not produce song.mid and generated charts");
     }
 
+    ff7rp::pipeline::set_audio_transcriber({});
     status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
     if (!status.ok() || calls != 2 || !song.loaded_from_runtime_cache) {
-        return fail("transcribed song.mid was not reused from disk on the next load");
+        return fail("transcribed song.mid warm load must work without a transcriber");
+    }
+    std::filesystem::remove_all(song_directory / ".cache");
+    status = ff7rp::pipeline::load_song_directory(song_directory.string(), &song);
+    if (!status.ok() || calls != 2 || song.loaded_from_runtime_cache || song.difficulty_profiles.empty()) {
+        return fail("transcribed song.mid cold load must work without a transcriber");
     }
     return 0;
 }

@@ -108,6 +108,11 @@ int main(int argc, char** argv) {
     const auto original_bank = bank(0x11);
     const auto replacement = bank(0x77);
     const auto source = source_fixture(original_bank);
+    const auto fixture_gain = std::bit_cast<float>(std::uint32_t(native_binary::get(source, 0x64))) *
+        std::bit_cast<float>(std::uint32_t(native_binary::get(original_bank, 0x98)));
+    if (native_music_fixed_gain() != fixture_gain ||
+        native_music_fixed_gain() != 0.8f * 0.535f)
+        return fail("Preview fixed gain differs from retained native asset/bank gains");
     const auto original_source = source;
     const auto original_replacement = replacement;
     MabfArtifactMetadata source_timing;

@@ -1,4 +1,5 @@
 #include "core/config.h"
+#include "core/theme.h"
 
 #include <windows.h>
 
@@ -43,10 +44,30 @@ Config load_config(const std::wstring& ini_path)
         L"Preview", L"KeyboardFunctionKey", 7, ini_path.c_str()));
     config.preview_function_key = preview_key >= 0 && preview_key <= 12 ? preview_key : 7;
 
+    wchar_t selected_theme[66]{};
+    GetPrivateProfileStringW(L"Theme", L"Selected", L"original", selected_theme,
+        static_cast<DWORD>(std::size(selected_theme)), ini_path.c_str());
+    std::string theme_id;
+    for (const wchar_t ch : std::wstring_view(selected_theme)) {
+        if (ch > 127) { theme_id.clear(); break; }
+        theme_id.push_back(static_cast<char>(ch));
+    }
+    if (valid_theme_id(theme_id)) config.selected_theme = theme_id;
+    const int theme_key = static_cast<int>(GetPrivateProfileIntW(
+        L"Theme", L"KeyboardFunctionKey", 6, ini_path.c_str()));
+    config.theme_function_key = theme_key >= 0 && theme_key <= 12 ? theme_key : 6;
+
     wchar_t level[32]{};
     GetPrivateProfileStringW(L"General", L"LogLevel", L"info", level, static_cast<DWORD>(std::size(level)), ini_path.c_str());
     config.log_level = parse_log_level(level);
     return config;
+}
+
+bool save_selected_theme(const std::wstring& ini_path, const std::string& theme_id)
+{
+    if (!valid_theme_id(theme_id)) return false;
+    const std::wstring value(theme_id.begin(), theme_id.end());
+    return WritePrivateProfileStringW(L"Theme", L"Selected", value.c_str(), ini_path.c_str()) != FALSE;
 }
 
 } // namespace ff7r::piano::core

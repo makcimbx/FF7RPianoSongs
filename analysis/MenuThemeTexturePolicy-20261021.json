@@ -1,0 +1,47 @@
+{
+  "scope": "Fresh theme Texture2D initialization before first UpdateResource",
+  "properties": {
+    "SRGB": {"byte_offset":"0x91","mask":"0x01","native_constructor_default":true},
+    "bNotOfflineProcessed": {"byte_offset":"0x91","mask":"0x10","native_constructor_default":false,"stock_importer_value":true}
+  },
+  "setter": {
+    "id":"native_texture_mark_not_offline_processed",
+    "cpp_symbol":"NativeTextureMarkNotOfflineProcessed",
+    "prefix":"80899100000010c3",
+    "abi":"void(Texture* RCX); generated native BoolSetFunc, not FFrame; no RDX boolean",
+    "effect":"OR byte [RCX+0x91],0x10; preserves all adjacent bits; returns",
+    "order":"Only fresh retained validated Texture2D, after current identity/ownership admission and before first UpdateResource; recheck authority/retained graph after native call",
+    "profiles": {
+      "ff7rebirth-steam-win64-6a16ced2": {
+        "program":"ff7rebirth_.exe-9457d4",
+        "rva":"0x019ca9d0",
+        "evidence_type":"static_disk_contract",
+        "offline_bool_property":"0x1463c2d20",
+        "srgb_bool_property":"0x1463c2e00",
+        "srgb_true_setter":"0x1419ca970",
+        "constructor_srgb_write":"0x140e37a3a",
+        "stock_importer_mark":"0x144dc3fbc",
+        "resource_constructor":"0x140e37820",
+        "verification":"Metadata and setter match catalog-authenticated disk; complete eight-byte function uniquely matches import and disk .text"
+      },
+      "ff7rebirth-steam-win64-68fd6fde": {
+        "program":"ff7rebirth_.exe",
+        "rva":"0x01917b70",
+        "evidence_type":"static_import_contract",
+        "offline_bool_property":"0x146537430",
+        "srgb_bool_property":"0x146537510",
+        "srgb_true_setter":"0x141917b10",
+        "constructor_srgb_write":"0x140d51cfa",
+        "stock_importer_mark":"0x144faead4",
+        "resource_constructor":"0x140c1ee88",
+        "verification":"Independent native Bool metadata/setter and complete unique imported function; older disk not authenticated"
+      }
+    }
+  },
+  "resource_flags": {
+    "SRGB":"0x10 (TexCreate_SRGB)",
+    "not_bNotOfflineProcessed":"0x80000 (TexCreate_OfflineProcessed)",
+    "interpretation":"Native constructor already enables sRGB. Match importer offline-processing policy for raw CPU BGRA8; do not add gamma conversion, alpha premultiplication or configuration knobs. Native resource flag interpretation corroborated by local RHI source."
+  },
+  "limits":"No live CDO inspected, native setter invoked or visual equivalence qualified; finding does not itself prove a visible midtone defect."
+}

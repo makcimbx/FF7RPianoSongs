@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "purpose": "Current native song-list cursor provider; read-only evidence, not mutation or lifetime authority",
+  "profiles": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "program": "ff7rebirth_.exe-9457d4",
+      "evidence_type": "static_disk_contract",
+      "disk_authenticated": true,
+      "class_parameters_va": "0x145c89750",
+      "property_array_va": "0x146132ae0",
+      "property_count": 32,
+      "fields": {
+        "CursorClass": {"offset": "0x830", "record_va": "0x146132d70", "kind": "Class"},
+        "CursorWidget": {"offset": "0x8f8", "record_va": "0x146132dd0", "kind": "strong Object"},
+        "CachedCursor": {"offset": "0x900", "record_va": "0x146132e00", "kind": "strong Object"},
+        "CursorEffectName": {"offset": "0x908", "record_va": "0x146132be8", "kind": "FName"},
+        "CursorEffectOffset": {"offset": "0x910", "record_va": "0x146132c10", "kind": "vector Struct"}
+      },
+      "getter_thunk_va": "0x143d37f5c",
+      "creation_va": "0x1415c4fdc",
+      "rebuild_va": "0x1415c55a8"
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "program": "/ff7rebirth_.exe-1.004",
+      "evidence_type": "static_import_contract",
+      "disk_authenticated": false,
+      "disk_verification": "not_performed",
+      "class_parameters_va": "0x145e29540",
+      "property_array_va": "0x1462cb4c0",
+      "property_count": 32,
+      "fields": {
+        "CursorClass": {"offset": "0x830", "record_va": "0x1462cb900", "kind": "Class"},
+        "CursorWidget": {"offset": "0x8f8", "record_va": "0x1462cb360", "kind": "strong Object"},
+        "CachedCursor": {"offset": "0x900", "record_va": "0x1462cb330", "kind": "strong Object"},
+        "CursorEffectName": {"offset": "0x908", "record_va": "0x1462cb5f0", "kind": "FName"},
+        "CursorEffectOffset": {"offset": "0x910", "record_va": "0x1462cb5c0", "kind": "Vector2D Struct"}
+      },
+      "getter_thunk_va": "0x143fcd310",
+      "creation_va": "0x1412e22bc",
+      "rebuild_va": "0x1412e1994"
+    }
+  },
+  "provider_contract": [
+    "Resolve the current MusicList SelectList weak reference with existing positive owner/list identity checks.",
+    "Read current CursorWidget, not CachedCursor. Creation may reuse CachedCursor but the two fields are not interchangeable.",
+    "Rebuild installs the cursor Slate representation and forwards CursorEffectName and CursorEffectOffset.",
+    "If current CursorWidget is a UserWidget, classify it and its own WidgetTree/root through existing authenticated native class contracts.",
+    "Anchor any future subject through current SelectList.CursorWidget equality plus list/session/receiver identities and current containment rechecks, not a fabricated MusicList tree or Song-row association."
+  ],
+  "default_live_observation": {
+    "capture": "menu-cursor-runtime-5cebe00888f9415082191c5a156a09bd.json",
+    "method": "Authenticated SDK bounded read-only snapshot; no hooks, writes or native calls; script unloaded and session detached",
+    "complete_scan": true,
+    "header_and_copied_spans_stable": true,
+    "errors": {},
+    "current_cursor_class": "Item_Cell_Light_C",
+    "current_effect_name": "None",
+    "effect_offset": [0, 0],
+    "tree_root": "All_EquipSelect_Cell",
+    "child_panel": "All_Equip_Cell",
+    "images": {
+      "Cursor_Left": {"class": "EndImage", "positive_serial": true, "image_size": [48, 37], "draw_as": 3, "resource": "/Game/Menu/Resident/Texture/U_MainMenu_Cursor.U_MainMenu_Cursor"},
+      "Img_BtnLight": {"class": "EndImage", "positive_serial": true, "image_size": [132, 132], "draw_as": 3, "resource": "/Game/Menu/Resident/Texture/U_Command_BtnLight_00.U_Command_BtnLight_00"},
+      "HoverBase": {"class": "EndImage", "positive_serial": true, "image_size": [16, 16], "draw_as": 1, "resource": "/Game/Menu/Resident/Texture/U_Com_BetaWhite.U_Com_BetaWhite"}
+    },
+    "limitations": "Tree/panels have diagnostic zero serials; snapshot consistency does not grant mutation authority or retention. Appearance/alpha is animated. This is one default-profile observation, not older live validation."
+  },
+  "limits": [
+    "CursorEffectName also feeds named native-effect machinery. It was None in the observed default menu; alternate configured effects are not an ordinary brush contract.",
+    "This provider is separate from row BtnHover and speed Pie arrows.",
+    "No callable signatures, hook ownership or runtime mutation qualification are supplied by this artifact; older metadata is independently recovered import-only evidence."
+  ]
+}

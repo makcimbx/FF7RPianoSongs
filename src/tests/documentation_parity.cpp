@@ -39,11 +39,12 @@ struct RoleDefinition {
     const char* distribution;
 };
 
-constexpr std::array<RoleDefinition, 21> kRequiredRoles{{
+constexpr std::array<RoleDefinition, 22> kRequiredRoles{{
     {"entrypoint", "package"},
     {"first-party-license", "package"},
     {"third-party-notices", "package"},
     {"song-format", "package"},
+    {"themes-guide", "package"},
     {"changelog", "package"},
     {"in-game-validation", "repository"},
     {"release-status", "repository"},

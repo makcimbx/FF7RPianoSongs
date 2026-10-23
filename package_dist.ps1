@@ -23,6 +23,7 @@ $RequiredDocumentRoles = [ordered]@{
     "first-party-license" = "package"
     "third-party-notices" = "package"
     "song-format" = "package"
+    "themes-guide" = "package"
     "changelog" = "package"
     "in-game-validation" = "repository"
     "release-status" = "repository"
@@ -309,6 +310,18 @@ if ($BuiltCatalogId -cne $ReleaseCatalogId) {
 }
 Assert-BuildProvenanceAdversePathSelfTests
 
+function Get-ExampleThemeMappings {
+    $themes = [ordered]@{
+        "steins-gate" = @("artwork.png", "button-disabled.png", "button-hovered.png", "button-normal.png", "button-pressed.png", "frame.png", "header.png", "info-frame.png", "line-record.png", "line.png", "new.png", "panel.png", "pattern.png", "record-deco.png", "row-selected.png", "row.png", "speed-configured.png", "speed-empty.png", "speed-recorded.png", "theme.ini")
+        "evangelion" = @("artwork.png", "button-disabled.png", "button-hovered.png", "button-normal.png", "button-pressed.png", "frame.png", "header-rank.png", "header-title.png", "info-frame.png", "line-record.png", "line.png", "new.png", "panel.png", "pattern.png", "record-deco.png", "row-selected.png", "row.png", "speed-configured.png", "speed-empty.png", "speed-recorded.png", "theme.ini")
+    }
+    foreach ($id in $themes.Keys) {
+        foreach ($file in ($themes[$id] + @("cursor.png", "cursor-glow.png"))) {
+            [pscustomobject]@{ Source = "examples/Themes/$id/$file"; Destination = "Themes/$id/$file" }
+        }
+    }
+}
+
 function Get-ExpectedPackageInventory {
     $inventory = @(
         "$BinaryRelative/D3DCOMPILER_43.dll",
@@ -317,6 +330,7 @@ function Get-ExpectedPackageInventory {
         "release.json"
     )
     foreach ($mapping in $DocumentMappings) { $inventory += $mapping.Destination }
+    foreach ($mapping in Get-ExampleThemeMappings) { $inventory += $mapping.Destination }
     return @($inventory | Sort-Object)
 }
 
@@ -338,6 +352,10 @@ function Assert-PackageTree {
     Assert-FilesEqual -Source $Model -Destination (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
     Assert-FilesEqual -Source (Join-Path $Root "release.json") -Destination (Join-Path $Candidate "release.json")
     foreach ($mapping in $DocumentMappings) {
+        Assert-FilesEqual -Source (Join-Path $Root $mapping.Source) `
+            -Destination (Join-Path $Candidate $mapping.Destination)
+    }
+    foreach ($mapping in Get-ExampleThemeMappings) {
         Assert-FilesEqual -Source (Join-Path $Root $mapping.Source) `
             -Destination (Join-Path $Candidate $mapping.Destination)
     }
@@ -406,18 +424,26 @@ function Assert-ReleaseSurface {
     }
 }
 
-$publicationToken = "$PID-$([Guid]::NewGuid().ToString('N'))"
-$packageStaging = Join-Path $Root ".package.staging-$publicationToken"
-$releaseStaging = Join-Path $Root ".release.staging-$publicationToken"
-$binaryRoot = Join-Path $packageStaging $BinaryRelative
-try {
+function Copy-PackageTree {
+    param([string]$Candidate)
+    $binaryRoot = Join-Path $Candidate $BinaryRelative
     Copy-ValidatedFile $Artifact (Join-Path $binaryRoot "D3DCOMPILER_43.dll")
     Copy-ValidatedFile $Ini (Join-Path $binaryRoot "FF7RPianoSongs.ini")
     Copy-ValidatedFile $Model (Join-Path $binaryRoot "muscriptor-small-f16.gguf")
-    Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $packageStaging "release.json")
+    Copy-ValidatedFile (Join-Path $Root "release.json") (Join-Path $Candidate "release.json")
     foreach ($mapping in $DocumentMappings) {
-        Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $packageStaging $mapping.Destination)
+        Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $Candidate $mapping.Destination)
     }
+    foreach ($mapping in Get-ExampleThemeMappings) {
+        Copy-ValidatedFile (Join-Path $Root $mapping.Source) (Join-Path $Candidate $mapping.Destination)
+    }
+}
+
+$publicationToken = "$PID-$([Guid]::NewGuid().ToString('N'))"
+$packageStaging = Join-Path $Root ".package.staging-$publicationToken"
+$releaseStaging = Join-Path $Root ".release.staging-$publicationToken"
+try {
+    Copy-PackageTree $packageStaging
     Assert-PackageTree $packageStaging
     New-Item -ItemType Directory -Path $releaseStaging | Out-Null
     $declaredBasenames = @($ReleaseTargets | ForEach-Object { [string]$_.archive_basename })

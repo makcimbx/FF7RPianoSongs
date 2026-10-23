@@ -211,6 +211,7 @@ constexpr bool rebuild_stage(
 struct PreviewBadgeFade {
     SongPreviewRenderSnapshot shown;
     PreviewBadgeLayout layout;
+    menu_theme_plan::PreviewPalette palette;
     float opacity = 0;
     std::chrono::steady_clock::time_point last;
 };
@@ -253,6 +254,7 @@ void render_preview_badge(void* viewport, void* canvas,
     if (preview_badge_active(current) && current.session_generation == snapshot.session_generation
         && current.selection.generation == snapshot.selection.generation
         && current.ticket == snapshot.ticket) {
+        if (fade.shown.session_generation != current.session_generation) fade.opacity = 0;
         fade.shown = current;
         fade.layout = *layout;
         fade.opacity = std::min(1.0f, fade.opacity + step);
@@ -260,8 +262,13 @@ void render_preview_badge(void* viewport, void* canvas,
         fade.opacity = std::max(0.0f, fade.opacity - step);
     }
     if (fade.opacity <= 0) { fade.shown = {}; return; }
+    // Copy once, release the mailbox lock before any Canvas/native draw. A closed
+    // or newer owner must not repaint a fading old-session selection.
+    if (!preview_badge_palette(capture_song_preview_palette(), fade.shown.session_generation, fade.palette)) {
+        fade.shown = {}; fade.opacity = 0; return;
+    }
     (void)draw_song_preview_badge(fade.shown, fade.layout, fcanvas, font,
-        production_draw, production_draw_tile, fade.opacity);
+        production_draw, production_draw_tile, fade.opacity, fade.palette);
 }
 
 void render_callback(void* viewport, void* canvas) noexcept

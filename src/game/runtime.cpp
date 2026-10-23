@@ -1,4 +1,5 @@
 #include "game/runtime.h"
+#include "game/menu_theme_runtime.h"
 #include "game/autoplay.h"
 
 #include "core/logging.h"
@@ -77,6 +78,7 @@ bool install_release_hooks(HMODULE exe_module, void (*native_initialized)() noex
             core::log(core::LogLevel::Error, "[hooks] shutdown status=failed cleanup=retained");
         }
     } else {
+        menu_theme_runtime::install_palette_hooks(); // Optional, internally transactional.
         g_non_audio_hook_gate.open();
     }
     core::log(core::LogLevel::Info, ok ? "[hooks] status=installed_release_hooks" : "[hooks] status=failed");
@@ -94,6 +96,12 @@ bool shutdown_release_hooks()
     if (!audio_ok || !native_audio_ok) {
         // Native callbacks still borrow the original ScoreInfo/GU services.
         core::log(core::LogLevel::Error, "[hooks] shutdown status=deferred services=retained");
+        return false;
+    }
+    g_non_audio_hook_gate.close();
+    if (!g_non_audio_hook_gate.drain(std::chrono::milliseconds(2000))
+        || !menu_theme_runtime::uninstall_palette_hooks()) {
+        core::log(core::LogLevel::Error, "[hooks] shutdown status=deferred palette_or_callbacks=retained");
         return false;
     }
     std::vector<core::HookShutdownResult> results;

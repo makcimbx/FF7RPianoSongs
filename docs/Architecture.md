@@ -140,6 +140,17 @@ silence), and the device is stopped outright if that fade has not completed afte
 400 ms; confirmation, focus loss, menu exit and teardown still stop the device
 immediately.
 
+Before queueing preview PCM, the runtime copies the game's BGM Config settings
+gain through a bounded, build-qualified read-only projection. This gain already
+includes master volume. The retained native asset and Music-record gains are
+decoded from the export/bank templates and included once, rather than guessing a
+preview-volume coefficient. The combined gain is applied to owned PCM before the OS driver
+borrows it. Zero is valid mute, whereas unavailable state denies that preview
+start without poisoning the audio driver. No native audio accessor is called on
+the input thread, and no category pointer is retained between attempts. The
+projection follows the configured target, not every transient mixer envelope or
+final native voice effect; source artifacts and cache identity remain unchanged.
+
 The equalizer is a per-excerpt spectrogram (16 log-spaced bands, 30 frames per
 second) computed by the preview worker from the loaded PCM, never in a game
 callback. It is not cached; the render snapshot interpolates it by the device

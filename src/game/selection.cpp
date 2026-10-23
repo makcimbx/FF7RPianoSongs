@@ -4,6 +4,8 @@
 
 #include "core/hooks.h"
 #include "core/logging.h"
+#include "game/menu_theme_runtime.h"
+#include "game/menu_theme_metrics.h"
 #include "core/pe_image.h"
 #include "game/audio_sead.h"
 #include "game/hook_specs.h"
@@ -64,6 +66,14 @@ core::RawRvaHook g_selected_entry_getter_hook;
 core::RawRvaHook g_action_state_query_hook;
 OnMenuSelectedIndexChangedBodyFn g_original_on_menu_selected_index_changed_body = nullptr;
 uintptr_t g_selection_exe_base = 0;
+menu_theme_runtime::SelectionObserver g_theme_selection_observer = nullptr;
+struct ThemeSelectionFrame {
+    const void* return_slot; void* caller; void* context; std::int32_t index;
+    MenuSessionSnapshot session;
+    const core::HookCallbackGate::Lease* lease;
+    bool after = false, retired = false;
+};
+thread_local ThemeSelectionFrame* g_theme_selection_frame = nullptr;
 std::mutex g_activation_denial_mutex;
 SelectionSnapshot g_activation_denied_selection;
 bool g_activation_denied = false;
@@ -688,19 +698,40 @@ bool __fastcall action_state_query_detour(void* action_ref)
 
 void __fastcall on_menu_selected_index_changed_body_detour(void* context, int32_t selected_index)
 {
+    menu_theme_metrics::Span measured(menu_theme_metrics::Metric::SelectionHook);
     auto callback = non_audio_hook_gate().try_enter();
     if (!g_original_on_menu_selected_index_changed_body) {
         return;
     }
     if (!callback) {
+        menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::SelectionOriginal);
         g_original_on_menu_selected_index_changed_body(context, selected_index);
         return;
     }
 
+    ThemeSelectionFrame theme{_AddressOfReturnAddress(), _ReturnAddress(), context, selected_index,
+        g_theme_selection_observer ? capture_menu_callback_session() : MenuSessionSnapshot{}, &callback};
+    auto* const parent = g_theme_selection_frame;
+    if (parent) parent->retired = true;
+    g_theme_selection_frame = &theme;
+    struct RetireThemeFrame {
+        ThemeSelectionFrame& frame; ThemeSelectionFrame* parent;
+        ~RetireThemeFrame() { frame.retired = true; g_theme_selection_frame = parent; }
+    } retire_theme_frame{theme, parent};
+    if (g_theme_selection_observer) g_theme_selection_observer(&theme, context, selected_index, false, callback);
+    const auto forward_original = [&] {
+        {
+            menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::SelectionOriginal);
+            g_original_on_menu_selected_index_changed_body(context, selected_index);
+        }
+        theme.after = true;
+        if (g_theme_selection_observer && !theme.retired)
+            g_theme_selection_observer(&theme, context, selected_index, true, callback);
+    };
     const SelectionSnapshot descriptor = descriptor_for_visible_index(selected_index);
     if (!descriptor) {
         clear_active_selection();
-        g_original_on_menu_selected_index_changed_body(context, selected_index);
+        forward_original();
         return;
     }
 
@@ -739,12 +770,12 @@ void __fastcall on_menu_selected_index_changed_body_detour(void* context, int32_
         || !capture_active_selection_ui_target(published, render_target)
         || render_target.context != context
         || render_target.visible_index != selected_index) {
-        g_original_on_menu_selected_index_changed_body(context, selected_index);
+        forward_original();
         return;
     }
 
     ScopedSongRenderContext menu_metadata(published);
-    g_original_on_menu_selected_index_changed_body(context, selected_index);
+    forward_original();
 }
 
 bool install_raw_hook(const HookInstallContext& context, const char* spec_name, void* detour, void** original, core::RawRvaHook& hook)
@@ -772,6 +803,21 @@ bool install_raw_hook(const HookInstallContext& context, const char* spec_name, 
 }
 
 } // namespace
+
+void menu_theme_runtime::bind_owned_selection(SelectionObserver observer) noexcept { g_theme_selection_observer = observer; }
+bool menu_theme_runtime::qualify_owned_selection(const void* opaque, const MenuSessionSnapshot& session, std::int32_t index, bool after) noexcept
+{
+    menu_theme_metrics::Span owner_check(menu_theme_metrics::Metric::QualifySelectionOwner);
+    const auto* frame = g_theme_selection_frame;
+    if (!frame || opaque != frame || frame->retired || frame->after != after || frame->index != index
+        || frame->context != session.widget || !frame->lease || !*frame->lease || !non_audio_hook_gate().accepting()
+        || !same_menu_session(frame->session, session, false)) return false;
+    void* caller = nullptr;
+    const auto module = reinterpret_cast<HMODULE>(g_selection_exe_base);
+    const auto address = reinterpret_cast<std::uintptr_t>(frame->caller);
+    return core::safe_copy_bytes(frame->return_slot, &caller, sizeof(caller)) && caller == frame->caller
+        && core::is_executable_image_address(module, address, true);
+}
 
 bool try_selection_runtime_idle_for_catalog_adoption() noexcept
 {

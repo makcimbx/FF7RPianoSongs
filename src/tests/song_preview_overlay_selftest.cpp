@@ -89,6 +89,62 @@ int main()
         require(std::abs(alpha - .4f) < .001f && label.empty(),"fade scales every tile; opaque-shadow text waits");
         require(!draw_song_preview_badge(snapshot,*layout,reinterpret_cast<void*>(1),nullptr,text,tile,0),
             "transparent badge is not drawn");
+        menu_theme_plan::PreviewPalette custom;
+        const menu_theme_plan::PreviewPalette defaults;
+        require(defaults.linear == std::array<std::array<float,4>,5>{{
+            {.012f,.024f,.30f,.94f}, {.64f,.49f,.22f,1}, {.12f,.66f,.94f,1}, {.03f,.07f,.45f,1}, {1,1,1,1}}},
+            "Original preserves all five exact pre-theme linear native-look roles");
+        for (unsigned role = 0; role < custom.linear.size(); ++role)
+            custom.linear[role] = {.1f * (role + 1), .02f * (role + 1), .03f, .1f * (role + 1)};
+        custom.overrides = 31;
+        std::vector<runtime_layouts::FLinearColor> drawn;
+        runtime_layouts::FLinearColor drawn_text{};
+        const OverlayDrawTile collect = [&](void*, float, float, float, float, float, float, float, float,
+            const runtime_layouts::FLinearColor* color, const void*, bool) { drawn.push_back(*color); return true; };
+        const OverlayDrawText collect_text = [&](void*, float, float, const wchar_t*, void*, const runtime_layouts::FLinearColor* color) {
+            drawn_text = *color; return 16;
+        };
+        require(draw_song_preview_badge(snapshot, *layout, reinterpret_cast<void*>(1), nullptr, collect_text, collect, .75f, custom),
+            "custom value palette draws same badge geometry");
+        const auto matches = [&](const runtime_layouts::FLinearColor& color, unsigned role) {
+            const auto& c = custom.linear[role]; return color.r == c[0] && color.g == c[1] && color.b == c[2]
+                && std::abs(color.a - c[3] * .75f) < .000001f;
+        };
+        require(matches(drawn[0], 1) && matches(drawn[1], 0) && matches(drawn[2], 4)
+            && matches(drawn[3], 2) && matches(drawn[4], 4) && matches(drawn[drawn.size()-2], 3)
+            && matches(drawn.back(), 1) && matches(drawn_text, 4),
+            "all roles: border/excerpt, fill, spectrum, groove, text/icon/peaks; fade multiplies authored alpha");
+        snapshot.phase = PreviewPhase::Playing; snapshot.position = {true,false,240000,480000}; drawn.clear();
+        require(draw_song_preview_badge(snapshot, *layout, reinterpret_cast<void*>(1), nullptr, collect_text, collect, .75f, custom)
+            && matches(drawn.back(), 4), "custom Text role also colors actual playing playhead, preserving fade alpha");
+        auto transparent_text = custom; transparent_text.linear[4][3] = 0;
+        drawn_text.a = -1;
+        require(draw_song_preview_badge(snapshot, *layout, reinterpret_cast<void*>(1), nullptr, collect_text, collect, 1, transparent_text)
+            && drawn_text.a == -1, "fully transparent authored text cannot leave opaque native shadow");
+        publish_song_preview_palette(1, custom);
+        menu_theme_plan::PreviewPalette copied;
+        require(preview_badge_palette(capture_song_preview_palette(), 1, copied) && copied == custom,
+            "same-session fade uses copied committed palette");
+        publish_song_preview_palette(1, {});
+        require(preview_badge_palette(capture_song_preview_palette(), 1, copied) && copied == menu_theme_plan::PreviewPalette{},
+            "Original replaces fade colors with exact defaults without stale custom fallback");
+        retire_song_preview_palette(1);
+        require(!preview_badge_palette(capture_song_preview_palette(), 1, copied), "closed-session fade suppressed");
+        publish_song_preview_palette(2, custom);
+        require(!preview_badge_palette(capture_song_preview_palette(), 1, copied)
+            && preview_badge_palette(capture_song_preview_palette(), 2, copied), "next owner never leaks style onto old shown selection");
+        require(!preview_badge_palette(capture_song_preview_palette(), 3, copied),
+            "active publication cannot authorize mismatched newer Preview owner");
+        retire_song_preview_palette(2);
+        require(!preview_badge_palette(capture_song_preview_palette(), 2, copied)
+            && !preview_badge_palette(capture_song_preview_palette(), 1, copied),
+            "retired generation and older fading selections remain suppressed");
+        require(preview_badge_palette(capture_song_preview_palette(), 3, copied)
+            && copied == menu_theme_plan::PreviewPalette{},
+            "terminal retirement then genuinely newer Preview without theme publication retains original working badge");
+        const auto retired = capture_song_preview_palette();
+        require(!retired.active && retired.generation == 2 && retired.palette == custom,
+            "default fallback does not revive publication or reuse retired custom colors");
         snapshot.mode = ff7r::piano::core::PreviewMode::Off;
         require(!draw_song_preview_badge(snapshot,*layout,reinterpret_cast<void*>(1),nullptr,{},tile),"off hidden");
         snapshot.mode = ff7r::piano::core::PreviewMode::Auto;

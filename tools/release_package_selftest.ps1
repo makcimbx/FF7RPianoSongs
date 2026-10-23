@@ -2,10 +2,25 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot "release_package.ps1")
 
+$sourceRoot = Split-Path -Parent $PSScriptRoot
+$tokens = $null; $parseErrors = $null
+$packageAst = [Management.Automation.Language.Parser]::ParseFile(
+    (Join-Path $sourceRoot "package_dist.ps1"), [ref]$tokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw "package_dist.ps1 did not parse" }
+# Exercise the real staging, parity and inventory functions without executing builds/publication.
+foreach ($name in @("Get-RelativeFileInventory", "Assert-FilesEqual", "Copy-ValidatedFile",
+        "Get-ExampleThemeMappings", "Get-ExpectedPackageInventory", "Assert-PackageTree", "Copy-PackageTree")) {
+    $definition = $packageAst.Find({ param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+    }, $true)
+    if (!$definition) { throw "Package authority function was not found: $name" }
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ".ff7rp-release-package-selftest-$PID-$([Guid]::NewGuid().ToString('N'))"
 try {
     $fixture = Join-Path $testRoot "fixture"
-    foreach ($directory in @("package/docs", "package/End/Binaries/Win64", "src/game", "out-a", "out-b")) {
+    foreach ($directory in @("docs", "inputs", "src/game", "out-a", "out-b")) {
         New-Item -ItemType Directory -Path (Join-Path $fixture $directory) -Force | Out-Null
     }
     $releaseJson = @{
@@ -25,23 +40,81 @@ try {
         )
     } | ConvertTo-Json -Depth 5
     [IO.File]::WriteAllText((Join-Path $fixture "release.json"), $releaseJson)
-    [IO.File]::WriteAllText((Join-Path $fixture "package/release.json"), $releaseJson)
     [IO.File]::WriteAllText((Join-Path $fixture "src/game/rva_catalog.json"),
         '{"schema_version":3,"default_build":"ff7rebirth-steam-win64-6a16ced2",' +
         '"builds":[{"id":"ff7rebirth-steam-win64-6a16ced2"},{"id":"ff7rebirth-steam-win64-68fd6fde"}],"addresses":[]}')
     $publicDocuments = @(
         "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md",
-        "docs/SongFormat.md"
+        "docs/SongFormat.md", "ThemesGuide.md"
     )
-    foreach ($relative in $publicDocuments) {
-        $path = Join-Path (Join-Path $fixture "package") $relative
-        [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
-        [IO.File]::WriteAllText($path, "$relative`n")
+    $DocumentMappings = @($publicDocuments | ForEach-Object {
+        $source = $_
+        [pscustomobject]@{ Source = $source; Destination = $_ }
+    })
+    $guideRegistration = @((Get-Content -LiteralPath (Join-Path $sourceRoot "package-docs.json") -Raw |
+        ConvertFrom-Json).documents | Where-Object { $_.role -ceq "themes-guide" })
+    if ($guideRegistration.Count -ne 1 -or $guideRegistration[0].distribution -cne "package" -or
+        $guideRegistration[0].source -cne "ThemesGuide.md" -or
+        $guideRegistration[0].destination -cne "ThemesGuide.md") {
+        throw "Theme guide must be registered once at the archive root"
     }
+    foreach ($mapping in $DocumentMappings) {
+        $path = Join-Path $fixture $mapping.Source
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
+        [IO.File]::WriteAllText($path, "$($mapping.Source)`n")
+    }
+    foreach ($mapping in Get-ExampleThemeMappings) {
+        Copy-ValidatedFile (Join-Path $sourceRoot $mapping.Source) (Join-Path $fixture $mapping.Source)
+    }
+    $exampleSources = @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot "examples/Themes") -File -Recurse |
+        ForEach-Object { [IO.Path]::GetRelativePath($sourceRoot, $_.FullName).Replace('\', '/') } | Sort-Object)
+    if (($exampleSources -join "`n") -cne ((@(Get-ExampleThemeMappings).Source | Sort-Object) -join "`n")) {
+        throw "Example source inventory differs from the explicit package authority"
+    }
+    $Root = $fixture
+    $BinaryRelative = "End/Binaries/Win64"
+    $Artifact = Join-Path $fixture "inputs/proxy.dll"
+    $Ini = Join-Path $fixture "inputs/example.ini"
+    $Model = Join-Path $fixture "inputs/model.gguf"
+    [IO.File]::WriteAllBytes($Artifact, [byte[]](0, 1, 2, 3, 255))
+    [IO.File]::WriteAllText($Ini, "[General]`n")
+    [IO.File]::WriteAllText($Model, "fixture model`n")
+    $AuditTool = { $global:LASTEXITCODE = 0 }
+    $package = Join-Path $fixture "package"
+    Copy-PackageTree $package
+    Assert-PackageTree $package
+    $supportMappings = @($DocumentMappings | Where-Object { $_.Destination -ceq "ThemesGuide.md" }) +
+        @(Get-ExampleThemeMappings)
+    foreach ($mapping in $supportMappings) {
+        $source = Join-Path $fixture $mapping.Source
+        $staged = Join-Path $package $mapping.Destination
+        $bytes = [IO.File]::ReadAllBytes($source)
+        Remove-Item -LiteralPath $source
+        try {
+            $accepted = $false
+            try { Copy-PackageTree (Join-Path $fixture "missing-source"); $accepted = $true } catch {}
+            if ($accepted) { throw "Staging accepted missing source: $($mapping.Source)" }
+            $accepted = $false
+            try { Assert-PackageTree $package; $accepted = $true } catch {}
+            if ($accepted) { throw "Validation accepted removed source: $($mapping.Source)" }
+        } finally { [IO.File]::WriteAllBytes($source, $bytes) }
+        Remove-Item -LiteralPath $staged
+        try {
+            $accepted = $false
+            try { Assert-PackageTree $package; $accepted = $true } catch {}
+            if ($accepted) { throw "Validation accepted missing staged file: $($mapping.Destination)" }
+        } finally { [IO.File]::WriteAllBytes($staged, $bytes) }
+        $changed = [byte[]]$bytes.Clone()
+        $changed[0] = $changed[0] -bxor 1
+        [IO.File]::WriteAllBytes($staged, $changed)
+        try {
+            $accepted = $false
+            try { Assert-PackageTree $package; $accepted = $true } catch {}
+            if ($accepted) { throw "Validation accepted changed staged bytes: $($mapping.Destination)" }
+        } finally { [IO.File]::WriteAllBytes($staged, $bytes) }
+    }
+    Assert-PackageTree $package
     $dll = Join-Path $fixture "package/End/Binaries/Win64/D3DCOMPILER_43.dll"
-    [IO.File]::WriteAllBytes($dll, [byte[]](0, 1, 2, 3, 255))
-    [IO.File]::WriteAllText((Join-Path $fixture "package/End/Binaries/Win64/FF7RPianoSongs.ini"), "[General]`n")
-    [IO.File]::WriteAllText((Join-Path $fixture "package/End/Binaries/Win64/muscriptor-small-f16.gguf"), "fixture model`n")
     $provenance = Join-Path $fixture "provenance.json"
     $generatedHeader = Join-Path $fixture "release_identity.generated.h"
     [IO.File]::WriteAllText($generatedHeader, "synthetic generated release identity`n")
@@ -89,26 +162,43 @@ try {
                 throw "Release ZIP metadata is not fixed for $($entry.FullName): time=$($entry.LastWriteTime.UtcDateTime.ToString('o')) attrs=$($entry.ExternalAttributes)"
             }
         }
+        foreach ($mapping in $supportMappings) {
+            $entry = $archive.GetEntry($mapping.Destination)
+            if (!$entry) { throw "ZIP is missing: $($mapping.Destination)" }
+            $input = $entry.Open(); $output = [IO.MemoryStream]::new()
+            try {
+                $input.CopyTo($output)
+                if ([Convert]::ToBase64String($output.ToArray()) -cne
+                    [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $fixture $mapping.Source)))) {
+                    throw "ZIP bytes differ from source: $($mapping.Source)"
+                }
+            } finally { $output.Dispose(); $input.Dispose() }
+        }
     } finally { $archive.Dispose() }
     $expectedInventory = @(
         "CHANGELOG.md", "End/Binaries/Win64/D3DCOMPILER_43.dll",
         "End/Binaries/Win64/FF7RPianoSongs.ini", "End/Binaries/Win64/muscriptor-small-f16.gguf", "LICENSE", "README.md",
-        "THIRD_PARTY_NOTICES.md", "docs/SongFormat.md", "release.json"
+        "THIRD_PARTY_NOTICES.md", "ThemesGuide.md", "docs/SongFormat.md", "release.json",
+        "Themes/steins-gate/artwork.png", "Themes/steins-gate/button-disabled.png",
+        "Themes/steins-gate/cursor.png", "Themes/steins-gate/cursor-glow.png",
+        "Themes/steins-gate/button-hovered.png", "Themes/steins-gate/button-normal.png",
+        "Themes/steins-gate/button-pressed.png", "Themes/steins-gate/frame.png", "Themes/steins-gate/header.png",
+        "Themes/steins-gate/info-frame.png", "Themes/steins-gate/line-record.png", "Themes/steins-gate/line.png",
+        "Themes/steins-gate/new.png", "Themes/steins-gate/panel.png", "Themes/steins-gate/pattern.png",
+        "Themes/steins-gate/record-deco.png", "Themes/steins-gate/row-selected.png", "Themes/steins-gate/row.png",
+        "Themes/steins-gate/speed-configured.png",
+        "Themes/steins-gate/speed-empty.png", "Themes/steins-gate/speed-recorded.png", "Themes/steins-gate/theme.ini",
+        "Themes/evangelion/artwork.png", "Themes/evangelion/button-disabled.png",
+        "Themes/evangelion/cursor.png", "Themes/evangelion/cursor-glow.png",
+        "Themes/evangelion/button-hovered.png", "Themes/evangelion/button-normal.png",
+        "Themes/evangelion/button-pressed.png", "Themes/evangelion/frame.png",
+        "Themes/evangelion/header-rank.png", "Themes/evangelion/header-title.png", "Themes/evangelion/info-frame.png",
+        "Themes/evangelion/line-record.png", "Themes/evangelion/line.png", "Themes/evangelion/new.png",
+        "Themes/evangelion/panel.png", "Themes/evangelion/pattern.png", "Themes/evangelion/record-deco.png",
+        "Themes/evangelion/row-selected.png", "Themes/evangelion/row.png", "Themes/evangelion/speed-configured.png",
+        "Themes/evangelion/speed-empty.png", "Themes/evangelion/speed-recorded.png", "Themes/evangelion/theme.ini"
     ) | Sort-Object
-    $packageSource = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $PSScriptRoot) "package_dist.ps1"))
-    $tokens = $null; $parseErrors = $null
-    $packageAst = [Management.Automation.Language.Parser]::ParseInput($packageSource, [ref]$tokens, [ref]$parseErrors)
-    if ($parseErrors.Count) { throw "package_dist.ps1 did not parse" }
-    $inventoryFunction = $packageAst.Find({ param($node)
-        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Get-ExpectedPackageInventory"
-    }, $true)
-    if (!$inventoryFunction) { throw "Package inventory authority was not found" }
-    $scriptInventory = @(& {
-        $BinaryRelative = "End/Binaries/Win64"
-        $DocumentMappings = @($publicDocuments | ForEach-Object { [pscustomobject]@{ Destination = $_ } })
-        . ([scriptblock]::Create($inventoryFunction.Extent.Text))
-        Get-ExpectedPackageInventory
-    })
+    $scriptInventory = @(Get-ExpectedPackageInventory)
     if (($scriptInventory -join "`n") -cne ($expectedInventory -join "`n")) {
         throw "Canonical package inventory does not match the proxy archive inventory"
     }
@@ -380,7 +470,7 @@ try {
     $surfaceWitnessAfter = @(Get-ChildItem -LiteralPath $surface -File -Recurse -Force | Sort-Object FullName |
         ForEach-Object { "$(Get-ReleaseFileSha256 $_.FullName) $([IO.Path]::GetRelativePath($surface, $_.FullName))" }) -join "`n"
     if ($surfaceWitnessAfter -cne $surfaceWitness) { throw "Sequential rejection tests changed the authoritative prior release surface" }
-    Write-Output "Release package self-test passed: deterministic target artifacts, exact identities, sequential aggregate inventory, rejection/non-replacement, and malformed metadata."
+    Write-Output "Release package self-test passed: fake-tree staging through production functions, guide/example byte parity and missing/changed inputs, deterministic target artifacts, exact identities, sequential aggregate inventory, rejection/non-replacement, and malformed metadata."
 } finally {
     if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
 }

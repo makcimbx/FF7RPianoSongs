@@ -21,6 +21,8 @@ release or another executable build.
 - [Current Status](CurrentStatus.md) is the short current implementation/build-qualification and artifact-disposition summary, not an append-only session log.
 - [In-Game Validation](InGameValidation.md) defines stable manual scenarios, acceptance criteria, and stop conditions.
 - [Architecture](Architecture.md) records durable ownership and lifecycle invariants.
+- [Themes Guide](../ThemesGuide.md) is the user-facing installation, controls and authoring guide, included with the two example themes in distribution archives.
+- [Menu Themes](MenuThemes.md) retains the developer format, runtime contracts and reverse-engineering evidence; user instructions belong in the Themes Guide.
 - [Mode-Specific Audio Design](ModeSpecificAudioDesign.md) is the implemented offline role-resolution, processing, cache, and validation reference for optional Mode1 and Mode2 source overrides.
 - [RVA catalog](../src/game/rva_catalog.json) is the machine-readable inventory of supported game builds, addresses, and hooks. [Architecture](Architecture.md) documents its schema and the per-build generated trees.
 

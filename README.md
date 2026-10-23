@@ -107,7 +107,10 @@ Default game songs are not previewed.
 The mod prepares an excerpt of up to 20 seconds with short fades and a waveform
 from its actual sound. Automatic selection favors sustained activity away from
 the edges, not necessarily a chorus or the musically best passage. The separate
-preview stream does not use the game's music-volume mixer. Development progress
+preview stream follows the game's master/music volume settings, including mute,
+and the native piano asset/bank attenuation;
+it stays silent when those settings cannot be read safely. It does not reproduce
+every native voice effect or mixer transition. Development progress
 and untested scope are recorded in [Current Status](https://github.com/makcimbx/FF7RPianoSongs/blob/main/docs/CurrentStatus.md#song-preview-development-2026-10-19).
 
 ## Settings
@@ -121,6 +124,8 @@ Edit `End/Binaries/Win64/FF7RPianoSongs.ini` only while the game is stopped.
 | `Autoplay.KeyboardFunctionKey` | `0`-`12` | Ctrl+F1 through Ctrl+F12; default `8` (Ctrl+F8). `0` disables the keyboard shortcut, not L3+R3. |
 | `Preview.Mode` | `auto`, `manual`, `off` | Default: `auto`; `manual` starts song previews only on request; `off` disables previews. |
 | `Preview.KeyboardFunctionKey` | `0`-`12` | Ctrl+F1 through Ctrl+F12 for preview; default `7` (Ctrl+F7). `0` disables the keyboard shortcut. |
+| `Theme.Selected` | Theme ID or `original` | Remembered after successful theme application; `original` restores native styling. |
+| `Theme.KeyboardFunctionKey` | `0`-`12` | Next theme with Ctrl+F1 through Ctrl+F12; default `6`. `0` disables only the keyboard shortcut. Gamepad: hold L3 and tap L2 for previous or R2 for next. |
 | `Advanced.RebuildAudioCache` | `0` or nonzero | Rebuilds every song cache on the next run. Set it back to `0` afterward. |
 | `Advanced.TranscriptionThreads` | `1`-`64` | CPU threads for transcribing the piano of a song without `song.mid`. Default: `4`. |
 
@@ -202,6 +207,7 @@ Logs may contain song names and local paths. Remove private data and copyrighted
 ## Reference
 
 - [Song Format](docs/SongFormat.md)
+- [Themes: installation, controls and authoring guide](ThemesGuide.md)
 - [Changelog](CHANGELOG.md)
 - [MIT License](LICENSE)
 - [Third-Party Notices](THIRD_PARTY_NOTICES.md)

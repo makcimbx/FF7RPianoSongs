@@ -125,6 +125,16 @@ Status validate_older_inputs(const std::vector<std::uint8_t>& source,
 
 } // namespace
 
+float native_music_fixed_gain() noexcept {
+    // Decode the same pinned bytes the exporter/bank builder preserve.
+    const std::span<const std::uint8_t> prefix(
+        reinterpret_cast<const std::uint8_t*>(kQualifiedPrefix), kBankOffset);
+    const auto asset = std::bit_cast<float>(std::uint32_t(native_binary::get(prefix, 0x64)));
+    const auto music = std::bit_cast<float>(std::uint32_t(native_binary::get(
+        ff7r::piano::pipeline::mabf_scaffold::kHeader, 0x98)));
+    return asset * music;
+}
+
 NativeMusicExportResult build_native_music_export(const std::vector<std::uint8_t>& source,
     const std::vector<std::uint8_t>& replacement, const NativeMusicCueTiming& timing) {
     return build_native_music_export(source,replacement,timing,NativeMusicExportProfile::Current1005);

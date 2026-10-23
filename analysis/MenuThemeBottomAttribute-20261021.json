@@ -1,0 +1,56 @@
+{
+  "scope": "Exact TextBottom effect-state restoration, not only its color",
+  "layout": {
+    "widget_color": "0x188",
+    "widget_slate": "0x220",
+    "slate_attribute": "0x340",
+    "attribute_bytes": 64,
+    "color_bytes": 40,
+    "is_set": "0x28",
+    "delegate": "0x30",
+    "delegate_count": "0x38"
+  },
+  "contract": [
+    "BottomColor and BottomOpacity always make the Slate bottom attribute set, even for an unchanged color. Primary setters do not clear it.",
+    "Capture separate owning UObject color and Slate attribute baselines. Preserve unset/bound state as well as color, updating the baseline for genuine untinted native changes.",
+    "Restore UObject color by owning assignment and the complete Slate attribute through its borrowed native setter, under current subject/session/Slate-pair authority.",
+    "No memcpy of owners/delegates, raw flag patch or whole-widget synchronization. Attribute assignment requires a valid initialized destination; destruction releases owners but not storage."
+  ],
+  "profiles": {
+    "ff7rebirth-steam-win64-6a16ced2": {
+      "program": "ff7rebirth_.exe-9457d4",
+      "evidence_type": "static_disk_contract",
+      "disk_authenticated": true,
+      "property_record": "14612a740",
+      "slate_color_getter": "1445a266c",
+      "bottom_setter": "14178c9d8",
+      "opacity_setter": "1437117ec",
+      "slate_constructor": "140886ba4",
+      "functions": {
+        "end_text_slate_set_bottom_attribute": ["00885450", "48895c2408488974241057b820000000e81b678e01482be0488d9940030000"],
+        "native_slate_color_attribute_assign": ["00b11ecc", "48895c2410488974241857b820000000e89f9c6501482be0c5f81002"],
+        "native_slate_color_attribute_destroy": ["008d8c84", "48895c241057b820000000e8ec2e8901482be0488d5930488bf9"]
+      }
+    },
+    "ff7rebirth-steam-win64-68fd6fde": {
+      "program": "ff7rebirth_.exe",
+      "evidence_type": "static_import_contract",
+      "disk_authenticated": false,
+      "property_record": "1462c1a40",
+      "slate_color_getter": "1448156b0",
+      "bottom_setter": "1416a9b04",
+      "opacity_setter": "1439d11c0",
+      "functions": {
+        "end_text_slate_set_bottom_attribute": ["016a9b9c", "48895c2408488974241057b820000000e87f53a000482be0488d9940030000"],
+        "native_slate_color_attribute_assign": ["00e7539c", "48895c240857b820000000e8849b2301482be0488bda488bf9e86eb4aa00"],
+        "native_slate_color_attribute_destroy": ["00aa4f3c", "4053b820000000e8e89f6001482be083793800488bd97409488b4930"]
+      }
+    }
+  },
+  "verification": "All windows are unique and instruction-complete in explicit imported programs; default entry windows and first 64 bytes match authenticated canonical disk. Older is import-only. No runtime invocation or rendered restoration qualification.",
+  "abi": {
+    "end_text_slate_set_bottom_attribute": "void(Slate* RCX, borrowed Attribute40* RDX); owns copy, does not consume input; native invalidation",
+    "native_slate_color_attribute_assign": "Attribute40* (initialized destination RCX, borrowed source RDX); retains color and clones/replaces delegate",
+    "native_slate_color_attribute_destroy": "void(Attribute40* RCX); releases delegate/color ownership without freeing caller storage"
+  }
+}

@@ -3,9 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <iomanip>
-#include <sstream>
 
+#include "chart_compiler.h"
 #include "pipeline_limits.h"
 #include "chart_event_plan.h"
 #include "song_types.h"
@@ -25,11 +24,7 @@ inline bool valid_compiled_time_string(const std::string& value)
 inline std::string expected_compiled_time_string(const double beat, const double bpm)
 {
     if (!std::isfinite(beat) || !std::isfinite(bpm) || bpm <= 0.0) return {};
-    const long long frames = static_cast<long long>(std::llround(beat * 3600.0 / bpm));
-    std::ostringstream out;
-    out << std::setw(2) << std::setfill('0') << frames / 60
-        << '_' << std::setw(2) << std::setfill('0') << frames % 60;
-    return out.str();
+    return beat_to_time_str(beat, bpm);
 }
 
 inline bool restricted_extended_source_note(const Note& note)

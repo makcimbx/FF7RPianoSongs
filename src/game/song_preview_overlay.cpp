@@ -5,8 +5,43 @@
 #include <cmath>
 #include <cwchar>
 #include <iterator>
+#include <mutex>
+#include <type_traits>
 
 namespace ff7r::piano::game {
+static_assert(std::is_trivially_copyable_v<PreviewPaletteSnapshot> && sizeof(PreviewPaletteSnapshot) <= 128);
+namespace {
+std::mutex preview_palette_mutex;
+PreviewPaletteSnapshot preview_palette_snapshot;
+}
+void publish_song_preview_palette(std::uint64_t generation, const menu_theme_plan::PreviewPalette& palette) noexcept
+{
+    const std::lock_guard lock(preview_palette_mutex);
+    preview_palette_snapshot = {generation, generation != 0, palette};
+}
+void retire_song_preview_palette(std::uint64_t generation) noexcept
+{
+    const std::lock_guard lock(preview_palette_mutex);
+    if (preview_palette_snapshot.generation == generation) preview_palette_snapshot.active = false;
+}
+PreviewPaletteSnapshot capture_song_preview_palette() noexcept
+{
+    const std::lock_guard lock(preview_palette_mutex);
+    return preview_palette_snapshot;
+}
+bool preview_badge_palette(const PreviewPaletteSnapshot& snapshot, std::uint64_t generation,
+    menu_theme_plan::PreviewPalette& out) noexcept
+{
+    if (!snapshot.generation) { out = {}; return true; }
+    if (!snapshot.active) {
+        // Retirement fences stale fades, not newer audio-preview sessions when
+        // optional theming can no longer adopt/publish another menu owner.
+        if (generation <= snapshot.generation) return false;
+        out = {}; return true;
+    }
+    if (snapshot.generation != generation) return false;
+    out = snapshot.palette; return true;
+}
 
 std::optional<PreviewBadgeLayout> preview_badge_layout(
     const PreviewSelectedRowBounds& bounds, const float width, const float height) noexcept
@@ -40,7 +75,8 @@ std::optional<PreviewBadgeLayout> preview_badge_layout(
 
 bool draw_song_preview_badge(const SongPreviewRenderSnapshot& snapshot,
     const PreviewBadgeLayout& layout, void* fcanvas, void* font,
-    const OverlayDrawText& text, const OverlayDrawTile& tile, const float opacity) noexcept
+    const OverlayDrawText& text, const OverlayDrawTile& tile, const float opacity,
+    const menu_theme_plan::PreviewPalette& palette) noexcept
 {
     if (!snapshot || snapshot.position.failed || !fcanvas || !tile
         || !(opacity > 0 && opacity <= 1)) return false;
@@ -51,10 +87,13 @@ bool draw_song_preview_badge(const SongPreviewRenderSnapshot& snapshot,
     try {
         using Color = runtime_layouts::FLinearColor;
         const auto fade = [opacity](Color color) { color.a *= opacity; return color; };
-        // Linear colors matched to the native selected row: navy fill, gold trim, cyan accents.
-        const Color gold = fade({.64f, .49f, .22f, 1}), navy = fade({.012f, .024f, .30f, .94f});
-        const Color cyan = fade({.12f, .66f, .94f, 1}), groove = fade({.03f, .07f, .45f, 1});
-        const Color white = fade({1, 1, 1, 1});
+        const auto role = [&](menu_theme_plan::PreviewRole value) {
+            const auto& c = palette.linear[static_cast<unsigned>(value)];
+            return fade(Color{c[0], c[1], c[2], c[3]});
+        };
+        const Color gold = role(menu_theme_plan::PreviewRole::Border), navy = role(menu_theme_plan::PreviewRole::Background);
+        const Color cyan = role(menu_theme_plan::PreviewRole::Accent), groove = role(menu_theme_plan::PreviewRole::Track);
+        const Color white = role(menu_theme_plan::PreviewRole::Text);
         const auto rect = [&](const PreviewPixelBounds& b, const Color& color) {
             return tile(fcanvas, b.x, b.y, b.width, b.height, 0, 0, 1, 1,
                 &color, nullptr, true);
@@ -76,7 +115,7 @@ bool draw_song_preview_badge(const SongPreviewRenderSnapshot& snapshot,
         // Stop icon, then the song clock: excerpt start plus device position, over the whole song.
         if (!rect({p.x + 8, p.y + 7, 9, 9}, white)) return false;
         // The native string shadow is opaque black, so text waits for a mostly opaque panel.
-        if (text && opacity >= .5f) {
+        if (text && opacity >= .5f && white.a > 0) {
             // Clamped so corrupt metadata cannot overflow the casts.
             const auto at = static_cast<unsigned>(std::min(start + static_cast<double>(played) / rate, 359999.0));
             const auto end = static_cast<unsigned>(std::min(length, 359999.0));

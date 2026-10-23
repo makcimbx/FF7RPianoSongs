@@ -375,6 +375,15 @@ public:
     bool left_thumbstick_held() const noexcept { return left_thumbstick_.load(std::memory_order_acquire); }
     bool right_thumbstick_held() const noexcept { return right_thumbstick_.load(std::memory_order_acquire); }
 
+    void update_trigger(const bool left, const int32_t event_type) noexcept
+    {
+        std::atomic_bool& held = left ? left_trigger_ : right_trigger_;
+        held.store(difficulty_provider_held_after_key_event(
+            held.load(std::memory_order_acquire), event_type), std::memory_order_release);
+    }
+    bool left_trigger_held() const noexcept { return left_trigger_.load(std::memory_order_acquire); }
+    bool right_trigger_held() const noexcept { return right_trigger_.load(std::memory_order_acquire); }
+
     void update_window_key(const bool decrement, const bool held) noexcept
     {
         (decrement ? window_key_left_ : window_key_right_)
@@ -421,6 +430,8 @@ private:
         raw_hid_right_.store(false, std::memory_order_release);
         left_thumbstick_.store(false, std::memory_order_release);
         right_thumbstick_.store(false, std::memory_order_release);
+        left_trigger_.store(false, std::memory_order_release);
+        right_trigger_.store(false, std::memory_order_release);
     }
 
     std::atomic_bool player_input_left_{false};
@@ -431,6 +442,8 @@ private:
     std::atomic_bool raw_hid_right_{false};
     std::atomic_bool left_thumbstick_{false};
     std::atomic_bool right_thumbstick_{false};
+    std::atomic_bool left_trigger_{false};
+    std::atomic_bool right_trigger_{false};
 };
 
 class DifficultyInputMergeState final {

@@ -4,6 +4,9 @@
 #include "game/catalog_adoption.h"
 #include "game/mandatory_hook_transaction.h"
 #include "game/menu_focus_restore.h"
+#include "game/menu_theme_observation.h"
+#include "game/menu_theme_runtime.h"
+#include "game/menu_theme_metrics.h"
 
 #include "core/logging.h"
 #include "core/pe_image.h"
@@ -125,6 +128,8 @@ void __fastcall restore_selection_detour(void* widget) noexcept {
 }
 
 void __fastcall open_detour(void* list, uint64_t selected) noexcept {
+    menu_theme_metrics::Span measured(menu_theme_metrics::Metric::OpenHook);
+    menu_theme_runtime::callback_entered();
     // Every entry shadows outer authority, including unrelated/declined Opens.
     MenuOpenFocusScope ineligible_scope(nullptr);
     auto original = g_original_open;
@@ -134,7 +139,7 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
         && ret == reinterpret_cast<uintptr_t>(g_module) + kOpenReturnRva;
     if (classify_menu_open_admission(exact_call_site, false, true)
         == MenuOpenAdmissionDisposition::ForwardOriginal) {
-        try { original(list, selected); } catch (...) {}
+        try { menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::OpenOriginal); original(list, selected); } catch (...) {}
         return;
     }
     if (classify_menu_open_admission(true,
@@ -144,7 +149,7 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
     const auto admission = classify_menu_open_admission(true,
         piano_list_catalog_terminal_failure(), static_cast<bool>(lease));
     if (admission == MenuOpenAdmissionDisposition::ForwardOriginal) {
-        try { original(list, selected); } catch (...) {}
+        try { menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::OpenOriginal); original(list, selected); } catch (...) {}
         return;
     }
     if (admission == MenuOpenAdmissionDisposition::SuppressTerminalFailure) return;
@@ -192,6 +197,7 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
     focus.opening = opening;
     try {
         MenuOpenFocusScope scope(&focus);
+        menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::OpenOriginal);
         original(list, selected);
     } catch (...) {
         if (focus.result != MenuFocusRestoreResult::NotApplied) {
@@ -225,27 +231,36 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
         (void)menu_session_authority().retire(opening.generation);
         return;
     }
+    const auto theme_before = menu_theme_observation::capture(
+        g_module, FF7RP_TARGET_BUILD_ID, opening.generation, ret);
     try {
         auto callbacks = make_profile_list_callbacks();
         (void)profile_list_coordinator().notify_session_ready(
             opening.generation, callbacks);
     } catch (...) {}
+    const auto theme_after = menu_theme_observation::capture(
+        g_module, FF7RP_TARGET_BUILD_ID, opening.generation, ret);
+    menu_theme_observation::report(theme_before, theme_after);
+    menu_theme_runtime::ready(list, opening.generation, _AddressOfReturnAddress(), lease);
 }
 
 void __fastcall close_detour(void* list) noexcept {
+    menu_theme_metrics::Span measured(menu_theme_metrics::Metric::CloseHook);
+    menu_theme_runtime::callback_entered();
     auto original = g_original_close;
     if (!original) return;
     auto lease = non_audio_hook_gate().try_enter();
     const uintptr_t ret = reinterpret_cast<uintptr_t>(_ReturnAddress());
     if (!lease || !g_module || ret != reinterpret_cast<uintptr_t>(g_module) + kListCloseReturnRva) {
-        try { original(list); } catch (...) {}
+        try { menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::CloseOriginal); original(list); } catch (...) {}
         return;
     }
     uint16_t word_before = 0;
     const bool before_read = read_active_word(list, word_before);
+    menu_theme_runtime::close(list, _AddressOfReturnAddress(), lease);
     const MenuSessionSnapshot closing = menu_session_authority().begin_close(list);
     if (closing) (void)cancel_song_preview("menu_close");
-    try { original(list); } catch (...) {
+    try { menu_theme_metrics::Span measured_original(menu_theme_metrics::Metric::CloseOriginal); original(list); } catch (...) {
         SelectionActivationTerminalResult result;
         if (closing) {
             result = terminate_terminal_audio(
@@ -301,9 +316,12 @@ void __fastcall close_detour(void* list) noexcept {
 
 void terminal_detour(void* controller, ControllerFn original,
     SelectionActivationTerminalReason reason) noexcept {
+    menu_theme_runtime::callback_entered();
     if (!original) return;
     auto lease = non_audio_hook_gate().try_enter();
     if (!lease) { try { original(controller); } catch (...) {} return; }
+    const auto theme_owner = capture_ready_menu_session();
+    if (theme_owner && theme_owner.controller == controller) menu_theme_runtime::retire();
     const MenuSessionSnapshot ending = menu_session_authority().begin_ending(controller);
     if (ending) (void)cancel_song_preview("menu_terminal");
     if (ending) {
@@ -361,6 +379,7 @@ core::HookShutdownResult shutdown_menu_session() {
         core::teardown_operation(g_close_hook), core::teardown_operation(g_open_hook),
         core::teardown_operation(g_restore_hook),
     }, [] { return true; }, [] {
+        menu_theme_runtime::disable();
         menu_session_authority().shutdown(); g_restore_selection = nullptr;
         g_original_destructor = nullptr; g_original_exit = nullptr;
         g_original_close = nullptr; g_original_open = nullptr; g_module = nullptr;

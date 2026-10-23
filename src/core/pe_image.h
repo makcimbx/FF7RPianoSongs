@@ -22,6 +22,10 @@ struct PeIdentity {
 PeIdentity pe_identity(HMODULE module);
 uint32_t pe_timestamp(HMODULE module);
 ImageRange image_range(HMODULE module);
+// Fresh PE bounds/mapping/current page protection, not callback or lifetime authority.
+// Optional resident-page queries fall back to the original VirtualQuery predicate.
+// Callers explicitly retain their existing execute-only acceptance policy.
+bool is_executable_image_address(HMODULE module, std::uintptr_t address, bool allow_execute_only) noexcept;
 bool bytes_equal(const uint8_t* address, const std::vector<uint8_t>& expected);
 bool safe_copy_bytes(const void* source, void* dest, size_t size);
 bool safe_write_bytes(void* dest, const void* source, size_t size);

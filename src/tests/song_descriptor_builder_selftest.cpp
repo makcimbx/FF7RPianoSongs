@@ -262,25 +262,16 @@ LoadedDifficultyProfile extended_profile_fixture(const std::size_t row_count)
     profile.config.diagnostic_extended_chart_fixture = true;
     for (std::size_t index = 0; index < row_count; ++index) {
         ff7rp::pipeline::Note note;
-        note.beat = static_cast<double>(index);
+        // Half-frame rounding must match the real compiler, not a second formula.
+        note.beat = index == 0 ? 520.0 / 480.0 : static_cast<double>(index) + 1.0;
         note.duration_beats = 1.0;
         note.pitch = "C4";
-        ChartNote compiled;
-        compiled.beat = note.beat;
-        compiled.duration_beats = note.duration_beats;
-        compiled.pitch = note.pitch;
-        compiled.time_str = ff7rp::pipeline::expected_compiled_time_string(note.beat, profile.config.bpm);
-        compiled.monotone_id = "Cn4";
-        compiled.monotone_note_type = 3;
-        if (index < ff7rp::pipeline::kMaxChartRows) {
-            profile.config.notes.push_back(std::move(note));
-            profile.chart.notes.push_back(std::move(compiled));
-        } else {
-            profile.diagnostic_chart.tail_rows.push_back({index, std::move(note), std::move(compiled)});
-        }
+        profile.config.notes.push_back(std::move(note));
     }
-    profile.diagnostic_chart.source_row_count = row_count;
-    profile.diagnostic_chart.native_prefix_row_count = ff7rp::pipeline::kMaxChartRows;
+    const auto status = ff7rp::pipeline::compile_chart(profile.config, &profile.chart,
+        &profile.diagnostic_chart, ff7rp::pipeline::kMaximumExtendedChartRows);
+    if (!status.ok()) throw std::runtime_error(status.message);
+    profile.config.notes.resize(ff7rp::pipeline::kMaxChartRows);
     return profile;
 }
 
@@ -340,6 +331,10 @@ int main()
     }
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
+    if (ff7rp::pipeline::expected_compiled_time_string(520.0 / 480.0, 120.0) != "00_33"
+        || ff7rp::pipeline::expected_compiled_time_string(1176.0 / 480.0, 72.0) != "02_02") {
+        return fail("extended eligibility disagreed with compiler half-frame rounding");
+    }
     LoadedSong playable = extended_song_fixture(513);
     SongDescriptor playable_descriptor = ff7r::piano::build_song_descriptor(playable, 17);
     if (playable_descriptor.profiles.front().note_count != 513
@@ -436,7 +431,10 @@ int main()
         return ff7r::piano::build_song_descriptor(candidate, 17).profiles.front().note_count == 512
             ? 0 : fail(std::string(label) + " exact-520 tail gained publication authority");
     };
-    if (rejects_tail_mutation("grouped", [](auto& row) {
+    if (rejects_tail_mutation("timestamp", [](auto& row) {
+            row.compiled.time_str = "00_00";
+        }) != 0
+        || rejects_tail_mutation("grouped", [](auto& row) {
             row.source.group_index = 1;
             row.compiled.group_index = 1;
         }) != 0
