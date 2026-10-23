@@ -1263,6 +1263,20 @@ void append_selected_row_capture_facts(std::ostream& out,
         << " capture_failure=" << native_audio::native_audio_failure_name(facts.failure);
     if(facts.binding_observed)out << " capture_binding=" << native_audio::binding_failure_name(facts.binding_failure)
         << " capture_role=" << static_cast<unsigned>(facts.binding_role);
+    if(facts.manager_gate.reason!=native_audio::NativeEntryGateFailure::None) {
+        out << " capture_manager_gate=" << native_audio::native_entry_gate_failure_name(facts.manager_gate.reason)
+            << " capture_manager_observation=non_authoritative_racy"
+            << " capture_manager_zero_mask=not_proof_of_no_contention"
+            << " capture_manager_entries=";
+        bool separator=false;
+        for(unsigned i=0;i<static_cast<unsigned>(native_audio::NativeEntryKind::Count);++i) {
+            if(!(facts.manager_gate.observed_entry_mask & (1u<<i)))continue;
+            if(separator)out << ',';
+            out << native_audio::native_entry_kind_name(static_cast<native_audio::NativeEntryKind>(i));
+            separator=true;
+        }
+        if(!separator)out << "none_observed";
+    }
     out << " capture_requested_name=0x" << std::hex << facts.requested_name;
     if(facts.name_observed)out << " capture_observed_name=0x" << facts.observed_name;
 }

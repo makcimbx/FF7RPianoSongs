@@ -7,6 +7,7 @@
 #include "pipeline/native_asset_hash.h"
 
 #include <fstream>
+#include <functional>
 #include <future>
 #include <latch>
 #include <thread>
@@ -48,7 +49,7 @@ struct RuntimeFixture : Fixture {
 
     explicit RuntimeFixture(std::string song_id="RuntimeFixture") {
         current=this;
-        na::g_base=base;na::g_failure.store(na::RuntimeFailure::None);
+        na::g_base=base;na::g_lookup_dispatch=false;na::test_lookup_call=nullptr;na::g_failure.store(na::RuntimeFailure::None);
         na::g_origin.store(true);na::g_entry_seen.store(false);na::g_hooks_ready.store(true);na::g_installed=0;
         na::g_entry_forwarding.store(0);na::g_entry_forwarding_uncertain.store(false);na::test_entry_handoff=nullptr;
         na::g_failure_reported.store(false);na::g_capture_reported.store(false);
@@ -109,7 +110,7 @@ struct RuntimeFixture : Fixture {
     }
     ~RuntimeFixture() {
         assert(na::shutdown_native_audio_runtime());na::g_queue.fill({});work.reset();
-        na::test_memory={};na::test_entry=nullptr;na::test_signature=nullptr;
+        na::test_memory={};na::test_entry=nullptr;na::test_signature=nullptr;na::test_lookup_call=nullptr;na::g_lookup_dispatch=false;
         na::test_install_hook=nullptr;na::test_disable_hook=nullptr;na::test_remove_hook=nullptr;
         na::test_entry_handoff=nullptr;
         std::filesystem::remove_all(directory);current=nullptr;
@@ -314,10 +315,277 @@ struct RuntimeFixture : Fixture {
         return na::install_native_audio_runtime(reinterpret_cast<HMODULE>(base),na::g_services);
     }
 };
+
+// Synthetic scalar/call seam exercising the actual production hook/traversal.
+// Native access faults are represented by their fault address, never by a miss.
+struct LookupScenario {
+    struct Event {unsigned kind;na::Address target,receiver;std::uint64_t key;};
+    inline static LookupScenario* active=nullptr;
+    Fixture& f;
+    decltype(na::test_memory) saved_memory=na::test_memory;
+    decltype(na::original_lookup) saved_original=na::original_lookup;
+    na::Address saved_base=na::g_base;
+    bool saved_capability=na::g_lookup_dispatch;
+    std::vector<Event> events;
+    std::function<void(Event)> before;
+    na::Address row=0xfeed0011;
+    unsigned char readiness=1;
+    explicit LookupScenario(Fixture& fixture):f(fixture) {
+        assert(!active);active=this;na::g_base=Fixture::base;
+        na::test_memory={&f,Fixture::read};na::test_lookup_call=call;
+        na::original_lookup=opaque;na::g_lookup_dispatch=true;
+        f.memory[Fixture::base+rva::NativeAudioInitialGuHeader].resize(48);
+        f.put(Fixture::base+rva::NativeAudioInitialGuHeader+16,f.chunks);
+        f.put(Fixture::base+rva::NativeAudioInitialGuHeader+36,128);
+        f.memory[Fixture::base+rva::NativeBootstrapSrwPoolComplete].resize(1);
+        f.put(Fixture::base+rva::NativeBootstrapSrwPoolComplete,static_cast<unsigned char>(1));
+        f.memory[Fixture::base+rva::LookupBackingGetter]={0x48,0x8b,0x41,0x58,0xc3};
+        f.memory[Fixture::base+rva::LookupSerializedGetter]={0x48,0x8b,0x41,0x58,0x48,0x83,0xc0,0x58,0xc3};
+        for(unsigned role=0;role<3;++role) {
+            const auto vt=get<na::Address>(f.seeds[role].stock.objects[0]);
+            f.put(vt+Fixture::backing_slot,Fixture::base+rva::LookupBackingGetter);
+            f.put(vt+Fixture::interface_slot,Fixture::base+rva::LookupSerializedGetter);
+            for(const auto* witness:{&f.seeds[role].stock,&f.seeds[role].candidate}) {
+                const auto provider=witness->objects[0];
+                if(!role) {
+                    const auto interface=f.alloc(48),vtable=f.alloc(48);
+                    f.put(provider+0x58,interface);f.put(interface,vtable);
+                    f.put(vtable+0x28,Fixture::base+rva::LookupMode0Bgm);
+                }
+                const auto receiver=get<na::Address>(provider+0x58)+(role?0x58:0);
+                f.put(get<na::Address>(receiver)+8,Fixture::base+rva::LookupReadyTrue);
+            }
+        }
+    }
+    ~LookupScenario(){na::test_memory=saved_memory;na::original_lookup=saved_original;
+        na::test_lookup_call=nullptr;na::g_lookup_dispatch=saved_capability;na::g_base=saved_base;active=nullptr;}
+    template<class T> T get(na::Address address) const {
+        T value{};assert(Fixture::read(&f,address,&value,sizeof(value)));return value;
+    }
+    static na::Address call(unsigned kind,na::Address target,na::Address receiver,std::uint64_t key) {
+        auto& s=*active;const Event event{kind,target,receiver,key};s.events.push_back(event);
+        if(s.before)s.before(event);
+        if(kind==0)return s.get<na::Address>(receiver+0x58)+(target==Fixture::base+rva::LookupSerializedGetter?0x58:0);
+        if(kind==1)return s.readiness;
+        return kind==2?s.row:0;
+    }
+    static void* opaque(void* manager,std::uint64_t key,std::uint64_t*,unsigned char*) {
+        return reinterpret_cast<void*>(call(3,0,reinterpret_cast<na::Address>(manager),key));
+    }
+    struct Result {void* row;std::uint64_t association;unsigned char mode;};
+    Result run(unsigned role=0) {
+        std::uint64_t association=0xbad;unsigned char mode=0x7f;
+        auto* result=na::lookup_hook(reinterpret_cast<void*>(f.manager(role)),0xaabbccdd11223344,&association,&mode);
+        return {result,association,mode};
+    }
+};
+
+void lookup_traversal_tests() {
+    const auto saved_signature=na::test_signature;
+    na::test_signature=+[](std::string_view){return true;};
+    assert(na::lookup_dispatch_capability());
+    const auto* layout=na::native_audio_layout(ff7r::piano::core::generated::kBuildId);
+    assert(layout && layout->backing_slot==Fixture::backing_slot && layout->serialized_interface_slot==Fixture::interface_slot);
+    static std::string_view rejected_signature;
+    na::test_signature=+[](std::string_view id){return id!=rejected_signature;};
+    for(const auto targets:{std::span<const na::LookupTarget>{na::lookup_getters},std::span<const na::LookupTarget>{na::lookup_readiness},
+            std::span<const na::LookupTarget>{na::lookup_mode0},std::span<const na::LookupTarget>{na::lookup_serialized}})
+        for(const auto& target:targets) {
+            rejected_signature=target.id;assert(!na::lookup_dispatch_capability());
+        }
+    rejected_signature="lookup_hot_singleton";
+    assert(!na::lookup_dispatch_capability());na::test_signature=saved_signature;
+    assert(na::native_lookup_stack_outputs(0x1010,0x1020,0x1000,0x1100));
+    assert(!na::native_lookup_stack_outputs(0x10fc,0x1020,0x1000,0x1100));
+    assert(!na::native_lookup_stack_outputs(0x1010,0x1017,0x1000,0x1100));
+    assert(!na::native_lookup_stack_outputs(0x1010,0x1100,0x1000,0x1100));
+    {Fixture f;LookupScenario s(f);auto result=s.run();
+     assert(result.row==reinterpret_cast<void*>(s.row) && result.association==f.seeds[0].stock_association && result.mode==0);
+      assert(s.events.size()==3 && s.events[0].kind==0 && s.events[1].kind==1 && s.events[2].kind==2);
+      assert(s.events[0].target==Fixture::base+rva::LookupBackingGetter);
+     assert(s.events[2].key==0xaabbccdd11223344);}
+    for(unsigned role:{1u,2u}) {
+        Fixture f;LookupScenario s(f);const auto result=s.run(role);
+        assert(result.row && result.association==f.seeds[role].stock_association && result.mode==1);
+        assert(s.events.size()==3 && s.events[0].target==Fixture::base+rva::LookupSerializedGetter);
+        assert(s.events[2].receiver==s.get<na::Address>(f.seeds[role].stock.objects[0]+0x58)+0x58);
+    }
+    for(const auto& target:na::lookup_readiness) {
+        Fixture f;LookupScenario s(f);const auto receiver=s.get<na::Address>(f.seeds[0].stock.objects[0]+0x58);
+        f.put(s.get<na::Address>(receiver)+8,Fixture::base+target.rva);
+        assert(s.run().row && s.events.size()==3 && s.events[1].target==Fixture::base+target.rva);
+    }
+    // All compiler-inlined full methods and ordinary mode0/mode1 targets dispatch
+    // once with the same receiver/name, not a second hash parser in the hook.
+    for(const auto targets:{std::span<const na::LookupTarget>{na::lookup_mode0},std::span<const na::LookupTarget>{na::lookup_serialized}})
+        for(const auto& target:targets) {
+            Fixture f;LookupScenario s(f);const auto provider=f.seeds[0].stock.objects[0];
+            const auto receiver=s.get<na::Address>(provider+0x58),vt=s.get<na::Address>(receiver);
+            f.put(vt+0x28,Fixture::base+target.rva);auto result=s.run();
+            assert(result.row==reinterpret_cast<void*>(s.row) && s.events.size()==3);
+            assert(s.events.back().target==Fixture::base+target.rva && s.events.back().receiver==receiver);
+        }
+    {Fixture f;LookupScenario s(f);s.readiness=0;auto result=s.run();
+     assert(!result.row && result.association==0 && result.mode==0x7f && s.events.size()==2);}
+    {Fixture f;LookupScenario s(f);s.row=0;auto result=s.run();
+     assert(!result.row && result.association==0 && result.mode==0x7f && s.events.size()==3);}
+    // Readiness reload boundary: no repeated getter; invoke NEW lookup exactly once.
+    {Fixture f;LookupScenario s(f);const auto provider=f.seeds[0].stock.objects[0];
+     const auto receiver=s.get<na::Address>(provider+0x58),replacement=f.alloc(48);
+     f.put(s.get<na::Address>(receiver)+8,na::Address{0x77770000});
+     f.put(replacement+0x28,Fixture::base+rva::LookupInlineScore);
+     s.before=[&](LookupScenario::Event e){if(e.kind==1)f.put(receiver,replacement);};
+     assert(s.run().row && s.events.size()==3 && s.events.back().target==Fixture::base+rva::LookupInlineScore);}
+    // Capture-once: target replacement inside a call must not change that call.
+    {Fixture f;LookupScenario s(f);const auto provider=f.seeds[0].stock.objects[0];
+     const auto receiver=s.get<na::Address>(provider+0x58),vt=s.get<na::Address>(receiver);
+     s.before=[&](LookupScenario::Event e){if(e.kind==2){assert(e.target==Fixture::base+rva::LookupMode0Bgm);f.put(vt+0x28,na::Address{0x77770000});}};
+     assert(s.run().row && s.events.size()==3);}
+    // Live group count/data rereads after a miss; hit association and mode use
+    // current entry/provider, not the original borrowed provider or normalized mode.
+    {Fixture f;LookupScenario s(f);const auto first=f.seeds[0].stock.objects[0],second=f.seeds[0].candidate.objects[0];
+     const auto third=f.seeds[1].stock.objects[0];
+     const auto payload=f.alloc(32),hit=f.alloc(32);const auto second_index=f.index(second);
+     f.put(f.items+second_index*24+16,7);f.put(payload,f.index(first));f.put(payload+4,7);
+     f.put(payload+16,second_index);f.put(payload+20,7);f.put(hit+16,f.index(third));f.put(hit+20,7);
+     f.put(hit+24,std::uint64_t{0x8877665544332211});unsigned calls=0;
+     s.before=[&](LookupScenario::Event e){if(e.kind==2){
+         if(++calls==1){f.put(f.manager(0),payload);f.put(f.manager(0)+8,2);s.row=0;}
+         else {f.put(f.manager(0),hit);f.put(third+0x54,static_cast<unsigned char>(0xa5));s.row=0xfeed0011;}}};
+     const auto result=s.run();assert(calls==2 && result.row && result.association==0x8877665544332211 && result.mode==0xa5);}
+    // Group order and signed empty groups: group1 then group2, no snapshots.
+    {Fixture f;LookupScenario s(f);f.put(f.manager(0)+8,-1);const auto provider=f.seeds[0].stock.objects[0];
+     for(unsigned group=1;group<3;++group){const auto payload=f.alloc(16);f.put(payload,f.index(provider));f.put(payload+4,7);
+         f.put(payload+8,std::uint64_t{group});f.put(f.manager(0)+group*16,payload);f.put(f.manager(0)+group*16+8,1);}
+     unsigned calls=0;s.before=[&](LookupScenario::Event e){if(e.kind==2)s.row=++calls==2?0xfeed0011:0;};
+     const auto result=s.run();assert(calls==2 && result.association==2);}
+    // Invalid weak inputs preserve native faults, including hit-time re-resolution.
+    for(unsigned fault=0;fault<7;++fault) {
+        Fixture f;LookupScenario s(f);const auto provider=f.seeds[0].stock.objects[0];
+        const auto payload=s.get<na::Address>(f.manager(0));const auto index=f.index(provider);
+        if(fault==0)f.put(payload+4,0);
+        if(fault==1)f.put(payload,-1);
+        if(fault==2)f.put(payload,128);
+        if(fault==3)f.put(f.items+index*24+16,99);
+        if(fault==4 || fault==5)f.put(f.items+index*24+8,std::uint32_t{1}<<(fault==4?28:29));
+        if(fault==6)s.before=[&](LookupScenario::Event e){if(e.kind==2)f.put(payload+4,0);};
+        bool faulted=false;try{(void)s.run();}catch(na::Address address){faulted=true;assert(address==(fault==6?0x54:0));}
+        assert(faulted && (fault==6?s.events.size()==3:s.events.empty()));
+    }
+    {Fixture f;LookupScenario s(f);s.row=0;
+     const auto provider=f.seeds[0].stock.objects[0],vt=s.get<na::Address>(provider);
+     f.put(vt+Fixture::backing_slot,na::Address{0x77770000});
+     assert(!s.run().row && s.events.size()==3 && s.events[0].target==0x77770000);}
+    {Fixture f;LookupScenario s(f);s.row=0;unsigned effects=0;
+     const auto receiver=s.get<na::Address>(f.seeds[0].stock.objects[0]+0x58);
+     f.put(s.get<na::Address>(receiver)+0x28,na::Address{0x77770000});
+     s.before=[&](LookupScenario::Event e){if(e.kind==2){++effects;const auto invalid=f.alloc(16);
+         f.put(f.manager(0)+16,invalid);f.put(f.manager(0)+24,1);}};
+     bool faulted=false;try{(void)s.run();}catch(na::Address address){faulted=true;assert(address==0);}
+     assert(faulted && effects==1 && s.events.size()==3); // Never replay after effects.
+    }
+    // Non-owned/overlapping outputs and unknown manager fall back before traversal.
+    {Fixture f;LookupScenario s(f);auto association=std::make_unique<std::uint64_t>();unsigned char mode=0;
+     na::lookup_hook(reinterpret_cast<void*>(f.manager(0)),1,association.get(),&mode);
+     assert(s.events.size()==1 && s.events[0].kind==3);s.events.clear();
+     std::uint64_t stack=0;na::lookup_hook(reinterpret_cast<void*>(f.manager(0)),1,&stack,reinterpret_cast<unsigned char*>(&stack));
+     assert(s.events.size()==1 && s.events[0].kind==3);s.events.clear();
+     na::lookup_hook(reinterpret_cast<void*>(0x1234),1,&stack,&mode);assert(s.events.size()==1 && s.events[0].kind==3);}
+}
+
+void lookup_validation_tests() {
+    // Baseline opaque original vs eligible actual dispatch, with FULL production
+    // bindings validation. The baseline is deterministically excluded, no sleeps.
+    for(unsigned scenario=0;scenario<9;++scenario) {
+        RuntimeFixture f;f.start(true);f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
+        LookupScenario s(f);const auto provider=f.seeds[0].stock.objects[0];
+        const auto receiver=s.get<na::Address>(provider+0x58),vt=s.get<na::Address>(receiver);
+        const bool accepted=scenario==1 || scenario==7 || scenario==8;
+        if(scenario==0)na::g_lookup_dispatch=false;
+        if(scenario==2)f.put(vt+0x28,na::Address{0x77770000});
+        if(scenario==3 || scenario==7)f.put(vt+0x28,Fixture::base+rva::LookupInlinePiano);
+        if(scenario==3)f.put(Fixture::base+rva::NativeBootstrapSrwPoolComplete,static_cast<unsigned char>(0));
+        if(scenario==4)f.put(s.get<na::Address>(provider)+Fixture::backing_slot,na::Address{0x77770000});
+        if(scenario==5)f.put(vt+8,na::Address{0x77770000});
+        if(scenario==8)f.put(Fixture::base+rva::NativeBootstrapSrwPoolComplete,static_cast<unsigned char>(0));
+        const auto saved_append=na::original_append;const auto saved_reserve=na::original_reserve;
+        if(scenario==6) {
+            na::original_reserve=+[](void*){};
+            na::original_append=+[](void*,unsigned char,std::uint64_t,void*){na::reserve_hook(nullptr);};
+        }
+        std::latch entered{1},release{1};
+        s.before=[&](LookupScenario::Event e){if(e.kind==2 || e.kind==3){
+            if(scenario==6) {
+                na::append_hook(nullptr,0,0,nullptr);
+                // Mutation admission must still be held after nested return.
+            }
+            entered.count_down();release.wait();}};
+        na::NativePianoScoreRow row{};na::NativePianoScoreCaptureFacts facts{};
+        auto reads=f.reads;assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,row,&facts));
+        const auto capture_reads=f.reads-reads;
+        auto lookup=std::async(std::launch::async,[&]{return s.run();});entered.wait();reads=f.reads;
+        assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,row,&facts)==accepted);
+        if(accepted){assert(std::string_view(facts.predicate)=="accepted" && f.reads-reads==capture_reads);}
+        else {assert(std::string_view(facts.predicate)=="manager_exclusion"
+            && facts.manager_gate.reason==na::NativeEntryGateFailure::ExclusiveTryBusy);}
+        release.count_down();lookup.get();na::original_append=saved_append;na::original_reserve=saved_reserve;
+        assert(na::capture_native_pianoscore_row(*f.artifacts,f.work->selected_name,row,&facts));
+        assert(scenario==0?s.events.size()==1:s.events.size()==3);
+    }
+    // An actual registration writer can reenter the original lookup and bridge
+    // append->reserve without attempting an upgrade or acquiring mutation again.
+    {Fixture f;LookupScenario s(f);na::NativeEntryGate::Writer registration{na::g_managers};assert(registration);
+     assert(!s.run().row && s.events.size()==1 && s.events[0].kind==3);
+     const auto append=na::original_append;const auto reserve=na::original_reserve;
+     na::original_reserve=+[](void*){assert(na::NativeEntryGate::owns_registration());};
+     na::original_append=+[](void*,unsigned char,std::uint64_t,void*){na::reserve_hook(nullptr);};
+     na::append_hook(nullptr,0,0,nullptr);na::original_append=append;na::original_reserve=reserve;}
+}
 }
 
 #ifndef FF7RP_NATIVE_AUDIO_RUNTIME_FIXTURE_ONLY
 int main() {
+    lookup_traversal_tests();lookup_validation_tests();
+    for(unsigned unrelated:{0u,2048u})for(bool immediate:{false,true}) {
+      RuntimeFixture f;
+      if(unrelated) {
+          const auto old=f.memory.at(f.items);f.items=f.alloc(4096*24);
+          std::memcpy(f.memory.at(f.items).data(),old.data(),old.size());f.put(f.chunks,f.items);
+          f.put(f.array+32,4096);f.put(f.array+36,4096);
+          for(unsigned i=0;i<unrelated;++i)f.object(0,0,0,7);
+      }
+      f.start(immediate);const auto name_calls=f.name_calls;
+      if(!immediate) {
+          f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Acquiring);
+          assert(f.mounts==1 && f.acquires==3 && !f.bridges && f.name_calls==name_calls);
+          f.complete();
+      }
+      na::seed_names(*f.work);
+      std::array<std::uint64_t,32> names{};
+      for(std::size_t i=0;i<f.work->name_count;++i)names[i]=f.work->names[i].packed;
+      f.reads=f.copied_bytes=0;assert(na::discover(*f.work,f.access()));
+      std::cout<<"discovery unrelated="<<unrelated<<" immediate="<<immediate<<" reads="<<f.reads
+          <<" reader_copied_bytes="<<f.copied_bytes<<'\n';
+      for(unsigned role=0;role<3;++role) {
+          assert(f.work->seeds[role].candidate.objects==f.seeds[role].candidate.objects);
+          assert(f.work->seeds[role].stock.objects==f.seeds[role].stock.objects);
+      }
+      for(std::size_t i=0;i<f.work->name_count;++i)assert(names[i]==f.work->names[i].packed);
+      assert(f.mounts==1 && f.acquires==3 && !f.bridges && f.name_calls==name_calls);
+      f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
+      assert(f.mounts==1 && f.acquires==3 && f.bridges==3 && f.name_calls==name_calls);
+    }
+    for(unsigned defect=0;defect<5;++defect) {
+      RuntimeFixture f;f.start(true);na::seed_names(*f.work);
+      const auto object=f.seeds[0].candidate.objects[0],outer=f.seeds[0].candidate.objects[5];
+      if(defect==0)f.object(f.seeds[0].candidate_names.instance,f.seeds[0].candidate.objects[1],outer,0);
+      if(defect==1)f.put(object+32,na::Address{});
+      if(defect==2)f.put(outer+24,std::uint64_t{});
+      if(defect==3)f.unreadable=object+24;
+      if(defect==4)f.unreadable=outer+24;
+      assert(!na::discover(*f.work,f.access()));
+      assert(f.mounts==1 && f.acquires==3 && !f.bridges && !f.work->bindings.captured());
+    }
     for(unsigned delayed_frames:{0u,2u}) {
       RuntimeFixture f;f.put(f.array+36,126);f.start(true);
       assert(f.work->timings.mount_us>=0 && f.work->timings.request_us>=0);
@@ -365,24 +633,82 @@ int main() {
      assert(std::string_view(facts.predicate)=="accepted" && facts.generation==41
          && facts.status_observed && facts.binding_observed && facts.name_observed
          && facts.stage==na::RuntimeStage::Ready && facts.failure==na::RuntimeFailure::None
-         && facts.binding_failure==na::BindingFailure::None
+          && facts.binding_failure==na::BindingFailure::None
+          && facts.manager_gate.reason==na::NativeEntryGateFailure::None
+          && facts.manager_gate.observed_entry_mask==0
          && facts.requested_name==selected && facts.observed_name==selected);
      assert(row.provider==plain.provider && row.row==plain.row
          && row.selected_name==plain.selected_name && row.cohort_generation==plain.cohort_generation);
      // A foreign native entry excludes the capture without invalidating retained bindings.
      std::latch entered(1),release(1);
      auto reader=std::async(std::launch::async,[&]{
-         na::NativeEntryGate::Reader gate{na::g_managers};entered.count_down();release.wait();
+          na::NativeEntryGate::Reader gate{na::g_managers,na::NativeEntryKind::Lookup};entered.count_down();release.wait();
      });
      entered.wait();reads=f.reads;
      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
      const auto busy_reads=f.reads-reads;reads=f.reads;
      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
-     assert(f.reads-reads==busy_reads && std::string_view(facts.predicate)=="manager_exclusion"
+      assert(f.reads-reads==busy_reads && std::string_view(facts.predicate)=="manager_exclusion"
+          && facts.manager_gate.reason==na::NativeEntryGateFailure::ExclusiveTryBusy
+          && facts.manager_gate.observed_entry_mask==(1u<<static_cast<unsigned>(na::NativeEntryKind::Lookup))
          && facts.status_observed && !facts.binding_observed && !facts.name_observed
          && !row.row && !row.provider);
-     release.count_down();reader.get();
-     na::g_services.identity=+[](gu::UObjectIdentityAccess&) noexcept {return false;};
+      release.count_down();reader.get();
+      assert(na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      assert(facts.manager_gate.reason==na::NativeEntryGateFailure::None);
+      // Nested readers inherit admission; only the outermost entry is observed.
+      {
+          na::NativeEntryGate::Reader outer{na::g_managers,na::NativeEntryKind::Append};
+          {
+              na::NativeEntryGate::Reader nested{na::g_managers,na::NativeEntryKind::Lookup};
+              reads=f.reads;
+              assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
+              const auto nested_reads=f.reads-reads;reads=f.reads;
+              assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+              assert(f.reads-reads==nested_reads && std::string_view(facts.predicate)=="manager_exclusion");
+              assert(facts.manager_gate.reason==na::NativeEntryGateFailure::NestedEntry
+                  && facts.manager_gate.observed_entry_mask==(1u<<static_cast<unsigned>(na::NativeEntryKind::Append)));
+          }
+          na::NativeEntryGate::Writer rejected{na::g_managers};assert(!rejected);
+          assert(rejected.failure().reason==na::NativeEntryGateFailure::NestedEntry
+              && rejected.failure().observed_entry_mask==(1u<<static_cast<unsigned>(na::NativeEntryKind::Append)));
+      }
+      // Both same-kind readers count independently; releasing one cannot clear the other.
+      std::latch both_entered(2),release_first(1),release_second(1);
+      auto first=std::async(std::launch::async,[&]{
+          na::NativeEntryGate::Reader outer{na::g_managers,na::NativeEntryKind::Lookup};
+          {na::NativeEntryGate::Reader nested{na::g_managers,na::NativeEntryKind::Lookup};}
+          both_entered.count_down();release_first.wait();
+      });
+      auto second=std::async(std::launch::async,[&]{
+          na::NativeEntryGate::Reader gate{na::g_managers,na::NativeEntryKind::Lookup};
+          both_entered.count_down();release_second.wait();
+      });
+      both_entered.wait();
+      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      assert(facts.manager_gate.observed_entry_mask==(1u<<static_cast<unsigned>(na::NativeEntryKind::Lookup)));
+      release_first.count_down();first.get();
+      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      assert(facts.manager_gate.reason==na::NativeEntryGateFailure::ExclusiveTryBusy
+          && facts.manager_gate.observed_entry_mask==(1u<<static_cast<unsigned>(na::NativeEntryKind::Lookup)));
+      release_second.count_down();second.get();
+      assert(na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      // A competing Writer is busy even with no observed reader categories.
+      std::latch writer_entered(1),release_writer(1);
+      auto writer=std::async(std::launch::async,[&]{
+          na::NativeEntryGate::Writer gate{na::g_managers};assert(gate);
+          writer_entered.count_down();release_writer.wait();
+      });
+      writer_entered.wait();reads=f.reads;
+      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
+      const auto writer_reads=f.reads-reads;reads=f.reads;
+      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      assert(f.reads-reads==writer_reads && std::string_view(facts.predicate)=="manager_exclusion"
+          && facts.manager_gate.reason==na::NativeEntryGateFailure::ExclusiveTryBusy
+          && facts.manager_gate.observed_entry_mask==0);
+      release_writer.count_down();writer.get();
+      assert(na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));
+      na::g_services.identity=+[](gu::UObjectIdentityAccess&) noexcept {return false;};
      reads=f.reads;assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,plain));
      const auto identity_reads=f.reads-reads;reads=f.reads;
      assert(!na::capture_native_pianoscore_row(*f.artifacts,selected,row,&facts));

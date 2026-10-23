@@ -23,10 +23,10 @@ using Failure = BindingFailure;
 
 struct Capture {
     struct Span { Address address; std::size_t size; std::array<unsigned char, 80> bytes; };
-    // Includes nested three-role captures and their rereads at the group bound.
+    // One operation-local journal retains every initial read across all three roles.
     static constexpr std::size_t kSpanLimit = kNativeAudioEntryLimit * 512;
     MemoryReader source;
-    // Fixed indexing preserves every nested read/reread without copying old spans on growth.
+    // Fixed indexing avoids copying old spans on growth.
     static constexpr std::size_t kBlockSize = 2048;
     static_assert(kSpanLimit % kBlockSize == 0);
     std::array<std::unique_ptr<Span[]>, kSpanLimit / kBlockSize> blocks{};
@@ -55,10 +55,10 @@ struct Capture {
     }
     MemoryReader reader() noexcept { return {this, read}; }
     template<class T> bool get(Address a, T& out) noexcept { return read(this, a, &out, sizeof(out)); }
-    bool stable() noexcept
+    bool stable(std::size_t first = 0) noexcept
     {
         std::array<unsigned char, 80> bytes{};
-        for (std::size_t i = 0; i < used; ++i) {
+        for (std::size_t i = first; i < used; ++i) {
             const auto& s = span(i);
             if (!source.read(source.context, s.address, bytes.data(), s.size)) {
                 failure_address = s.address; reread_failed = true; return false;
@@ -249,7 +249,10 @@ Failure map_binding(Capture& c, Address base, std::uint64_t key, Address manager
 BindingResult CohortBindings::read_record(const gu::UObjectIdentityAccess& access,
     unsigned char role, Record& record, BindingPhase phase, bool initial) const noexcept
 {
-    Capture c{access.memory}; auto identity = access; identity.memory = c.reader();
+    // All private callers supply the operation's journal; verification bypasses it.
+    auto& c = *static_cast<Capture*>(access.memory.context);
+    const auto record_begin = c.used;
+    const auto& identity = access;
     const auto p = profile(role);
     BindingDiagnostic facts{}; facts.stage = "profile"; facts.phase = phase;
     const auto fail = [&](Failure f) {
@@ -406,7 +409,7 @@ BindingResult CohortBindings::read_record(const gu::UObjectIdentityAccess& acces
     else if (root != record.map_root || (phase != BindingPhase::CurrentRegistered && header != record.map_header))
         return fail(Failure::HistoricalMapDrift);
     facts.stage = "record_reread"; facts.predicate = "captured_span_drift";
-    if (!c.stable()) {
+    if (!c.stable(record_begin)) {
         for (unsigned side = 0; side < 2; ++side) {
             const auto& witness = side ? record.seed.stock : record.seed.candidate;
             const auto& saved = side ? record.stock : record.candidate;

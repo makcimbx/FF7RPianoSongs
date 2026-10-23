@@ -422,6 +422,14 @@ foreach(native_writer_test IN ITEMS native_iostore_writer_selftest native_audio_
     target_link_libraries(${native_writer_test} PRIVATE ff7rp_pipeline)
 endforeach()
 
+add_executable(native_asset_hash_selftest src/tests/native_asset_hash_selftest.cpp)
+ff7rp_apply_cpp_policy(native_asset_hash_selftest)
+target_compile_definitions(native_asset_hash_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(native_asset_hash_selftest PRIVATE "src")
+if(WIN32)
+    target_link_libraries(native_asset_hash_selftest PRIVATE bcrypt)
+endif()
+
 add_executable(wav_reader_selftest
     src/tests/wav_reader_selftest.cpp
 )
@@ -1141,6 +1149,7 @@ add_test(NAME native_iostore_writer_selftest COMMAND native_iostore_writer_selft
 add_test(NAME native_audio_cohort_selftest COMMAND native_audio_cohort_selftest)
 add_test(NAME native_audio_cache_selftest COMMAND native_audio_cache_selftest)
 add_test(NAME native_audio_warm_selftest COMMAND native_audio_warm_selftest)
+add_test(NAME native_asset_hash_selftest COMMAND native_asset_hash_selftest)
 add_test(NAME wav_reader_selftest COMMAND wav_reader_selftest)
 add_test(NAME encoded_audio_fixture_selftest COMMAND encoded_audio_fixture_selftest)
 if(FF7RP_BUILD_RUNTIME)
@@ -1290,6 +1299,7 @@ set(FF7RP_BOUNDED_SELFTESTS
     native_audio_cohort_selftest
     native_audio_cache_selftest
     native_audio_warm_selftest
+    native_asset_hash_selftest
     hca_encoder_selftest
     wav_reader_selftest
     encoded_audio_fixture_selftest

@@ -2,6 +2,7 @@
 #include "game/native_audio_bootstrap.h"
 #include "game/native_proxy_bootstrap.h"
 #include "game/native_audio_gate.h"
+#include "game/native_audio_lookup.h"
 #include "game/native_audio_mount.h"
 #include "game/hook_specs.h"
 #include "game/rvas.h"
@@ -20,6 +21,7 @@
 #include <limits>
 #include <mutex>
 #include <shared_mutex>
+#include <span>
 #include <string>
 
 namespace ff7r::piano::game::native_audio {
@@ -62,6 +64,8 @@ bool (*test_disable_hook)(std::size_t)=nullptr;
 bool (*test_remove_hook)(std::size_t)=nullptr;
 Address test_updater_caller=0;
 void (*test_invalidation_entered)()=nullptr;
+// Same scalar-read/captured-call boundary as production; never native execution.
+Address (*test_lookup_call)(unsigned,Address,Address,std::uint64_t)=nullptr;
 #endif
 bool memory_read(void*, Address address, void* out, std::size_t size) noexcept {
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
@@ -151,6 +155,7 @@ Address g_base=0;
 RuntimeServices g_services{};
 core::HookCallbackGate g_callbacks;
 NativeEntryGate g_managers;
+bool g_lookup_dispatch=false; // Published before installing the existing lookup hook.
 std::shared_mutex g_lifetime;
 // Admission is independent of the lifetime fence: shutdown never waits while
 // holding a fence needed by an original callback to finish.
@@ -363,36 +368,110 @@ void initialize_hook(void* owner) {
     }
     notify_initializer_complete(callback);
 }
+struct LookupTarget {const char* id;Address rva;};
+constexpr LookupTarget lookup_getters[]={
+    {"lookup_backing_getter",rva::LookupBackingGetter},{"lookup_serialized_getter",rva::LookupSerializedGetter}};
+constexpr LookupTarget lookup_readiness[]={
+    {"lookup_ready_true",rva::LookupReadyTrue},{"lookup_ready_serialized",rva::LookupReadySerialized},
+    {"lookup_ready_inline_bgm",rva::LookupReadyInlineBgm},{"lookup_ready_inline_score",rva::LookupReadyInlineScore},
+    {"lookup_ready_inline_piano",rva::LookupReadyInlinePiano}};
+constexpr LookupTarget lookup_mode0[]={
+    {"lookup_mode0_bgm",rva::LookupMode0Bgm},{"lookup_mode0_score",rva::LookupMode0Score},{"lookup_mode0_piano",rva::LookupMode0Piano}};
+constexpr LookupTarget lookup_serialized[]={
+    {"lookup_mode1_bgm",rva::LookupMode1Bgm},{"scoreinfo_typed_lookup",rva::ScoreInfoTypedLookup},
+    {"pianoscore_typed_lookup",rva::PianoScoreTypedLookup},{"lookup_inline_bgm",rva::LookupInlineBgm},
+    {"lookup_inline_score",rva::LookupInlineScore},{"lookup_inline_piano",rva::LookupInlinePiano}};
+template<std::size_t N> bool lookup_target(Address target,const LookupTarget (&targets)[N]) noexcept {
+    for(const auto& entry:targets)if(entry.rva && target==g_base+entry.rva)return true;
+    return false;
+}
+bool lookup_dispatch_capability() noexcept {
+    if(!native_audio_layout(core::generated::kBuildId))return false;
+    for(const auto targets:{std::span<const LookupTarget>{lookup_getters},std::span<const LookupTarget>{lookup_readiness},
+            std::span<const LookupTarget>{lookup_mode0},std::span<const LookupTarget>{lookup_serialized}})
+        for(const auto& target:targets)if(!target.rva || !signature(target.id))return false;
+    return signature("lookup_hot_singleton");
+}
+struct NativeLookupDispatch {
+    NativeEntryGate::Reader& gate;
+    template<class T> T load(Address address) const {
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+        if(test_memory.read) {
+            T value{};
+            if(test_memory.read(test_memory.context,address,&value,sizeof(value)))return value;
+            throw address; // Fixture models a native access fault, not a miss.
+        }
+#endif
+        // The original native routine faults on unsafe input. Do not convert a
+        // failed load to a miss or replay original after effects have occurred.
+        return *reinterpret_cast<const volatile T*>(address);
+    }
+    Address getter(Address target,Address receiver) {
+        if(!lookup_target(target,lookup_getters))gate.require_mutation();
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+        if(test_lookup_call)return test_lookup_call(0,target,receiver,0);
+#endif
+        return reinterpret_cast<Address(*)(Address)>(target)(receiver);
+    }
+    unsigned char ready(Address target,Address receiver) {
+        if(!lookup_target(target,lookup_readiness))gate.require_mutation();
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+        if(test_lookup_call)return static_cast<unsigned char>(test_lookup_call(1,target,receiver,0));
+#endif
+        return reinterpret_cast<unsigned char(*)(Address)>(target)(receiver);
+    }
+    Address lookup(Address target,Address receiver,std::uint64_t key) {
+        if(!lookup_target(target,lookup_mode0)
+            && !(lookup_target(target,lookup_serialized) && load<unsigned char>(g_base+rva::NativeBootstrapSrwPoolComplete)))
+            gate.require_mutation();
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+        if(test_lookup_call)return test_lookup_call(2,target,receiver,key);
+#endif
+        return reinterpret_cast<Address(*)(Address,std::uint64_t)>(target)(receiver,key);
+    }
+};
 void* lookup_hook(void* manager,std::uint64_t key,std::uint64_t* association,unsigned char* mode) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers};
-    return original_lookup(manager,key,association,mode);
+    auto callback=g_callbacks.try_enter();
+    NativeEntryGate::Reader gate{g_managers,NativeEntryKind::Lookup,NativeEntryGate::Admission::DispatchAware};
+    const auto* tib=reinterpret_cast<const NT_TIB*>(NtCurrentTeb());
+    const auto* layout=native_audio_layout(core::generated::kBuildId);
+    if(!g_lookup_dispatch || !layout || !known_manager(manager) || NativeEntryGate::owns_registration()
+        || !native_lookup_stack_outputs(reinterpret_cast<Address>(association),reinterpret_cast<Address>(mode),
+            reinterpret_cast<Address>(tib->StackLimit),reinterpret_cast<Address>(tib->StackBase))) {
+        gate.require_mutation();
+        return original_lookup(manager,key,association,mode);
+    }
+    NativeLookupDispatch dispatch{gate};
+    return reinterpret_cast<void*>(dispatch_native_lookup(dispatch,reinterpret_cast<Address>(manager),key,association,mode,
+        g_base+rva::NativeAudioInitialGuHeader+16,g_base+rva::NativeAudioInitialGuHeader+36,
+        layout->backing_slot,layout->serialized_interface_slot));
 }
 void append_hook(void* manager,unsigned char group,std::uint64_t association,void* object) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers};
+    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers,NativeEntryKind::Append};
     original_append(manager,group,association,object);
 }
 void remove_hook(void* manager,unsigned char group,std::uint64_t opaque,void* object) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers};
+    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers,NativeEntryKind::Remove};
     if(known_manager(manager) && g_stock_admitted.load(std::memory_order_acquire)) invalidate(RuntimeFailure::Bindings);
     original_remove(manager,group,opaque,object);
 }
 void reset_hook(void* manager) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers};
+    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers,NativeEntryKind::Reset};
     if(known_manager(manager) && g_stock_admitted.load(std::memory_order_acquire)) invalidate(RuntimeFailure::Bindings);
     original_reset(manager);
 }
 std::uint64_t name_helper_hook(void* map,std::uint64_t name,void* manager) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers};
+    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers,NativeEntryKind::NameHelper};
     return original_name_helper(map,name,manager);
 }
 void reserve_hook(void* header) {
     covered_entry();
-    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers}; original_reserve(header);
+    auto callback=g_callbacks.try_enter(); NativeEntryGate::Reader gate{g_managers,NativeEntryKind::Reserve}; original_reserve(header);
 }
 
 bool construct_names(PreparedNativeAudio& work) {
@@ -464,6 +543,7 @@ bool discover(PreparedNativeAudio& work,const gu::UObjectIdentityAccess& identit
     if(!gu::read_guobject_array_header(identity.memory,identity.array_address,{},header)
         || !gu::list_header_accepts(header))return false;
     constexpr const char* classes[]={"BGMList","PianoScoreInfo","PianoScore"};
+    const std::array<std::uint64_t,3> comparison_names={work.name(classes[0]),work.name(classes[1]),work.name(classes[2])};
     std::array<unsigned,6> matches{};
     for(int index=0;index<header.num_elements;++index) {
         Address object=0;
@@ -471,7 +551,7 @@ bool discover(PreparedNativeAudio& work,const gu::UObjectIdentityAccess& identit
         std::uint64_t name=0,package_name=0;Address outer=0;
         if(!read(object+24,name))return false;
         for(unsigned char role=0;role<3;++role) {
-            if(name!=work.name(classes[role]))continue;
+            if(name!=comparison_names[role])continue;
             if(!read(object+32,outer) || !outer || !read(outer+24,package_name))return false;
             auto& seed=work.seeds[role];
             if(package_name==seed.candidate_names.package) {
@@ -874,6 +954,7 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         "scoreinfo_append_bridge","pianoscore_append_bridge","bgmlist_accessor","pianoscore_accessor","package_store_mount_callback","native_audio_updater_return"};
     for(auto id:calls)if(!signature(id)){g_base=0;return false;}
     for(const auto& h:hooks)if(!find_hook_spec(h.id) || !signature(h.id)){g_base=0;return false;}
+    g_lookup_dispatch=lookup_dispatch_capability();
     if(synchronous?!bootstrap_detail::begin_publication(module):proxy_entry?!native_proxy_detail::begin_publication(module):!cold_baseline()) {
         invalidate(RuntimeFailure::MissedInitializer);return false;
     }
@@ -991,9 +1072,9 @@ static bool validated_native_binding(const PreparedNativeAudio& work,std::uint64
         if(!lifetime.owns_lock())return false;
         if(facts)facts->predicate="lifetime_provenance";
         if(!provenance())return false;
-        NativeEntryGate::Writer exclusion{g_managers};
+        NativeEntryGate::Validation exclusion{g_managers};
         if(facts)facts->predicate="manager_exclusion";
-        if(!exclusion)return false;
+        if(!exclusion){if(facts)facts->manager_gate=exclusion.failure();return false;}
         gu::UObjectIdentityAccess identity{};
         if(facts)facts->predicate="identity_service";
         if(!g_services.identity(identity))return false;

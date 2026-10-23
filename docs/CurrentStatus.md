@@ -5,6 +5,124 @@ limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
+## Cached-song startup cost — Integration in progress
+
+- The owner clarified that the hitch occurs during initial song loading, not
+  selection after discovery. A stable filesystem log snapshot is retained under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/cached-song-latency-20261023T102732Z-75d63ee8`
+  (`observation.json`, `song-load-summary.json`). Its producer is not authenticated
+  merely by the separately observed installed DLL hash; no game process was
+  controlled, cache deleted, or installed artifact replaced for this investigation.
+- All 31 candidates report warm artifact acceptance, followed by about 25 seconds
+  cumulatively in descriptor/native-cache admission intervals. Repository trace
+  strings are replayed at settlement: their adjacent log timestamps do NOT measure
+  original hashing/validation duration. This source-backed timing correction is
+  retained in `song-load-summary.json`. Existing native-updater timers independently
+  show discovery/binding passes growing into tens of milliseconds on the qualified
+  updater thread. These observations are not an FPS or per-function CPU profile.
+- Scoped implementation preserves full content verification and native readiness:
+  Windows SHA-256 acceleration with scalar fallback, hoisted immutable discovery
+  name comparisons, and one operation-local binding read journal retaining both
+  immediate-record and final-cohort stability verification. The production proxy
+  builds and all ten affected checks pass, with clean scoped independent reviews.
+  Digest equivalence/failure cleanup/concurrency and binding drift/identity/retention
+  checks pass. Watched binding reads are 3 rather than 4; native mount/request/bridge
+  counts are unchanged. An isolated 2,097,169-byte SHA test takes 8424 us scalar
+  versus 867 us through CNG, not an overall startup/FPS measurement.
+- Frozen candidate: `%LOCALAPPDATA%/FF7RPianoSongs/captures/menu-song-startup-candidate-20261023T105350Z-ca03eb29`,
+  DLL SHA256 `7db98320fb39ff089959747ae7a5483eb779c39227abf62ca7a53b90052fdb0b`.
+  Exact production inputs, current focused tests, provenance/cache, build/CTest
+  logs and validation are retained. Only CMake and the three scoped production
+  implementations differ from the current kept chart-admission receipt; unrelated
+  chart integration is preserved. Installed without rebuilding in prepared session
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261023T110359Z-b16a74d979b5449286dafd70e5240b3a/session.json`.
+  The owner explicitly authorized closed-game installation; the prior kept chart
+  proxy was canonically rolled back before exclusive preparation. Its DLL/log/
+  receipt and the independently reviewed transaction are retained under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/menu-theme-opt-install-20261023T110112Z-bf6ac289`.
+  INI/Themes are unchanged; songs/caches were not touched and no game was launched.
+  Physical startup improvement remains unqualified. Default cohort/cache tests do
+  not replace optional real-donor checks.
+  Native request internals and the two complete object scans remain outside this
+  batch. No elapsed preparation limit or new time-based scheduler is introduced;
+  caches/formats/content identity remain unchanged, so invalidation is unnecessary.
+
+## Custom chart admission — Integration candidate; gameplay unresolved
+
+- Static lookup/actual-dispatch contract:
+  `analysis/ChartAdmissionReadOnlyLookupEvidence-20261023.md`.
+- Older-build extension passed independent review and all four focused Release
+  selftests (`native_audio_runtime_selftest`, `native_audio_adapter_selftest`,
+  `native_proxy_bootstrap_selftest`, `chart_selected_row_selftest`) under each
+  catalog selection. The default build configuration was restored afterward;
+  build/test logs are retained under
+  `C:/Users/makci/AppData/Local/Temp/opencode/lookup-1004-baseline-20261023T140213092/`.
+  All optional dispatch targets were independently recovered from the
+  older Ghidra program. Its different getter slots now come from the existing
+  exact-build `NativeAudioLayout`, rather than the newer hardcoded pair. Both
+  catalog selections execute the same traversal/concurrency fixtures, including
+  per-target signature rejection. Newer catalog data/generated headers are
+  unchanged. No older disk authentication or in-game acceptance is claimed;
+  this source change has not replaced the currently kept installed proxy.
+- A scoped actual-dispatch implementation now permits full binding validation
+  during qualified read-only lookup dispatch. Registration exclusion remains;
+  unknown/cold dispatch and nested mutations retain conservative protection.
+  Whole-population preclassification was rejected because existing witnesses
+  do not pin every visited provider; the implementation does not rely on it.
+  Unsupported builds/capabilities and unsuitable output storage use the original.
+  Focused runtime/adapter/bootstrap/selected-row tests and older-catalog runtime
+  test passed. Independent review found no blockers; production proxy compilation
+  and canonical build-provenance verification passed. The reviewed candidate is
+  installed with explicit authorization; a bounded human run is collected/reviewed.
+  Genuine mutation
+  contention and safe native cancellation remain unresolved, so this is not a
+  complete chart/audio-split fix or broad gameplay qualification.
+- New dispatch signatures match the authenticated installed executable on disk;
+  `lookup-dispatch-disk-verification.json` in the capture root records exact
+  catalog/game hashes and checked bytes. This is not live execution evidence.
+- Chart-admission validation session was collected/Kept after the scoped successful
+  run, before the startup candidate above replaced its installation:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261023T093952Z-7c5767add3ef40129c856b7fd59b223f/session.json`.
+  All four Lv6 launches (Libera Me From Hell, Mikus Song, Hacking to the Gate,
+  Promise) authenticate their custom chart targets, commit preparation, and
+  produce matching native event counts with valid captures. No manager-exclusion
+  rejection is logged; user reports apparently correct gameplay. Superseded
+  prior generations account for the three terminal `failed_recorded/outcome=9`
+  markers, not new-chart failure. Sorairo Days and extended-tail charts were not
+  launched in this run; recurrence/concurrent pure-path coverage is not proven.
+  `manual-report.txt` and `keep-result.json` in the candidate evidence directory
+  below bind this limited assessment and disposition.
+  The original error log remains hash-identical. Candidate/source/provenance,
+  previous diagnostic DLL and latest log, transition plan, deployment identity,
+  and fallback receipt are preserved in the capture root below under
+  `lookup-admission-20261023T093949Z-6af233c6/`. Canonical rollback followed by
+  that fallback-receipt prepare restores the previous proxy without overwrites.
+
+- Preserved Sorairo Days (Gurren Lagann) report: chart planning succeeded, then
+  final selected-row capture rejected with `manager_exclusion` before writes.
+  The failed activation was Lv4 after switching through Lv6. This is separate
+  from the fixed offline timestamp-rounding inconsistency; no provider drift
+  or safe post-request native cancellation is established.
+- Reviewed diagnostics preserve admission/locking semantics and distinguish
+  nested entry from failed exclusive try. Observed native-entry categories are
+  explicitly racy/non-authoritative, including an empty observed mask.
+  `native_audio_runtime_selftest`, `chart_selected_row_selftest`, and production
+  proxy compilation passed. This does not fix the chart/audio split.
+- The diagnostic run did not reproduce the symptom. Collected log authenticates
+  Sorairo Days Lv6/Lv5 and Rufus chart targets without manager-exclusion rejection;
+  user reports no incorrect charts in that run. This is not a fix or evidence
+  against the original failure. This diagnostic session was collected/Kept,
+  then canonically rolled back for the authorized candidate replacement above:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261023T075845Z-64ee9706e2d146778886f31f65b2011e/session.json`.
+  Original failure log, prior DLL, source/provenance, diagnostic receipt, and
+  fallback receipt are preserved under
+  `%LOCALAPPDATA%/Temp/opencode/piano-vanilla-chart-20261023T102948061/`.
+  `pre-diagnostic-20261023T105537649/diagnostic-deployment.json` records exact
+  installed and rollback identities; `diagnostic-manual-report.txt` and
+  `diagnostic-keep-result.json` document the bounded no-repro run. Restoring the
+  prior proxy requires the canonical fallback-receipt prepare after rollback; rollback alone
+  restores the prior ASI, not that proxy. No gameplay or Release pass is claimed.
+
 ## Menu themes — in development
 
 - Integration optimization now targets the measured repeated proof work and

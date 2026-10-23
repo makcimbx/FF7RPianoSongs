@@ -30,6 +30,7 @@ struct Fixture {
     int object_count = 0;
     na::Address drift = 0; unsigned drift_reads = 0;
     std::size_t reads = 0;
+    std::size_t copied_bytes = 0;
     na::Address watched = 0;
     std::size_t watched_reads = 0;
     na::Address unreadable = 0;
@@ -51,6 +52,7 @@ struct Fixture {
         auto it = f.memory.upper_bound(address); if (it == f.memory.begin()) return false; --it;
         if (address - it->first > it->second.size() || size > it->second.size() - (address - it->first)) return false;
         std::memcpy(out, it->second.data() + address - it->first, size);
+        f.copied_bytes += size;
         if (address == f.drift && ++f.drift_reads == 2) static_cast<unsigned char*>(out)[0] ^= 1;
         if (f.after_read) f.after_read(f, address, size);
         return true;
@@ -194,19 +196,51 @@ int main() {
     using F = na::BindingFailure; using P = na::BindingPhase;
     static_assert(sizeof(na::BindingDiagnostic) <= 192);
     { Fixture f;na::CohortBindings b;
+      f.reads=f.copied_bytes=0;
       track_capture_allocations=true;capture_allocations=capture_bytes=0;
       const auto result=f.capture(b);track_capture_allocations=false;assert(result);
-      // Small cohorts no longer allocate four full 12 MiB capture arrays.
-      assert(capture_allocations==4 && capture_bytes==4*2048*96);
-      std::cout<<"small capture allocations="<<capture_allocations<<" bytes="<<capture_bytes<<'\n';
+      assert(capture_allocations==1 && capture_bytes==2048*96);
+      std::cout<<"small capture reads="<<f.reads<<" reader_copied_bytes="<<f.copied_bytes
+          <<" allocations="<<capture_allocations<<" bytes="<<capture_bytes<<'\n';
     }
     for(std::size_t allocation:{0u,1u,3u}) {
       Fixture f;na::CohortBindings b;
+      if(allocation)for(unsigned role=0;role<3;++role)for(unsigned group=0;group<3;++group)f.fill_group(role,group,65);
       track_capture_allocations=true;capture_allocations=capture_bytes=0;fail_capture_allocation=allocation;
       const auto result=f.capture(b);track_capture_allocations=false;fail_capture_allocation=static_cast<std::size_t>(-1);
       assert(!result && !b.captured());
       assert(result.failure==F::Budget || result.failure==F::Read);
       assert(f.capture(b)); // No native mutation or terminal latch on an initial allocation failure.
+    }
+    { Fixture f;na::CohortBindings b;assert(f.capture(b));f.registered(0);
+       track_capture_allocations=true;capture_allocations=capture_bytes=0;fail_capture_allocation=0;
+       const auto result=b.latch_after_own_bridge(f.access(),0);
+       track_capture_allocations=false;fail_capture_allocation=static_cast<std::size_t>(-1);
+       assert(result.failure==F::Budget && b.terminal_failure().failure==F::Budget);
+       const auto reads=f.reads;assert(b.validate(f.access(),P::BeforeBridge).failure==F::PartialMutation);
+       assert(f.reads==reads);
+    }
+    for(unsigned operation=0;operation<3;++operation)for(unsigned boundary:{2u,3u})for(bool unreadable:{false,true}) {
+       Fixture f;na::CohortBindings b;
+       if(operation)assert(f.capture(b));
+       if(operation==2)f.registered(0);
+       f.watched=f.seeds[0].owner.handle+152;f.watched_reads=0;
+       // Change only after the preceding read: record verification or final cohort verification.
+       f.drift_reads=boundary-1;
+       f.after_read=unreadable?+[](Fixture& f,na::Address a,std::size_t) noexcept {
+           if(a==f.watched && f.watched_reads==f.drift_reads)f.unreadable=f.watched;
+       }:+[](Fixture& f,na::Address a,std::size_t) noexcept {
+           if(a==f.watched && f.watched_reads==f.drift_reads)f.put(f.watched,f.service+80);
+       };
+       const auto result=operation==0?f.capture(b):operation==1?b.validate(f.access(),P::BeforeBridge)
+           :b.latch_after_own_bridge(f.access(),0);
+       assert(result.failure==F::Drift && result.diagnostic.read_failed==unreadable);
+       assert(std::string_view(result.diagnostic.stage)==(boundary==2?"record_reread":"cohort_reread"));
+       assert(f.watched_reads==boundary && b.captured()==(operation!=0));
+       if(operation==2) {
+           const auto reads=f.reads;assert(b.terminal_failure().failure==F::Drift);
+           assert(b.validate(f.access(),P::BeforeBridge).failure==F::PartialMutation && f.reads==reads);
+       }
     }
     for(unsigned role=0;role<3;++role) {
       Fixture f;na::CohortBindings b;const na::Address tables[]{rva::BgmListObjectVtable,rva::ScoreInfoObjectVtable,rva::PianoScoreObjectVtable};
@@ -354,20 +388,26 @@ int main() {
       Fixture f;
       for(unsigned role=0;role<3;++role)for(unsigned group=0;group<3;++group)f.fill_group(role,group,count);
       na::Address payload=0;assert(Fixture::read(&f,f.manager(2)+32,&payload,8));
-      f.watched=payload+(count-1)*16;
+       f.watched=payload+(count-1)*16;
+       f.reads=f.copied_bytes=0;
       track_capture_allocations=true;capture_allocations=capture_bytes=0;
       na::CohortBindings b;const auto result=f.capture(b);
       track_capture_allocations=false;
       if(!result)std::cerr<<na::binding_failure_name(result.failure)<<" role "<<int(result.role)<<'\n';
-      assert(result && f.watched_reads==4);
+       assert(result && f.watched_reads==3);
+       std::cout<<"group_count="<<count<<" capture reads="<<f.reads<<" reader_copied_bytes="<<f.copied_bytes
+           <<" allocations="<<capture_allocations<<" bytes="<<capture_bytes<<'\n';
       if(count==static_cast<int>(na::kNativeAudioEntryLimit)) {
-          assert(capture_allocations>4); // Both record and cohort storage grow on demand.
+           assert(capture_allocations>4); // The single journal grows across record ranges.
           track_capture_allocations=true;capture_allocations=capture_bytes=0;fail_capture_allocation=2;
           const auto exhausted=b.validate(f.access(),P::BeforeBridge);
           track_capture_allocations=false;fail_capture_allocation=static_cast<std::size_t>(-1);
           assert(exhausted.failure==F::Budget || exhausted.failure==F::Read);
       }
-      f.watched_reads=0;assert(b.validate(f.access(),P::BeforeBridge));assert(f.watched_reads==4);
+       f.watched_reads=0;const auto reads=f.reads,bytes=f.copied_bytes;
+       assert(b.validate(f.access(),P::BeforeBridge));assert(f.watched_reads==3);
+       std::cout<<"group_count="<<count<<" validate reads="<<f.reads-reads
+           <<" reader_copied_bytes="<<f.copied_bytes-bytes<<'\n';
       f.drift=f.watched;f.drift_reads=0;
       const auto drifting=b.validate(f.access(),P::BeforeBridge);assert(drifting.failure==F::Drift);
       assert(std::string_view(drifting.diagnostic.stage)=="record_reread");f.drift=0;

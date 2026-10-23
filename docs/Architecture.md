@@ -49,6 +49,18 @@ for the same source path/build. Each song still validates those bytes and rebuil
 the expected cohort; warm verification compares every existing file byte using
 bounded read storage. No cache-authored digest replaces validation authority.
 
+On Windows, SHA-256 may use the system CNG provider; provider failure falls back
+to the portable implementation. Digest values and complete byte verification
+remain identical. This accelerates computation, not trust in cached metadata.
+
+Native binding capture uses one operation-local read journal. Immediate record
+verification and final cohort verification both reread the underlying source;
+verification reads are not journaled again. No proof survives a native boundary.
+
+Repository trace stages are buffered and replayed at progressive settlement.
+Adjacent `[song_load]` log timestamps therefore do not measure original stage
+duration; native updater `*_us` fields measure their actual named operations.
+
 The repository worker qualifies the executable's decoder/default callbacks, or
 loads the explicitly authenticated companion. Decoder availability is not engine
 ownership, a callback-replacement lease or native audio readiness. Native cache

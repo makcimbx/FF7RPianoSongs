@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/native_audio_bindings.h"
+#include "game/native_audio_gate.h"
 
 #include <windows.h>
 #include <memory>
@@ -80,6 +81,7 @@ struct NativePianoScoreCaptureFacts {
     BindingFailure binding_failure=BindingFailure::None;
     unsigned char binding_role=0;
     bool status_observed=false,binding_observed=false,name_observed=false;
+    NativeEntryGateFailureSnapshot manager_gate{};
 };
 // Read-only snapshot of the retained constructor result, not a mutation lease.
 // Requires the exact immutable artifact and parser-selected name. Chart writes
