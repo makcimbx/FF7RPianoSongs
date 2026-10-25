@@ -1,6 +1,8 @@
 #include "startup/music_repository_loader.h"
 
 #include "core/logging.h"
+#include "core/theme.h"
+#include "game/song_hud_artwork.h"
 #include "song_descriptor_builder.h"
 #include "startup/startup_cache_progress.h"
 
@@ -45,6 +47,25 @@ std::string loaded_log(const ff7rp::pipeline::LoadedSong& song)
         << " cache=0x" << std::hex << song.cache_key
         << " hca_status=\"" << song.hca_status.message << "\"";
     return out.str();
+}
+
+// Optional artwork is prepared once off-thread, independently of the audio/chart cache.
+std::string prepare_song_cover(const ff7rp::pipeline::LoadedSong& song,
+    game::SongDescriptor& descriptor)
+{
+    if (song.directory.empty()) return {};
+    const std::filesystem::path directory(song.directory);
+    std::error_code ec;
+    const bool present = std::filesystem::exists(directory / "cover.png", ec);
+    if (!present && !ec) return {};
+    auto image = std::make_shared<core::ThemeImage>();
+    std::string error = ec ? ec.message() : std::string{};
+    if (!ec && core::load_png_thumbnail(directory, "cover.png", *image, error)) {
+        game::round_song_hud_cover(*image);
+        descriptor.cover = std::move(image);
+        return {};
+    }
+    return "[song_cover] status=rejected id=" + song.id + " error=\"" + error + "\"";
 }
 
 void fail_plan(MusicRepositoryPlan& plan, std::string message)
@@ -269,6 +290,8 @@ public:
                 game::SongDescriptor descriptor = build_song_descriptor(
                     candidate.song, game::kUnresolvedVisibleIndex,
                     ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID));
+                if (const auto error = prepare_song_cover(candidate.song, descriptor); !error.empty())
+                    emit(event(MusicRepositoryLogLevel::Error, error));
                 if (publisher_.admit_descriptor(descriptor)) {
                     descriptors_.push_back(std::move(descriptor));
                     emit(event(MusicRepositoryLogLevel::Info, loaded_log(candidate.song)));
@@ -341,6 +364,8 @@ MusicRepositoryPlan compose_music_repository(ff7rp::pipeline::SongRepositoryResu
             plan.descriptors.push_back(
                 build_song_descriptor(song, game::kUnresolvedVisibleIndex,
                     ff7rp::pipeline::native_asset_capabilities_for_catalog(FF7RP_TARGET_BUILD_ID)));
+            if (const auto error = prepare_song_cover(song, plan.descriptors.back()); !error.empty())
+                plan.events.push_back(event(MusicRepositoryLogLevel::Error, error));
         } catch (const std::exception& error) {
             fail_plan(plan, "song descriptor composition failed for directory " +
                 candidate.directory_name + ": " + error.what());

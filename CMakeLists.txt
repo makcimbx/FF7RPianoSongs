@@ -576,14 +576,16 @@ add_executable(music_repository_loader_selftest
     src/startup/music_repository_loader.cpp
     src/startup/startup_cache_progress.cpp
     src/song_descriptor_builder.cpp
+    src/game/song_hud_artwork.cpp
     src/game/song_registry.cpp
     src/core/logging.cpp
+    src/core/theme.cpp
 )
 ff7rp_apply_cpp_policy(music_repository_loader_selftest)
 target_compile_definitions(music_repository_loader_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX
     FF7RP_MUSIC_REPOSITORY_SELFTEST=1)
 target_include_directories(music_repository_loader_selftest PRIVATE "src")
-target_link_libraries(music_repository_loader_selftest PRIVATE ff7rp_pipeline)
+target_link_libraries(music_repository_loader_selftest PRIVATE ff7rp_pipeline ole32 windowscodecs)
 add_executable(startup_cache_overlay_selftest
     src/tests/startup_cache_overlay_selftest.cpp
     src/game/startup_cache_overlay.cpp
@@ -600,6 +602,24 @@ target_compile_definitions(startup_cache_overlay_selftest PRIVATE WIN32_LEAN_AND
 target_include_directories(startup_cache_overlay_selftest PRIVATE "src")
 target_link_libraries(startup_cache_overlay_selftest PRIVATE minhook)
 ff7rp_use_generated_catalog(startup_cache_overlay_selftest)
+add_executable(song_hud_overlay_selftest
+    src/tests/song_hud_overlay_selftest.cpp
+    src/game/song_hud_artwork.cpp
+    src/game/song_hud_overlay.cpp)
+ff7rp_apply_cpp_policy(song_hud_overlay_selftest)
+target_compile_definitions(song_hud_overlay_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(song_hud_overlay_selftest PRIVATE "src")
+add_test(NAME song_hud_overlay_selftest COMMAND song_hud_overlay_selftest)
+set_tests_properties(song_hud_overlay_selftest PROPERTIES TIMEOUT 60)
+add_executable(song_hud_runtime_selftest
+    src/tests/song_hud_runtime_selftest.cpp
+    src/game/song_hud_overlay.cpp)
+ff7rp_apply_cpp_policy(song_hud_runtime_selftest)
+ff7rp_use_generated_catalog(song_hud_runtime_selftest)
+target_compile_definitions(song_hud_runtime_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(song_hud_runtime_selftest PRIVATE "src")
+add_test(NAME song_hud_runtime_selftest COMMAND song_hud_runtime_selftest)
+set_tests_properties(song_hud_runtime_selftest PROPERTIES TIMEOUT 60)
 endif()
 add_executable(song_cache_tool
     tools/song_cache_tool.cpp
@@ -974,8 +994,10 @@ target_include_directories(menu_theme_plan_selftest PRIVATE "src")
 target_link_libraries(menu_theme_plan_selftest PRIVATE ole32 windowscodecs)
 
 add_executable(menu_theme_native_selftest src/tests/menu_theme_native_selftest.cpp
+    src/game/song_hud_artwork.cpp
     src/core/pe_image.cpp src/core/version_gate.cpp src/game/uobject_locator_core.cpp
-    src/game/menu_theme_metrics.cpp)
+    src/game/menu_theme_metrics.cpp src/game/song_hud_overlay.cpp
+    src/game/song_preview_anchor.cpp)
 add_dependencies(menu_theme_native_selftest check_rva_catalog)
 ff7rp_apply_cpp_policy(menu_theme_native_selftest)
 ff7rp_use_generated_catalog(menu_theme_native_selftest)

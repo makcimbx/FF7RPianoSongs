@@ -61,6 +61,14 @@ int main()
         write(image, "changed after preparation");
         check(theme.images.at("MusicList/Bg_1").bgra == expected, "owned pixels/straight alpha mismatch");
         write(image, png);
+        ThemeImage thumbnail;
+        check(load_png_thumbnail(root / "night", "background.png", thumbnail, error)
+            && thumbnail.width == 2 && thumbnail.height == 1 && thumbnail.bgra == expected,
+            "thumbnail changed small PNG/straight alpha");
+        check(!load_png_thumbnail(root / "night", "../outside.png", thumbnail, error)
+            && thumbnail.bgra == expected && !error.empty(), "thumbnail traversal/transaction failed");
+        check(!load_png_thumbnail(root / "night", "missing.png", thumbnail, error)
+            && thumbnail.bgra == expected, "thumbnail missing-file transaction failed");
         const std::u8string unicode_name = u8"\u0444\u043e\u043d.png";
         write(root / "night" / std::filesystem::path(unicode_name), png);
         auto unicode_manifest = valid;
@@ -132,6 +140,9 @@ int main()
             "0000003649444154789cedc101010000008220ffaf6e484001000000000000000000000000000000000000"
             "000000000000000000000000000000007c1b82000001d27889f00000000049454e44ae426082");
         write(image, large);
+        check(load_png_thumbnail(root / "night", "background.png", thumbnail, error)
+            && thumbnail.width == 256 && thumbnail.height == 256
+            && thumbnail.bgra.size() == 256 * 256 * 4, "large thumbnail was not bounded");
         std::string over_budget = version + "[Images]\n";
         for (int i = 0; i < 129; ++i) over_budget += "Bg" + std::to_string(i) + "=background.png\n";
         rejected(over_budget);

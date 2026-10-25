@@ -38,6 +38,7 @@ need them. A **profile** is a playable difficulty version of the same song, not 
    `End/Binaries/Win64/FF7RPianoSongs.log`. An invalid song is rejected rather than partly loaded.
 
 Quick reference: [files](#folder-and-source-selection) · [song settings](#root-object) ·
+[cover and credits](#cover-and-display-credits) ·
 [notes](#explicit-notes) · [profiles](#difficulty-profiles) · [MIDI timing](#midi-backed-songs) ·
 [audio and volume](#audio-modes-loudness-and-gain) · [limits](#extended-charts-and-build-policy).
 
@@ -49,6 +50,7 @@ Music/My Song/
   song.wav | song.mp3 | song.flac  choose exactly one audio file
   song.mode1.wav                  optional; .mp3 or .flac also accepted
   song.mode2.wav                  optional; .mp3 or .flac also accepted
+  cover.png                       optional gameplay artwork
   song.mid | song.midi              required only when JSON has no explicit notes; transcribed when missing
 ```
 
@@ -66,6 +68,51 @@ without a `metronome` field; clicks are disabled by default. Supply matching MID
 explicit notes, or the transcription model for a piano recording without notes.
 An existing file is not replaced, even if it contains errors.
 
+### Cover and display credits
+
+Put optional artwork in `cover.png` beside `song.json`; no JSON path setting is
+needed. Use a square image for the song card. PNGs must be at most 4096 pixels per
+side and 32 MiB on disk. The worker prepares an aspect-preserving thumbnail no
+larger than 256 pixels per side, with rounded alpha corners and a fine frame for
+the HUD; the source PNG is never rewritten. Artwork must remain inside the song directory,
+including after resolving links. Missing or rejected artwork never rejects the
+song; rejected artwork is reported separately in the log. Changing artwork does
+not rebuild audio or charts; restart the game to reload it.
+
+The card keeps the game's title and adds album, BPM, duration and a preparer credit.
+Tempo, time and preparer are marked by metronome, clock and pencil pictograms.
+The tempo icon does **not** mean audible metronome clicks are enabled; those are
+controlled separately by [`metronome.enabled`](#metronome).
+
+Optional `album` and `author` belong at the root of `song.json`, shared by all
+difficulty profiles. `author` names the person who prepared the chart or
+arrangement for the mod, not automatically the original composer or performer.
+Omit unknown credits rather than supplying placeholders. Empty strings are hidden.
+
+With matching audio and MIDI, this is a complete `song.json`:
+
+```json
+{
+  "schema": "ff7rpianosongs.song.v2",
+  "title": "My Song",
+  "album": "Original Soundtrack",
+  "author": "YourName"
+}
+```
+
+For an existing song, add only the optional fields; keep its notes, profiles and
+timing settings. The HUD uses the prepared song's BPM and duration, not embedded
+image tags or a live tempo detector. Duration is calculated automatically and the
+cover has a fixed filename: do not add `duration` or `cover` fields. Remove `artist`
+from older experimental song files; it is no longer accepted. Long album names
+are shortened first to leave room for tempo, duration and the preparer.
+
+Close the game before edits and restart to load them. Editing `song.json` can
+cause normal song-cache preparation; artwork-only edits do not rebuild audio or
+charts. Do not edit the generated `.cache/resolved-song.json` to change credits.
+Missing artwork or unavailable HUD geometry does not prevent playback; the card
+is omitted when its current game objects cannot be verified safely.
+
 ## Root object
 
 The root is the outermost `{ ... }` object. Most songs need only `schema`, `title`, and either
@@ -76,6 +123,8 @@ a list of settings you must fill in. All numbers must be finite.
 | --- | --- | --- | --- |
 | `schema` | string or number | **required** | Exactly `"ff7rpianosongs.song.v2"`, `"v2"`, or numeric `2`. JSON schema remains v2. |
 | `title` | string | **required** | Nonempty display title. |
+| `album` | string | optional; absent or empty is hidden | Album name; single-line UTF-8, at most 256 decoded UTF-8 bytes. |
+| `author` | string | optional; absent or empty is hidden | Chart/arrangement prepared for the mod; same text limits as `album`. |
 | `bpm` | number | **required for authored notes/profiles** | 30–300 beats per minute. With MIDI, omit to use its tempo. |
 | `difficulty` | integer | optional; default `1` | Difficulty label, 0–2147483647. Does not simplify authored notes. Forbidden with `profiles`; does not select a generated MIDI level. |
 | `score_thresholds` | array of integers | optional; calculated per chart | Advanced score boundaries, for example `[0, 1000, 2000, 3000]`. Nonempty; values 0–2147483647 in ascending order, with equal values allowed. |
@@ -92,6 +141,11 @@ a list of settings you must fill in. All numbers must be finite.
 | `profiles` | array | optional | 1–32 explicit profile objects. Mutually exclusive with root `notes` and root `difficulty`. |
 | `chord_voicings` | object | optional; omitted means stock chord sounds | Song-wide replacements for chord sounds; requires explicit `notes` or `profiles` and the matching mod for game 1.004 or 1.005. See “Custom chord sounds”. |
 | `diagnostic_extended_chart_fixture` | boolean | obsolete; omit | Accepted for old files, but has no effect. It does not unlock longer charts. |
+
+Optional display credits reject control characters (including escaped tabs/newlines, NUL,
+DEL and C1 controls), Unicode line/paragraph separators, and malformed UTF-8. Empty strings
+are equivalent to omission. These root fields are shared by every difficulty profile and
+preserved in the resolved-song export; they do not change chart timing or audio processing.
 
 Usually omit both threshold arrays. The mod calculates them for each chart from its required
 player actions and difficulty. Automatic group followers do not add required actions; a note and
@@ -597,18 +651,15 @@ and combo settings may be recalculated for the edited chart.
 Do not edit `.cache` directly or include it when sharing a song. The export is recreated on a
 successful load if possible; inability to write it does not stop an otherwise valid song loading.
 
-### Native cached-audio development path
+### Generated native-audio cache
 
-Song inputs and settings do not change. The native-audio candidate automatically builds
-immutable per-song cohorts in `%LOCALAPPDATA%/FF7RPianoSongs/native_audio`; these are generated cache,
-not files to install manually in the game's Paks directory or include with a song.
-Source changes produce a separate content identity. Keep the containers untouched while
-the game is running, because mounted files, registrations and native owning references
-are retained until process exit. Prepared files alone do not mean a song is ready:
-selection requires its authenticated native identities and registered rows, not a stock
-Sound source patch or replayed request. This is not a claim of audible playback validation.
-The embedded decoder is preferred; a qualified companion is a fallback rather than a new
-song-author setting. See the [player guide](../README.md) for installation and limitations.
+The mod automatically prepares native audio containers under
+`%LOCALAPPDATA%/FF7RPianoSongs/native_audio/`. They are generated cache, not song
+sources: do not include them when sharing a song or install them manually in Paks.
+Source changes create new content identities. Do not edit or delete these files
+while the game is running; the game can keep them open until it exits. No extra
+`song.json` setting or manual container installation is needed. See the
+[player guide](../README.md) for installation, cache cleanup and limitations.
 
 ## Failure behavior
 
@@ -622,6 +673,8 @@ song-author setting. See the [player guide](../README.md) for installation and l
 | Early MIDI notes are missing | Check the lead-in, timing offsets, and audio length. Generation also reduces notes for playability. |
 | MIDI edits no longer change the chart | Remove explicit `notes`/`profiles` to return to MIDI generation, or edit those explicit notes instead. |
 | Mode audio is rejected | Export all versions on the same timeline with exactly matching decoded lengths. |
+| Cover is missing but the song plays | Check `cover.png` beside `song.json`, PNG limits and the log; restart after replacing artwork. Do not delete audio caches just to reload a cover. |
+| Credits are absent or shortened | Put `album`/`author` at the root, restart after edits, and leave unknown credits out. Long text is shortened to fit; it does not affect playback. |
 
 Source edits normally invalidate the affected cache automatically. If a problem persists, exit
 the game, delete only that song's `.cache/`, and retry. Invalid authored songs are rejected;

@@ -1,9 +1,251 @@
 # Current Status
 
-Updated 2026-10-23. This page describes the current implementation, release
+Updated 2026-10-24. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## Gameplay song card — Integration in progress
+
+- **Partial gameplay confirmation, not full visual acceptance:** the latest owner
+  confirms the Runtime text is now sharp; the screenshot also shows rounded artwork,
+  pictograms and preparer credit. The installed width/gap correction uses remaining
+  Canvas width with a right gutter and tighter icon-label/group gaps. The latest
+  screenshot prompted a further scoped change: show only `author` (not recording
+  `artist`/composer), and begin the row at the qualified full-title-block left edge,
+  beside the cover with its existing gap rather than at the narrower text anchor.
+  Missing full-block evidence retains the qualified text anchor; source metadata
+  is not deleted. Fitting still reserves tempo, duration and preparer. The production
+  proxy and focused layout/runtime/native-bridge/documentation checks pass; this
+  further layout/credit correction is installed below, not visually accepted yet.
+  The previous stock-font log selected `render_font/small_font_fallback_blur_unresolved`:
+  the stock-font-field change did not produce an improved source in this run.
+  Read-only log snapshot: `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-font-fallback-20261023-224849`.
+  Owner-authorized read-only Frida observation subsequently found all three stock
+  fields alias one Runtime UFont with legacy size 10; larger-field preference
+  cannot improve its source size. See
+  [copied observation](../analysis/SongHudFontObservation-20261023.md).
+  The worktree now implements the independently recovered local size-keyed
+  FontInfo path: genuine current typeface, integer raster-size fitting, matching
+  native item measurement and Canvas DPI, final geometry scale one. See
+  [adapter evidence](../analysis/SongHudSharpTextAdapterEvidence-20261023.md).
+  Independent native review found no concrete blocker; the production proxy builds
+  and focused native-bridge, HUD runtime/layout and documentation checks pass.
+  This candidate is installed below, but not visually accepted. Offline/incomplete capability retains an
+  explicitly blur-unresolved legacy fallback. Independently recovered older sizing
+  contracts are now in the catalog/generated trees; focused independent review,
+  canonical generation/checks, default production build and affected tests pass.
+  Older Runtime-font availability remains unobserved.
+  Pause appearance is not established by the screenshot.
+  The preceding pause/root-consumption and
+  note-overlap failures motivated the installed correction below; their read-only
+  running-game snapshot is retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-pause-layout-20261023T174827Z`.
+  Do not finalize visual acceptance or Keep before the focused corrections.
+- Current single-credit/left-expanded iteration:
+  `native-proxy-20261023T213311Z-dce4e9f464df4706a94593ba3c1b217d`
+  (**Prepared, awaiting owner layout/credit check; no Keep**), proxy SHA-256
+  `7fb5fc2aff3903088a249ad26f9b100359a169bd16304084cd7c7a8959c9df2c`.
+  Game/bootstrap were checked closed; production-input hashes matched provenance,
+  and installed bytes matched the reviewed candidate. The prior session was collected
+  as Unassessed, then canonically rolled back. Exact prior/candidate DLLs, receipts,
+  provenance and log are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-single-credit-install-20261023T213310Z-25dddeb6`.
+  No process launch/control or edits to songs, INI or caches. New layout/credit
+  appearance remains unverified; no older-gameplay claim.
+- Previous width/spacing iteration: `native-proxy-20261023T212018Z-ca8d5ba7ec7d4234a527b27e1d4362ab`
+  (**Collected/Unassessed, then rolled back; no Keep**), installed/hash-verified proxy
+  SHA-256 `7cb2d977afbc1a6881e0cb266b1b866d61a11bcc8d1059d151ed0c7edcfc521b`.
+  The preceding sharp-text run was collected as Unassessed with the owner's visual
+  observations, then canonically rolled back. Exact prior/candidate bytes, receipts,
+  provenance and log are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-width-spacing-install-20261023T212016Z-0f7acaa4`.
+  Production-input hashes matched provenance; game/bootstrap were checked closed.
+  No process launch/control or song/INI/cache edits. New width/gaps are not visually
+  accepted yet; prior sharpness confirmation does not qualify all resolutions or 1.004.
+- After explicit owner authorization and a fresh closed-game/bootstrap gate, the
+  previous blur-rejected session was canonically rolled back and the size-keyed
+  Runtime FontInfo candidate installed/hash-verified. That session:
+  `native-proxy-20261023T211536Z-c43f8279e6d842468120be2462d94128`
+  (**Collected/Unassessed after owner sharpness confirmation and layout correction request, then rolled back; no Keep**). Proxy SHA-256:
+  `862600f1f4730ef1c94f1c8296359afbdb85dfcd42c2fbbc7e94de758033d3e2`.
+  Exact prior/candidate DLLs, receipts, provenance and prior run log are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-runtime-font-install-20261023T211534Z-cce3311e`.
+  All production-input hashes matched provenance before installation. No process
+  was launched or controlled, and songs, INI and caches were not changed by this
+  replacement. Actual sharpness, preparer visibility, Unicode/DPI and pause/resume
+  remain for focused gameplay checking; older gameplay remains untested.
+- The current visual correction prepares antialiased rounded cover alpha and a fine
+  border offline, preserving source PNGs. Bounded metronome/clock/pencil images
+  use the existing rooted Prepared texture bridge and synchronous resource checks;
+  metadata is arranged as optional icon-led fields rather than pipe-separated
+  labels. Isolated MSVC artwork/layout and native-bridge double tests pass;
+  independent artwork/icon safety review found no concrete blocker. Integrated
+   checks and the stock-font follow-up review passed for the installed iteration.
+   Its Small/Medium/Large comparison did not improve the observed source; the
+   worktree retires that selection in favor of size-keyed Runtime text.
+   Field/identity/currentness remain rechecked through drawing. Legacy fallback
+   explicitly logs unresolved blur, and actual raster quality is not accepted.
+  [Stock-font evidence](../analysis/SongHudStockFontEvidence-20261023.md) records
+  the default-build qualification. Review found an oversized-title scale rejection
+  could retire a paused card; the correction caps improved-source scale before
+  layout, width measurement and drawing, with a callback-free repeated-render
+  regression. Independent re-review closed the finding; focused execution checks
+  pass. The reviewed candidate is installed below, pending owner visual evidence.
+- [Older-build HUD recovery](../analysis/SongHudOlderBuildEvidence-20261023.md)
+  independently recovered the existing HUD callable/layout contracts from the
+  older import and is integrated into the catalog/generated trees. The later font
+  contract has also been independently recovered and added to the catalog;
+  generated older output and canonical catalog checks agree. No authenticated older disk or older
+  gameplay evidence is available, so this is not a compatibility acceptance claim.
+  [Older Runtime FontInfo recovery](../analysis/SongHudOlderRuntimeFontEvidence-20261023.md)
+  additionally supplies all nine new size-keyed text contracts, with matching
+  consumed ABI/layout and import-only provenance; catalog/generated checks and
+  focused default-build execution pass, not older-gameplay or raster-quality acceptance.
+- The pause correction retains only the positive gameplay root and exact playback
+  association across successful PostRender calls; geometry, resource pointers and
+  controller pointers are not retained for later dereference. Every draw still
+  checks current identity, authority, containment and paint. Same-controller ticks
+  invalidate in-flight frames without consuming the root; exit, switch, token or
+  identity retirement revoke it. Focused pause/resume, repeated-render, autoplay
+  and catalog-adoption checks pass; independent native-lifetime review found no
+  concrete blocker. The owner has since closed the game and authorized the
+  next reviewed candidate installation, not process launch or visual acceptance.
+- Layout correction uses the already-validated full `Pnl_MusicTitle` rectangle,
+  rather than text-only bounds, to clear the native note icon. Artwork proportions
+  follow the reference viewport ratio rather than padded title-widget height;
+  metadata fits a header-relative line height with matching uniform measurement
+  and draw scale. The isolated owning native text-item adapter now authenticates
+  all callable/layout contracts for the default build, preserves foreground alpha
+  and constructs/submits/destroys only within the qualified synchronous draw.
+  [Typography evidence](../analysis/SongHudTypographyEvidence-20261023.md) records
+  independent disk/import/mapped-image qualification. Integrated independent review
+  found no concrete blocker. The production proxy builds; native-bridge ownership/
+  scale/fault tests, HUD runtime/layout, preview anchor/overlay, autoplay, catalog
+  adoption and documentation audit pass. These are focused Integration checks,
+  not a visual pass or release qualification.
+- The owner authorized the next iteration after closing the game. The previous
+  pause/layout/text session was collected as Unassessed (square frame, blur and
+  missing icons rejected), then canonically rolled back. The rounded-artwork/
+   pictogram/stock-font correction was installed and hash-verified with game/bootstrap
+  checked closed: `native-proxy-20261023T193239Z-4029fd3356174ac3b5ad051c53f6fdd6`
+    (**Collected/Unassessed after owner rejected metadata blur, then rolled back; no Keep**), SHA-256
+  `66a089222234ac7888e4fc55c29ec2bc116788239c3718a772c9dbefcf441cc4`.
+  Exact prior/candidate DLLs, receipts, provenance and prior run log are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-rounded-icons-install-20261023T193237Z-d6891028`.
+  No process was launched or controlled; songs, INI and caches were not changed.
+  Metadata fidelity, icon clearance, fades and pause/resume appearance remain
+  unaccepted; no Keep. Older gameplay compatibility has not been tested.
+- Owner-authorized [Frida memory observation](../analysis/SongHudMissingObservation-20261023.md)
+  during unpaused custom play found state 9, a positive gameplay-root weak handle
+  matching the current object item, and the expected receiver/WidgetTree/root
+  ownership. Native GC/exit flags were clear. No hooks, native calls, writes or
+  process control were used. This does not prove product callback/token admission
+  or paint submission; an absent/zero-serial root is not supported by this run.
+- The next Debug candidate adds capped, deduplicated capture/render/bridge
+  first-failure diagnostics without changing admission guards, plus a focused
+  runtime-orchestration selftest. The proxy builds; runtime, layout and documentation
+  checks pass. After the owner closed the game and explicitly requested installation,
+  the canonical workflow collected the failed prior run as Unassessed, rolled back
+  its owned session and installed this candidate with both processes checked closed.
+  Session: `native-proxy-20261023T171556Z-92a0a95e1f00408385f860bbc4ec5411`.
+  Installed proxy SHA-256: `10c5445f768c3e38bf155fafbf256347eed0eb1aee7f9ef43e82b5ded89559fc`.
+  Receipt, exact prior/candidate DLLs, provenance and collection handoff are retained
+  under `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-diagnostic-install-20261023T171553Z-12a7b3f5`.
+  Songs, INI and caches were not changed; no game launch was performed. The session
+  was collected after the owner's next closed-game report, without a Keep or visual
+  acceptance claim. Its `log-after.log` establishes `capture/controller_token_mismatch`
+  during custom state-9 playback: menu name preparation and shared rendering ran,
+  but no gameplay root was published.
+- The source fix distinguishes the audio/publication token controller from the
+  piano controller. Independent review rejected the first attempt's universal
+  chord-voicing binding requirement: those bindings are optional, so ordinary/MIDI
+  songs would still have no card. The revised capture receives the actual chart
+  and playback snapshot from the existing qualified piano chart scope and checks
+  exact playback currency plus reciprocal controller/chart/control-block ownership.
+  Voicing checks remain conditional on a present binding or declared voicings;
+  full-token, positive-root and engine/GC checks remain. Render revalidation also
+  rejects changed chart admission. Regressions cover ordinary/no-binding playback,
+  distinct/null publication controllers, wrong chart/controller/control block and
+  stale snapshot/token. Independent focused re-review found no remaining concrete
+  blocker and closed the ordinary/MIDI finding. The revised proxy builds; HUD
+  runtime/layout, autoplay-runtime, catalog-adoption and documentation checks pass.
+  On explicit owner authorization the revised fix was installed with game/bootstrap
+  closed after canonical rollback of the collected diagnostic session. Current
+  session: `native-proxy-20261023T173158Z-3daaedf1264340418dc9bb825d4d602b`
+  (subsequently collected and rolled back for the pause/layout correction above).
+  Installed SHA-256: `228269b5a3f5c31e4ebac3d2ed9fc6fbd7d2a53c040f6b632738045106957039`.
+  Receipt, provenance, exact prior/candidate DLLs and prior failed log are retained
+  under `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-binding-install-20261023T173155Z-aa776cd7`.
+  The installed hash and all production-input hashes were checked; songs, INI and
+  caches were not changed and no process was launched. Downstream paint remains
+  unqualified; no visual acceptance or Keep has been recorded.
+- Optional root `album` and `author` display credits are parsed,
+  exported, projected into descriptors and restored from validated source on warm
+  loads without changing the binary cache format. Existing songs remain valid.
+- Optional contained `cover.png` is decoded on the repository worker using the
+  existing bounded PNG decoder and reduced to an owned thumbnail (maximum 256px
+  per side). Missing/bad artwork does not reject playable songs or participate in
+  the audio/chart cache key. Both progressive and batch composition prepare it.
+- The pure Canvas card renderer preserves the native title, accepts explicit
+  qualified title bounds and font metrics, draws framed artwork to its left and
+  a measured, truncated metadata row below it. Its resource argument is a native
+  rendering resource, never a cast Texture2D UObject.
+- The existing shared PostRender now dispatches the card. A qualified controller
+  scope captures the current playback token and positive gameplay-root identity;
+  fresh containment, paint geometry/visibility/opacity and native font measurement
+  gate drawing. Existing qualified menu callbacks prepare immutable rooted cover
+  textures even with Original selected. The bridge projects and submits its own
+  Prepared resource synchronously, never exporting a saved resource pointer.
+  The new static contracts are admitted only for the default executable build;
+  the older build omits the card without disabling songs. Static evidence and
+  remaining presentation limits are in [Song HUD native evidence](../analysis/SongHudNativeEvidence.md).
+- Focused metadata/parser, descriptor, resolved-export, Unicode warm-cache,
+  repository artwork, PNG-thumbnail and card-layout checks pass, together with
+  documentation parity. The integrated production proxy and affected native-bridge,
+  observation, theme-runtime, preview-anchor, shared-overlay, autoplay and catalog
+  tests build and pass. Independent scoped native-safety review found no concrete
+  blocking defect. The candidate is `build/proxy/Release/FF7RPianoSongsProxy.dll`;
+  these are Integration checks, not release qualification.
+- On explicit owner request, the hash-verified candidate was installed with both
+  game/bootstrap closed through the canonical proxy session workflow. The prior
+  owned session was collected without a gameplay claim and rolled back before
+  preparing `native-proxy-20261023T150955Z-7c7eded46afd43a0848b9e76a9ee5f5a`.
+  Installed SHA-256 is `5bb04efee24f84e7676013332947f819c5ed6a8b68ade8a298359de63b56af85`.
+  Candidate/provenance, prior proxy and replacement handoff are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-hud-install-20261023T150928Z-f944587f`.
+   This initial session was subsequently collected and rolled back for the Debug
+   candidate above, not visually accepted. No game was launched or controlled, and
+   the INI was not changed by installation. Separately authorized collection edits added
+   artwork/source albums to all 31 installed songs and initially labelled composer
+    credits to 30. Those unused `artist` credits have now been removed on explicit
+    owner request from parser/export/descriptor/HUD fields and installed JSONs.
+    The closed root schema will reject the removed field; no binary cache change
+    is needed because display metadata was never serialized there. All installed
+    JSONs were checked: 30 changed and the already-absent field stayed absent in the
+    remaining song; only the root member was removed, with all other values preserved.
+    Exact originals/hashes are retained at
+    `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-remove-artist-20261023T215422Z-dc8c4f3f`.
+    The interrupted build was resumed successfully: the production proxy, focused
+    parser/export/descriptor/HUD/native-bridge checks, Unicode warm-cache scenario
+    and documentation audit pass. The installed DLL is unchanged.
+    On explicit
+   owner attribution, root `author` is now `makcimbx` in every installed song except
+   Rufus (30 updates); Rufus JSON is byte-identical. Only that field changed,
+   with exact originals and verified hashes retained at
+   `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-preparer-credit-20261023T195030Z-fc4afb6c`.
+    The current renderer reserves room for preparer credit and truncates long album
+    names first; the focused layout regression and
+   documentation audit pass. This renderer ordering is installed with the current
+   Runtime FontInfo candidate; actual preparer visibility remains unverified.
+  All 22 enabled metronomes were disabled; audio/MIDI/cache files were preserved.
+  Exact originals, source URLs and per-song hashes are retained at
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/song-card-metadata-20261023-180829`.
+  The lead rechecked installed DLL and all changed song/artwork hashes, display
+  field bounds and collection-wide effective metronome-off state. Appearance,
+  title alignment/fades through pause/results, prompt clearance, immediate
+  transitions, UI scaling and Original/custom-theme compatibility still require
+  focused in-game validation; static queue ordering is not a visual pass.
 
 ## Cached-song startup cost — Integration in progress
 

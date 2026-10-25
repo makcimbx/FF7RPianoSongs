@@ -55,6 +55,8 @@ int main() {
     const std::string cyrillic_text = "\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82";
     const std::string cyrillic_title = "Resolved \"" + cyrillic_text + "\"";
     SongConfig config = base_config(cyrillic_title, 3);
+    config.album = "Album \"quoted\"";
+    config.author = "Arrangement \\ credit";
     Note dual;
     dual.beat = 0.0;
     dual.duration_beats = 1.0;
@@ -89,11 +91,26 @@ int main() {
     ParsedSongSource parsed_root;
     if (!parse_song_json_string(root_json, &parsed_root).ok() ||
         !parsed_root.authored_profiles.empty() || parsed_root.config.title != cyrillic_title ||
+        parsed_root.config.album != config.album ||
+        parsed_root.config.author != config.author ||
         root_json.find(cyrillic_text) == std::string::npos ||
         parsed_root.config.notes.size() != 2u) {
         return fail("root projection did not parse as explicit source JSON");
     }
     const Note& parsed_dual = parsed_root.config.notes.front();
+    auto hidden_metadata = root_song;
+    hidden_metadata.config.album.clear();
+    hidden_metadata.config.author.clear();
+    std::string hidden_json;
+    if (!render_resolved_song_json(hidden_metadata, false, &hidden_json).ok() ||
+        hidden_json.find("\"artist\"") != std::string::npos ||
+        hidden_json.find("\"album\"") != std::string::npos || hidden_json.find("\"author\"") != std::string::npos)
+        return fail("empty display metadata was exported");
+    auto invalid_metadata = root_song;
+    invalid_metadata.config.author = "two\nlines";
+    std::string unchanged_metadata = "unchanged";
+    if (render_resolved_song_json(invalid_metadata, false, &unchanged_metadata).ok() || unchanged_metadata != "unchanged")
+        return fail("invalid display metadata export replaced output");
     if (parsed_dual.pitch != "C4" || parsed_dual.chord_id != "pca_C" ||
         parsed_dual.group_index != 7u || !parsed_dual.alternate_monotone ||
         parsed_dual.ignore_sound_pitches != std::vector<std::string>{"En2"} ||
@@ -172,6 +189,8 @@ int main() {
     }
     ParsedSongSource parsed_profiles;
     if (!parse_song_json_string(profiles_json, &parsed_profiles).ok() ||
+        parsed_profiles.config.album != config.album ||
+        parsed_profiles.config.author != config.author ||
         parsed_profiles.authored_profiles.size() != 2u ||
         parsed_profiles.authored_profiles[0].difficulty != 3 ||
         parsed_profiles.authored_profiles[1].difficulty != 5 ||

@@ -53,6 +53,9 @@ Failure classify(const Snapshot&) noexcept;
 // Copied native facts only: NO callback provenance, retention or allocation
 // authority. Requires completed capture; the current owned stack must qualify itself.
 Failure classify_native_facts(const Snapshot&) noexcept;
+// Game-thread/GC/package facts only; deliberately grants no Ready-menu authority.
+Failure classify_engine_facts(const Snapshot&) noexcept;
+Snapshot capture_engine_facts(HMODULE, std::string_view exact_profile) noexcept;
 // Immutable authentication is reused only for the process-lifetime main executable
 // and exact compiled profile. All session/thread/TLS/GC/package reads remain fresh.
 // The normal open observer still authenticates independently on every capture.

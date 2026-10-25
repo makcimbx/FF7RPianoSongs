@@ -4085,6 +4085,321 @@
       }
     },
     {
+      "id": "song_hud_text_from_string", "cpp_symbol": "SongHudTextFromString",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x0120773c",
+        "signature": {"bytes": "48 89 5c 24 10 57 b8 60 00 00 00 e8 34 44 f6 00 48 2b e0 83 7a 08 01 48 8b f9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 default 1.005 import and independently hash-authenticated disk: instruction-complete entry uniquely matches full raw disk, PE-mapped disk and explicit Ghidra program. FText24*(out, const FString16*) copies borrowed terminated UTF16; count/capacity include NUL. Owns native text, never caller string. Independent older-build recovery absent."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x011dd508",
+        "signature": {"bytes": "48 89 5c 24 10 57 b8 60 00 00 00 e8 18 1a ed 00 48 2b e0 83 7a 08 01 48 8b f9", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older import: unique complete entry, borrowed FString16 to owning FText24; caller string not consumed. K2 owning construction/destruction recovered independently. No older disk or gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_item_construct", "cpp_symbol": "SongHudTextItemConstruct",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00aee2cc",
+        "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 9f d8 67 01 48 2b e0 49 8b f8 49 8b f1", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete entry unique in authenticated default-build disk/mapped image/import. Item1b0*(out, const Vec2f*, const FText24*, UFont*, const LinearColor4f*). Retains text; position and all four foreground floats copied. Local storage 0x1b0, alignas16 sufficient. Native defaults uncentered/unoutlined; only isolated Scale pair changed. No older-build equivalence assumed."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00e6db2c",
+        "signature": {"bytes": "48 89 5c 24 08 48 89 74 24 10 57 b8 20 00 00 00 e8 ef 13 24 01 48 2b e0 49 8b f8 49 8b f1", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older import: unique complete typed Item1b0 constructor, borrowed position/FText/font/RGBA; retains text. Aligned local storage, owning ABI and native defaults independently verified; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_destroy", "cpp_symbol": "SongHudTextDestroy",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x007acd1c",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 58 ee 9b 01 48 2b e0 48 8b 59 08 48 85 db 74 0d", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete entry unique in authenticated default-build disk/mapped image/import. void(FText24*); K2 destroys temporary text after item constructor retains it. Local 0x18-byte storage, alignas16 sufficient; never memcpy native owner. No cleanup on fault/uncertain construction. Older build unproved."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00894970",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 b4 a5 81 01 48 2b e0 48 8b 59 08 48 85 db 74 0d", "mask": "xxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older import: unique complete void(FText24*) entry. Native K2 destroys temporary after item retains ownership; never frees caller storage. No older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_submit", "cpp_symbol": "SongHudTextSubmit",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x017d9c0c",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 68 1f 99 00 48 2b e0 48 8b 02 4c 8b c2 48 8b d9 48 8b d1 49 8b c8 ff 50 18", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete entry unique in authenticated default-build disk/mapped image/import. void(FCanvas*, Item1b0*) dispatches item virtual+18 synchronously, may flush Canvas. K2 immediately destroys local item after return; no pointer escapes or GPU-completion claim. Older build unproved."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x0095dc50",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 d4 12 75 01 48 2b e0 48 8b 02 4c 8b c2 48 8b d9 48 8b d1 49 8b c8 ff 50 18", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older import: unique complete void(FCanvas*,Item*) synchronous virtual+18 dispatch; K2 immediately destroys local item. Retained immutable resource ordering independently followed; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_item_destroy", "cpp_symbol": "SongHudTextItemDestroy",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00aee4e8",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 8c d6 67 01 48 2b e0 48 8b d9 48 81 c1 50 01 00 00 e8 12 68 cc 01", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete entry unique in authenticated default-build disk/mapped image/import. void(Item1b0*) destroys retained text/internal layout without freeing caller storage. Only after successful constructor and submission under uninterrupted qualified authority; native faults suppress unsafe cleanup. Older build unproved."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00e6dfd8",
+        "signature": {"bytes": "40 53 b8 20 00 00 00 e8 4c 0f 24 01 48 2b e0 48 8b d9 48 81 c1 50 01 00 00 e8 5a 54 cc 01", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older import: unique complete item destructor releases retained text/internal owners, not caller storage. Qualified ordered cleanup only; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_scale_layout", "cpp_symbol": "SongHudTextScaleLayout",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x0507fe7d",
+        "signature": {"bytes": "c5 fa 11 85 88 00 00 00 c5 fa 11 8d 8c 00 00 00", "mask": "xxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete NONCALLABLE K2 stores unique in authenticated default-build disk/mapped image/import. Item starts RBP-18; stores RBP+88/+8c prove item ScaleX/ScaleY+a0/+a4 before synchronous submit. Never invoke this verifier or mutate shared Canvas/font. Older build unproved."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x05245d65",
+        "signature": {"bytes": "c5 fa 11 85 88 00 00 00 c5 fa 11 8d 8c 00 00 00", "mask": "xxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older K2 recovery: unique complete NONCALLABLE stores prove item Scale+a0/+a4 from item stack base RBP-18. Never invoke verifier; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_text_foreground_layout", "cpp_symbol": "SongHudTextForegroundLayout",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00aee41f",
+        "signature": {"bytes": "c4 c1 78 10 01 48 8b 5c 24 30 48 8b c7 c5 fa 7f 47 28 c7 87 a0 00 00 00 00 00 80 3f c7 87 a4 00 00 00 00 00 80 3f", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudTypographyEvidence-20261023.md", "detail": "2026-10-23 instruction-complete NONCALLABLE base-constructor window unique in authenticated default-build disk/mapped image/import. Copies fifth constructor argument RGBA to item+28 including alpha+34; initializes Scale+a0/+a4 to1. Draw body14120a0a8 multiplies foreground alpha by Canvas alpha, no forced opacity. Never invoke verifier; no shadow flag assumed. Older build unproved."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00e6df0f",
+        "signature": {"bytes": "c4 c1 78 10 01 48 8b 5c 24 30 48 8b c7 c5 fa 7f 47 28 c7 87 a0 00 00 00 00 00 80 3f c7 87 a4 00 00 00 00 00 80 3f", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older constructor: unique complete NONCALLABLE RGBA copy to item+28, alpha+34, default Scale+a0/+a4=1. Live Canvas alpha multiplication independently verified; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_engine_font_fields", "cpp_symbol": "SongHudEngineFontFields",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "research", "hook_owner": null, "hook_spec": null,
+      "consumers": ["analysis/SongHudSharpTextAdapterEvidence-20261023.md"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x04ffeaed",
+        "signature": {"bytes": "48 8d 4f 78 48 89 45 df 48 8d 55 e7 e8 fa f1 ce fb 48 8d 57 70 4c 8b c0 4c 8d 4d d7 e8 62 ae 2a fd 48 8d 4d e7 e8 91 63 76 fb 48 8d 45 b7 48 89 45 df 48 8d 8f 98 00 00 00 48 89 75 d7 48 8d 55 e7 e8 c5 f1 ce fb 48 8d 97 90 00 00 00 4c 8b c0 4c 8d 4d d7 e8 2a ae 2a fd", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudStockFontEvidence-20261023.md", "detail": "2026-10-23 default-build stock Engine initializer144ffd978 passes configured MediumFontName+78 to typed UFont loader1422a9970 with destination+70, then LargeFontName+98 with destination+90. Reflected Engine object properties1462d3af0/1462d35f8 independently encode offsets70/90 and UFont class thunk144aa35f8 ->1450a22b4 (/Script/Engine.Font). Complete89-byte NONCALLABLE window unique in exact installed disk, PE-mapped image and named import. Borrow already-loaded fields only; never call loader. Field names do not promise raster resolution: compare actual unit metrics and guard improved-source draw scale<=1. No older-build admission."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x051c803d",
+        "signature": {"bytes": "48 8d 4f 78 48 89 45 df 48 8d 55 e7 e8 0a 2b 9b fb 48 8d 57 70 4c 8b c0 4c 8d 4d d7 e8 92 58 49 fd 48 8d 4d e7 e8 89 77 5d fb 48 8d 45 b7 48 89 45 df 48 8d 8f 98 00 00 00 48 89 75 d7 48 8d 55 e7 e8 d5 2a 9b fb 48 8d 97 90 00 00 00 4c 8b c0 4c 8d 4d d7 e8 5a 58 49 fd", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older stock-loader chain and reflected /Script/Engine.Font object properties prove Small+50/Medium+70/Large+90. Unique complete89-byte NONCALLABLE configured Medium/Large load window; HUD only borrows loaded fields, never invokes loader/fallback. Actual unit measurements and capped improved-source scale required. Import-only: no older disk or gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_font_info_construct", "cpp_symbol": "SongHudFontInfoConstruct",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00b08498",
+        "signature": {"bytes": "48 89 5c 24 08 57 b8 80 00 00 00 e8 d8 36 66 01 48 2b e0 48 8b 84 24 b0 00 00 00 48 8b fa 48 89 11", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "Default owning local FontInfo58 constructor: RCX destination,RDX genuine retained UFont,R8D signed size,R9 borrowed full FName64 pointer,stack fifth borrowed Outline20. Native ownership, outside-GC game-thread admission and poison-on-uncertain-construction required. Unique import/disk/mapped exact window; no global font or Canvas mutation."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x008d3b2c",
+        "signature": {"bytes": "48 89 5c 24 08 57 b8 80 00 00 00 e8 f4 b3 7d 01 48 2b e0 48 8b 84 24 b0 00 00 00 48 8b fa 48 89 11", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "Independent older owning FontInfo58 constructor, same Win64 five-argument ABI, genuine typeface/Outline20 and retained font provider. Unique complete older-import window; no old disk authentication or runtime-source/visual acceptance. Native currentness and conservative ownership/fault handling remain required."}]
+      }}
+    },{
+      "id": "song_hud_item_measure", "cpp_symbol": "SongHudItemMeasure",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x05019964",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55 48 8d 6c 24 80 b8 80 01 00 00 e8 fd 21 15 fd 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "Default item own measure vtable+38: RCX initialized item,RDX Vec2f output,XMM2 float font_scale (same native Canvas DPI as emission), returns output. Runtime branch copies local optional FontInfo and uses native measure service, applies local item scale. Matching actual size-keyed pixel metrics, not legacy unit metrics times geometry scale. Unique import/disk/mapped window."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x051e0f7c",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 48 89 7c 24 20 55 48 8d 6c 24 80 b8 80 01 00 00 e8 95 df ec fc 48 2b e0", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "Recovered from older item vtable+38: initialized item, Vec2f output, XMM2 float actual Canvas DPI, output returned. Owner-aware optional FontInfo measurement and unit local geometry match draw. Unique complete import-only window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_canvas_dpi", "cpp_symbol": "SongHudCanvasDpi",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x009edd00",
+        "signature": {"bytes": "80 b9 94 00 00 00 00 0f 85 e9 04 b6 01 c5 fa 10 81 a4 00 00 00 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "Default native float(FCanvas*) getter: byte+94 clear returns float+a4, cold branch one. Runtime emission14120a73c obtains exactly this scale and passes XMM2 to character-list cache at14120a86e/883; measure must use same scale. No Windows DPI or invented field getter. Unique import/disk/mapped window."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00cc3b58",
+        "signature": {"bytes": "80 b9 94 00 00 00 00 0f 85 71 ab c4 01 c5 fa 10 81 a4 00 00 00 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "Independent older float(FCanvas*) getter: byte+94 clear uses float+a4, cold branch native one. Older Runtime emission uses this same value for size-keyed character list lookup; measurement must match. Unique import-only complete window, no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_cache_dispatch", "cpp_symbol": "SongHudFontCacheDispatch",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x0120a240",
+        "signature": {"bytes": "b8 28 00 00 00 e8 36 19 f6 00 48 2b e0 48 8b 81 48 01 00 00 44 0f b6 50 30 45 85 d2 74 10 41 83 fa 01 75 05 e8 3b 04 00 00 48 83 c4 28 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "NONCALLABLE verifier: genuine item Font+148, UFont cache byte+30; Offline0,Runtime1. Independent reflected enum/property proof retained in evidence. Only Runtime permits optional local FontInfo override; observation is not mutation authority. Unique default import/disk/mapped window."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x0095e13c",
+        "signature": {"bytes": "b8 28 00 00 00 e8 ea 0d 75 01 48 2b e0 48 8b 81 48 01 00 00 44 0f b6 50 30 45 85 d2 74 10 41 83 fa 01 75 05 e8 cb c7 ff ff 48 83 c4 28 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE older item vtable+40 dispatch: Font+148, UFont cache byte+30, Offline0/Runtime1 split independently recovered. Runtime availability must be checked in current qualified frame. Unique import-only complete window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_info_layout", "cpp_symbol": "SongHudFontInfoLayout",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00b084dd",
+        "signature": {"bytes": "49 8b 01 48 89 41 40 44 89 41 48 c7 41 4c 00 00 00 00 c6 41 50 03", "mask": "xxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "NONCALLABLE native ctor layout: full typeface FName64 copied to+40,size int32+48,spacing+4c zero,fallback+50 three. Payload58 and native owner pair+30/+38; do not memcpy owners or mutate UFont. Unique default import/disk/mapped window."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x008d3b71",
+        "signature": {"bytes": "49 8b 01 48 89 41 40 44 89 41 48 c7 41 4c 00 00 00 00 c6 41 50 03", "mask": "xxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE older ctor stores full FName64+40, signed size+48, zero spacing+4c, fallback3+50. FontInfo58 native ownership/layout independently matches consumed adapter. Unique import-only complete window, no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_optional_layout", "cpp_symbol": "SongHudFontOptionalLayout",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x050199b9",
+        "signature": {"bytes": "0f b6 4a 30 85 c9 0f 84 15 01 00 00 83 f9 01 0f 85 84 01 00 00 48 8d 87 50 01 00 00 80 78 58 00 74 16 48 8b d0 48 8d 4d 10 e8 dd ee ae fb", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextEvidence-20261023.md", "detail": "NONCALLABLE Runtime item measurement tests optional payload+150/initialized+1a8 and copies it through native owner-aware140b088c4, like emission. Local optional mark only after successful construction; existing owning item destructor releases it. Unique default import/disk/mapped window."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x051e0fd1",
+        "signature": {"bytes": "0f b6 4a 30 85 c9 0f 84 15 01 00 00 83 f9 01 0f 85 84 01 00 00 48 8d 87 50 01 00 00 80 78 58 00 74 16 48 8b d0 48 8d 4d 10 e8 59 2f 6f fb", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE older Runtime measure verifies optional item+150/initialized+1a8 and performs native owning copy. Native measure and emission use same local size-keyed payload, not legacy geometry magnification. Unique import-only complete window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_typeface_source", "cpp_symbol": "SongHudFontTypefaceSource",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x050199f9",
+        "signature": {"bytes": "44 8b 82 3c 01 00 00 48 8d 44 24 30 4c 8d 8a 40 01 00 00 48 89 44 24 20 48 8d 4c 24 58 c7 44 24 30 00 00 00 00 c5 f8 11 44 24 40 66 c7 44 24 34 00 00 48 c7 44 24 38 00 00 00 00 e8 5f ea ae fb", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextAdapterEvidence-20261023.md", "detail": "NONCALLABLE default native measurement fallback constructs FontInfo using genuine UFont+140 address as R9 FName64 pointer; same constructor copies64 bits at payload+40. UFont+13c size is explanatory only, not read/written by adapter. Defaults use zero Outline first16/black alpha1 last16. Complete64-byte window unique import/raw/mapped."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x051e1011",
+        "signature": {"bytes": "44 8b 82 3c 01 00 00 48 8d 44 24 30 4c 8d 8a 40 01 00 00 48 89 44 24 20 48 8d 4c 24 58 c7 44 24 30 00 00 00 00 c5 f8 11 44 24 40 66 c7 44 24 34 00 00 48 c7 44 24 38 00 00 00 00 e8 db 2a 6f fb", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE independent older measure fallback passes genuine UFont+140 typeface address to owning constructor; explanatory legacy size+13c is not mutated. Native outline defaults and full64-bit face source match adapter. Unique import-only complete window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_optional_init", "cpp_symbol": "SongHudFontOptionalInit",
+      "kind": "call_site", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00aee32b",
+        "signature": {"bytes": "48 89 b3 48 01 00 00 48 8b 74 24 38 c6 83 a8 01 00 00 00 c7 43 14 02 00 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextAdapterEvidence-20261023.md", "detail": "NONCALLABLE ordinary owning item ctor installs genuine Font+148 and clears optional initialized byte+1a8. Construct local payload+150 only while uninitialized, mark only after native ctor success; no shared state. Complete26-byte window unique import/raw/mapped."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x00e6db8b",
+        "signature": {"bytes": "48 89 b3 48 01 00 00 48 8b 74 24 38 c6 83 a8 01 00 00 00 c7 43 14 02 00 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE independent older owning item constructor stores Font+148 and clears optional initialized+1a8. Local FontInfo payload+150 may be marked only after successful native construction. Unique import-only complete window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_optional_destroy", "cpp_symbol": "SongHudFontOptionalDestroy",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/menu_theme_native.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x027b4d18",
+        "signature": {"bytes": "b8 28 00 00 00 e8 5e 6e 9b ff 48 2b e0 80 79 58 00 74 0d c6 41 58 00 48 83 c1 30 e8 38 e9 fd fd 48 83 c4 28 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudSharpTextAdapterEvidence-20261023.md", "detail": "NONCALLABLE destructor-chain verifier: existing admitted owning item dtor calls1427b4d18(item+150), tests/clears optional+58 then releases shared owner pair+30 via140793670 before FText destruction. Never invoke independently. Complete37-byte window unique import/raw/mapped. Native faults/authority loss with owners poison without unsafe cleanup."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x02b33450",
+        "signature": {"bytes": "b8 28 00 00 00 e8 d6 ba 57 ff 48 2b e0 80 79 58 00 74 0d c6 41 58 00 48 83 c1 30 e8 28 9c c5 fd 48 83 c4 28 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderRuntimeFontEvidence-20261023.md", "detail": "NONCALLABLE older existing item-dtor chain tests/clears payload+58 then releases shared CompositeFont pair+30 before FText release. Never call independently or clean uncertain owners after fault/authority loss. Unique import-only complete window; no old disk/gameplay claim."}]
+      }}
+    },{
+      "id": "song_hud_font_measure", "cpp_symbol": "SongHudFontMeasure",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "callable",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_hud_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x05011658",
+        "signature": {"bytes": "b8 38 00 00 00 e8 1e a5 15 fd 48 2b e0 49 83 c8 ff 49 ff c0 66 42 83 3c 42 00 75 f5 48 8d 44 24 50 45 33 c9 48 89 44 24 28 c7 44 24 20 02 00 00 00 e8 9a af 00 00 48 83 c4 38 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_hud_runtime.cpp", "detail": "2026-10-23 read-only Ghidra ff7rebirth_.exe-9457d4 / 1.005: K2_TextSize string1462b6f50 registration146a73320 -> exec1450806b0 constructs 0x28-byte FontRenderInfo, calls145011658. Complete wrapper bytes recovered: RCX info, RDX null-terminated UTF16; wrapper counts code units, invokes14501c628 with R8 length,R9=0,stack limit mode2/output count. Body writes width+8,height+c; scale+10/+14,font+18,spacing+20/+24. Unit-scale native glyph/kerning measurement only, no Canvas submission or arbitrary font scaling. Not independently recovered on older build."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x051d9b04",
+        "signature": {"bytes": "b8 38 00 00 00 e8 22 54 ed fc 48 2b e0 49 83 c8 ff 49 ff c0 66 42 83 3c 42 00 75 f5 48 8d 44 24 50 45 33 c9 48 89 44 24 28 c7 44 24 20 02 00 00 00 e8 c6 a2 00 00 48 83 c4 38 c3", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older K2_TextSize: unique complete wrapper, measure-info28 and UTF16 ABI, native unit glyph/kerning measurement and font+18 verified. Uniform metric/draw scaling retained; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_root_initialization", "cpp_symbol": "SongHudRootInitialization",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_hud_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x039a3bec",
+        "signature": {"bytes": "45 33 ed 48 8b fa 4c 8b f1 48 85 d2 0f 84 7a 0c 00 00 4c 8d 61 08 49 8b cc e8 46 0c e9 fc 83 c8", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudNativeEvidence.md", "detail": "2026-10-23 same 1.005 import: initializer1439a3bbc incoming RDX widget assigned weak at component+8 through140834850; signature starts1439a3bec, includes LEA R12,[RCX+8]/weak assign. Research establishes controller component+6f0, weak+6f8, gameplay title1439b8cf8 typed Pnl_MusicTitle/EndCanvasPanel and Txt_MusicTitle/EndTextBlock. Concrete Blueprint name deliberately unknown; typed UserWidget/WidgetTree and fresh Slots/Content containment required. No independent older-build recovery."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x03c4ab34",
+        "signature": {"bytes": "45 33 ed 48 8b fa 4c 8b f1 48 85 d2 0f 84 7a 0c 00 00 4c 8d 61 08 49 8b cc e8 62 ad cb fd 83 c8 ff", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older controller component initializer: unique complete NONCALLABLE window proves incoming widget weak assignment at component+8/controller+6f8. Typed title/panel setter and positive-root ownership recovered; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_widget_opacity", "cpp_symbol": "SongHudWidgetOpacity",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_hud_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x04a7c040",
+        "signature": {"bytes": "40 53 b8 40 00 00 00 e8 34 fb 6e fd 48 2b e0 48 8d 54 24 20 48 8b d9 c5 f8 29 74 24 30 e8 c6 87", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.cpp", "detail": "2026-10-23 same 1.005 import: GetRenderOpacity string14625f620 registration146855420 -> exec144ad54e8 ->144a7c040. Body borrows same preferred/fallback widget Slate pair via140b14828, reads live Slate+1c8 (fallback UObject+c4 only without Slate). New HUD reads live Slate opacity for title and all bounded parents, rejects nonfinite/out-of-range/zero, rereads unchanged; no callable invocation or fallback cached property."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x04c98328",
+        "signature": {"bytes": "40 53 b8 40 00 00 00 e8 fc 6b 41 fd 48 2b e0 48 8d 54 24 20 48 8b d9 c5 f8 29 74 24 30 e8 76 6f cd fb", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older GetRenderOpacity: unique complete NONCALLABLE entry; live Slate opacity+1c8 and preferred/fallback shared-pair layout verified. No UObject fallback or delegate invocation; no older disk/gameplay verification."}]
+      }}
+    },{
+      "id": "song_hud_widget_visibility", "cpp_symbol": "SongHudWidgetVisibility",
+      "kind": "function", "subsystem": "song_hud", "requirement": "optional",
+      "validation": {"policy": "signature"}, "install_policy": "signature_only",
+      "status": "production", "hook_owner": null, "hook_spec": null,
+      "consumers": ["src/game/song_hud_runtime.cpp"],
+      "builds": {"ff7rebirth-steam-win64-6a16ced2": {
+        "rva": "0x00b146a4",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 c7 74 65 01 48 2b e0 48 83 b9 e8 00 00 00 00", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "src/game/song_preview_anchor.cpp", "detail": "2026-10-23 same 1.005 import: GetVisibility string146242580 registration146855450 -> exec144ad5670 ->140b146a4. Native borrows widget preferred/fallback pairs, evaluates bound Slate visibility only when+1c0!=0 and+1b8!=null; caches value+1b0. Constants146f13140..144 =04 11 02 01 19, respectively Hidden,SelfHitTestInvisible,Collapsed,HitTestInvisible,Visible. HUD read-only path rejects bound attributes, accepts only19/11/01 and rereads all parent facts; no stale UObject+c3 fallback."}]
+      }, "ff7rebirth-steam-win64-68fd6fde": {
+        "rva": "0x0096f134",
+        "signature": {"bytes": "48 89 5c 24 10 48 89 74 24 18 57 b8 20 00 00 00 e8 e7 fd 73 01 48 2b e0 48 83 b9 e8 00 00 00 00 48 8b f1", "mask": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+        "evidence": [{"type": "static_import_contract", "path": "analysis/SongHudOlderBuildEvidence-20261023.md", "detail": "Independent older GetVisibility: unique complete NONCALLABLE entry; Slate visibility+1b0, bound fields+1b8/+1c0 and 04/11/02/01/19 constants verified. Bound visibility rejected, no older disk/gameplay verification."}]
+      }}
+    },{
       "id": "fcanvas_draw_shadowed_string_default_black",
       "cpp_symbol": "FCanvasDrawShadowedStringDefaultBlack",
       "kind": "function",

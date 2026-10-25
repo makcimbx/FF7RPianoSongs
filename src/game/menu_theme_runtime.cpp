@@ -1,4 +1,5 @@
 #include "game/menu_theme_runtime.h"
+#include "game/song_hud_runtime.h"
 
 #include "core/logging.h"
 #include "core/pe_image.h"
@@ -2594,7 +2595,7 @@ void ready(void* list, std::uint64_t notified_generation, const void* frame,
     // The poller holds this only for bounded value copies, never posting or native work.
     // Do not lose a close/Ready transition merely because it sampled concurrently.
     std::unique_lock lock(state.mutex);
-    if (!state.configured || state.themes.size() < 2 || state.compromised.load()) return;
+    if (!state.configured || state.compromised.load()) return;
     const auto session = capture_ready_menu_session(); event.generation = session.generation;
     metrics::annotate({session.generation});
     if (!session || session.list != list || session.generation != notified_generation) return;
@@ -2608,6 +2609,7 @@ void ready(void* list, std::uint64_t notified_generation, const void* frame,
         } else {
             invalidate_preparation(); state.subjects.clear();
             state.owner = session; state.owner_thread = scope.thread; state.applied = 0; state.themes[0].available = true;
+            prepare_song_hud_covers(scope.authority());
             state.diagnostic_ready_ns = diagnostic_started; state.diagnostic_ready_generation = session.generation;
             publish_song_preview_palette(session.generation, {});
             state.preparation_facts = {}; state.preparation_facts.generation = session.generation;

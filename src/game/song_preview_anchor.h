@@ -35,7 +35,9 @@ struct PreviewAnchorSource {
     std::uintptr_t root_pair = 0;
     std::uintptr_t row_widget = 0, list_widget = 0;
     std::uint32_t strong_count_offset = 0;
+    bool require_visible_paint = false;
 };
+struct PreviewAnchorPresentation { float opacity = 0, ui_scale = 0; };
 struct PreviewAnchorVerifier {
     std::string_view name;
     std::uintptr_t address = 0;
@@ -50,9 +52,11 @@ bool validate_preview_anchor_gate(const PreviewAnchorGate& gate, const PreviewAn
     std::string_view& failure) noexcept;
 
 void configure_song_preview_anchor(HMODULE module) noexcept;
+std::uintptr_t song_preview_anchor_root_pair() noexcept;
 // Borrows only within PostRender. No pin/unpin, native calls, or registry scanning.
 bool read_preview_anchor(const PreviewAnchorSource& source, const PreviewAnchorRead& read,
     const std::function<bool()>& identity_current,
-    float canvas_width, float canvas_height, PreviewSelectedRowBounds& out) noexcept;
+    float canvas_width, float canvas_height, PreviewSelectedRowBounds& out,
+    PreviewAnchorPresentation* presentation = nullptr) noexcept;
 
 } // namespace ff7r::piano::game

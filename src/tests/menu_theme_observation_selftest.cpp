@@ -354,6 +354,16 @@ int main()
     facts = healthy; facts.caller = facts.expected_caller = 0;
     facts.session.phase = game::MenuSessionPhase::Closing;
     require(obs::classify_native_facts(facts) == Failure::Session, "facts require current Ready session");
+    facts.session={}; facts.expected_generation=0;
+    require(obs::classify_engine_facts(facts)==Failure::None
+        && obs::classify_native_facts(facts)==Failure::Session,
+        "gameplay engine facts do not manufacture Ready-menu authority");
+    facts.garbage_collecting=1;
+    require(obs::classify_engine_facts(facts)==Failure::GarbageCollecting,"gameplay still rejects GC");
+    facts.garbage_collecting=0; facts.native_thread=99;
+    require(obs::classify_engine_facts(facts)==Failure::WrongThread,"gameplay still requires actual engine game thread");
+    facts.native_thread=facts.current_thread; facts.complete=false;
+    require(obs::classify_engine_facts(facts)==Failure::Incomplete,"gameplay cannot use an incomplete capture");
     good.put(Fixture::items + 0x10, std::int32_t{0});
     const auto zero = snapshot();
     require(obs::classify(zero) == Failure::None && zero.package.diagnostic_zero_serial

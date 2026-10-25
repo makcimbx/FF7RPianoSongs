@@ -5,10 +5,12 @@
 #include <filesystem>
 #include <limits>
 #include <string_view>
+#include <utility>
 
 #include "chart_event_plan.h"
 #include "chord_voicing.h"
 #include "note_value.h"
+#include "song_display_metadata.h"
 
 namespace ff7rp::pipeline {
 namespace {
@@ -221,6 +223,14 @@ Status append_root_settings(std::string* out, const LoadedSong& song, const bool
     out->append("{\n  \"schema\": \"ff7rpianosongs.song.v2\",\n  \"title\": ");
     if (!append_escaped_json_string(out, config.title)) {
         return invalid_projection("title is not well-formed UTF-8");
+    }
+    for (const auto& [name, value] : {
+             std::pair{"album", &config.album},
+             std::pair{"author", &config.author}}) {
+        if (!valid_song_display_metadata(*value)) return invalid_projection("invalid display metadata");
+        if (value->empty()) continue;
+        out->append(",\n  \"").append(name).append("\": ");
+        if (!append_escaped_json_string(out, *value)) return invalid_projection("invalid display metadata");
     }
     out->append(",\n  \"bpm\": ");
     if (!append_number(out, config.bpm)) return invalid_projection("BPM is not renderable");

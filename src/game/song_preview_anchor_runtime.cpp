@@ -83,4 +83,8 @@ bool capture_song_preview_row_bounds(const SongPreviewRenderSnapshot& snapshot,
             reinterpret_cast<std::uintptr_t>(session.widget),8},read_native,identity_current,width,height,out);
     } catch (...) { return false; }
 }
+std::uintptr_t song_preview_anchor_root_pair() noexcept
+{
+    return g_root_pair.load(std::memory_order_acquire);
+}
 } // namespace ff7r::piano::game

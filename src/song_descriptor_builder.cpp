@@ -87,6 +87,8 @@ game::SongDescriptor build_song_descriptor(
         descriptor.chord_voicings.push_back({voicing.chord_id, voicing.sound_ids});
     descriptor.id = song.id;
     descriptor.title = core::widen(song.config.title);
+    descriptor.album = core::widen(song.config.album);
+    descriptor.author = core::widen(song.config.author);
     descriptor.visible_index = visible_index;
     descriptor.base_slot = 0;
     descriptor.unique_index = 0;

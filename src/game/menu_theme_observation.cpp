@@ -380,6 +380,13 @@ Failure classify_native_facts(const Snapshot& s) noexcept
     if (!s.complete) return Failure::Incomplete;
     return classify_thread_package_facts(s);
 }
+Failure classify_engine_facts(const Snapshot& s) noexcept
+{
+    if (s.failure != Failure::None) return s.failure;
+    if (!s.authenticated) return Failure::UnsupportedImage;
+    if (!s.complete) return Failure::Incomplete;
+    return classify_thread_package_facts(s);
+}
 Failure classify(const Snapshot& s) noexcept
 {
     const auto failure = classify_session_facts(s);
@@ -410,7 +417,7 @@ static bool facts_identity_access(obj::UObjectIdentityAccess& access) noexcept
     return capture_current_uobject_identity_access(access);
 }
 static Snapshot capture_impl(HMODULE module, std::string_view profile, std::uint64_t generation,
-    Address caller, bool open_provenance = true)
+    Address caller, bool open_provenance = true, bool require_session = true)
 {
     Snapshot s{}; s.expected_generation = generation; s.caller = caller;
     s.current_thread = GetCurrentThreadId();
@@ -424,8 +431,8 @@ static Snapshot capture_impl(HMODULE module, std::string_view profile, std::uint
         if (!facts_image(authentication, module, process_image, profile, s, image, authenticate_module)) return s;
     }
     if (open_provenance) s.expected_caller = image.base + rva::PianoMenuListOpenCall + 5;
-    if (!generation || s.session.generation != generation || s.session.phase != MenuSessionPhase::Ready
-        || !s.session.widget) { fail(s, Failure::Session, "ready_generation"); return s; }
+    if (require_session && (!generation || s.session.generation != generation || s.session.phase != MenuSessionPhase::Ready
+        || !s.session.widget)) { fail(s, Failure::Session, "ready_generation"); return s; }
     if (open_provenance && caller != s.expected_caller) {
         fail(s, Failure::Caller, "open_return_site"); return s;
     }
@@ -451,6 +458,13 @@ Snapshot capture_native_facts(HMODULE module, std::string_view profile, std::uin
     catch (...) {
         Snapshot s{}; s.expected_generation = generation;
         fail(s, Failure::ObserverException, "capture_exception"); return s;
+    }
+}
+Snapshot capture_engine_facts(HMODULE module, std::string_view profile) noexcept
+{
+    try { return capture_impl(module, profile, 0, 0, false, false); }
+    catch (...) {
+        Snapshot s{}; fail(s, Failure::ObserverException, "engine_capture_exception"); return s;
     }
 }
 void report(const Snapshot& before, const Snapshot& after) noexcept

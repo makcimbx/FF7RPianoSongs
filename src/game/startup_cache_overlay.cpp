@@ -1,4 +1,5 @@
 #include "game/startup_cache_overlay.h"
+#include "game/song_hud_runtime.h"
 
 #include "core/hooks.h"
 #include "core/logging.h"
@@ -279,6 +280,7 @@ void render_callback(void* viewport, void* canvas) noexcept
     (void)g_renderer->render(viewport, canvas, now);
     // Startup hiding never retires the shared PostRender owner or preview rendering.
     render_preview_badge(viewport, canvas, now);
+    render_song_hud(viewport, canvas, production_draw, production_draw_tile);
 }
 
 void __fastcall post_render_detour(void* viewport, void* canvas) noexcept
@@ -562,6 +564,7 @@ bool install_startup_cache_overlay(HMODULE exe_module,
             return false;
         }
         configure_song_preview_anchor(exe_module);
+        configure_song_hud(exe_module);
         g_callback_gate.open();
         log_overlay_noexcept(core::LogLevel::Info, "[startup_overlay] status=installed");
         return true;

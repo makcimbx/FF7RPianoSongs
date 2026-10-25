@@ -43,6 +43,9 @@ int main()
         require(map_preview_anchor_geometry(row,list,cull,root,2560,1440,out),"live bottom-row mapping");
         require(std::abs(out.row.x-1674.6667f)<.01f && std::abs(out.row.y-642.6667f)<.01f
             && std::abs(out.inherited_cull.x-1634.6667f)<.01f,"native inverse, no extra DPI");
+        require(std::abs(out.panel.x-1661.3333f)<.01f && std::abs(out.panel.y-157.3333f)<.01f
+            && std::abs(out.panel.width-688.0f)<.01f && std::abs(out.panel.height-562.6667f)<.01f,
+            "complete panel is copied separately from wider and vertically clipped cull");
         require(preview_badge_layout(out,2560,1440).has_value(),"observed margin fits24px badge");
         auto hd=root; hd.output_width=1920; hd.output_height=1080; hd.viewport_scale=1;
         require(map_preview_anchor_geometry(row,list,cull,hd,1920,1080,out)
@@ -52,6 +55,7 @@ int main()
             && preview_badge_layout(out,2560,1440),"first scroll position");
         top.ty=220;
         require(!map_preview_anchor_geometry(top,list,cull,root,2560,1440,out),"partial scroll hidden");
+        require(out.panel.width==0 && out.panel.height==0,"failed mapping clears copied panel");
         auto mismatch=root; mismatch.origin_x=1;
         require(!map_preview_anchor_geometry(row,list,cull,mismatch,2560,1440,out),"nonzero origin unsupported");
         mismatch=root; mismatch.output_width=2550;
@@ -81,14 +85,47 @@ int main()
         memory.put(0x6038,list_pair); memory.put(0x8038,root_pair);
         const PreviewAnchorRead read=[&](auto a,auto o,auto s){return memory.read(a,o,s);};
         require(read_preview_anchor(source,read,[]{return true;},2560,1440,out),"preferred + fallback shared widgets");
+        require(std::abs(out.panel.x-1661.3333f)<.01f && std::abs(out.panel.height-562.6667f)<.01f,
+            "qualified anchor publishes complete panel");
         const int successful_reads=memory.reads;
+        auto hud_source=source; hud_source.require_visible_paint=true;
+        PreviewAnchorPresentation paint;
+        require(!read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint),
+            "gameplay omits absent current visibility/opacity, unlike existing preview");
+        for (auto p:{0x2000u,0x6000u,0x8000u}) {
+            memory.put(p+0x1b0,std::uint8_t{25});
+            memory.put(p+0x1c0,std::int32_t{0});
+            memory.put(p+0x1c8,1.0f);
+        }
+        require(read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint)
+            && paint.opacity==1 && paint.ui_scale==root.viewport_scale,"immediate visible gameplay paint");
+        memory.put(0x81c8,.5f);
+        require(read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint)
+            && paint.opacity==.5f,"fresh ancestor opacity composes into artwork");
+        memory.put(0x81b0,std::uint8_t{4});
+        require(!read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint)
+            && paint.opacity==0,"hidden ancestor immediately omits gameplay");
+        memory.put(0x81b0,std::uint8_t{17}); memory.put(0x81c8,1.0f);
+        require(read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint),
+            "delayed resume visible paint accepted without a timer");
+        memory.put(0x61c0,std::int32_t{1});
+        require(!read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint),
+            "bound visibility is not evaluated or trusted from stale cache");
+        memory.put(0x61c0,std::int32_t{0});
+        memory.put(0x21c8,std::numeric_limits<float>::quiet_NaN());
+        require(!read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint),"nonfinite root opacity omitted");
+        memory.put(0x21c8,1.0f);
+        int opacity_reads=0;
+        memory.mutate=[&](int) { if(memory.last_address==0x61c8 && ++opacity_reads==2) memory.put(0x61c8,.25f); };
+        require(!read_preview_anchor(hud_source,read,[]{return true;},2560,1440,out,&paint),"opacity drift clears copied anchor");
+        memory.mutate={}; memory.put(0x61c8,1.0f);
         memory.put(0x6038,root_pair);
         require(!read_preview_anchor(source,read,[]{return true;},2560,1440,out),"row under same root but unrelated to active list");
         memory.put(0x6038,list_pair);
         for (int n=1;n<=successful_reads;++n) {
             memory.reads=0; memory.fail_at=n;
             require(!read_preview_anchor(source,read,[]{return true;},2560,1440,out),"every failed native copy hides");
-            require(out.row.width==0,"failure clears output");
+            require(out.row.width==0 && out.panel.width==0,"failure clears row and panel output");
         }
         memory.fail_at=0; memory.reads=0;
         std::array<Pair,30> chain{};

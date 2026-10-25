@@ -10,6 +10,9 @@ FF7RPianoSongs adds user-authored piano songs to Final Fantasy VII Rebirth.
 This is an unofficial community project and is not affiliated with or endorsed
 by Square Enix.
 
+Development changes not yet in the published version are listed under
+[Unreleased](CHANGELOG.md#unreleased).
+
 ## Requirements
 
 - Final Fantasy VII Rebirth on Windows x64. Each download supports one game build and the game version is part of its file name, so pick the download that matches your installed game. A download built for a different game version refuses to run rather than guessing.
@@ -40,6 +43,7 @@ End/Binaries/Win64/
     song.json                      (settings and optional hand-authored notes)
     song.wav                       (required audio; .mp3 or .flac also accepted)
     song.mid                       (or song.midi; transcribed from the audio when missing)
+    cover.png                      (optional song-card artwork)
     song.mode1.wav                 (optional alternate audio; .mp3/.flac also accepted)
     song.mode2.wav                 (optional alternate audio; .mp3/.flac also accepted)
 ```
@@ -77,6 +81,36 @@ and the full settings/chord reference.
 - For a song with several profiles, use D-pad left/right or the keyboard arrow keys in its detail view. Scores are stored separately for each actual profile.
 - Older score sections ending in `.difficulty.<number>` are retained but not imported automatically: their names can also belong to another song. New scores use separate song/profile identities; ambiguous old records require manual attribution.
 - If a song is missing, it was rejected safely. Check `End/Binaries/Win64/FF7RPianoSongs.log` for the reason.
+
+### Song card
+
+During a custom song, a compact card accompanies the game's top-right title:
+optional artwork, album, BPM, duration and the person who prepared the chart or
+arrangement for the mod. The tempo, time and preparer have small pictograms.
+
+- Put `cover.png` beside `song.json`. A square image is recommended; the mod adds
+  rounded corners and a fine frame without changing your source image.
+- Add optional `album` and `author` strings at the root of `song.json`.
+  `author` is the song's preparer, not a separate recording-artist/composer credit.
+  Leave unknown values out; there are no placeholder labels.
+- BPM and duration come from the prepared song. Do not add a `duration` or `cover`
+  JSON field. `artist` is no longer accepted.
+- Close and restart the game after editing song files or artwork. Artwork changes
+  do not require deleting audio/chart caches. Long labels are shortened when they
+  cannot fit beside the other fields.
+
+Missing or invalid artwork does not prevent playback. If the mod cannot safely
+read the game's current HUD, it omits the card rather than blocking the song.
+See [cover and display credits](docs/SongFormat.md#cover-and-display-credits)
+for a complete example and image limits.
+
+### Menu themes
+
+Themes change the piano-song menu's images, colors and preview badge; **Original**
+keeps the game's styling. Install themes under `End/Binaries/Win64/Themes/` and
+use the controls in [Settings](#settings). See the bundled
+[Themes Guide](ThemesGuide.md) for the example themes and authoring instructions.
+Themes and per-song `cover.png` artwork are independent.
 
 ### Autoplay
 
@@ -179,6 +213,15 @@ the game is running. Source changes produce separate content identities.
 - `prepared` and native `ready` log entries establish artifact/runtime admission,
   not correct notes or every playback transition. Report a wrong chart, denied
   activation or failed song switch even when the cache finished successfully.
+
+**The song plays, but its card or cover is missing**
+
+- Use the exact `cover.png` filename beside that song's `song.json`, not inside
+  `.cache/` or a theme folder. Check the image limits in the Song Format guide.
+- `album` and `author` belong at the JSON root, not inside a difficulty profile.
+  Empty or omitted values stay hidden. Remove an old experimental `artist` field.
+- Restart after edits. Keep the log when reporting a missing card; artwork and
+  HUD checks can fail independently of successful song playback.
 
 **Some MIDI notes have no playable input**
 

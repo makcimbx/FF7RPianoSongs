@@ -94,6 +94,9 @@ struct ChordVoicing {
 struct SongConfig {
     std::string schema;
     std::string title;
+    // Source-owned display credits; restored after reading the binary runtime cache.
+    std::string album;
+    std::string author;
     double bpm = 0.0;
     int difficulty = 1;
     std::vector<int> score_thresholds{0, 1200, 2400, 3600};

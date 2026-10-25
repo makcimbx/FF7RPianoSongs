@@ -295,6 +295,35 @@ int test_note_values()
 
 int main(int argc, char** argv)
 {
+    {
+        using namespace ff7rp::pipeline;
+        const std::string prefix = R"({"schema":"v2","title":"Metadata",)";
+        SongConfig config;
+        if (!parse_song_json_string(prefix + R"("album":"\u65e5\u672c","author":"\uD834\uDD1E"})", &config).ok() ||
+            config.album != "\xe6\x97\xa5\xe6\x9c\xac" ||
+            config.author != "\xf0\x9d\x84\x9e") return fail("Unicode display metadata did not parse");
+        if (!parse_song_json_string(R"({"schema":"v2","title":"Old song"})", &config).ok() ||
+            !config.album.empty() || !config.author.empty())
+            return fail("absent display metadata changed old input");
+        if (parse_song_json_string(prefix + R"("artist":"Unsupported"})", &config).ok())
+            return fail("removed artist field accepted by the closed source contract");
+        for (const char* field : {"album", "author"}) {
+            for (const std::string value : {std::string("\"\""), "\"" + std::string(256, 'a') + "\""}) {
+                if (!parse_song_json_string(prefix + "\"" + field + "\":" + value + "}", &config).ok())
+                    return fail("empty/boundary display metadata rejected");
+            }
+            for (const std::string value : {
+                     std::string("null"), std::string("42"), std::string("true"), std::string("[]"), std::string("{}"),
+                     std::string(R"("line\nline")"), std::string(R"("tab\ttext")"), std::string(R"("\u0000")"),
+                     std::string(R"("\u007f")"), std::string(R"("\u0085")"), std::string(R"("\u2028")"), std::string(R"("\u2029")"),
+                     "\"" + std::string(257, 'a') + "\"", std::string("\"\xc0\xaf\""),
+                     std::string("\"\xed\xa0\x80\""), std::string("\"\xf4\x90\x80\x80\""),
+                     std::string("\"\xe2\x82\""), std::string(R"("\uD800")")}) {
+                if (parse_song_json_string(prefix + "\"" + field + "\":" + value + "}", &config).ok())
+                    return fail("invalid display metadata accepted: " + std::string(field));
+            }
+        }
+    }
     if (test_note_values() != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--note-values-only") return 0;
     if (std::string_view(ff7rp::pipeline::kPipelineCacheVersion)

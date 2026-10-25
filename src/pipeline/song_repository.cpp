@@ -876,6 +876,15 @@ Status load_song_directory(
     LoadedSong cached_song = song;
     report("runtime_cache_read_started");
     const bool runtime_cache_read = read_runtime_cache(&cached_song, native_assets);
+    if (runtime_cache_read) {
+        // Display-only fields remain source-owned, outside the binary cache layout.
+        cached_song.config.album = source_config.album;
+        cached_song.config.author = source_config.author;
+        for (auto& profile : cached_song.difficulty_profiles) {
+            profile.config.album = source_config.album;
+            profile.config.author = source_config.author;
+        }
+    }
     report(runtime_cache_read ? "runtime_cache_read" : "runtime_cache_rejected");
     const bool runtime_semantics_valid = runtime_cache_read &&
         runtime_profiles_semantically_valid(cached_song, native_assets);

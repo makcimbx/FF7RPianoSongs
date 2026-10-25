@@ -29,6 +29,8 @@ struct PreviewPixelBounds {
 };
 struct PreviewSelectedRowBounds {
     PreviewPixelBounds row, inherited_cull;
+    // Full mapped list/panel rectangle, not the inherited clipping intersection.
+    PreviewPixelBounds panel;
 };
 struct PreviewBadgeLayout {
     PreviewPixelBounds panel, waveform, progress;

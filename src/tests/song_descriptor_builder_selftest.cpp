@@ -101,6 +101,7 @@ bool descriptor_equal(const SongDescriptor& left, const SongDescriptor& right)
         if (left.chord_voicings[i].chord_id != right.chord_voicings[i].chord_id ||
             left.chord_voicings[i].sound_ids != right.chord_voicings[i].sound_ids) return false;
     if (left.id != right.id || left.title != right.title ||
+        left.album != right.album || left.author != right.author ||
         left.visible_index != right.visible_index || left.base_slot != right.base_slot ||
         left.unique_index != right.unique_index || left.difficulty != right.difficulty ||
         left.note_count != right.note_count || left.bpm != right.bpm ||
@@ -501,12 +502,18 @@ int main()
 
     LoadedSong single_profile;
     single_profile.config.title = "Solo";
+    single_profile.config.album = "\xe6\x97\xa5\xe6\x9c\xac";
+    single_profile.config.author = "Chart credit";
     single_profile.difficulty_profiles.push_back(profile_fixture(
         3, 77.0, chart_note("0_00", "Cn4", "", 3, 0, 0, 0)));
     const SongDescriptor single = ff7r::piano::build_song_descriptor(single_profile, 5);
     if (single.profiles.size() != 1 || single.profiles[0].title != L"Solo") {
         return fail("single-profile title unexpectedly gained a level suffix");
     }
+    single_profile.config.album.clear();
+    single_profile.config.author.clear();
+    if (single.album != L"\u65e5\u672c" || single.author != L"Chart credit")
+        return fail("display metadata projection lost Unicode or independent storage");
 
     if (ff7rp::pipeline::test_target_native_assets().has_verified_authored_chord_voicing()) {
         LoadedSong voiced;

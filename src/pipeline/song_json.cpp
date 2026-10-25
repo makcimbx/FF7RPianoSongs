@@ -1,5 +1,6 @@
 #include "song_json.h"
 #include "song_json_fields.h"
+#include "song_display_metadata.h"
 #include "chord_voicing.h"
 #include "pipeline_limits.h"
 
@@ -742,6 +743,18 @@ Status parse_song_json_string(const std::string& json,
     }
     if (config.title.empty()) {
         return Status::error(StatusCode::InvalidJson, "field 'title' must not be empty");
+    }
+
+    for (const auto& [name, target] : {
+             std::pair{"album", &config.album},
+             std::pair{"author", &config.author}}) {
+        if (!find_member(root, name)) continue;
+        status = require_string(root, name, target);
+        if (!status.ok()) return status;
+        if (!valid_song_display_metadata(*target)) {
+            return Status::error(StatusCode::InvalidJson,
+                std::string("field '") + name + "' must be single-line UTF-8, at most 256 bytes, without controls");
+        }
     }
 
     if (const JsonValue* bpm = find_member(root, "bpm")) {

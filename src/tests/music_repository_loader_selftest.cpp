@@ -2,6 +2,7 @@
 #include "pipeline/native_audio_artifacts.h"
 
 #include "core/logging.h"
+#include "core/theme.h"
 #include "pipeline/song_repository_detail.h"
 #include "tests/target_native_assets.h"
 #include "startup/startup_cache_progress.h"
@@ -528,6 +529,55 @@ MusicRepositoryPlan plan = ff7r::piano::startup::compose_music_repository(std::m
     const std::filesystem::path temp =
         std::filesystem::temp_directory_path() / "ff7rp_music_repository_loader_selftest";
     std::error_code ec;
+    {
+        const auto artwork_root = std::filesystem::path(temp.string() + "_cover");
+        std::filesystem::create_directories(artwork_root, ec);
+        const auto cover_path = artwork_root / "cover.png";
+        const auto with_artwork = [&] {
+            SongRepositoryResult discovery;
+            discovery.songs.push_back(song("artwork", "Artwork"));
+            discovery.songs.back().directory = artwork_root.string();
+            discovery.candidates.push_back(accepted("artwork", 0));
+            return ff7r::piano::startup::compose_music_repository(std::move(discovery));
+        };
+        std::filesystem::remove(cover_path, ec);
+        auto missing = with_artwork();
+        ok &= require(missing.ready_to_publish && missing.descriptors.size() == 1
+            && !missing.descriptors.front().cover, "missing artwork must not reject a song");
+        const std::string_view hex = "89504e470d0a1a0a0000000d4948445200000002000000010806000000f4227f8a"
+            "0000000e49444154789c63f8cfc000420d000f7a037e77e97f970000000049454e44ae426082";
+        {
+            std::ofstream stream(cover_path, std::ios::binary);
+            for (std::size_t i = 0; i < hex.size(); i += 2)
+                stream.put(static_cast<char>(std::stoul(std::string(hex.substr(i, 2)), nullptr, 16)));
+        }
+        auto artwork = with_artwork();
+        ok &= require(artwork.ready_to_publish && artwork.descriptors.size() == 1
+            && artwork.descriptors.front().cover && artwork.descriptors.front().cover->width == 2
+            && artwork.descriptors.front().cover->bgra.size() == 8, "owned artwork missing from descriptor");
+        {
+            const std::string_view square="89504e470d0a1a0a0000000d4948445200000020000000200806000000737a7af4"
+                "0000002f49444154789cedce2101000008033022128210b487183713f3ab9ebda412101010101010101010101010101010101048071ea6d6ac79d83ad5700000000049454e44ae426082";
+            std::ofstream stream(cover_path,std::ios::binary|std::ios::trunc);
+            for (std::size_t i=0;i<square.size();i+=2)
+                stream.put(static_cast<char>(std::stoul(std::string(square.substr(i,2)),nullptr,16)));
+        }
+        const auto rounded=with_artwork();
+        ok &= require(rounded.ready_to_publish && rounded.descriptors.front().cover
+            && rounded.descriptors.front().cover->width==32
+            && rounded.descriptors.front().cover->bgra[3]<255,
+            "offline descriptor artwork must include rounded alpha, without changing source PNG");
+        { std::ofstream stream(cover_path, std::ios::binary | std::ios::trunc); stream << "invalid PNG"; }
+        auto rejected_artwork = with_artwork();
+        ok &= require(rejected_artwork.ready_to_publish && rejected_artwork.descriptors.size() == 1
+            && !rejected_artwork.descriptors.front().cover
+            && std::any_of(rejected_artwork.events.begin(), rejected_artwork.events.end(), [](const auto& item) {
+                return item.text.starts_with("[song_cover] status=rejected id=artwork");
+            }), "invalid artwork must log independently without rejecting the song");
+        ok &= require(artwork.descriptors.front().cover && artwork.descriptors.front().cover->bgra.size() == 8,
+            "prepared artwork must survive file replacement");
+        std::filesystem::remove_all(artwork_root, ec);
+    }
     {
         const std::filesystem::path pool_root = temp.string() + "_worker_pool";
         std::filesystem::remove_all(pool_root, ec);

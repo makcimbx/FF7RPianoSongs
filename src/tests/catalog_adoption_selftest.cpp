@@ -17,6 +17,11 @@
 
 namespace game = ff7r::piano::game;
 namespace core = ff7r::piano::core;
+namespace ff7r::piano::game {
+void begin_song_hud_tick() noexcept {}
+void begin_song_hud_tick(void*) noexcept {}
+void observe_song_hud_controller(void*,void*,const PlaybackSnapshot&,int,int) noexcept {}
+}
 
 namespace {
 enum class Event : uint8_t { Tuple, Owner, Audio, Registry };

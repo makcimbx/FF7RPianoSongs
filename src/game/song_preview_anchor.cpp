@@ -95,6 +95,28 @@ bool unchanged(const PreviewAnchorSource& source, const PreviewAnchorRead& read,
     }
     return true;
 }
+bool presentation(const PreviewAnchorRead& read, const BorrowedWidget& widget, float& opacity)
+{
+    // HUD caller gates song_hud_widget_opacity / song_hud_widget_visibility; preview never opts in.
+    opacity = 1;
+    const auto sample = [&](const Pair& pair) {
+        std::uint8_t visibility = 0;
+        std::int32_t bound = -1;
+        float alpha = 0;
+        // Bound visibility needs native evaluation; the read-only route omits it.
+        if (!copy(read,pair.pointer,0x1c0,bound) || bound != 0
+            || !copy(read,pair.pointer,0x1b0,visibility)
+            || (visibility != 25 && visibility != 17 && visibility != 1)
+            || !copy(read,pair.pointer,0x1c8,alpha)
+            || !std::isfinite(alpha) || alpha <= 0 || alpha > 1) return false;
+        opacity *= alpha;
+        return opacity > .01f;
+    };
+    if (!sample(widget.slate)) return false;
+    for (std::size_t i=0;i<widget.parent_count;++i)
+        if (!sample(widget.parents[i].parent)) return false;
+    return true;
+}
 } // namespace
 
 bool validate_preview_anchor_gate(const PreviewAnchorGate& gate, const PreviewAnchorRead& read,
@@ -167,15 +189,17 @@ bool map_preview_anchor_geometry(const PreviewPaintGeometry& row,
     const float bottom = std::min(list_pixels.y+list_pixels.height,cull_pixels.y+cull_pixels.height);
     if (!std::isfinite(top) || !std::isfinite(bottom) || bottom<=top
         || row_pixels.y < top-tolerance || row_pixels.y+row_pixels.height > bottom+tolerance) return false;
-    out = {row_pixels,{cull_pixels.x,top,cull_pixels.width,bottom-top}};
+    out = {row_pixels,{cull_pixels.x,top,cull_pixels.width,bottom-top},list_pixels};
     return true;
 }
 
 bool read_preview_anchor(const PreviewAnchorSource& source, const PreviewAnchorRead& read,
     const std::function<bool()>& identity_current,
-    const float width, const float height, PreviewSelectedRowBounds& out) noexcept
+    const float width, const float height, PreviewSelectedRowBounds& out,
+    PreviewAnchorPresentation* projected) noexcept
 {
     out = {};
+    if (projected) *projected = {};
     if (!read || !identity_current || !source.strong_count_offset) return false;
     try {
         Pair root;
@@ -188,6 +212,8 @@ bool read_preview_anchor(const PreviewAnchorSource& source, const PreviewAnchorR
         if (std::none_of(row.parents.begin(),row.parents.begin()+row.parent_count,
             [&](const ParentLink& link) { return link.parent==list.slate; })) return false;
         PreviewSelectedRowBounds mapped;
+        float opacity=1, opacity_again=1;
+        if (source.require_visible_paint && !presentation(read,row,opacity)) return false;
         if (!map_preview_anchor_geometry(row.block.paint,list.block.paint,row.block.cull,
                 layout,width,height,mapped)) return false;
         Pair root_again;
@@ -195,8 +221,11 @@ bool read_preview_anchor(const PreviewAnchorSource& source, const PreviewAnchorR
             || !copy(read,source.root_pair,0,root_again) || root_again != root
             || !live(read,root_again,source.strong_count_offset)
             || !copy(read,root.pointer,0x318,again) || std::memcmp(&layout,&again,sizeof(layout)) != 0
-            || !identity_current()) return false;
+            || !identity_current()
+            || (source.require_visible_paint && (!presentation(read,row,opacity_again)
+                || opacity_again != opacity))) return false;
         out = mapped;
+        if (projected) *projected = {opacity,layout.viewport_scale};
         return true;
     } catch (...) { return false; }
 }

@@ -31,6 +31,15 @@ struct UCanvas {
 
 struct UEngine {
     static constexpr uintptr_t small_font = 0x50;
+    // Default-build stock font loader/typed reflection; independently gated by the HUD.
+    static constexpr uintptr_t medium_font = 0x70;
+    static constexpr uintptr_t large_font = 0x90;
+};
+
+// HUD optional Runtime-font contract; read only after its exact layout gates pass.
+struct UFont {
+    static constexpr uintptr_t cache_type = 0x30;
+    static constexpr uintptr_t legacy_typeface = 0x140;
 };
 
 struct FLinearColor {

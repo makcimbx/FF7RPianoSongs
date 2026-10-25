@@ -8,6 +8,7 @@
 #include <vector>
 
 namespace ff7rp::pipeline { struct NativeAudioArtifactSet; struct SongPreviewArtifact; }
+namespace ff7r::piano::core { struct ThemeImage; }
 
 namespace ff7r::piano::game {
 
@@ -61,6 +62,8 @@ struct SongChordVoicing {
 struct SongDescriptor {
     std::string id;
     std::wstring title;
+    std::wstring album;
+    std::wstring author;
     int visible_index = kUnresolvedVisibleIndex;
     int base_slot = 0;
     int unique_index = 0;
@@ -74,6 +77,8 @@ struct SongDescriptor {
     std::wstring sidecar_path;
     std::shared_ptr<const ff7rp::pipeline::NativeAudioArtifactSet> native_audio;
     std::shared_ptr<const ff7rp::pipeline::SongPreviewArtifact> preview;
+    // CPU-only owned thumbnail, prepared offline; not native texture readiness.
+    std::shared_ptr<const core::ThemeImage> cover;
     std::vector<SongDifficultyProfile> profiles;
     int default_profile_index = 0;
     std::vector<SongChordVoicing> chord_voicings;

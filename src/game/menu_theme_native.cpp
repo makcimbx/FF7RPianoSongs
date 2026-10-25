@@ -1,5 +1,7 @@
 #include "game/menu_theme_native.h"
+#include "game/song_preview_anchor.h"
 #include "game/menu_theme_metrics.h"
+#include "game/song_hud_runtime.h"
 
 #include "core/pe_image.h"
 #include "core/version_gate.h"
@@ -64,6 +66,29 @@ using TextureCreate = void* (__fastcall*)(std::int32_t, std::int32_t, std::int32
 using FindChild = void* (__fastcall*)(void*, const std::uint64_t*);
 using Assign = void* (__fastcall*)(void*, const void*);
 using Invalidate = void (__fastcall*)(void*, std::uint8_t);
+using HudString = runtime_layouts::FString;
+struct HudPosition { float x, y; };
+using HudTextFromString = void* (__fastcall*)(void*, const HudString*);
+using HudItemConstruct = void* (__fastcall*)(void*, const HudPosition*, const void*, void*,
+    const runtime_layouts::FLinearColor*);
+struct HudTextFunctions {
+    HudTextFromString from_string = nullptr;
+    HudItemConstruct construct = nullptr;
+    Unary destroy_text = nullptr, destroy_item = nullptr;
+    Binary submit = nullptr;
+    explicit operator bool() const noexcept {
+        return from_string && construct && destroy_text && destroy_item && submit;
+    }
+};
+using HudInfoConstruct = void* (__fastcall*)(void*,void*,std::int32_t,const std::uint64_t*,const void*);
+using HudItemMeasure = HudPosition* (__fastcall*)(void*,HudPosition*,float);
+using HudCanvasDpi = float (__fastcall*)(void*);
+struct HudSharpFunctions {
+    HudInfoConstruct construct = nullptr;
+    HudItemMeasure measure = nullptr;
+    HudCanvasDpi dpi = nullptr;
+    explicit operator bool() const noexcept { return construct && measure && dpi; }
+};
 enum class NativeClass : std::size_t { UserWidget, WidgetTree, Image, Pie, Tiled, ImageSet, Button, Text, Canvas, SongList, SpeedList, Count };
 constexpr auto kClassCount = static_cast<std::size_t>(NativeClass::Count);
 struct ClassSpec { const char* reference; Address slot, site; const wchar_t* name; bool umg; };
@@ -120,7 +145,10 @@ struct Record {
     Object package_class{}, holder_class{}, texture_class{};
     alignas(8) std::array<std::uint8_t, kOriginalCaptureByteCharge> local_brush{};
     bool bound = false, published = false;
+    DWORD creation_thread = 0;
+    std::uint32_t width = 0, height = 0;
 };
+std::uint64_t hud_title_name = 0, hud_panel_name = 0;
 // Reader policy caps, NOT recovered engine maxima.
 constexpr std::size_t kContainmentDepth = 32;
 constexpr std::int32_t kPanelSlots = 256, kAncestryIndex = 128;
@@ -255,6 +283,11 @@ struct State {
     std::uint64_t pending_payload = 0;
     RetainedRecords retained{};
     GenericFunctions generic{};
+    HudTextFunctions hud_text{};
+    HudSharpFunctions hud_sharp{};
+    std::array<core::ThemeImage,kSongHudIconCount> hud_icon_pixels{};
+    std::array<OwnedImage,kSongHudIconCount> hud_icons{};
+    std::array<bool,kSongHudIconCount> hud_icons_ready{};
     GenericNames generic_names{};
     Names carrier_names{}; // FName values only; package/class/owner facts are always fresh.
     std::optional<std::deque<RowBinding, LedgerAllocator<RowBinding>>> rows;
@@ -2053,6 +2086,8 @@ Result configure(HMODULE module, std::string_view profile) noexcept
     state.available = false;
     state.functions = {};
     state.generic = {};
+    state.hud_text = {};
+    state.hud_sharp = {};
     state.generic_names = {};
     state.carrier_names = {};
     state.module = nullptr;
@@ -2091,6 +2126,38 @@ Result configure(HMODULE module, std::string_view profile) noexcept
     f.package_slot = reinterpret_cast<void*>(base + rva::NativeTransientPackage);
     f.fname = reinterpret_cast<FNameCtor>(base + rva::FNameCtor);
     state.generic = authenticate_generic(module); // optional capabilities publish ONLY complete tables
+    // All seven default-build contracts must be present; older builds omit this capability.
+    HudTextFunctions hud{};
+    if (signature(module,"song_hud_text_from_string",rva::SongHudTextFromString)
+        && signature(module,"song_hud_text_item_construct",rva::SongHudTextItemConstruct)
+        && signature(module,"song_hud_text_destroy",rva::SongHudTextDestroy)
+        && signature(module,"song_hud_text_submit",rva::SongHudTextSubmit)
+        && signature(module,"song_hud_text_item_destroy",rva::SongHudTextItemDestroy)
+        && signature(module,"song_hud_text_scale_layout",rva::SongHudTextScaleLayout)
+        && signature(module,"song_hud_text_foreground_layout",rva::SongHudTextForegroundLayout)) {
+        hud.from_string=reinterpret_cast<HudTextFromString>(base+rva::SongHudTextFromString);
+        hud.construct=reinterpret_cast<HudItemConstruct>(base+rva::SongHudTextItemConstruct);
+        hud.destroy_text=reinterpret_cast<Unary>(base+rva::SongHudTextDestroy);
+        hud.submit=reinterpret_cast<Binary>(base+rva::SongHudTextSubmit);
+        hud.destroy_item=reinterpret_cast<Unary>(base+rva::SongHudTextItemDestroy);
+    }
+    state.hud_text = hud;
+    if (hud && signature(module,"song_hud_font_info_construct",rva::SongHudFontInfoConstruct)
+        && signature(module,"song_hud_item_measure",rva::SongHudItemMeasure)
+        && signature(module,"song_hud_canvas_dpi",rva::SongHudCanvasDpi)
+        && signature(module,"song_hud_font_cache_dispatch",rva::SongHudFontCacheDispatch)
+        && signature(module,"song_hud_font_info_layout",rva::SongHudFontInfoLayout)
+        && signature(module,"song_hud_font_optional_layout",rva::SongHudFontOptionalLayout)
+        && signature(module,"song_hud_font_typeface_source",rva::SongHudFontTypefaceSource)
+        && signature(module,"song_hud_font_optional_init",rva::SongHudFontOptionalInit)
+        && signature(module,"song_hud_font_optional_destroy",rva::SongHudFontOptionalDestroy)) {
+        state.hud_sharp={reinterpret_cast<HudInfoConstruct>(base+rva::SongHudFontInfoConstruct),
+            reinterpret_cast<HudItemMeasure>(base+rva::SongHudItemMeasure),
+            reinterpret_cast<HudCanvasDpi>(base+rva::SongHudCanvasDpi)};
+    }
+    try {
+        if (!state.hud_icon_pixels.front().width) state.hud_icon_pixels=make_song_hud_icons();
+    } catch (...) { return {Outcome::Memory,"hud_icon_pixels"}; }
     state.functions = f;
     state.module = module;
     state.available = true;
@@ -2152,6 +2219,8 @@ Result create(const core::ThemeImage& image, const CallbackAuthority& authority,
         state.poisoned = true;
     }
     if (result) {
+        work.record->creation_thread = GetCurrentThreadId();
+        work.record->width = image.width; work.record->height = image.height;
         state.retained[slot].published = true;
         out.slot_ = slot;
     }
@@ -3053,5 +3122,398 @@ Result preflight_subjects(std::span<const SubjectPreflight> groups, const Callba
     if (!finish_reads(access, a)) return {Outcome::Authority, "preflight_final_admission"};
     progress.failed_index = kInvalidImageSlot;
     return {Outcome::Ready, "subjects_preflighted"};
+}
+static Result prepare_song_hud_names(const CallbackAuthority& a) noexcept
+{
+    if (entered) return {Outcome::Busy,"hud_names"};
+    std::unique_lock lock(state.mutex,std::try_to_lock);
+    if (!lock.owns_lock()) return {Outcome::Busy,"hud_names"};
+    EntryScope entry;
+    if (!admitted(a)) return {Outcome::Authority,"hud_names_admission"};
+    objects::UObjectIdentityAccess access{};
+    if (!capture_current_uobject_identity_access(access)) return {Outcome::Identity,"hud_names_identity"};
+    const auto prepared=ensure_generic_names(access,a);
+    if (!prepared) return prepared;
+    std::uint64_t title=0,panel=0;
+    if (!find_name(state.functions.fname,L"Txt_MusicTitle",title) || !admitted(a)
+        || !find_name(state.functions.fname,L"Pnl_MusicTitle",panel) || !admitted(a))
+        return {Outcome::Unavailable,"hud_names_not_published"};
+    hud_title_name=title; hud_panel_name=panel;
+    return {Outcome::Ready,"hud_names"};
+}
+
+Result prepare_song_hud_subjects(const CallbackAuthority& a) noexcept
+{
+    const auto names=prepare_song_hud_names(a);
+    if (!names) return names;
+    for (std::size_t i=0;i<kSongHudIconCount;++i) {
+        {
+            std::unique_lock lock(state.mutex,std::try_to_lock);
+            if (!lock.owns_lock()) return {Outcome::Busy,"hud_icons"};
+            if (!admitted(a)) return {Outcome::Authority,"hud_icons_admission"};
+            if (state.hud_icons_ready[i]) continue;
+        }
+        // CPU images are immutable after configure; creation still needs real menu authority.
+        OwnedImage image;
+        const auto prepared=create(state.hud_icon_pixels[i],a,image);
+        if (!prepared) return prepared;
+        std::unique_lock lock(state.mutex,std::try_to_lock);
+        if (!lock.owns_lock()) return {Outcome::Busy,"hud_icons_publish"};
+        if (!admitted(a)) return {Outcome::Authority,"hud_icons_publish"};
+        state.hud_icons[i]=image; state.hud_icons_ready[i]=true;
+    }
+    return {Outcome::Ready,"hud_names"};
+}
+
+namespace {
+template<class F, class... Args>
+bool hud_native_call(F function, Args... args) noexcept
+{
+    __try { function(args...); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+bool hud_dpi_call(HudCanvasDpi function,void* canvas,float& out) noexcept
+{
+    __try { out=function(canvas); return true; }
+    __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+struct HudSharpText {
+    HudSharpFunctions functions{};
+    std::uint64_t typeface=0;
+    std::int32_t size=0;
+    float dpi=0;
+};
+template<class Measure>
+Result hud_fit_font_size(float target,HudSharpText& sharp,Measure&& measure,float& height)
+{
+    if (!std::isfinite(target) || target<=0 || !std::isfinite(sharp.dpi) || sharp.dpi<=0)
+        return {Outcome::Input,"hud_font_pixel_size_input"};
+    int low=1,high=static_cast<int>(std::clamp(std::ceil(target/sharp.dpi),1.0f,128.0f));
+    int chosen=0;
+    while (low<=high) {
+        sharp.size=low+(high-low)/2;
+        HudPosition size{};
+        if (auto r=measure(size); !r) return r;
+        if (!std::isfinite(size.y) || size.y<=0) return {Outcome::Unavailable,"hud_font_measure_invalid"};
+        if (size.y<=target) { chosen=sharp.size; height=size.y; low=sharp.size+1; }
+        else high=sharp.size-1;
+    }
+    sharp.size=chosen;
+    return chosen ? Result{Outcome::Ready,"hud_font_pixel_size"}
+        : Result{Outcome::Unavailable,"hud_font_pixel_size_no_fit"};
+}
+struct HudTextWork {
+    HudTextFunctions functions{};
+    const void* context = nullptr;
+    bool (*current)(const void*) noexcept = nullptr;
+    void* canvas = nullptr;
+    void* font = nullptr;
+    const wchar_t* value = nullptr;
+    HudPosition position{};
+    runtime_layouts::FLinearColor color{};
+    float scale = 0;
+    const HudSharpText* sharp = nullptr;
+    HudPosition* measurement = nullptr; // Copy only; native item never escapes.
+};
+Result hud_scaled_text(const HudTextWork& w) noexcept
+{
+    if (!w.functions) return {Outcome::Unavailable,"hud_text_contract"};
+    if (!w.current || !w.current(w.context)) return {Outcome::Authority,"hud_text_admission"};
+    if (!w.canvas || !w.font || !w.value || !std::isfinite(w.position.x) || !std::isfinite(w.position.y)
+        || !std::isfinite(w.scale) || w.scale<=0 || !std::isfinite(w.color.r)
+        || !std::isfinite(w.color.g) || !std::isfinite(w.color.b) || !std::isfinite(w.color.a)
+        || w.color.a<0 || w.color.a>1) return {Outcome::Input,"hud_text_input"};
+    // Pure renderer owns this terminated string for the entire synchronous draw.
+    std::int32_t length=0;
+    while (length<4096 && w.value[length]) ++length;
+    if (length==4096) return {Outcome::Input,"hud_text_length"};
+    if (!length) return {Outcome::Ready,"hud_text_empty"};
+    if (w.sharp) {
+        if (!w.sharp->functions) return {Outcome::Unavailable,"hud_font_info_contract"};
+        if (w.sharp->size<1 || w.sharp->size>128 || w.scale!=1
+            || !std::isfinite(w.sharp->dpi) || w.sharp->dpi<=0)
+            return {Outcome::Input,"hud_font_info_input"};
+        float dpi=0;
+        if (!hud_dpi_call(w.sharp->functions.dpi,w.canvas,dpi))
+            return {Outcome::Unavailable,"hud_font_dpi_fault"};
+        if (!w.current(w.context) || dpi!=w.sharp->dpi)
+            return {Outcome::Authority,"hud_font_dpi_changed"};
+    } else if (w.measurement) return {Outcome::Unavailable,"hud_font_info_contract"};
+    if (!song_hud_font_draw_scale_allowed(w.font,w.scale))
+        return {Outcome::Authority,"hud_font_scale"};
+    const HudString source{w.value,length+1,length+1};
+    static_assert(sizeof(HudString)==0x10 && offsetof(HudString,num)==8 && offsetof(HudString,max)==0xc);
+    alignas(16) std::array<std::uint8_t,0x18> text{};
+    alignas(16) std::array<std::uint8_t,0x1b0> item{};
+    bool text_owned=false, item_owned=false;
+    const auto admission=[&](const char* stage) -> Result {
+        if (w.current(w.context)) return {Outcome::Ready,stage};
+        // Lost lifetime authority forbids native cleanup of a still-owned local.
+        return {text_owned || item_owned ? Outcome::NativeFault : Outcome::Authority,stage};
+    };
+    if (auto r=admission("hud_text_before_construct"); !r) return r;
+    if (!hud_native_call(w.functions.from_string,text.data(),&source))
+        return {Outcome::NativeFault,"hud_text_construct_fault"};
+    text_owned=true;
+    if (auto r=admission("hud_text_before_item"); !r) return r;
+    if (!hud_native_call(w.functions.construct,item.data(),&w.position,text.data(),w.font,&w.color))
+        return {Outcome::NativeFault,"hud_text_item_construct_fault"};
+    item_owned=true;
+    if (auto r=admission("hud_text_before_text_destroy"); !r) return r;
+    if (!hud_native_call(w.functions.destroy_text,text.data()))
+        return {Outcome::NativeFault,"hud_text_destroy_fault"};
+    text_owned=false;
+    if (w.sharp) {
+        if (auto r=admission("hud_font_info_before_construct"); !r) return r;
+        if (item[0x1a8]) return {Outcome::NativeFault,"hud_font_optional_not_empty"};
+        struct alignas(8) Outline {
+            std::array<std::uint8_t,16> flags{};
+            runtime_layouts::FLinearColor color{0,0,0,1};
+        } outline;
+        static_assert(sizeof(Outline)==0x20);
+        if (!hud_native_call(w.sharp->functions.construct,item.data()+0x150,w.font,
+                w.sharp->size,&w.sharp->typeface,&outline))
+            return {Outcome::NativeFault,"hud_font_info_construct_fault"};
+        item[0x1a8]=1; // Successful native construction transfers this local owner to item destruction.
+    }
+    if (auto r=admission("hud_text_before_submit"); !r) return r;
+    // Only the authenticated local Scale pair is changed; foreground is native-constructed RGBA.
+    std::memcpy(item.data()+0xa0,&w.scale,sizeof(w.scale));
+    std::memcpy(item.data()+0xa4,&w.scale,sizeof(w.scale));
+    HudPosition measured{NAN,NAN};
+    if (w.measurement) {
+        if (!hud_native_call(w.sharp->functions.measure,item.data(),&measured,w.sharp->dpi))
+            return {Outcome::NativeFault,"hud_font_measure_fault"};
+    } else if (!hud_native_call(w.functions.submit,w.canvas,item.data()))
+        return {Outcome::NativeFault,"hud_text_submit_fault"};
+    if (auto r=admission("hud_text_before_item_destroy"); !r) return r;
+    if (!hud_native_call(w.functions.destroy_item,item.data()))
+        return {Outcome::NativeFault,"hud_text_item_destroy_fault"};
+    item_owned=false;
+    if (auto r=admission("hud_text_submitted"); !r) return r;
+    if (w.measurement) {
+        if (!std::isfinite(measured.x) || measured.x<0 || !std::isfinite(measured.y) || measured.y<=0)
+            return {Outcome::Unavailable,"hud_font_measure_invalid"};
+        *w.measurement=measured;
+    }
+    return {Outcome::Ready,"hud_text_submitted"};
+}
+bool hud_resource(const Record& record,const objects::UObjectIdentityAccess& access,const void*& resource) noexcept
+{
+    resource=nullptr;
+    void* platform=nullptr; std::int32_t mips=0,w=0,h=0;
+    const void* candidate=nullptr; const void* again=nullptr;
+    if (!record.published || record.kind!=RecordKind::Prepared
+        || record.creation_thread!=GetCurrentThreadId() || !graph_valid_sequence(state.functions,access,record)
+        || !read(record.texture.pointer,0x138,platform) || !platform
+        || !read(platform,0,w) || !read(platform,4,h) || !read(platform,0x20,mips)
+        || w!=static_cast<std::int32_t>(record.width) || h!=static_cast<std::int32_t>(record.height) || mips!=1
+        || !read(record.texture.pointer,0xa8,candidate) || !candidate
+        || !read(record.texture.pointer,0xa8,again) || again!=candidate) return false;
+    resource=candidate;
+    return true;
+}
+bool hud_path(const objects::UObjectIdentityAccess& access, const Target& t,
+    const PanelBases& bases) noexcept
+{
+    std::array<ContainmentEdge,kContainmentDepth> path{};
+    std::size_t count=0;
+    Object child=t.target;
+    while (child.pointer!=t.root.pointer) {
+        if (count==path.size()) return false;
+        for (std::size_t i=0;i<count;++i) if (path[i].child.pointer==child.pointer) return false;
+        auto& e=path[count++]; e.child=child; e.index=-1;
+        void* slot=nullptr; void* parent=nullptr; void* content=nullptr;
+        if (!unchanged(access,child) || !read(child.pointer,0x28,slot)
+            || !capture(access,slot,e.slot) || !ancestry(access,e.slot,bases.slot,bases,e.slot_type)
+            || !read(slot,0x28,parent) || !capture(access,parent,e.parent)
+            || !ancestry(access,e.parent,bases.panel,bases,e.parent_type)
+            || !read(slot,0x30,content) || content!=child.pointer
+            || !read(parent,0x108,e.slots) || !e.slots
+            || !read(parent,0x110,e.count) || e.count<=0 || e.count>kPanelSlots
+            || !read(parent,0x114,e.capacity) || e.capacity<e.count || e.capacity>kPanelSlots) return false;
+        for (std::int32_t i=0;i<e.count;++i) {
+            void* item=nullptr;
+            if (!read(e.slots,static_cast<Address>(i)*sizeof(void*),item)) return false;
+            if (item==slot) { e.index=i; break; }
+        }
+        if (e.index<0) return false;
+        child=e.parent;
+    }
+    for (std::size_t i=0;i<count;++i) if (!edge_unchanged(access,path[i])) return false;
+    return bases_unchanged(access,bases) && unchanged(access,t.root) && unchanged(access,t.tree)
+        && unchanged(access,t.receiver);
+}
+bool hud_title(const objects::UObjectIdentityAccess& access, void* receiver,
+    const UObjectLiveHandle& identity, Target& title, Target& panel) noexcept
+{
+    Target owner{}; generic_witness_names(owner);
+    void* pointer=nullptr;
+    if (!hud_title_name || !hud_panel_name || identity.serial_number<=0
+        || !capture(access,receiver,owner.receiver)
+        || owner.receiver.live.serial_number!=identity.serial_number
+        || owner.receiver.live.internal_index!=identity.internal_index
+        || !typed_object(access,owner.receiver,NativeClass::UserWidget)
+        || !read(receiver,0x1d8,pointer) || !capture(access,pointer,owner.tree)
+        || owner.tree.outer!=receiver || !typed_object(access,owner.tree,NativeClass::WidgetTree)
+        || !read(pointer,0x28,pointer) || !capture(access,pointer,owner.root)
+        || owner.root.outer!=owner.tree.pointer) return false;
+    PanelBases bases{};
+    if (!panel_bases(access,owner,bases)) return false;
+    std::array<Object,256> pending{};
+    std::array<void*,256> visited{};
+    std::size_t n=1,seen=0;
+    pending[0]=owner.root;
+    while (n) {
+        const auto node=pending[--n];
+        if (seen==visited.size() || !unchanged(access,node)) return false;
+        for (std::size_t i=0;i<seen;++i) if (visited[i]==node.pointer) return false;
+        visited[seen++]=node.pointer;
+        if (node.name==hud_title_name || node.name==hud_panel_name) {
+            auto& found=node.name==hud_title_name ? title : panel;
+            if (found.target.pointer || node.outer!=owner.tree.pointer) return false;
+            found=owner; found.target=node;
+            if (!typed_object(access,node,node.name==hud_title_name ? NativeClass::Text : NativeClass::Canvas)) return false;
+        }
+        Ancestry type{};
+        if (!ancestry(access,node,bases.panel,bases,type)) continue;
+        PointerArray slots{};
+        if (!pointer_array(node.pointer,0x108,slots)) return false;
+        for (std::int32_t i=0;i<slots.count;++i) {
+            void* slot_pointer=nullptr; void* child_pointer=nullptr; void* parent=nullptr; void* child_slot=nullptr;
+            Object slot{},child{}; Ancestry slot_type{};
+            if (n==pending.size() || !read(slots.data,static_cast<Address>(i)*sizeof(void*),slot_pointer)
+                || !capture(access,slot_pointer,slot) || !ancestry(access,slot,bases.slot,bases,slot_type)
+                || !read(slot_pointer,0x28,parent) || parent!=node.pointer
+                || !read(slot_pointer,0x30,child_pointer) || !capture(access,child_pointer,child)
+                || !read(child_pointer,0x28,child_slot) || child_slot!=slot_pointer
+                || !unchanged(access,slot) || !ancestry_unchanged(access,slot_type)
+                || !same_array(node.pointer,0x108,slots)) return false;
+            pending[n++]=child;
+        }
+        if (!ancestry_unchanged(access,type)) return false;
+    }
+    void* tree=nullptr; void* root=nullptr;
+    return title.target.pointer && panel.target.pointer && hud_path(access,title,bases) && hud_path(access,panel,bases)
+        && read(receiver,0x1d8,tree) && tree==owner.tree.pointer
+        && read(tree,0x28,root) && root==owner.root.pointer;
+}
+}
+
+Result draw_song_hud(const OwnedImage* image, void* root, const UObjectLiveHandle& identity,
+    std::uintptr_t root_pair, float width, float height, const SongHudMetadata& metadata,
+    const SongHudFontMetrics& metrics, void* fcanvas, void* font, const OverlayDrawText& text,
+    const OverlayDrawTile& tile, const SongHudCanvasAuthority& authority) noexcept
+{
+    (void)text; // Runtime ABI retains the legacy six-argument helper; HUD uses its isolated owning item.
+    if (entered) return {Outcome::Busy,"hud_draw"};
+    std::unique_lock lock(state.mutex,std::try_to_lock);
+    if (!lock.owns_lock()) return {Outcome::Busy,"hud_draw"};
+    EntryScope entry;
+    try {
+        const auto current=[&] { return state.available && !state.poisoned && authority.current
+            && authority.current(authority.frame); };
+        if (!current()) return {Outcome::Authority,"hud_post_render"};
+        if (!state.hud_text) return {Outcome::Unavailable,"hud_text_contract"};
+        objects::UObjectIdentityAccess access{}; Target title{},panel{};
+        if (!capture_current_uobject_identity_access(access) || !hud_title(access,root,identity,title,panel))
+            return {Outcome::Identity,"hud_title_tree"};
+        const auto identity_current=[&] {
+            PanelBases bases{}; void* tree=nullptr; void* root_widget=nullptr;
+            return current() && panel_bases(access,title,bases)
+                && unchanged(access,title.target) && unchanged(access,panel.target)
+                && hud_path(access,title,bases) && hud_path(access,panel,bases)
+                && read(root,0x1d8,tree) && tree==title.tree.pointer
+                && read(tree,0x28,root_widget) && root_widget==title.root.pointer;
+        };
+        PreviewSelectedRowBounds bounds{}; PreviewAnchorPresentation presentation{};
+        const PreviewAnchorRead reader=[](std::uintptr_t p,void* out,std::size_t bytes) {
+            return p && core::safe_copy_bytes(reinterpret_cast<const void*>(p),out,bytes);
+        };
+        if (!read_preview_anchor({root_pair,reinterpret_cast<Address>(title.target.pointer),
+                reinterpret_cast<Address>(panel.target.pointer),8,true},reader,identity_current,
+                width,height,bounds,&presentation)) return {Outcome::Unavailable,"hud_current_paint"};
+        const void* resource=nullptr;
+        if (image && image->slot_<state.reserved_images) {
+            auto& record=state.retained[image->slot_];
+            (void)hud_resource(record,access,resource);
+        }
+        SongHudIconTextures icons{};
+        for (std::size_t i=0;i<icons.size();++i) {
+            const auto slot=state.hud_icons[i].slot_;
+            if (state.hud_icons_ready[i] && slot<state.reserved_images)
+                (void)hud_resource(state.retained[slot],access,icons[i]);
+        }
+        SongHudAnchor anchor{{bounds.row.x,bounds.row.y,bounds.row.width,bounds.row.height},width,height,presentation.ui_scale};
+        anchor.title_block = SongHudRect{bounds.panel.x,bounds.panel.y,bounds.panel.width,bounds.panel.height};
+        bool sharp_font=false;
+        std::uint8_t cache_type=0;
+        HudSharpText sharp{state.hud_sharp};
+        if (state.hud_sharp) {
+            if (!identity_current() || !read(font,runtime_layouts::UFont::cache_type,cache_type))
+                return {Outcome::Identity,"hud_font_cache_read"};
+            if (cache_type>1) return {Outcome::Unavailable,"hud_font_cache_unsupported"};
+            sharp_font=cache_type==1;
+            if (sharp_font && !read(font,runtime_layouts::UFont::legacy_typeface,sharp.typeface))
+                return {Outcome::Identity,"hud_font_typeface_read"};
+        }
+        const auto font_current=[&] {
+            std::uint8_t type=0; std::uint64_t face=0;
+            return identity_current() && (!sharp_font
+                || (read(font,runtime_layouts::UFont::cache_type,type) && type==1
+                    && read(font,runtime_layouts::UFont::legacy_typeface,face) && face==sharp.typeface));
+        };
+        Result text_result{Outcome::Ready,"hud_text_unused"};
+        SongHudFontMetrics actual=metrics;
+        const auto measure_pixels=[&](const wchar_t* value,HudPosition& size) {
+            if (!text_result) return false;
+            HudTextWork work{state.hud_text,&font_current,
+                [](const void* context) noexcept { return (*static_cast<const decltype(font_current)*>(context))(); },
+                fcanvas,font,value,{0,0},{1,1,1,1},1,&sharp,&size};
+            text_result=latch(hud_scaled_text(work));
+            return static_cast<bool>(text_result);
+        };
+        if (sharp_font) {
+            if (!font_current()) return {Outcome::Authority,"hud_font_info_admission"};
+            if (!hud_dpi_call(sharp.functions.dpi,fcanvas,sharp.dpi))
+                return {Outcome::Unavailable,"hud_font_dpi_fault"};
+            if (!font_current() || !std::isfinite(sharp.dpi) || sharp.dpi<=0)
+                return {Outcome::Unavailable,"hud_font_dpi_invalid"};
+            const SongHudFontMetrics copied_text{1,[](std::wstring_view value) { return static_cast<float>(value.size()); }};
+            const auto probe=L"Mg "+song_hud_metadata(metadata,std::numeric_limits<float>::max(),copied_text);
+            const float target=anchor.title.height*.5f;
+            // Bound cache requests; choose a measured integer size, never enlarge its glyph geometry.
+            float line_height=0;
+            const auto fitted=hud_fit_font_size(target,sharp,[&](HudPosition& size) {
+                (void)measure_pixels(probe.c_str(),size); return text_result;
+            },line_height);
+            if (!fitted) return fitted;
+            actual={line_height,[&](std::wstring_view value) {
+                if (value.empty()) return 0.0f;
+                const std::wstring terminated(value);
+                HudPosition size{};
+                return measure_pixels(terminated.c_str(),size) ? size.x : NAN;
+            },1};
+        }
+        const OverlayDrawTile checked_tile=[&](void* c,float x,float y,float w,float h,float u,float v,
+            float su,float sv,const runtime_layouts::FLinearColor* color,const void* texture,bool alpha) {
+            return font_current() && tile && tile(c,x,y,w,h,u,v,su,sv,color,texture,alpha);
+        };
+        const SongHudDrawText checked_text=[&](void* c,float x,float y,const wchar_t* value,void* f,
+            const runtime_layouts::FLinearColor* color,float scale) -> std::int32_t {
+            if (!text_result || !color || c!=fcanvas || f!=font) throw 0;
+            HudTextWork work{state.hud_text,&font_current,
+                [](const void* context) noexcept { return (*static_cast<const decltype(font_current)*>(context))(); },
+                c,f,value,{x,y},*color,scale,sharp_font ? &sharp : nullptr};
+            text_result=latch(hud_scaled_text(work));
+            if (!text_result) throw 0;
+            return 0; // Submit is void; the renderer does not interpret the legacy layout metric.
+        };
+        const bool drawn=draw_song_hud_overlay(anchor,metadata,actual,resource,fcanvas,font,checked_text,checked_tile,presentation.opacity,icons);
+        if (!text_result) return text_result;
+        return drawn ? Result{Outcome::Ready,sharp_font ? "hud_submitted_runtime_font_info"
+            : state.hud_sharp ? "hud_submitted_offline_blur_unresolved" : "hud_submitted_legacy_blur_unresolved"}
+            : Result{Outcome::Unavailable,"hud_draw_failed"};
+    } catch (...) { return {Outcome::Unavailable,"hud_exception"}; }
 }
 } // namespace ff7r::piano::game::menu_theme_native

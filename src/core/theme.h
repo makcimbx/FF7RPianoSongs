@@ -26,6 +26,11 @@ struct ThemeDefinition {
 
 bool valid_theme_id(std::string_view id) noexcept;
 
+// Worker-only, contained PNG input; aspect-preserving thumbnail, at most 256px per side.
+// Failure leaves output unchanged, including when a symlink escapes the directory.
+bool load_png_thumbnail(const std::filesystem::path& directory,
+    const std::filesystem::path& filename, ThemeImage& output, std::string& error);
+
 // Worker-side file preparation and PNG decoding only; native readiness is separate.
 // Failure leaves output unchanged; prepared images own their bytes, not file paths.
 bool load_theme(const std::filesystem::path& themes_directory, std::string_view id,

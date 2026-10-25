@@ -72,7 +72,7 @@ void check_wic(HRESULT result)
     if (FAILED(result)) throw std::runtime_error("PNG decode failed: WIC HRESULT " + std::to_string(result));
 }
 
-void decode_pixels(std::vector<std::uint8_t>& png, ThemeImage& image)
+void decode_pixels(std::vector<std::uint8_t>& png, ThemeImage& image, const bool thumbnail)
 {
     struct Apartment {
         HRESULT result = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
@@ -96,17 +96,29 @@ void decode_pixels(std::vector<std::uint8_t>& png, ThemeImage& image)
     check_wic(frame->GetSize(&width, &height));
     if (width != image.width || height != image.height)
         throw std::runtime_error("PNG decoder dimensions disagree with header");
+    ComPtr<IWICBitmapScaler> scaler;
+    IWICBitmapSource* source = frame.Get();
+    if (thumbnail && std::max(width, height) > 256) {
+        const UINT largest = std::max(width, height);
+        width = std::max(1u, width * 256 / largest);
+        height = std::max(1u, height * 256 / largest);
+        check_wic(factory->CreateBitmapScaler(scaler.GetAddressOf()));
+        check_wic(scaler->Initialize(frame.Get(), width, height, WICBitmapInterpolationModeFant));
+        source = scaler.Get();
+    }
     ComPtr<IWICFormatConverter> converter;
     check_wic(factory->CreateFormatConverter(converter.GetAddressOf()));
-    check_wic(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppBGRA,
+    check_wic(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA,
         WICBitmapDitherTypeNone, nullptr, 0.0, WICBitmapPaletteTypeCustom));
     image.bgra.resize(static_cast<std::size_t>(width) * height * 4);
     check_wic(converter->CopyPixels(nullptr, width * 4,
         static_cast<UINT>(image.bgra.size()), image.bgra.data()));
+    image.width = width;
+    image.height = height;
 }
 
 ThemeImage read_image(const std::filesystem::path& path, std::uint64_t& pixel_bytes,
-    std::uint64_t& file_bytes)
+    std::uint64_t& file_bytes, const bool thumbnail = false)
 {
     ThemeImage image;
     auto png = read_file(path, kImageFileLimit);
@@ -128,7 +140,7 @@ ThemeImage read_image(const std::filesystem::path& path, std::uint64_t& pixel_by
         throw std::runtime_error("invalid PNG format or dimensions");
     pixel_bytes += std::uint64_t{image.width} * image.height * (depth == 16 ? 8 : 4);
     if (pixel_bytes > kPixelByteLimit) throw std::runtime_error("theme exceeds decoded pixel budget");
-    decode_pixels(png, image);
+    decode_pixels(png, image, thumbnail);
     return image;
 }
 
@@ -152,6 +164,22 @@ std::array<std::uint8_t, 4> read_color(std::string_view value)
 bool valid_theme_id(std::string_view id) noexcept
 {
     return !id.empty() && id.size() <= 64 && std::all_of(id.begin(), id.end(), identifier_char);
+}
+
+bool load_png_thumbnail(const std::filesystem::path& directory,
+    const std::filesystem::path& filename, ThemeImage& output, std::string& error)
+{
+    try {
+        std::uint64_t pixel_bytes = 0, file_bytes = 0;
+        auto image = read_image(contained_file(std::filesystem::canonical(directory), filename),
+            pixel_bytes, file_bytes, true);
+        output = std::move(image);
+        error.clear();
+        return true;
+    } catch (const std::exception& exception) {
+        error = exception.what();
+        return false;
+    }
 }
 
 bool load_theme(const std::filesystem::path& themes_directory, std::string_view id,

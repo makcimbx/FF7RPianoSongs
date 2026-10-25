@@ -7,6 +7,11 @@
 
 namespace ff7r::piano::game {
 core::HookCallbackGate& non_audio_hook_gate() { static core::HookCallbackGate gate; return gate; }
+void begin_song_hud_tick() noexcept {}
+void begin_song_hud_tick(void*) noexcept {}
+void observe_song_hud_controller(void*,void*,const PlaybackSnapshot&,int,int) noexcept {}
+SongRegistry& registry() { static SongRegistry value; return value; }
+PlaybackSnapshot SongRegistry::playback_snapshot() const { return {}; }
 }
 using namespace ff7r::piano::game;
 namespace {

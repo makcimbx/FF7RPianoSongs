@@ -73,6 +73,9 @@ namespace native = ff7r::piano::game::menu_theme_native;
 namespace obs = ff7r::piano::game::menu_theme_observation;
 namespace game = ff7r::piano::game;
 namespace core = ff7r::piano::core;
+namespace ff7r::piano::game {
+void prepare_song_hud_covers(const menu_theme_native::CallbackAuthority&) noexcept {}
+}
 namespace {
 game::MenuSessionSnapshot current;
 core::HookCallbackGate gate;

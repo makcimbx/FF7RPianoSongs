@@ -315,6 +315,8 @@ void* __fastcall fake_fname(std::uint64_t* out, const wchar_t* text, std::int32_
     if (name == L"Cursor_Left") *out = 0x200000031ull;
     if (name == L"Img_BtnLight") *out = 0x200000032ull;
     if (name == L"HoverBase") *out = 0x200000033ull;
+    if (name == L"Txt_MusicTitle") *out = 0x200000034ull;
+    if (name == L"Pnl_MusicTitle") *out = 0x200000035ull;
     for (std::size_t i = 0; i < theme::kClassCount; ++i)
         if (name == theme::class_specs[i].name && !*out) *out = 0x100000010ull + i;
     if (fixture->cursor_lookup_reentry) {
@@ -516,6 +518,8 @@ void install_fake_functions()
     theme::state.generic = {};
     theme::state.generic_names = {};
     theme::state.carrier_names = {};
+    theme::hud_title_name = theme::hud_panel_name = 0;
+    theme::state.hud_icons_ready.fill(false);
     if (theme::state.rows) for (auto& row : *theme::state.rows) row = {};
     theme::state.poisoned = false; // isolate synthetic engine-failure cases, not a production reset
     theme::state.available = true;
@@ -2487,6 +2491,35 @@ void prepare_subjects_tests()
         }
     }
 }
+void prepare_hud_icons_tests()
+{
+    for (bool fail:{false,true}) {
+        Fixture f; fixture=&f; f.enable_target(); install_fake_functions();
+        enable_generic(theme::SubjectKind::TextBlock);
+        f.qualified=true; f.fault_construct=fail;
+        // Exercise one pending image with the existing 2x2 native upload double.
+        theme::state.hud_icon_pixels[0]={std::vector<std::uint8_t>(16,127),2,2};
+        theme::state.hud_icons_ready.fill(true); theme::state.hud_icons_ready[0]=false;
+        const auto slots=theme::state.reserved_images;
+        const auto result=theme::prepare_song_hud_subjects(authority());
+        if (fail) {
+            require(!result && !theme::state.hud_icons_ready[0] && theme::state.poisoned,
+                "faulted icon creation never publishes readiness or retries unsafe native work");
+        } else {
+            require(result && theme::state.hud_icons_ready[0]
+                && theme::state.reserved_images==slots+1 && f.textures==1,
+                "real menu admission creates and publishes one pending prepared icon");
+            const auto calls=native_calls;
+            require(theme::prepare_song_hud_subjects(authority()) && native_calls==calls+2
+                && f.textures==1,
+                "prepared icon resources are immutable and reused without native allocations");
+            f.qualified=false;
+            const auto prepared_calls=native_calls;
+            require(!theme::prepare_song_hud_subjects(authority()) && prepared_calls==native_calls,
+                "cached icon readiness does not bypass current menu authority");
+        }
+    }
+}
 void speed_membership_tests()
 {
     using Kind = theme::SubjectKind;
@@ -2763,7 +2796,9 @@ void texture_policy_tests()
 }
 } // namespace
 
+namespace { bool allow_hud_font_scale=true; }
 namespace ff7r::piano::game {
+bool song_hud_font_draw_scale_allowed(void*,float) noexcept { return allow_hud_font_scale; }
 bool capture_current_uobject_identity_access(obj::UObjectIdentityAccess& out) noexcept
 {
     out = fixture->access(); return true;
@@ -2782,8 +2817,249 @@ const RvaSignatureSpec* find_rva_signature(std::string_view id)
 }
 } // namespace ff7r::piano::game
 
+namespace {
+struct HudTextFixture {
+    std::vector<int> events;
+    int fault_at=0, revoke_after=0;
+    bool current=true, text_owned=false, item_owned=false;
+    void* text=nullptr;
+    void* item=nullptr;
+    float scale=1;
+    bool sharp=false,info_owned=false,invalid_measure=false;
+    float dpi=1;
+    std::int32_t size=18;
+    std::uint64_t typeface=0x12340000832a6ull;
+    game::runtime_layouts::FLinearColor color{.2f,.3f,.4f,.25f};
+};
+HudTextFixture* hud=nullptr;
+void hud_event(int stage)
+{
+    hud->events.push_back(stage);
+    if (stage==hud->revoke_after) hud->current=false;
+    if (stage==hud->fault_at) RaiseException(0xe0000001,0,0,nullptr);
+}
+void* __fastcall hud_from_string(void* destination,const theme::HudString* source)
+{
+    require(reinterpret_cast<std::uintptr_t>(destination)%16==0,"FText storage alignment");
+    require(source && source->num==5 && source->max==5
+        && std::wstring_view(source->data)==L"Test","borrowed bounded FString includes NUL");
+    require(!hud->text_owned && !hud->item_owned,"temporary FText constructs first");
+    hud->text=destination; hud->text_owned=true;
+    hud_event(1); return destination;
+}
+void* __fastcall hud_construct(void* destination,const theme::HudPosition* position,
+    const void* text,void* font,const game::runtime_layouts::FLinearColor* color)
+{
+    require(reinterpret_cast<std::uintptr_t>(destination)%16==0 && destination!=text,"separate aligned item storage");
+    require(hud->text_owned && text==hud->text && !hud->item_owned,"item retains initialized FText");
+    require(position->x==12 && position->y==34 && font==reinterpret_cast<void*>(2),"native constructor arguments");
+    require(color->r==hud->color.r && color->g==hud->color.g && color->b==hud->color.b
+        && color->a==hud->color.a,"actual foreground preserves opacity");
+    std::memcpy(static_cast<std::uint8_t*>(destination)+0x28,color,sizeof(*color));
+    hud->item=destination; hud->item_owned=true;
+    hud_event(2); return destination;
+}
+void __fastcall hud_destroy_text(void* text)
+{
+    require(text==hud->text && hud->text_owned && hud->item_owned,"temporary text destroyed only after item retains it");
+    hud_event(3); hud->text_owned=false; hud->text=nullptr;
+}
+void __fastcall hud_submit(void* canvas,void* item)
+{
+    require(canvas==reinterpret_cast<void*>(1) && item==hud->item && hud->item_owned && !hud->text_owned,
+        "submission owns item, not temporary text");
+    float x=0,y=0; game::runtime_layouts::FLinearColor color{};
+    require(core::safe_read_field(item,0xa0,x) && core::safe_read_field(item,0xa4,y)
+        && x==hud->scale && y==hud->scale,"uniform local scale at native offsets");
+    require(core::safe_read_field(item,0x28,color) && color.a==hud->color.a,"foreground alpha survives scale write");
+    if (hud->sharp) {
+        std::uint8_t initialized=0;
+        require(core::safe_read_field(item,0x1a8,initialized) && initialized==1 && hud->info_owned
+            && x==1 && y==1,"size-keyed draw owns FontInfo and never magnifies glyph geometry");
+    }
+    hud_event(4);
+}
+void __fastcall hud_destroy_item(void* item)
+{
+    require(item==hud->item && hud->item_owned && !hud->text_owned,"item destruction follows submit");
+    hud_event(5); hud->item_owned=false; hud->item=nullptr;
+    if (hud->sharp) {
+        std::uint8_t initialized=0;
+        require(core::safe_read_field(item,0x1a8,initialized) && initialized==1 && hud->info_owned,
+            "native item destruction owns optional FontInfo release");
+        put(item,0x1a8,std::uint8_t{0}); hud->info_owned=false;
+    }
+}
+void* __fastcall hud_info_construct(void* info,void* font,std::int32_t size,
+    const std::uint64_t* face,const void* outline)
+{
+    std::uint8_t initialized=1;
+    require(info==static_cast<std::uint8_t*>(hud->item)+0x150
+        && reinterpret_cast<std::uintptr_t>(info)%8==0 && hud->item_owned && !hud->text_owned
+        && core::safe_read_field(hud->item,0x1a8,initialized) && initialized==0,
+        "construct FontInfo in uninitialized owning item payload after temporary FText release");
+    require(font==reinterpret_cast<void*>(2) && size==hud->size && *face==hud->typeface,
+        "retain genuine full typeface and requested integer size, not legacy size");
+    std::array<std::uint8_t,16> flags{};
+    game::runtime_layouts::FLinearColor color{};
+    require(core::safe_copy_bytes(outline,flags.data(),flags.size()) && flags==std::array<std::uint8_t,16>{}
+        && core::safe_copy_bytes(static_cast<const std::uint8_t*>(outline)+16,&color,sizeof(color))
+        && color.r==0 && color.g==0 && color.b==0 && color.a==1,
+        "native default outline flags and black alpha-one color");
+    hud->info_owned=true; hud_event(6); return info;
+}
+theme::HudPosition* __fastcall hud_measure_item(void* item,theme::HudPosition* out,float dpi)
+{
+    std::uint8_t initialized=0; float x=0,y=0;
+    require(item==hud->item && hud->info_owned && core::safe_read_field(item,0x1a8,initialized) && initialized==1
+        && core::safe_read_field(item,0xa0,x) && core::safe_read_field(item,0xa4,y) && x==1 && y==1,
+        "matching measurement uses initialized size-keyed FontInfo at unit local geometry scale");
+    require(dpi==hud->dpi,"measurement receives actual Canvas DPI as float");
+    *out={hud->size*dpi*2,hud->invalid_measure ? NAN : hud->size*dpi};
+    hud_event(7); return out;
+}
+float __fastcall hud_canvas_dpi(void* canvas)
+{
+    require(canvas==reinterpret_cast<void*>(1) && !hud->item_owned && !hud->text_owned,
+        "DPI is read under authority before owning native construction");
+    hud_event(8); return hud->dpi;
+}
+theme::HudTextWork hud_work(HudTextFixture& fixture)
+{
+    return {{hud_from_string,hud_construct,hud_destroy_text,hud_destroy_item,hud_submit},&fixture,
+        [](const void* context) noexcept { return static_cast<const HudTextFixture*>(context)->current; },
+        reinterpret_cast<void*>(1),reinterpret_cast<void*>(2),L"Test",{12,34},fixture.color,fixture.scale};
+}
+void test_hud_text()
+{
+    for (const float scale:{.75f,1.0f,2.5f}) {
+        HudTextFixture fixture; hud=&fixture; fixture.scale=scale;
+        require(static_cast<bool>(theme::hud_scaled_text(hud_work(fixture))),"scaled native draw completes");
+        require(fixture.events==std::vector<int>({1,2,3,4,5}) && !fixture.text_owned && !fixture.item_owned,
+            "native ownership/order balances without pointer escape");
+    }
+    for (int stage=1;stage<=5;++stage) {
+        HudTextFixture fixture; hud=&fixture; fixture.fault_at=stage;
+        require(theme::hud_scaled_text(hud_work(fixture)).outcome==theme::Outcome::NativeFault,
+            "native constructor/submit/destructor faults report uncertain ownership");
+        require(fixture.events.size()==static_cast<std::size_t>(stage),"fault never triggers unsafe cleanup or retry");
+    }
+    for (int stage=1;stage<=5;++stage) {
+        HudTextFixture fixture; hud=&fixture; fixture.revoke_after=stage;
+        const auto result=theme::hud_scaled_text(hud_work(fixture));
+        require(result.outcome==(stage<5 ? theme::Outcome::NativeFault : theme::Outcome::Authority),
+            "authority loss poisons only while native owning state remains");
+        require(fixture.events.size()==static_cast<std::size_t>(stage),"revocation suppresses further native operations");
+    }
+    HudTextFixture fixture; hud=&fixture;
+    allow_hud_font_scale=false;
+    require(theme::hud_scaled_text(hud_work(fixture)).outcome==theme::Outcome::Authority
+        && fixture.events.empty(),"unapproved font scale constructs no native owner");
+    allow_hud_font_scale=true;
+    auto work=hud_work(fixture); work.functions={};
+    require(theme::hud_scaled_text(work).outcome==theme::Outcome::Unavailable && fixture.events.empty(),
+        "absent older-build capability invokes no native code");
+    for (int missing=0;missing<5;++missing) {
+        work=hud_work(fixture);
+        switch (missing) {
+        case 0: work.functions.from_string=nullptr; break;
+        case 1: work.functions.construct=nullptr; break;
+        case 2: work.functions.destroy_text=nullptr; break;
+        case 3: work.functions.submit=nullptr; break;
+        case 4: work.functions.destroy_item=nullptr; break;
+        }
+        require(theme::hud_scaled_text(work).outcome==theme::Outcome::Unavailable && fixture.events.empty(),
+            "partial native ownership table cannot construct anything");
+    }
+    fixture.current=false;
+    require(theme::hud_scaled_text(hud_work(fixture)).outcome==theme::Outcome::Authority && fixture.events.empty(),
+        "immediate stale authority invokes nothing");
+    fixture.current=true;
+    require(static_cast<bool>(theme::hud_scaled_text(hud_work(fixture))),"delayed current admission needs no wait");
+    fixture.events.clear(); work=hud_work(fixture); work.scale=std::numeric_limits<float>::quiet_NaN();
+    require(theme::hud_scaled_text(work).outcome==theme::Outcome::Input && fixture.events.empty(),"nonfinite scale rejected");
+    work=hud_work(fixture); work.value=L"";
+    require(static_cast<bool>(theme::hud_scaled_text(work)) && fixture.events.empty(),"empty text needs no owning construction");
+    hud=nullptr;
+}
+void test_hud_sharp_text()
+{
+    for (float dpi:{1.0f,1.5f,2.0f}) {
+        HudTextFixture fixture; hud=&fixture; fixture.sharp=true; fixture.dpi=dpi;
+        theme::HudSharpText sharp{{hud_info_construct,hud_measure_item,hud_canvas_dpi},fixture.typeface,fixture.size,dpi};
+        auto work=hud_work(fixture); work.sharp=&sharp;
+        theme::HudPosition measured{}; work.measurement=&measured;
+        require(static_cast<bool>(theme::hud_scaled_text(work)),"size-keyed native measurement completes");
+        require(fixture.events==std::vector<int>({8,1,2,3,6,7,5}) && !fixture.info_owned
+            && !fixture.item_owned && !fixture.text_owned && measured.x==36*dpi && measured.y==18*dpi,
+            "copy actual DPI-aware pixels only after native item/FontInfo owners are destroyed");
+        fixture.events.clear(); work.measurement=nullptr;
+        require(static_cast<bool>(theme::hud_scaled_text(work))
+            && fixture.events==std::vector<int>({8,1,2,3,6,4,5}) && !fixture.info_owned,
+            "draw uses identical size/typeface and unit scale then releases local optional owner");
+    }
+    const std::vector<int> order{8,1,2,3,6,7,5};
+    for (const int stage:order) {
+        for (bool revoke:{false,true}) {
+            HudTextFixture fixture; hud=&fixture; fixture.sharp=true;
+            if (revoke) fixture.revoke_after=stage; else fixture.fault_at=stage;
+            theme::HudSharpText sharp{{hud_info_construct,hud_measure_item,hud_canvas_dpi},fixture.typeface,fixture.size,1};
+            auto work=hud_work(fixture); work.sharp=&sharp;
+            theme::HudPosition measured{-1,-1}; work.measurement=&measured;
+            const auto result=theme::hud_scaled_text(work);
+            const auto expected=stage==8 ? (revoke ? theme::Outcome::Authority : theme::Outcome::Unavailable)
+                : revoke && stage==5 ? theme::Outcome::Authority : theme::Outcome::NativeFault;
+            require(result.outcome==expected && measured.x==-1 && measured.y==-1,
+                "fault/revocation never publishes measurement or cleans uncertain ownership; read-only DPI cannot poison");
+            const auto end=std::find(order.begin(),order.end(),stage)+1;
+            require(fixture.events==std::vector<int>(order.begin(),end),"no native operation after first failure");
+        }
+    }
+    HudTextFixture fixture; hud=&fixture; fixture.sharp=true;
+    theme::HudSharpText sharp{{hud_info_construct,hud_measure_item,hud_canvas_dpi},fixture.typeface,fixture.size,1};
+    auto work=hud_work(fixture); work.sharp=&sharp;
+    for (float scale:{.75f,1.01f}) {
+        work.scale=scale;
+        require(theme::hud_scaled_text(work).outcome==theme::Outcome::Input && fixture.events.empty(),
+            "no fractional geometry scaling after intended-size raster generation");
+    }
+    work.scale=1; sharp.dpi=2;
+    require(theme::hud_scaled_text(work).outcome==theme::Outcome::Authority
+        && fixture.events==std::vector<int>({8}),"changed Canvas DPI denies before native owners");
+    fixture.events.clear(); sharp.dpi=1;
+    for (int missing=0;missing<3;++missing) {
+        auto partial=sharp;
+        if (missing==0) partial.functions.construct=nullptr;
+        if (missing==1) partial.functions.measure=nullptr;
+        if (missing==2) partial.functions.dpi=nullptr;
+        work.sharp=&partial;
+        require(theme::hud_scaled_text(work).outcome==theme::Outcome::Unavailable && fixture.events.empty(),
+            "incomplete/older capability performs no Runtime invocation");
+    }
+    work.sharp=&sharp; fixture.invalid_measure=true;
+    theme::HudPosition measured{-1,-1}; work.measurement=&measured;
+    require(theme::hud_scaled_text(work).outcome==theme::Outcome::Unavailable && measured.x==-1
+        && !fixture.info_owned && !fixture.item_owned,"invalid copied metrics release healthy owners without poisoning");
+    for (const float dpi:{1.0f,1.5f,2.0f}) {
+        sharp.dpi=dpi; float height=0; int calls=0;
+        const auto fit=theme::hud_fit_font_size(25,sharp,[&](theme::HudPosition& out) {
+            ++calls; out={1,sharp.size*dpi*1.25f}; return theme::Result{theme::Outcome::Ready,"fixture_measure"};
+        },height);
+        require(static_cast<bool>(fit) && calls<=8 && height<=25 && (sharp.size+1)*dpi*1.25f>25,
+            "bounded integer native raster size fits actual pixel height at native DPI without enlarging geometry");
+    }
+    sharp.dpi=1; float height=0;
+    require(theme::hud_fit_font_size(.25f,sharp,[](theme::HudPosition& out) {
+        out={1,1}; return theme::Result{theme::Outcome::Ready,"fixture_measure"};
+    },height).outcome==theme::Outcome::Unavailable,"unrepresentable tiny line omits rather than geometrically rescaling");
+    hud=nullptr;
+}
+} // namespace
+
 int main()
 {
+    test_hud_text();
+    test_hud_sharp_text();
     using theme::Outcome;
     require(theme::detail::preflight(0, 2, 0, 0).outcome == Outcome::Input, "zero dimension");
     require(theme::detail::preflight(4097, 1, 16388, 0).outcome == Outcome::Input, "dimension bound");
@@ -2834,6 +3110,39 @@ int main()
     perf::enable(true);
     require(static_cast<bool>(theme::create(image, a, owned)), "immediate qualified create");
     perf::enable(false);
+    {
+        auto& record=theme::state.retained[theme::state.reserved_images-1];
+        const void* resource=reinterpret_cast<const void*>(1);
+        const auto access=first.access();
+        const auto calls=native_calls;
+        require(!theme::hud_resource(record,access,resource) && !resource,
+            "upload dispatch with absent Canvas resource omits artwork without waiting");
+        const void* expected=first.pixels.data(); // Deliberately not a UObject.
+        put(record.texture.pointer,0xa8,expected);
+        require(theme::hud_resource(record,access,resource) && resource==expected,
+            "delayed publication projects the exact resource, without a UObject cast");
+        require(theme::hud_resource(record,access,resource) && resource==expected,
+            "immediate retained resource is usable on the creation game thread");
+        record.kind=theme::RecordKind::Original;
+        require(!theme::hud_resource(record,access,resource) && !resource,"captured originals cannot enter Canvas projection");
+        record.kind=theme::RecordKind::Prepared;
+        record.creation_thread^=0x80000000;
+        require(!theme::hud_resource(record,access,resource),"different thread cannot order initialization before Canvas consumption");
+        record.creation_thread^=0x80000000;
+        put(first.platform.data(),0x20,std::int32_t{2});
+        require(!theme::hud_resource(record,access,resource),"streamable multi-mip graph is ineligible");
+        put(first.platform.data(),0x20,std::int32_t{1});
+        put(record.texture.pointer,0xa8,static_cast<const void*>(nullptr));
+        require(!theme::hud_resource(record,access,resource) && !resource,"a prior draw never supplies a saved resource pointer");
+        put(record.texture.pointer,0xa8,expected);
+        put(record.holder.pointer,0x150,static_cast<void*>(nullptr));
+        require(!theme::hud_resource(record,access,resource) && !resource,"lost owning brush graph omits resource");
+        put(record.holder.pointer,0x150,record.texture.pointer);
+        put(record.texture.pointer,0xa8,static_cast<const void*>(nullptr));
+        require(native_calls==calls,"resource projection invokes no native helper or extra upload");
+        require(theme::draw_song_hud(&owned,nullptr,{},0,1920,1080,{}, {},nullptr,nullptr,{}, {},{}).outcome
+                ==theme::Outcome::Authority,"saved/missing PostRender scope is not Ready-menu authority");
+    }
     perf::Snapshot metrics{};
     require(perf::take_snapshot(metrics)
         && metrics.stats[static_cast<std::size_t>(perf::Metric::NativeConstruct)].count == 1
@@ -3010,6 +3319,7 @@ int main()
     growing_ledger_tests();
     texture_policy_tests();
     prepare_subjects_tests();
+    prepare_hud_icons_tests();
     speed_membership_tests();
     growing_row_association_tests();
     Fixture fault; fixture = &fault; fault.qualified = true; fault.fault_unlock = true;

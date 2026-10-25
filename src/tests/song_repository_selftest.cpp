@@ -3394,6 +3394,10 @@ int test_unicode_warm_cache(const std::filesystem::path& root) {
     for (const std::string& title : {std::string("Caf\xC3\xA9"), std::string("\\uD834\\uDD1E \\u65E5\\u672C")}) {
         if (!write_explicit_song_json(directory / "song.json", title, false))
             return fail("Unicode JSON write failed");
+        std::string metadata_json = read_text(directory / "song.json");
+        metadata_json.insert(1, R"("album":"\u65e5\u672c","author":"Chart credit",)");
+        if (!write_bytes(directory / "song.json", std::vector<std::uint8_t>(metadata_json.begin(), metadata_json.end())))
+            return fail("Unicode metadata JSON write failed");
         ff7rp::pipeline::LoadedSong cold;
         if (!ff7rp::pipeline::load_song_directory(directory.string(), &cold).ok() || cold.loaded_from_runtime_cache)
             return fail("Unicode cold load failed");
@@ -3407,9 +3411,18 @@ int test_unicode_warm_cache(const std::filesystem::path& root) {
         if (!ff7rp::pipeline::load_song_directory(directory.string(), &warm,
                 [&](const char* stage) { trace.emplace_back(stage); }, false).ok() ||
             !warm.loaded_from_runtime_cache || warm.config.title != cold.config.title ||
+            cold.config.album != "\xe6\x97\xa5\xe6\x9c\xac" || warm.config.album != cold.config.album ||
+            warm.config.author != "Chart credit" || warm.difficulty_profiles.empty() ||
+            warm.difficulty_profiles.front().config.album != cold.config.album ||
+            warm.difficulty_profiles.front().config.author != cold.config.author ||
             std::find(trace.begin(), trace.end(), "audio_decode_started") != trace.end() ||
             std::find(trace.begin(), trace.end(), "midi_generation_started") != trace.end())
             return fail("Unicode warm reuse failed with rebuilding disabled");
+        ff7rp::pipeline::ParsedSongSource exported_metadata;
+        if (!ff7rp::pipeline::parse_song_json_string(read_text(directory / ".cache" / "resolved-song.json"),
+                &exported_metadata).ok() ||
+            exported_metadata.config.album != cold.config.album || exported_metadata.config.author != cold.config.author)
+            return fail("Unicode warm export lost display metadata");
         for (std::size_t index = 0; index < artifacts.size(); ++index)
             if (read_binary(artifacts[index]) != before[index]) return fail("Unicode warm load changed artifact bytes");
     }

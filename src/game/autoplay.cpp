@@ -1,4 +1,6 @@
 #include "game/autoplay.h"
+#include "game/song_hud_runtime.h"
+#include "game/song_registry.h"
 #include "game/module_hooks.h"
 #include "game/hook_specs.h"
 #include "game/mandatory_hook_transaction.h"
@@ -32,6 +34,7 @@ thread_local std::uint64_t g_chart_play = 0;
 std::atomic_uint64_t g_marked{0}, g_terminalized{0};
 
 void observe_phase(void* controller, int current, int pending) noexcept {
+    if (current!=9 || (pending!=-1 && pending!=9)) begin_song_hud_tick();
     AutoplayPolicy snapshot;
     bool changed = false;
     {
@@ -73,6 +76,7 @@ bool read_state(void* controller, int& current, int& pending) noexcept {
 }
 
 void disable_authority() noexcept {
+    begin_song_hud_tick();
     std::lock_guard lock(g_mutex);
     g_policy.available = false;
     g_policy.revoke();
@@ -84,10 +88,14 @@ bool __fastcall tick_detour(void* controller, float delta) {
     {
         auto callback = non_audio_hook_gate().try_enter();
         admitted = lifetime && callback;
+        if (!admitted) begin_song_hud_tick();
         int current = -1, pending = -1;
         if (admitted) {
             if (g_controller || !read_state(controller, current, pending)) disable_authority();
-            else observe_phase(controller, current, pending);
+            else {
+                begin_song_hud_tick(controller);
+                observe_phase(controller, current, pending);
+            }
         }
     }
     void* previous = g_controller;
@@ -185,6 +193,7 @@ void autoplay_observe_native_phase() noexcept {
     observe_phase(g_controller, current, pending);
 }
 void autoplay_revoke_controller(void* controller) noexcept {
+    begin_song_hud_tick();
     std::lock_guard lock(g_mutex);
     if (g_policy.controller == reinterpret_cast<std::uintptr_t>(controller)) g_policy.revoke();
 }
@@ -201,11 +210,12 @@ AutoplayChartScope::AutoplayChartScope(void* chart, void* left, void* right, boo
     }
     const auto owner = reinterpret_cast<std::uintptr_t>(g_controller);
     observe_phase(g_controller, current, pending);
-    std::lock_guard lock(g_mutex);
     if (current != 9 || (pending != -1 && pending != 9) || owned_chart != chart
         || left != reinterpret_cast<void*>(owner + 0x380)
-        || right != reinterpret_cast<void*>(owner + 0x538)
-        || !g_policy.available || !g_policy.seated || g_policy.controller != owner) return;
+        || right != reinterpret_cast<void*>(owner + 0x538)) return;
+    observe_song_hud_controller(g_controller,chart,registry().playback_snapshot(),current,pending);
+    std::lock_guard lock(g_mutex);
+    if (!g_policy.available || !g_policy.seated || g_policy.controller != owner) return;
     g_chart = chart; g_chart_play = g_policy.play;
 }
 AutoplayChartScope::~AutoplayChartScope() { g_chart = previous_chart_; g_chart_play = previous_play_; }

@@ -3,6 +3,7 @@
 #include "core/theme.h"
 #include "game/menu_session_authority.h"
 #include "game/uobject_locator_core.h"
+#include "game/song_hud_overlay.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -122,6 +123,16 @@ private:
     friend Result preflight_subjects(std::span<const SubjectPreflight>, const CallbackAuthority&, BatchProgress&) noexcept;
 };
 class OwnedImage;
+struct SongHudCanvasAuthority {
+    const void* frame = nullptr;
+    bool (*current)(const void*) noexcept = nullptr;
+};
+// Prepared-only synchronous projection/submission; no FTexture pointer escapes.
+Result draw_song_hud(const OwnedImage*, void* root, const UObjectLiveHandle&,
+    std::uintptr_t root_pair, float width, float height, const SongHudMetadata&,
+    const SongHudFontMetrics&, void* fcanvas, void* font,
+    const OverlayDrawText&, const OverlayDrawTile&, const SongHudCanvasAuthority&) noexcept;
+Result prepare_song_hud_subjects(const CallbackAuthority&) noexcept;
 class ImageTarget final {
 public:
     ImageTarget() = default;
@@ -143,6 +154,9 @@ private:
     detail::TargetState affinity_{};
     bool target_bound_ = false;
     friend Result create(const core::ThemeImage&, const CallbackAuthority&, OwnedImage&) noexcept;
+    friend Result draw_song_hud(const OwnedImage*, void*, const UObjectLiveHandle&,
+        std::uintptr_t, float, float, const SongHudMetadata&, const SongHudFontMetrics&,
+        void*, void*, const OverlayDrawText&, const OverlayDrawTile&, const SongHudCanvasAuthority&) noexcept;
     friend Result borrow_brush(const OwnedImage&, const CallbackAuthority&, const void*&) noexcept;
     friend Result capture_original(const ImageTarget&, const CallbackAuthority&, OwnedImage&) noexcept;
     friend Result apply(const ImageTarget&, const OwnedImage&, const CallbackAuthority&) noexcept;

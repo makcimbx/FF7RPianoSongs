@@ -4,6 +4,8 @@
 namespace ff7r::piano::game {
 SongPreviewRenderSnapshot capture_song_preview_render_snapshot() noexcept { return {}; }
 void configure_song_preview_anchor(HMODULE) noexcept {}
+void configure_song_hud(HMODULE) noexcept {}
+void render_song_hud(void*,void*,const OverlayDrawText&,const OverlayDrawTile&) noexcept {}
 bool capture_song_preview_row_bounds(const SongPreviewRenderSnapshot&,void*,void*,
     PreviewSelectedRowBounds&) noexcept { return false; }
 }
