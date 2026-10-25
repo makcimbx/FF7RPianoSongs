@@ -1184,6 +1184,12 @@ limitations and tested artifacts. Public version history remains in
   acceptance of the semantic-unit policy; unverified theme close/reopen, gamepad
   and 1.004 behavior; exact-ZIP gameplay and the full per-build manual matrix.
   Development reports and earlier dispositions do not qualify these artifacts.
+- Also accepted for **0.4.0**: custom-chart admission has one bounded 1.005
+  gameplay run and only automated 1.004 coverage, with mutation contention and
+  safe native cancellation unresolved; preview volume is unverified on 1.004 and
+  against every native mix effect. The in-progress song-card, cached-startup,
+  chart-admission and menu-theme sections above are these accepted version-scoped
+  limitations, not open release blockers.
 - Automated Release checks, independent review, clean source identity and
   transactional packaging remain required. This decision grants no installation
   or launch authority; no new in-game qualification is claimed.

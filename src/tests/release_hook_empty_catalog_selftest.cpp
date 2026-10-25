@@ -77,6 +77,10 @@ core::HookShutdownResult shutdown_note_count() { return shutdown_ok(); }
 core::HookShutdownResult shutdown_duration() { return shutdown_ok(); }
 core::HookShutdownResult shutdown_progress() { return shutdown_ok(); }
 bool shutdown_audio_sead() { ++audio_shutdown_calls; return true; }
+namespace menu_theme_runtime {
+void install_palette_hooks() noexcept {}
+bool uninstall_palette_hooks() noexcept { return true; }
+}
 }
 
 int main()

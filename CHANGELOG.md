@@ -31,8 +31,9 @@
 - Reduced verification overhead when loading already-prepared songs at startup
   (Windows CNG SHA-256 with a portable fallback, fewer repeated reads). Every
   cached artifact is still fully verified.
-- Reduced spurious rejections when activating a custom chart: full binding checks
-  are now permitted inside the game's read-only chart lookup, on 1.005 and 1.004.
+- Permit full binding checks inside the game's read-only chart lookup, intended to
+  reduce spurious custom-chart activation rejections. One bounded 1.005 run logged
+  none; 1.004 is covered by automated tests only.
 
 ### Updating song files
 
@@ -53,6 +54,7 @@
   restoration, gamepad switching and 1.004 theming are not fully verified in-game.
   Startup and chart-activation changes are not measured in-game improvements, and
   chart activation is not a complete fix for every reported chart/audio mismatch.
+  Preview volume on 1.004 and parity with every native mix effect are unverified.
 - Exact packaged-artifact gameplay and the full per-build manual matrix are not
   established. The owner explicitly accepts these gaps for 0.4.0; see
   `docs/CurrentStatus.md` in the source repository.
