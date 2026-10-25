@@ -317,7 +317,7 @@ function Get-ExampleThemeMappings {
     }
     foreach ($id in $themes.Keys) {
         foreach ($file in ($themes[$id] + @("cursor.png", "cursor-glow.png"))) {
-            [pscustomobject]@{ Source = "examples/Themes/$id/$file"; Destination = "Themes/$id/$file" }
+            [pscustomobject]@{ Source = "examples/Themes/$id/$file"; Destination = "$BinaryRelative/Themes/$id/$file" }
         }
     }
 }

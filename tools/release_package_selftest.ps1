@@ -63,6 +63,7 @@ try {
         [IO.Directory]::CreateDirectory((Split-Path -Parent $path)) | Out-Null
         [IO.File]::WriteAllText($path, "$($mapping.Source)`n")
     }
+    $BinaryRelative = "End/Binaries/Win64"
     foreach ($mapping in Get-ExampleThemeMappings) {
         Copy-ValidatedFile (Join-Path $sourceRoot $mapping.Source) (Join-Path $fixture $mapping.Source)
     }
@@ -72,7 +73,6 @@ try {
         throw "Example source inventory differs from the explicit package authority"
     }
     $Root = $fixture
-    $BinaryRelative = "End/Binaries/Win64"
     $Artifact = Join-Path $fixture "inputs/proxy.dll"
     $Ini = Join-Path $fixture "inputs/example.ini"
     $Model = Join-Path $fixture "inputs/model.gguf"
@@ -179,24 +179,24 @@ try {
         "CHANGELOG.md", "End/Binaries/Win64/D3DCOMPILER_43.dll",
         "End/Binaries/Win64/FF7RPianoSongs.ini", "End/Binaries/Win64/muscriptor-small-f16.gguf", "LICENSE", "README.md",
         "THIRD_PARTY_NOTICES.md", "ThemesGuide.md", "docs/SongFormat.md", "release.json",
-        "Themes/steins-gate/artwork.png", "Themes/steins-gate/button-disabled.png",
-        "Themes/steins-gate/cursor.png", "Themes/steins-gate/cursor-glow.png",
-        "Themes/steins-gate/button-hovered.png", "Themes/steins-gate/button-normal.png",
-        "Themes/steins-gate/button-pressed.png", "Themes/steins-gate/frame.png", "Themes/steins-gate/header.png",
-        "Themes/steins-gate/info-frame.png", "Themes/steins-gate/line-record.png", "Themes/steins-gate/line.png",
-        "Themes/steins-gate/new.png", "Themes/steins-gate/panel.png", "Themes/steins-gate/pattern.png",
-        "Themes/steins-gate/record-deco.png", "Themes/steins-gate/row-selected.png", "Themes/steins-gate/row.png",
-        "Themes/steins-gate/speed-configured.png",
-        "Themes/steins-gate/speed-empty.png", "Themes/steins-gate/speed-recorded.png", "Themes/steins-gate/theme.ini",
-        "Themes/evangelion/artwork.png", "Themes/evangelion/button-disabled.png",
-        "Themes/evangelion/cursor.png", "Themes/evangelion/cursor-glow.png",
-        "Themes/evangelion/button-hovered.png", "Themes/evangelion/button-normal.png",
-        "Themes/evangelion/button-pressed.png", "Themes/evangelion/frame.png",
-        "Themes/evangelion/header-rank.png", "Themes/evangelion/header-title.png", "Themes/evangelion/info-frame.png",
-        "Themes/evangelion/line-record.png", "Themes/evangelion/line.png", "Themes/evangelion/new.png",
-        "Themes/evangelion/panel.png", "Themes/evangelion/pattern.png", "Themes/evangelion/record-deco.png",
-        "Themes/evangelion/row-selected.png", "Themes/evangelion/row.png", "Themes/evangelion/speed-configured.png",
-        "Themes/evangelion/speed-empty.png", "Themes/evangelion/speed-recorded.png", "Themes/evangelion/theme.ini"
+        "End/Binaries/Win64/Themes/steins-gate/artwork.png", "End/Binaries/Win64/Themes/steins-gate/button-disabled.png",
+        "End/Binaries/Win64/Themes/steins-gate/cursor.png", "End/Binaries/Win64/Themes/steins-gate/cursor-glow.png",
+        "End/Binaries/Win64/Themes/steins-gate/button-hovered.png", "End/Binaries/Win64/Themes/steins-gate/button-normal.png",
+        "End/Binaries/Win64/Themes/steins-gate/button-pressed.png", "End/Binaries/Win64/Themes/steins-gate/frame.png", "End/Binaries/Win64/Themes/steins-gate/header.png",
+        "End/Binaries/Win64/Themes/steins-gate/info-frame.png", "End/Binaries/Win64/Themes/steins-gate/line-record.png", "End/Binaries/Win64/Themes/steins-gate/line.png",
+        "End/Binaries/Win64/Themes/steins-gate/new.png", "End/Binaries/Win64/Themes/steins-gate/panel.png", "End/Binaries/Win64/Themes/steins-gate/pattern.png",
+        "End/Binaries/Win64/Themes/steins-gate/record-deco.png", "End/Binaries/Win64/Themes/steins-gate/row-selected.png", "End/Binaries/Win64/Themes/steins-gate/row.png",
+        "End/Binaries/Win64/Themes/steins-gate/speed-configured.png",
+        "End/Binaries/Win64/Themes/steins-gate/speed-empty.png", "End/Binaries/Win64/Themes/steins-gate/speed-recorded.png", "End/Binaries/Win64/Themes/steins-gate/theme.ini",
+        "End/Binaries/Win64/Themes/evangelion/artwork.png", "End/Binaries/Win64/Themes/evangelion/button-disabled.png",
+        "End/Binaries/Win64/Themes/evangelion/cursor.png", "End/Binaries/Win64/Themes/evangelion/cursor-glow.png",
+        "End/Binaries/Win64/Themes/evangelion/button-hovered.png", "End/Binaries/Win64/Themes/evangelion/button-normal.png",
+        "End/Binaries/Win64/Themes/evangelion/button-pressed.png", "End/Binaries/Win64/Themes/evangelion/frame.png",
+        "End/Binaries/Win64/Themes/evangelion/header-rank.png", "End/Binaries/Win64/Themes/evangelion/header-title.png", "End/Binaries/Win64/Themes/evangelion/info-frame.png",
+        "End/Binaries/Win64/Themes/evangelion/line-record.png", "End/Binaries/Win64/Themes/evangelion/line.png", "End/Binaries/Win64/Themes/evangelion/new.png",
+        "End/Binaries/Win64/Themes/evangelion/panel.png", "End/Binaries/Win64/Themes/evangelion/pattern.png", "End/Binaries/Win64/Themes/evangelion/record-deco.png",
+        "End/Binaries/Win64/Themes/evangelion/row-selected.png", "End/Binaries/Win64/Themes/evangelion/row.png", "End/Binaries/Win64/Themes/evangelion/speed-configured.png",
+        "End/Binaries/Win64/Themes/evangelion/speed-empty.png", "End/Binaries/Win64/Themes/evangelion/speed-recorded.png", "End/Binaries/Win64/Themes/evangelion/theme.ini"
     ) | Sort-Object
     $scriptInventory = @(Get-ExpectedPackageInventory)
     if (($scriptInventory -join "`n") -cne ($expectedInventory -join "`n")) {

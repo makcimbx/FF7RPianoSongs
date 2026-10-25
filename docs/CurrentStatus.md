@@ -1177,8 +1177,8 @@ limitations and tested artifacts. Public version history remains in
   preparer), piano-menu themes with the `evangelion` and `steins-gate` examples,
   preview volume integration, cached-startup verification cost reductions and
   read-only-lookup chart admission. Packaging remains the standalone DLL with the
-  transcription model and separate game-build archives, now with `Themes/` and
-  `ThemesGuide.md`.
+  transcription model and separate game-build archives, now with the example
+  themes under `End/Binaries/Win64/Themes/` and `ThemesGuide.md`.
 - The owner explicitly accepts for **0.4.0**: song-card/font checks only on a
   1.005 development build and none on 1.004; pending custom-theme performance
   acceptance of the semantic-unit policy; unverified theme close/reopen, gamepad
