@@ -777,10 +777,10 @@ limitations and tested artifacts. Public version history remains in
    in `menu-cursor-preview-retry-20261022T091901Z-f4567e0d`. Prior DLL/themes are
    retained; existing design, INI, debug-cells and unrelated work are preserved.
    No tooling launch or physical Cursor/Preview appearance qualification is claimed.
-- Added the separate Russian [user guide](../ThemesGuide.md), covering installation,
+- Added the separate [user guide](../ThemesGuide.md), covering installation,
   controls, authoring, practical image geometry, format/resource limits and recovery
   without native implementation details. Packaging stages it as `ThemesGuide.md`
-  beside two full-menu `Themes/steins-gate` and `Themes/evangelion` samples,
+  with two full-menu samples under `End/Binaries/Win64/Themes/steins-gate` and `evangelion`,
   which replaced the earlier ocean/orchid examples on 2026-10-21. Both pass real
   PNG/WIC decoding and plan compilation; documentation parity and fake-package
   staging/inventory tests pass. Both reached `applied_complete_program` and were
