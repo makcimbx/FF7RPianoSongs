@@ -2,15 +2,21 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-10-25
+
 ### New features
 
 - Added a gameplay song card beside the native title: optional `cover.png`,
   album, BPM, prepared duration and chart/arrangement preparer (`author`).
   Artwork has rounded corners and a fine frame; tempo, time and preparer have
   pictograms. Missing artwork or credits do not prevent playback.
-- Added piano-menu themes, remembered selection and bundled example themes.
-  See the Themes Guide for installation, controls and authoring. Menu themes and
-  song-card artwork are independent.
+- Added piano-menu themes for the song menu's images, colors and preview badge;
+  **Original** keeps the game's styling. Install themes under
+  `End/Binaries/Win64/Themes/`. Ctrl+F6 cycles themes (`Theme.KeyboardFunctionKey`),
+  or hold L3 and tap L2/R2 on a gamepad; the last applied theme is remembered
+  (`Theme.Selected`). The package includes the `evangelion` and `steins-gate`
+  example themes and the Themes Guide for installation, controls and authoring.
+  Menu themes and song-card artwork are independent.
 
 ### Improvements
 
@@ -19,6 +25,14 @@
   gaps and priority for tempo, duration and preparer over long album names.
 - Preserve song-card identity through callback-free pause while rechecking the
   current song and visible HUD before drawing; stale content is withdrawn.
+- Song previews now follow the game's master and music volume, including mute,
+  and the native piano attenuation. Previews stay silent when those settings
+  cannot be read safely. This replaces the 0.3.1 separate-stream volume limit.
+- Reduced verification overhead when loading already-prepared songs at startup
+  (Windows CNG SHA-256 with a portable fallback, fewer repeated reads). Every
+  cached artifact is still fully verified.
+- Reduced spurious rejections when activating a custom chart: full binding checks
+  are now permitted inside the game's read-only chart lookup, on 1.005 and 1.004.
 
 ### Updating song files
 
@@ -34,8 +48,14 @@
 - Song-card appearance and sharper text have owner feedback on a 1.005
   development build. The complete pause/results, resolution/UI-scale and Unicode
   matrix is not established. The 1.004 contracts were recovered independently,
-  but the new card/font path has not been verified in that game build. These are
-  development changes, not a new packaged-release qualification.
+  but the new card/font path has not been verified in that game build.
+- Custom-theme menu performance under the final scheduling policy, close/reopen
+  restoration, gamepad switching and 1.004 theming are not fully verified in-game.
+  Startup and chart-activation changes are not measured in-game improvements, and
+  chart activation is not a complete fix for every reported chart/audio mismatch.
+- Exact packaged-artifact gameplay and the full per-build manual matrix are not
+  established. The owner explicitly accepts these gaps for 0.4.0; see
+  `docs/CurrentStatus.md` in the source repository.
 
 ## 0.3.1 - 2026-10-20
 

@@ -1,6 +1,6 @@
 # Current Status
 
-Updated 2026-10-24. This page describes the current implementation, release
+Updated 2026-10-25. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
@@ -1170,6 +1170,23 @@ limitations and tested artifacts. Public version history remains in
 - Keyboard-triggered background replacement is visually confirmed, not full theming.
   Close/reopen restoration, restart/reapply persistence, GC survival, gamepad and
   older-profile runtime acceptance and release qualification remain pending.
+
+## 0.4.0 release disposition (2026-10-25)
+
+- This minor release adds the gameplay song card (cover, album, BPM, duration,
+  preparer), piano-menu themes with the `evangelion` and `steins-gate` examples,
+  preview volume integration, cached-startup verification cost reductions and
+  read-only-lookup chart admission. Packaging remains the standalone DLL with the
+  transcription model and separate game-build archives, now with `Themes/` and
+  `ThemesGuide.md`.
+- The owner explicitly accepts for **0.4.0**: song-card/font checks only on a
+  1.005 development build and none on 1.004; pending custom-theme performance
+  acceptance of the semantic-unit policy; unverified theme close/reopen, gamepad
+  and 1.004 behavior; exact-ZIP gameplay and the full per-build manual matrix.
+  Development reports and earlier dispositions do not qualify these artifacts.
+- Automated Release checks, independent review, clean source identity and
+  transactional packaging remain required. This decision grants no installation
+  or launch authority; no new in-game qualification is claimed.
 
 ## 0.3.1 release disposition (2026-10-20)
 
