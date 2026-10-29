@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "pipeline/pipeline_limits.h"
+
 namespace ff7rp::pipeline { struct NativeAudioArtifactSet; struct SongPreviewArtifact; }
 namespace ff7r::piano::core { struct ThemeImage; }
 
@@ -49,6 +51,21 @@ struct SongDifficultyProfile {
     // Immutable owned rows beyond chart_notes' native 512-row prefix.
     std::vector<SongChartNote> extended_chart_tail_notes;
 };
+
+// A grouped chart of at most 512 rows whose compact events exceed the native
+// parser's stable 512-event link capacity. It takes the synchronous extended
+// transaction with an empty tail (P == E); the builder marks it with a
+// descriptor hash only after the extended policy and row checks pass.
+inline bool compact_extended_chart_profile(const SongDifficultyProfile& profile) noexcept
+{
+    return profile.extended_chart_tail_notes.empty()
+        && profile.diagnostic_source_rows == 0 && profile.diagnostic_tail_rows == 0
+        && profile.diagnostic_descriptor_hash != 0
+        && profile.source_row_count == profile.chart_notes.size()
+        && profile.source_row_count <= ff7rp::pipeline::kMaxChartRows
+        && profile.native_event_count > ff7rp::pipeline::kMaxChartRows
+        && profile.native_prefix_event_count == profile.native_event_count;
+}
 
 // A song's row in the piano list is a runtime fact, not an offline one.
 // Catalog adoption resolves this value against the live menu widget.

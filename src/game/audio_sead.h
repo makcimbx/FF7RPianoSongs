@@ -219,6 +219,9 @@ struct SelectionAudioAdmissionAuthority final {
     SelectionSnapshot selection{};
     CustomContextToken token{};
     std::uint64_t route_lifecycle_epoch = 0;
+    // Selection activation claim, checked by the matcher. The two fields below
+    // are chart transaction numbering and may be rewritten by chart_patch.
+    std::uint64_t selection_activation = 0;
     std::uint64_t activation_generation = 0;
     std::uint64_t preparation_ordinal = 0;
 };
@@ -238,7 +241,7 @@ bool capture_selection_audio_admission_authority(
     SelectionAudioAdmissionAuthority& out) noexcept;
 enum class SelectionAudioAuthorityFailure : std::uint8_t {
     None, NotExact, Disabled, ActiveToken, ActiveSelection, Activation,
-    RouteEpoch, PreparationOrdinal, SelectionGuard, CurrentSelection,
+    RouteEpoch, SelectionGuard, CurrentSelection,
     PlaybackSelection, PlaybackToken, PlaybackChartFailed
 };
 struct SelectionAudioAuthorityDiagnostic final {

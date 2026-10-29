@@ -226,7 +226,7 @@ std::shared_ptr<ChordVoicingBinding> preflight_chord_voicing(
     binding->right = static_cast<uint8_t*>(binding->controller) + 0x538;
     std::vector<ff7rp::pipeline::ChartEventRow> rows;
     const auto& profile = *selection.profile;
-    if (!profile.extended_chart_tail_notes.empty()
+    if ((!profile.extended_chart_tail_notes.empty() || compact_extended_chart_profile(profile))
         && !ff7rp::pipeline::playable_extended_transport_available()) return {};
     rows.reserve(profile.chart_notes.size() + profile.extended_chart_tail_notes.size());
     for (const auto& row : profile.chart_notes)

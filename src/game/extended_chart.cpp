@@ -168,14 +168,6 @@ struct FailedActivationWatermark {
     std::uint64_t route_lifecycle_epoch = 0;
 };
 
-struct SuccessfulLifecycleTransition {
-    bool delivered = false;
-    bool exact = false;
-    std::uint64_t generation = 0;
-    std::uint64_t lifecycle_epoch_before = 0;
-    std::uint64_t lifecycle_epoch_after = 0;
-};
-
 thread_local Transaction g_transaction;
 std::atomic_bool g_global_claim{false};
 std::atomic_bool g_admissions{false};
@@ -189,7 +181,6 @@ std::mutex g_committed_mutex;
 CommittedExtended g_committed;
 ActivationSerialState g_activation_serial;
 FailedActivationWatermark g_failed_activation_watermark;
-SuccessfulLifecycleTransition g_successful_lifecycle_transition;
 
 template <typename T>
 bool read_at(const void* base, std::size_t offset, T& value) {
@@ -204,14 +195,15 @@ void write_at(void* base, std::size_t offset, const T& value) {
 bool stored_profile_shape_valid(const SongDifficultyProfile& profile) {
     const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
     const std::size_t rows = profile.source_row_count;
-    return policy.playable_extended_available
-        && rows > ff7rp::pipeline::kMaxChartRows
+    const bool tail_shape = rows > ff7rp::pipeline::kMaxChartRows
         && rows <= ff7rp::pipeline::kMaximumExtendedChartRows
         && profile.chart_notes.size() == ff7rp::pipeline::kMaxChartRows
         && profile.extended_chart_tail_notes.size() == rows - ff7rp::pipeline::kMaxChartRows
         && profile.native_prefix_event_count >= ff7rp::pipeline::kMaxChartRows
         && profile.native_prefix_event_count <= ff7rp::pipeline::kMaxChartRows * 2u
-        && profile.native_event_count > profile.native_prefix_event_count
+        && profile.native_event_count > profile.native_prefix_event_count;
+    return policy.playable_extended_available
+        && (tail_shape || compact_extended_chart_profile(profile))
         && profile.native_event_count <= ff7rp::pipeline::kMaximumNativeChartEvents
         && profile.required_action_count > 0
         && profile.required_action_count <= profile.native_event_count
@@ -487,28 +479,14 @@ bool publish_committed_extended(const Transaction& tx)
             == tx.authority.route_lifecycle_epoch
         && tx.authority.activation_generation
             <= g_failed_activation_watermark.generation;
-    const bool lifecycle_handoff_invalid =
-        g_successful_lifecycle_transition.delivered
-        && g_successful_lifecycle_transition.generation
-            >= tx.authority.activation_generation
-        && (g_successful_lifecycle_transition.generation
-                != tx.authority.activation_generation
-            || !g_successful_lifecycle_transition.exact
-            || tx.authority.route_lifecycle_epoch == UINT64_MAX
-            || g_successful_lifecycle_transition.lifecycle_epoch_before
-                != tx.authority.route_lifecycle_epoch
-            || g_successful_lifecycle_transition.lifecycle_epoch_after
-                != tx.authority.route_lifecycle_epoch + 1);
-    if (terminalized || lifecycle_handoff_invalid || !g_activation_serial.valid
+    if (terminalized || !g_activation_serial.valid
         || g_activation_serial.generation != tx.authority.activation_generation
         || g_activation_serial.route_lifecycle_epoch != tx.authority.route_lifecycle_epoch
         || g_activation_serial.preparation_ordinal != tx.authority.preparation_ordinal
         || g_activation_serial.failed) {
         try {
             core::log(core::LogLevel::Error,
-                lifecycle_handoff_invalid
-                    ? "[extended_chart] committed_extended=rejected reason=invalid_lifecycle_transition rollback=synchronous"
-                    : "[extended_chart] committed_extended=rejected reason=failed_activation_terminal rollback=synchronous");
+                "[extended_chart] committed_extended=rejected reason=failed_activation_terminal rollback=synchronous");
         } catch (...) {}
         return false;
     }
@@ -566,28 +544,6 @@ bool committed_playback_identity_matches_locked(const PlaybackSnapshot& playback
             == g_committed.route_lifecycle_epoch
         && g_activation_serial.preparation_ordinal
             == g_committed.preparation_ordinal;
-}
-
-enum class LifecycleTransitionMatch { Awaiting, Exact, Invalid };
-
-LifecycleTransitionMatch committed_lifecycle_transition_locked()
-{
-    if (!g_successful_lifecycle_transition.delivered
-        || g_successful_lifecycle_transition.generation
-            < g_committed.activation_generation) {
-        return LifecycleTransitionMatch::Awaiting;
-    }
-    if (g_successful_lifecycle_transition.generation
-            != g_committed.activation_generation
-        || !g_successful_lifecycle_transition.exact
-        || g_committed.route_lifecycle_epoch == UINT64_MAX
-        || g_successful_lifecycle_transition.lifecycle_epoch_before
-            != g_committed.route_lifecycle_epoch
-        || g_successful_lifecycle_transition.lifecycle_epoch_after
-            != g_committed.route_lifecycle_epoch + 1) {
-        return LifecycleTransitionMatch::Invalid;
-    }
-    return LifecycleTransitionMatch::Exact;
 }
 
 bool playback_absent(const PlaybackSnapshot& playback)
@@ -735,22 +691,15 @@ bool playable_extended_playback(const PlaybackSnapshot& playback) noexcept {
             "[extended_chart] committed_extended=pending playback=absent publication=512");
         return false;
     }
-    const bool identity_matches = committed_playback_identity_matches_locked(playback);
-    const LifecycleTransitionMatch transition = identity_matches
-        ? committed_lifecycle_transition_locked() : LifecycleTransitionMatch::Invalid;
-    if (g_committed.pending && identity_matches
-        && transition == LifecycleTransitionMatch::Awaiting) {
-        core::log(core::LogLevel::Debug,
-            "[extended_chart] committed_extended=pending playback_identity=exact lifecycle_transition=awaiting publication=512");
-        return false;
-    }
-    const bool matches = identity_matches
-        && transition == LifecycleTransitionMatch::Exact;
+    // Native audio is published with the selection guard before expansion,
+    // so the exact playback token is the activation proof; no later audio
+    // publication callback exists to wait for.
+    const bool matches = committed_playback_identity_matches_locked(playback);
     if (g_committed.pending && matches) {
         g_committed.pending = false;
         g_committed.active = true;
         core::log(core::LogLevel::Info,
-            "[extended_chart] committed_extended=active playback_identity=exact lifecycle_transition=exact");
+            "[extended_chart] committed_extended=active playback_identity=exact");
     } else if ((g_committed.pending || g_committed.active) && !matches) {
         core::log(core::LogLevel::Info,
             "[extended_chart] committed_extended=invalidated reason=playback_publication_mismatch");
@@ -759,47 +708,6 @@ bool playable_extended_playback(const PlaybackSnapshot& playback) noexcept {
     return matches && g_committed.active;
 }
 
-
-bool playable_extended_presentation(
-    const RenderSnapshot& menu, const PlaybackSnapshot& playback) noexcept
-{
-    std::lock_guard<std::mutex> lock(g_committed_mutex);
-    // The two immutable snapshots are accepted as one coherent bundle only
-    // when their shared selection generation and descriptor identities agree.
-    // No retry or retained native-pointer dereference is used here.
-    const bool menu_matches = committed_selection_matches_locked(menu);
-    if (g_committed.pending && menu_matches && playback_absent(playback)) {
-        core::log(core::LogLevel::Debug,
-            "[extended_chart] committed_extended=pending presentation_playback=absent publication=512");
-        return false;
-    }
-    const bool playback_identity_matches = menu_matches
-        && committed_playback_identity_matches_locked(playback)
-        && menu.storage && playback.storage
-        && menu.song == playback.song && menu.profile == playback.profile
-        && menu.generation == playback.generation;
-    const LifecycleTransitionMatch transition = playback_identity_matches
-        ? committed_lifecycle_transition_locked() : LifecycleTransitionMatch::Invalid;
-    if (g_committed.pending && playback_identity_matches
-        && transition == LifecycleTransitionMatch::Awaiting) {
-        core::log(core::LogLevel::Debug,
-            "[extended_chart] committed_extended=pending presentation_identity=exact lifecycle_transition=awaiting publication=512");
-        return false;
-    }
-    const bool matches = playback_identity_matches
-        && transition == LifecycleTransitionMatch::Exact;
-    if (g_committed.pending && matches) {
-        g_committed.pending = false;
-        g_committed.active = true;
-        core::log(core::LogLevel::Info,
-            "[extended_chart] committed_extended=active playback_identity=exact lifecycle_transition=exact source=presentation");
-    } else if ((g_committed.pending || g_committed.active) && !matches) {
-        core::log(core::LogLevel::Info,
-            "[extended_chart] committed_extended=invalidated reason=presentation_context_mismatch");
-        g_committed = {};
-    }
-    return matches && g_committed.active;
-}
 
 void invalidate_extended_chart_commit(const char* reason) noexcept {
     std::lock_guard<std::mutex> lock(g_committed_mutex);
@@ -821,29 +729,11 @@ void invalidate_extended_chart_commit(const char* reason) noexcept {
 
 void extended_chart_activation_terminal(const std::uint64_t activation_generation,
     const std::uint64_t route_lifecycle_epoch,
-    const ChartAudioDiagnosticTerminalOutcome outcome,
-    const std::uint64_t successful_lifecycle_epoch) noexcept
+    const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
 {
     try {
         if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished
             || outcome == ChartAudioDiagnosticTerminalOutcome::ExpandFinished) {
-            if (outcome == ChartAudioDiagnosticTerminalOutcome::AudioPublished) {
-                const bool exact = route_lifecycle_epoch != 0
-                    && route_lifecycle_epoch != UINT64_MAX
-                    && successful_lifecycle_epoch == route_lifecycle_epoch + 1;
-                std::lock_guard<std::mutex> lock(g_committed_mutex);
-                if (!g_successful_lifecycle_transition.delivered
-                    || activation_generation
-                        > g_successful_lifecycle_transition.generation) {
-                    g_successful_lifecycle_transition = {true, exact,
-                        activation_generation, route_lifecycle_epoch,
-                        successful_lifecycle_epoch};
-                }
-                core::log(exact ? core::LogLevel::Info : core::LogLevel::Error,
-                    exact
-                        ? "[extended_chart] activation_terminal=audio_published lifecycle_transition=exact"
-                        : "[extended_chart] activation_terminal=audio_published lifecycle_transition=invalid");
-            }
             return;
         }
         std::lock_guard<std::mutex> lock(g_committed_mutex);
@@ -857,12 +747,6 @@ void extended_chart_activation_terminal(const std::uint64_t activation_generatio
             && g_activation_serial.generation == activation_generation
             && g_activation_serial.route_lifecycle_epoch == route_lifecycle_epoch;
         if (exact_serial) g_activation_serial.failed = true;
-        if (g_successful_lifecycle_transition.delivered
-            && g_successful_lifecycle_transition.generation == activation_generation
-            && g_successful_lifecycle_transition.lifecycle_epoch_before
-                == route_lifecycle_epoch) {
-            g_successful_lifecycle_transition = {};
-        }
         const bool invalidated_after_publication =
             (g_committed.pending || g_committed.active)
             && g_committed.activation_generation == activation_generation
@@ -892,7 +776,6 @@ ExtendedChartCapability configure_extended_chart_capability(HMODULE exe_module)
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         g_activation_serial = {};
         g_failed_activation_watermark = {};
-        g_successful_lifecycle_transition = {};
     }
     ExtendedChartCapability support;
     ff7rp::pipeline::configure_chart_row_limit(false, false);
@@ -978,7 +861,8 @@ bool begin_extended_chart_transaction(const ChartAudioExpandTlsSnapshot& transac
         diagnostic_profile && (diagnostic_profile->source_row_count > ff7rp::pipeline::kMaxChartRows
             || diagnostic_profile->diagnostic_source_rows > ff7rp::pipeline::kMaxChartRows
             || !diagnostic_profile->extended_chart_tail_notes.empty()
-            || diagnostic_profile->diagnostic_tail_rows != 0));
+            || diagnostic_profile->diagnostic_tail_rows != 0
+            || compact_extended_chart_profile(*diagnostic_profile)));
     const auto reject = [&](const char* reason,
          const std::size_t tail_index = (std::numeric_limits<std::size_t>::max)()) noexcept {
         // Menu/count/ordinary expansions still take every original guard/return,
@@ -1539,9 +1423,11 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             try {
                 std::ostringstream out;
                 out << "[extended_chart] prefix_validated=1 tails_constructed="
-                    << tx.constructed_tail_count << " first_ordinal=" << tx.plans[prefix].entry.ordinal
-                    << " last_ordinal=" << tx.plans.back().entry.ordinal
-                    << " links=" << tx.physical_plan.links.size()
+                    << tx.constructed_tail_count;
+                if (prefix < tx.plans.size()) // compact charts have no tail
+                    out << " first_ordinal=" << tx.plans[prefix].entry.ordinal
+                        << " last_ordinal=" << tx.plans.back().entry.ordinal;
+                out << " links=" << tx.physical_plan.links.size()
                     << " ignore_values=validated count_commit=" << tx.native_event_count
                     << " required_actions=" << tx.required_action_count
                     << " committed_extended=pending rollback=none authority_source=selection_admission+synchronous_native";
@@ -1636,7 +1522,6 @@ void clear_extended_chart_runtime_state() noexcept {
         std::lock_guard<std::mutex> lock(g_committed_mutex);
         g_activation_serial = {};
         g_failed_activation_watermark = {};
-        g_successful_lifecycle_transition = {};
     }
     ff7rp::pipeline::configure_chart_row_limit(false, false);
 }

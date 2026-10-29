@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Fixes
+
+- Long charts above 512 rows no longer fall back to the first native song: the
+  long-chart transaction checked song selection against an unrelated activation
+  counter and rejected it once the two drifted apart.
+- Grouped charts of at most 512 rows but more than 512 events (common for generated
+  MIDI levels 4-6) now play through the long-chart path instead of being skipped.
+- A committed long chart no longer waits for an audio-publication signal that
+  native audio stopped sending, which kept it `pending` indefinitely.
+- The result screen again receives the custom song's title, difficulty and score
+  thresholds: it rejected every custom song because live playback always carries
+  a cleanup lease with the same token, which the check mistook for an unrevoked
+  previous playback.
+
 ## 0.4.0 - 2026-10-25
 
 ### New features

@@ -184,6 +184,10 @@ void test_optional_revoke_detail_admission()
             && live.state.phase == ScoreInfoResultPhase::DetailPublished
             && !live.state.playback_released,
         "exact live-playback detail path was rejected despite exact full token identity");
+    auto live_cleanup = live_detail;
+    live_cleanup.cleanup = ScoreInfoResultCleanupAuthority::Exact;
+    require(consume_scoreinfo_result_authority(style_state(), live_cleanup).accepted,
+        "live playback with its mirrored exact cleanup lease was rejected");
 
     auto different = live_detail;
     ++different.authority.token_request_handle;

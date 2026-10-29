@@ -44,6 +44,29 @@ bool eligible_extended_profile(const ff7rp::pipeline::LoadedSong& song,
         && verified.physical_digest == event_plan.physical_digest;
 }
 
+bool eligible_compact_extended_profile(
+    const ff7rp::pipeline::LoadedDifficultyProfile& profile,
+    const ff7rp::pipeline::ChartEventPlan& event_plan)
+{
+    if (profile.diagnostic_chart.source_row_count != 0
+        || !profile.diagnostic_chart.tail_rows.empty()
+        || event_plan.source_row_count > ff7rp::pipeline::kMaxChartRows
+        || event_plan.native_event_count <= ff7rp::pipeline::kMaxChartRows
+        || event_plan.native_prefix_event_count != event_plan.native_event_count
+        || event_plan.links.empty()
+        || profile.config.notes.size() != event_plan.source_row_count
+        || profile.chart.notes.size() != event_plan.source_row_count) {
+        return false;
+    }
+    for (std::size_t index = 0; index < profile.chart.notes.size(); ++index) {
+        if (!ff7rp::pipeline::restricted_extended_row_pair(
+                profile.config.notes[index], profile.chart.notes[index], profile.config.bpm)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 float chart_duration_seconds(const ff7rp::pipeline::LoadedSong& song)
 {
     double last_beat = 0.0;
@@ -149,6 +172,10 @@ game::SongDescriptor build_song_descriptor(
         profile.diagnostic_policy_generation = song.chart_policy_generation;
         profile.diagnostic_loaded_from_runtime_cache = song.loaded_from_runtime_cache;
         const std::size_t source_rows = source_profile.diagnostic_chart.source_row_count;
+        const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
+        const bool policy_exact = policy.playable_extended_available && song.chart_policy_enabled
+            && song.chart_policy_generation == policy.generation
+            && song.chart_policy_identity == policy.identity();
         bool supported_tail_shape =
             ff7rp::pipeline::extended_chart_row_count_in_range(source_rows)
             && source_profile.diagnostic_chart.native_prefix_row_count == ff7rp::pipeline::kMaxChartRows
@@ -166,10 +193,7 @@ game::SongDescriptor build_song_descriptor(
                 const auto& note = tail_row.compiled;
                 profile.extended_chart_tail_notes.push_back(project_chart_note(note));
             }
-            const auto policy = ff7rp::pipeline::chart_row_policy_snapshot();
-            if (policy.playable_extended_available && song.chart_policy_enabled
-                && song.chart_policy_generation == policy.generation
-                && song.chart_policy_identity == policy.identity()
+            if (policy_exact
                 && song.accepted_chart_input_limit >= source_rows
                 && song.published_chart_row_limit >= source_rows
                 && event_plan_valid
@@ -190,6 +214,11 @@ game::SongDescriptor build_song_descriptor(
                     profile.note_count = static_cast<int>(prefix_plan.required_action_count);
                 }
             }
+        } else if (policy_exact && event_plan_valid
+            && eligible_compact_extended_profile(source_profile, event_plan)) {
+            profile.diagnostic_descriptor_hash = ff7rp::pipeline::compute_diagnostic_descriptor_hash(
+                song.id, source_profile.config.difficulty, source_profile.chart,
+                source_profile.diagnostic_chart);
         }
         descriptor.profiles.push_back(std::move(profile));
     }

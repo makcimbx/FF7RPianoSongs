@@ -122,7 +122,6 @@ void chart_audio_diagnostic_expand_completed(
     const ChartAudioDiagnosticTransaction& transaction) noexcept;
 void finish_chart_audio_diagnostic_transaction(
     const ChartAudioDiagnosticTransaction& transaction,
-    ChartAudioDiagnosticTerminalOutcome outcome,
-    uint64_t successful_lifecycle_epoch = 0) noexcept;
+    ChartAudioDiagnosticTerminalOutcome outcome) noexcept;
 
 } // namespace ff7r::piano::game

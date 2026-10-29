@@ -621,8 +621,8 @@ longer charts up to **8192 rows and 8192 events per profile**. One pitch or chor
 a row containing both is two. Group followers still count toward these size limits.
 
 There is no setting to unlock long charts. If the game's compatibility checks fail, the ordinary
-limit remains and oversized charts are rejected, not shortened. For an ordinary chart of at most
-512 rows, groups combined with more than 512 events are unsupported; reduce or split that chart.
+limit remains and oversized charts are rejected, not shortened. On those fallback builds a grouped
+chart of at most 512 rows with more than 512 events is also rejected; reduce or split that chart.
 
 Long-chart and independent left/right note-symbol support have limited in-game testing on 1.005
 and are **runtime-untested on 1.004**. Grouped/filtered long-chart combinations and alternate-input

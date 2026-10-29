@@ -12,7 +12,6 @@
 namespace ff7r::piano::game {
 
 struct SongDifficultyProfile;
-struct RenderSnapshot;
 struct PlaybackSnapshot;
 struct SelectionAudioAdmissionAuthority;
 
@@ -80,13 +79,10 @@ void invalidate_extended_chart_commit(const char* reason) noexcept;
 void extended_chart_activation_terminal(
     std::uint64_t activation_generation,
     std::uint64_t route_lifecycle_epoch,
-    ChartAudioDiagnosticTerminalOutcome outcome,
-    std::uint64_t successful_lifecycle_epoch = 0) noexcept;
+    ChartAudioDiagnosticTerminalOutcome outcome) noexcept;
 core::HookTeardownOperation extended_chart_reserve_teardown_operation();
 void clear_extended_chart_runtime_state() noexcept;
 bool playable_extended_profile(const SongDifficultyProfile& profile) noexcept;
 bool playable_extended_playback(const PlaybackSnapshot& playback) noexcept;
-bool playable_extended_presentation(
-    const RenderSnapshot& menu, const PlaybackSnapshot& playback) noexcept;
 
 } // namespace ff7r::piano::game

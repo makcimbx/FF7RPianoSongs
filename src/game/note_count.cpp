@@ -461,7 +461,8 @@ void __fastcall chart_expand_detour(
     }
     const auto* selected_profile = activation_authority.selection.profile;
     const bool extension_required = preparation == ChartExpandPreparationOutcome::CustomCommitted
-        && selected_profile && !selected_profile->extended_chart_tail_notes.empty();
+        && selected_profile && (!selected_profile->extended_chart_tail_notes.empty()
+            || compact_extended_chart_profile(*selected_profile));
     if (g_original_chart_expand) {
         ChartAudioExpandTlsScope scope(
             chart_audio_transaction, wrapper, chart_audio_expand);
@@ -508,7 +509,7 @@ void __fastcall chart_expand_detour(
     finish_chord_voicing_expansion(wrapper,
         preparation == ChartExpandPreparationOutcome::CustomCommitted
         && selected_profile
-        && (selected_profile->extended_chart_tail_notes.empty() || extended_committed));
+        && (!extension_required || extended_committed));
     chart_audio_diagnostic_expand_completed(chart_audio_transaction);
     // Keep the exact committed transaction active after expand return. A
     // PlaySetup that is not nested in this call can then correlate solely by
@@ -558,11 +559,12 @@ void __fastcall chart_expand_detour(
         && owner.owner_observed && owner.chart_read_succeeded && owner.chart == wrapper
         && owner.registry_generation == snapshot.generation;
     const bool exact_extended_playable = playable_extended_count
-        && profile->source_row_count > ff7rp::pipeline::kMaxChartRows
-        && profile->source_row_count <= ff7rp::pipeline::kMaximumExtendedChartRows
-        && profile->native_prefix_event_count >= ff7rp::pipeline::kMaxChartRows
-        && profile->native_prefix_event_count <= ff7rp::pipeline::kMaxChartRows * 2u
-        && profile->native_event_count > profile->native_prefix_event_count
+        && ((profile->source_row_count > ff7rp::pipeline::kMaxChartRows
+                && profile->source_row_count <= ff7rp::pipeline::kMaximumExtendedChartRows
+                && profile->native_prefix_event_count >= ff7rp::pipeline::kMaxChartRows
+                && profile->native_prefix_event_count <= ff7rp::pipeline::kMaxChartRows * 2u
+                && profile->native_event_count > profile->native_prefix_event_count)
+            || compact_extended_chart_profile(*profile))
         && profile->native_event_count <= ff7rp::pipeline::kMaximumNativeChartEvents
         && profile->required_action_count <= profile->native_event_count
         && profile->note_count == static_cast<int32_t>(profile->required_action_count)
@@ -685,7 +687,8 @@ void __fastcall chart_expand_detour(
             ChartAudioDiagnosticTerminalOutcome::ExpandException);
         if (preparation == ChartExpandPreparationOutcome::CustomCommitted) {
             if (activation_authority.selection.profile
-                && !activation_authority.selection.profile->extended_chart_tail_notes.empty())
+                && (!activation_authority.selection.profile->extended_chart_tail_notes.empty()
+                    || compact_extended_chart_profile(*activation_authority.selection.profile)))
                 fail_required_chart_expansion(activation_authority, wrapper);
             finish_chord_voicing_expansion(wrapper, false);
             block_custom_audio_route_for_unresolved_chart_mutation();
@@ -705,8 +708,9 @@ uintptr_t __fastcall note_count_detour(void* arg0, void* arg1, void* arg2, void*
     const SongDifficultyProfile* profile = menu.profile ? menu.profile : playback.profile;
     const int replacement = resolve_menu_or_playback_note_count(menu, playback);
     const bool extended_profile = !menu.song && profile
-        && profile->source_row_count > ff7rp::pipeline::kMaxChartRows
-        && profile->native_event_count > profile->native_prefix_event_count;
+        && ((profile->source_row_count > ff7rp::pipeline::kMaxChartRows
+                && profile->native_event_count > profile->native_prefix_event_count)
+            || compact_extended_chart_profile(*profile));
     const bool restricted_extended = extended_profile && replacement == profile->note_count
         && playable_extended_playback(playback);
     if (!song || (menu.song ? replacement <= 0
@@ -761,8 +765,9 @@ void reset_active_note_count()
 int resolve_note_count(const PlaybackSnapshot& playback)
 {
     const bool extended = playback.profile
-        && playback.profile->source_row_count > ff7rp::pipeline::kMaxChartRows
-        && playback.profile->native_event_count > playback.profile->native_prefix_event_count;
+        && ((playback.profile->source_row_count > ff7rp::pipeline::kMaxChartRows
+                && playback.profile->native_event_count > playback.profile->native_prefix_event_count)
+            || compact_extended_chart_profile(*playback.profile));
     const bool active = extended && playable_extended_playback(playback);
     // Zero means "use native/original" to callers. Never reuse a captured
     // descriptor action count after generalized parser-group suppression.

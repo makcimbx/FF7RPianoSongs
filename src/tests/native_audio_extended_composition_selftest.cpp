@@ -98,7 +98,7 @@ int main() {
     auto admission=begin_selection_audio_admission(f.claim(profile,visible),true);assert(admission);
     SelectionAudioAdmissionAuthority authority;assert(capture_selection_audio_admission_authority(admission,authority));
     assert(selection_audio_admission_authority_matches(authority)); // precommit real guard
-    auto bad=authority;++bad.activation_generation;SelectionAudioAuthorityDiagnostic diagnostic;
+    auto bad=authority;++bad.selection_activation;SelectionAudioAuthorityDiagnostic diagnostic;
     assert(!selection_audio_admission_authority_matches(bad,&diagnostic));
     assert(diagnostic.failure==SelectionAudioAuthorityFailure::Activation);
     assert(composition_patch_source(authority.selection,selection_audio_admission_lease(admission)));
@@ -108,9 +108,10 @@ int main() {
     bad=authority;++bad.route_lifecycle_epoch;
     assert(!selection_audio_admission_authority_matches(bad,&diagnostic));
     assert(diagnostic.failure==SelectionAudioAuthorityFailure::RouteEpoch);
-    bad=authority;++bad.preparation_ordinal;
-    assert(!selection_audio_admission_authority_matches(bad,&diagnostic));
-    assert(diagnostic.failure==SelectionAudioAuthorityFailure::PreparationOrdinal);
+    // chart_patch rewrites these with chart diagnostic numbering, which drifts
+    // from the selection activation whenever a reservation skips a chart.
+    bad=authority;bad.activation_generation+=7;bad.preparation_ordinal+=7;
+    assert(selection_audio_admission_authority_matches(bad));
     bad=authority;++bad.token.route_generation;
     assert(!selection_audio_admission_authority_matches(bad,&diagnostic));
     assert(diagnostic.failure==SelectionAudioAuthorityFailure::ActiveToken);

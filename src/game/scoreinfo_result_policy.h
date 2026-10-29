@@ -397,8 +397,10 @@ constexpr ScoreInfoResultTransition consume_scoreinfo_result_authority(
         return result;
     }
     if (facts.playback_present) {
-        if (current.playback_released
-            || facts.cleanup != ScoreInfoResultCleanupAuthority::Absent) {
+        // Playback publication mirrors the same token into the cleanup lease,
+        // and native audio keeps playback live through the result screen, so
+        // exact cleanup beside live playback is the normal state.
+        if (current.playback_released) {
             result.failure = ScoreInfoResultFailure::PlaybackNotRevoked;
             result.state = scoreinfo_result_poisoned(current);
             return result;

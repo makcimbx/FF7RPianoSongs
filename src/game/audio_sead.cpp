@@ -394,7 +394,7 @@ bool cancel_selection_audio_admission(SelectionAudioAdmission& admission) noexce
 bool capture_selection_audio_admission_authority(const SelectionAudioAdmission& admission,SelectionAudioAdmissionAuthority& out) noexcept {
     out={};if(!admission)return false;
     std::lock_guard lock(state_mutex);const auto& state=*admission.impl_;
-    out.selection=state.selection;out.token=state.token;out.activation_generation=state.activation;
+    out.selection=state.selection;out.token=state.token;out.selection_activation=state.activation;out.activation_generation=state.activation;
     out.route_lifecycle_epoch=state.token.route_generation;out.preparation_ordinal=state.token.lease_generation;
     out.exact=!state.committed && active.token==state.token && registry().selection_guard_matches(state.selection,state.token);
     return out.exact;
@@ -405,7 +405,7 @@ const char* selection_audio_authority_failure_name(SelectionAudioAuthorityFailur
     AUTHORITY_FAILURE(None,"none"); AUTHORITY_FAILURE(NotExact,"not_exact");
     AUTHORITY_FAILURE(Disabled,"disabled"); AUTHORITY_FAILURE(ActiveToken,"active_token");
     AUTHORITY_FAILURE(ActiveSelection,"active_selection"); AUTHORITY_FAILURE(Activation,"activation");
-    AUTHORITY_FAILURE(RouteEpoch,"route_epoch"); AUTHORITY_FAILURE(PreparationOrdinal,"preparation_ordinal");
+    AUTHORITY_FAILURE(RouteEpoch,"route_epoch");
     AUTHORITY_FAILURE(SelectionGuard,"selection_guard"); AUTHORITY_FAILURE(CurrentSelection,"current_selection");
     AUTHORITY_FAILURE(PlaybackSelection,"playback_selection"); AUTHORITY_FAILURE(PlaybackToken,"playback_token");
     AUTHORITY_FAILURE(PlaybackChartFailed,"playback_chart_failed");
@@ -419,7 +419,7 @@ bool selection_audio_admission_authority_matches(const SelectionAudioAdmissionAu
     SelectionAudioAuthorityDiagnostic facts;
     facts.committed=active.committed;
     facts.expected_selection=authority.selection.generation;facts.observed_selection=active.selection.generation;
-    facts.expected_activation=authority.activation_generation;facts.observed_activation=active.activation;
+    facts.expected_activation=authority.selection_activation;facts.observed_activation=active.activation;
     facts.expected_route_epoch=authority.route_lifecycle_epoch;facts.expected_preparation=authority.preparation_ordinal;
     facts.expected_token=authority.token;facts.observed_token=active.token;
     const auto finish=[&](SelectionAudioAuthorityFailure failure) {
@@ -431,9 +431,8 @@ bool selection_audio_admission_authority_matches(const SelectionAudioAdmissionAu
     if(disabled)return finish(Failure::Disabled);
     if(!authority.token.valid() || active.token!=authority.token)return finish(Failure::ActiveToken);
     if(!exact(active.selection,authority.selection))return finish(Failure::ActiveSelection);
-    if(active.activation!=authority.activation_generation)return finish(Failure::Activation);
+    if(active.activation!=authority.selection_activation)return finish(Failure::Activation);
     if(authority.route_lifecycle_epoch!=active.token.route_generation)return finish(Failure::RouteEpoch);
-    if(authority.preparation_ordinal!=active.token.lease_generation)return finish(Failure::PreparationOrdinal);
     if(!active.committed)return finish(registry().selection_guard_matches(authority.selection,authority.token)
         ?Failure::None:Failure::SelectionGuard);
     // Commit consumes the guard. Validate its real playback successor and the

@@ -297,6 +297,34 @@ LoadedSong extended_song_fixture(const std::size_t row_count)
     return song;
 }
 
+// R=258 with three grouped monotone rows and 255 dual rows: E=513, P=E.
+LoadedSong compact_song_fixture(const bool grouped)
+{
+    LoadedSong song = extended_song_fixture(513);
+    song.id = "compact-fixture";
+    LoadedDifficultyProfile profile;
+    profile.config.difficulty = 1;
+    profile.config.bpm = 120.0;
+    for (std::size_t index = 0; index < 258; ++index) {
+        ff7rp::pipeline::Note note;
+        note.beat = static_cast<double>(index) + 1.0;
+        note.duration_beats = 1.0;
+        note.pitch = "C4";
+        if (index < 3) {
+            note.group_index = grouped ? 1 : 0;
+        } else {
+            note.chord_id = "pca_C";
+            note.source_chord_pitches = {"C2", "E2", "G2"};
+        }
+        profile.config.notes.push_back(std::move(note));
+    }
+    const auto status = ff7rp::pipeline::compile_chart(profile.config, &profile.chart,
+        &profile.diagnostic_chart, ff7rp::pipeline::kMaxChartRows);
+    if (!status.ok()) throw std::runtime_error(status.message);
+    song.difficulty_profiles = {std::move(profile)};
+    return song;
+}
+
 } // namespace
 
 int main()
@@ -350,6 +378,20 @@ int main()
         || playable_520_descriptor.profiles.front().extended_chart_tail_notes.size() != 8
         || !tail_projection_equal(playable_520, playable_520_descriptor)) {
         return fail("exact eligible 520 descriptor did not publish its immutable tail vector");
+    }
+    const SongDescriptor compact_descriptor
+        = ff7r::piano::build_song_descriptor(compact_song_fixture(true), 17);
+    const auto& compact_profile = compact_descriptor.profiles.front();
+    if (compact_profile.source_row_count != 258 || compact_profile.native_event_count != 513
+        || !compact_profile.extended_chart_tail_notes.empty()
+        || !ff7r::piano::game::compact_extended_chart_profile(compact_profile)) {
+        return fail("grouped R=258/E=513 descriptor was not marked for the extended transaction");
+    }
+    const SongDescriptor ungrouped_compact_descriptor
+        = ff7r::piano::build_song_descriptor(compact_song_fixture(false), 17);
+    if (ff7r::piano::game::compact_extended_chart_profile(
+            ungrouped_compact_descriptor.profiles.front())) {
+        return fail("ungrouped compact chart left the proven native path");
     }
     LoadedSong warm_520 = playable_520;
     warm_520.loaded_from_runtime_cache = true;

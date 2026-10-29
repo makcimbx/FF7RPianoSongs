@@ -950,8 +950,9 @@ bool plan_descriptor_chart_patch(
             ff7rp::pipeline::derive_chart_event_plan(complete_rows);
         generalized_extended = policy.playable_extended_available
             && plan.valid()
-            && plan.source_row_count > ff7rp::pipeline::kMaxChartRows
-            && plan.native_event_count > plan.native_prefix_event_count
+            && ((plan.source_row_count > ff7rp::pipeline::kMaxChartRows
+                    && plan.native_event_count > plan.native_prefix_event_count)
+                || compact_extended_chart_profile(profile))
             && plan.source_row_count == profile.source_row_count
             && plan.native_prefix_event_count == profile.native_prefix_event_count
             && plan.native_event_count == profile.native_event_count
@@ -1826,8 +1827,34 @@ bool chart_patch_ignore_sound_selftest()
         && boundary_plan.arrays
         && std::all_of(boundary_plan.arrays->group_indices.begin(),
             boundary_plan.arrays->group_indices.end(), [](const uint8_t value) { return value == 0; });
+    // Compact R<=512 grouped charts past the stable link capacity take the
+    // same transaction with an empty tail instead of the stability guard.
+    SongDifficultyProfile compact = boundary_song.profiles[1];
+    std::vector<ff7rp::pipeline::ChartEventRow> compact_rows;
+    for (const auto& row : compact.chart_notes)
+        compact_rows.push_back(ff7rp::pipeline::chart_event_row_from_compiled(row));
+    const auto compact_events = ff7rp::pipeline::derive_chart_event_plan(compact_rows);
+    compact.source_row_count = compact_events.source_row_count;
+    compact.native_prefix_event_count = compact_events.native_prefix_event_count;
+    compact.native_event_count = compact_events.native_event_count;
+    compact.required_action_count = compact_events.required_action_count;
+    compact.note_count = static_cast<int32_t>(compact_events.required_action_count);
+    compact.physical_chart_digest = compact_events.physical_digest;
+    compact.diagnostic_policy_generation = ff7rp::pipeline::chart_row_policy_generation();
+    const bool unmarked_compact = compact_extended_chart_profile(compact);
+    compact.diagnostic_descriptor_hash = 1;
+    boundary_plan = {};
+    const bool compact_ok = !unmarked_compact
+        && compact_extended_chart_profile(compact)
+        && compact.native_event_count == 513
+        && try_plan_descriptor_chart_patch(
+            compact, "selftest-compact-groups", layout, resolver,
+            boundary_plan, &boundary_reason)
+        && boundary_plan.arrays
+        && std::all_of(boundary_plan.arrays->group_indices.begin(),
+            boundary_plan.arrays->group_indices.end(), [](const uint8_t value) { return value == 0; });
     ff7rp::pipeline::configure_chart_row_limit(false, false);
-    if (!suppression_ok) return fail();
+    if (!suppression_ok || !compact_ok) return fail();
 
     // Generalized cleanup preserves exact compact P only with synchronous
     // authority. Missing authority and legacy diagnostics retain the cap;
@@ -2072,8 +2099,7 @@ void chart_audio_diagnostic_expand_completed(
 
 void finish_chart_audio_diagnostic_transaction(
     const ChartAudioDiagnosticTransaction& transaction,
-    const ChartAudioDiagnosticTerminalOutcome outcome,
-    const uint64_t successful_lifecycle_epoch) noexcept
+    const ChartAudioDiagnosticTerminalOutcome outcome) noexcept
 {
     ChartAudioDiagnosticTransaction terminal;
     try {
@@ -2092,8 +2118,7 @@ void finish_chart_audio_diagnostic_transaction(
         }
         log_chart_audio_diagnostic_transaction("terminal", terminal);
         extended_chart_activation_terminal(
-            terminal.generation, terminal.route_lifecycle_epoch, outcome,
-            successful_lifecycle_epoch);
+            terminal.generation, terminal.route_lifecycle_epoch, outcome);
     } catch (...) {
     }
 }

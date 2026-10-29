@@ -115,7 +115,8 @@ int main(int argc, char** argv)
                 | (static_cast<std::uint32_t>(header[11]) << 24u);
         }
     }
-    if (runtime_magic != "F7RPRT16" || runtime_format != 16u) {
+    if (runtime_magic != std::string_view(ff7rp::pipeline::kRuntimeCacheMagic, sizeof(ff7rp::pipeline::kRuntimeCacheMagic))
+        || runtime_format != ff7rp::pipeline::kRuntimeCacheFormat) {
         std::cerr << "generated runtime cache header is missing or invalid\n";
         return 5;
     }
