@@ -1,6 +1,6 @@
 # Current Status
 
-Updated 2026-10-25. This page describes the current implementation, release
+Updated 2026-10-29. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
@@ -1170,6 +1170,26 @@ limitations and tested artifacts. Public version history remains in
 - Keyboard-triggered background replacement is visually confirmed, not full theming.
   Close/reopen restoration, restart/reapply persistence, GC survival, gamepad and
   older-profile runtime acceptance and release qualification remain pending.
+
+## 0.4.1 release disposition (2026-10-29)
+
+- This patch fixes long-chart playback and the result screen: selection admission
+  no longer compares against the drifting chart-transaction counter, grouped charts
+  of at most 512 rows with more than 512 events use an empty-tail extended
+  transaction, committed long charts no longer wait for a retired audio signal, and
+  the result screen accepts the mirrored cleanup lease of live playback. Packaging
+  is unchanged from 0.4.0.
+- 1.005 development builds of the same source were exercised on the owner's
+  machine: long charts up to R=1246/E=1321 were admitted and finished, the grouped
+  test chart R=440/E=550 was admitted with a native note total of 440, and the
+  result screen published title, rank and thresholds without rejection.
+- The owner explicitly accepts for **0.4.1**: no 1.004 gameplay and no exact-ZIP
+  gameplay; `committed_extended=active` was not observed in these runs, so the
+  native note total was used and matched the required action count each time. The
+  accepted 0.4.0 limitations below carry over unchanged.
+- Automated Release checks, independent review, clean source identity and
+  transactional packaging remain required. This decision grants no installation
+  or launch authority.
 
 ## 0.4.0 release disposition (2026-10-25)
 

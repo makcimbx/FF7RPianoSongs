@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-10-29
+
 ### Fixes
 
 - Long charts above 512 rows no longer fall back to the first native song: the
