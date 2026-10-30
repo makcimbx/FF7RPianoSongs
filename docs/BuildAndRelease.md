@@ -273,7 +273,12 @@ catalog layout and generator invariants are described in
    every hook and then publishes nothing. Confirm the anchor instruction decodes to a cataloged
    field of the target structure, and that the first image-wide match is the intended one —
    `match_policy` is `first`, so a later match cannot rescue a wrong one.
-6. Add each `builds.<catalog-build-id>` block, regenerate, and validate. The generator rejects a
+6. Derive the build's complete `builds[].runtime_profile` (native-audio layout and
+   extended-chart byte/callback contracts) and retain its evidence. Do not copy a
+   neighboring build's layout or fall back to the catalog default. Shared runtime
+   layouts, bootstrap profiles and native asset producers must also be checked;
+   catalog completeness alone does not qualify those contracts or a different game.
+   Add each address's `builds.<catalog-build-id>` block, regenerate, and validate. The generator rejects a
    missing `release` entry, an address present in no build, a duplicate or out-of-image RVA, a
    locator missing from a declared build, and a hand-authored `"0x0"`.
 7. Add the matching `release.json` target and one matrix entry in

@@ -9,13 +9,8 @@
 namespace ff7r::piano::game::native_audio {
 const NativeAudioLayout* native_audio_layout(std::string_view build) noexcept {
     if(build!=core::generated::kBuildId)return nullptr;
-    // Explicit old/new imported-program contracts, not an address delta.
-    static constexpr NativeAudioLayout newer{"ff7rebirth-steam-win64-6a16ced2",0x60,0x50,0x288,0x2b8,0x2c0};
-    // Older FUN_141348ed0 reads Music at +0x60; +0x50 is an alternate BGM key.
-    static constexpr NativeAudioLayout older{"ff7rebirth-steam-win64-68fd6fde",0x60,0x50,0x280,0x2b0,0x2b8};
-    if(build==newer.build_id)return &newer;
-    if(build==older.build_id)return &older;
-    return nullptr;
+    const auto* profile=find_runtime_build_profile(build);
+    return profile?&profile->native_audio:nullptr;
 }
 namespace {
 namespace gu = uobject_locator_core;

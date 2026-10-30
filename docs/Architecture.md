@@ -182,18 +182,24 @@ Any required timestamp, signature, or prologue mismatch fails closed. Optional b
 
 ### Catalog Schema
 
-The catalog is `schema_version` 3. It declares the supported game builds once and records every address against those builds:
+The catalog is `schema_version` 4. It declares the supported game builds once and records every address against those builds:
 
 ```jsonc
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "catalog_id": "ff7rpianosongs-rva-catalog",
   "cataloged_on": "<date>",
   "default_build": "<build-id>",
   "builds": [
     { "id": "ff7rebirth-steam-win64-<pe-timestamp>", "game_version": "1.005",
       "pe_timestamp": "0x...", "size_of_image": "0x...", "pe_checksum": "0x...",
-      "file_size": 0, "sha256": "..." }
+      "file_size": 0, "sha256": "...",
+      "runtime_profile": {
+        "native_audio": { "bgm_resource": "0x...", "scoreinfo_bgm": "0x...",
+          "append_slot": "0x...", "backing_slot": "0x...", "serialized_interface_slot": "0x..." },
+        "extended_chart": { "persistent_expand_call": "...", "fname_signature": "...",
+          "callback_vtable_slots": [ "0x...", "0x...", "0x...", "0x..." ] },
+        "evidence": [ { "type": "...", "path": "analysis/...", "detail": "..." } ] } }
   ],
   "addresses": [
     { "id": "<snake_case_id>", "cpp_symbol": "<CppSymbol>", "kind": "function",
@@ -241,6 +247,17 @@ The generator enforces the invariants that make the sentinel safe: a `release` a
 
 Locators admit no absence at all. A locator carries no `requirement` field and has no null-spec degradation path, so a build that omitted one would still install its hooks and then silently publish nothing. The generator therefore requires every declared build to name exactly one derivation of every locator, and rejects a `builds` map that omits a declared build or names an undeclared one.
 
+Each build also requires a complete `runtime_profile`: the native-audio field/virtual-slot
+layout and extended-chart exact caller bytes, FName prefix and callback-target RVAs.
+These previously separate C++ tables are generated into
+`runtime_build_profiles.generated.inc`; `src/game/runtime_build_profile.h` owns their
+value-only shapes and inventory lookup. The inventory retains all declared profiles
+to preserve existing lookup behavior, but is not runtime multi-build dispatch:
+native audio still rejects any ID other than the compiled build, and chart admission
+still validates the compiled executable's bytes and layouts. Missing fields, invalid
+byte extents, unaligned layout offsets, duplicate/out-of-image callback targets or
+missing evidence fail catalog generation rather than selecting a default profile.
+
 ### Per-Build Generated Trees
 
 Each build owns its generated tree:
@@ -250,7 +267,17 @@ src/generated/<build-id>/game/generated/{rvas.generated.h, *.generated.inc}
 src/generated/<build-id>/core/generated/build_identity.generated.h
 ```
 
-The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on the include path, so existing `#include "game/generated/rvas.generated.h"` directives resolve to the chosen build without source changes. The runtime stays single-build and its RVAs stay `constexpr`; each product DLL or ASI targets one game build. The generator is total over builds — it writes and checks every tree — so catalog validation does not depend on which build was selected for compilation. Adding a game build is a data change plus regeneration; the procedure is in [Build And Release](BuildAndRelease.md).
+The CMake variable `FF7RP_GAME_BUILD` places the selected tree ahead of `src` on the include path, so existing `#include "game/generated/rvas.generated.h"` directives resolve to the chosen build without source changes. The runtime stays single-build and its RVAs stay `constexpr`; each product DLL or ASI targets one game build. The generator is total over builds — it writes and checks every tree — so catalog validation does not depend on which build was selected for compilation. Adding a build is a data change plus regeneration only while the remaining structural, bootstrap and asset contracts hold; the procedure is in [Build And Release](BuildAndRelease.md).
+
+### Portability Boundary
+
+Offline isolation is not game neutrality. Musical source processing is separate from
+game-memory access, but pitch filtering, native note/chord names, chart time/row
+encoding, mode roles and stock-template/container serialization still describe Rebirth.
+`runtime_profile` covers the migrated build-specific tables, not every shared layout
+in `runtime_layouts.h`, native lifecycle, loader handoff or asset schema. Another game
+requires independent evidence for those contracts. Preserve audio/MIDI sources;
+recompile target-specific charts and caches instead of assuming binary compatibility.
 
 ## Publication Invariants
 

@@ -190,7 +190,11 @@ void* operator new[](std::size_t bytes,const std::nothrow_t&) noexcept {
     try{return ::operator new[](bytes);}catch(...){return nullptr;}
 }
 int main() {
-    assert(na::native_audio_layout(ff7r::piano::core::generated::kBuildId));
+    const auto* layout=na::native_audio_layout(ff7r::piano::core::generated::kBuildId);
+    assert(layout && layout->build_id==ff7r::piano::core::generated::kBuildId);
+    assert(layout->bgm_resource==Fixture::bgm_resource && layout->scoreinfo_bgm==0x50);
+    assert(layout->append_slot==Fixture::append_slot && layout->backing_slot==Fixture::backing_slot
+        && layout->serialized_interface_slot==Fixture::interface_slot);
     assert(!na::native_audio_layout("unknown"));
     assert(!na::native_audio_layout(Fixture::older?"ff7rebirth-steam-win64-6a16ced2":"ff7rebirth-steam-win64-68fd6fde"));
     using F = na::BindingFailure; using P = na::BindingPhase;

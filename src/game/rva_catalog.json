@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "catalog_id": "ff7rpianosongs-rva-catalog",
   "cataloged_on": "2026-08-03",
   "default_build": "ff7rebirth-steam-win64-6a16ced2",
@@ -11,7 +11,22 @@
       "size_of_image": "0x099d9000",
       "pe_checksum": "0x0769ea6e",
       "file_size": 124317952,
-      "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc"
+      "sha256": "752807180c4ed919667ff0ec163046410187e873888dd75248e78aaa72e363dc",
+      "runtime_profile": {
+        "native_audio": {
+          "bgm_resource": "0x60", "scoreinfo_bgm": "0x50",
+          "append_slot": "0x288", "backing_slot": "0x2b8", "serialized_interface_slot": "0x2c0"
+        },
+        "extended_chart": {
+          "persistent_expand_call": "e8 b1 f1 01 00",
+          "fname_signature": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 40 04 00 00 e8 a4 a3 61 01 48 2b e0 48 8b 05 1a b0",
+          "callback_vtable_slots": ["0x02805da4", "0x01958660", "0x007a5680", "0x027fcc44"]
+        },
+        "evidence": [
+          {"type":"retained_contract","path":"analysis/NativeCachedAudioEvidence-20261016.md","detail":"NativeAudioLayout moved unchanged from native_audio_bindings.cpp; resource fields and native append/backing/serialized-interface slots. No new runtime qualification."},
+          {"type":"retained_contract","path":"analysis/ChartRowLimitEvidence.md","detail":"ExtendedChartBuildSpec moved unchanged from extended_chart.h; exact caller bytes, FName constructor prefix and callback targets. No new runtime qualification."}
+        ]
+      }
     },
     {
       "id": "ff7rebirth-steam-win64-68fd6fde",
@@ -20,7 +35,22 @@
       "size_of_image": "0x09bad000",
       "pe_checksum": "0x07877c99",
       "file_size": 126263624,
-      "sha256": "76bd4d539878a8759433f1cd7c7b47d5e3abda0ef41572a664d2d606a9f09dc8"
+      "sha256": "76bd4d539878a8759433f1cd7c7b47d5e3abda0ef41572a664d2d606a9f09dc8",
+      "runtime_profile": {
+        "native_audio": {
+          "bgm_resource": "0x60", "scoreinfo_bgm": "0x50",
+          "append_slot": "0x280", "backing_slot": "0x2b0", "serialized_interface_slot": "0x2b8"
+        },
+        "extended_chart": {
+          "persistent_expand_call": "e8 c5 e8 01 00",
+          "fname_signature": "48 89 5c 24 10 48 89 6c 24 18 56 57 41 56 b8 40 04 00 00 e8 80 cc 82 01 48 2b e0 48 8b 05 46 75",
+          "callback_vtable_slots": ["0x020d1d40", "0x018d5bd0", "0x020b6dc0", "0x020b5820"]
+        },
+        "evidence": [
+          {"type":"retained_contract","path":"analysis/NativeCachedAudioOffsets-OlderBuild-20261016.json","detail":"NativeAudioLayout moved unchanged from native_audio_bindings.cpp; Music is at +0x60, not the alternate BGM key at +0x50. No new runtime qualification."},
+          {"type":"retained_contract","path":"analysis/PlayableExtended1004Evidence.md","detail":"ExtendedChartBuildSpec moved unchanged from extended_chart.h; independent older-build caller bytes, FName constructor prefix and callback targets. No new runtime qualification."}
+        ]
+      }
     }
   ],
   "addresses": [

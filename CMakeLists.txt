@@ -138,6 +138,7 @@ set(FF7RP_RVA_GENERATED_FILES
     "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/hook_specs.generated.inc"
     "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/rva_signatures.generated.inc"
     "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/runtime_locator_specs.generated.inc"
+    "${FF7RP_GENERATED_CATALOG_DIR}/game/generated/runtime_build_profiles.generated.inc"
     "${FF7RP_GENERATED_CATALOG_DIR}/core/generated/build_identity.generated.h"
 )
 add_library(ff7rp_generated_catalog INTERFACE)

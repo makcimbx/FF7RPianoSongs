@@ -192,7 +192,7 @@ class RuntimeLocatorGeneratorTests(unittest.TestCase):
 
 
 class MultiBuildCatalogTests(unittest.TestCase):
-    """Schema-3 multi-build coverage and absence-handling invariants."""
+    """Multi-build coverage, complete runtime profiles and absence handling."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -220,6 +220,73 @@ class MultiBuildCatalogTests(unittest.TestCase):
         for locator in catalog["locators"]:
             locator["builds"][new_build_id] = copy.deepcopy(locator["builds"][source_build_id])
         return catalog
+
+    def test_runtime_profile_is_required_for_every_declared_build(self) -> None:
+        for index in range(len(self.raw_catalog["builds"])):
+            for field in (None, "native_audio", "extended_chart", "evidence"):
+                with self.subTest(build=index, field=field):
+                    catalog = self.raw()
+                    build = catalog["builds"][index]
+                    if field is None:
+                        build.pop("runtime_profile")
+                    else:
+                        build["runtime_profile"].pop(field)
+                    with self.assertRaisesRegex(generator.CatalogError, "invalid keys"):
+                        self.load(catalog)
+
+    def test_runtime_profile_rejects_invalid_layouts_and_byte_contracts(self) -> None:
+        cases = [
+            ("native_audio", "bgm_resource", "0x0", "pointer-aligned"),
+            ("native_audio", "append_slot", "0x281", "pointer-aligned"),
+            ("extended_chart", "persistent_expand_call", "90 00 00 00 00", "CALL rel32"),
+            ("extended_chart", "persistent_expand_call", "e8 00", "5 fixed bytes"),
+            ("extended_chart", "fname_signature", "90", "32 fixed bytes"),
+            ("extended_chart", "fname_signature", None, "32 fixed bytes"),
+            ("extended_chart", "callback_vtable_slots", ["0x1"], "four RVAs"),
+            ("extended_chart", "callback_vtable_slots", ["0x0", "0x1", "0x2", "0x3"], "in-image"),
+            ("extended_chart", "callback_vtable_slots", ["0xffffffff", "0x1", "0x2", "0x3"], "in-image"),
+            ("extended_chart", "callback_vtable_slots", ["0x1", "0x1", "0x2", "0x3"], "distinct"),
+        ]
+        for section, field, value, error in cases:
+            with self.subTest(section=section, field=field, value=value):
+                catalog = self.raw()
+                catalog["builds"][0]["runtime_profile"][section][field] = value
+                with self.assertRaisesRegex(generator.CatalogError, error):
+                    self.load(catalog)
+        catalog = self.raw()
+        audio = catalog["builds"][0]["runtime_profile"]["native_audio"]
+        audio["append_slot"] = "0x0" + audio["backing_slot"][2:]
+        with self.assertRaisesRegex(generator.CatalogError, "virtual slots must be distinct"):
+            self.load(catalog)
+
+    def test_runtime_profile_requires_retained_evidence(self) -> None:
+        catalog = self.raw()
+        catalog["builds"][0]["runtime_profile"]["evidence"] = []
+        with self.assertRaisesRegex(generator.CatalogError, "evidence must be non-empty"):
+            self.load(catalog)
+
+    def test_runtime_profile_generation_preserves_build_specific_values(self) -> None:
+        catalog = self.raw()
+        rendered = generator.render_runtime_build_profiles(catalog["builds"]).decode("ascii")
+        for build in catalog["builds"]:
+            profile = build["runtime_profile"]
+            audio = ", ".join(profile["native_audio"][key] for key in generator.NATIVE_AUDIO_LAYOUT_FIELDS)
+            self.assertIn(f'{{"{build["id"]}", {audio}}}', rendered)
+            for field in ("persistent_expand_call", "fname_signature"):
+                expected = generator.format_bytes(bytes.fromhex(profile["extended_chart"][field]))
+                self.assertIn("{" + expected + "}", rendered)
+            self.assertIn("{" + ", ".join(profile["extended_chart"]["callback_vtable_slots"]) + "}", rendered)
+
+    def test_runtime_profile_edit_does_not_change_other_generated_contracts(self) -> None:
+        catalog, entries, locators = self.load(self.raw())
+        before = generator.generated_outputs(catalog, entries, locators)
+        catalog["builds"][0]["runtime_profile"]["native_audio"]["bgm_resource"] = "0x68"
+        after = generator.generated_outputs(catalog, entries, locators)
+        for path, original in before.items():
+            if path.name == "runtime_build_profiles.generated.inc":
+                self.assertNotEqual(original, after[path])
+            else:
+                self.assertEqual(original, after[path], path)
 
     def test_new_build_preserves_source_absence(self) -> None:
         catalog = self.raw()

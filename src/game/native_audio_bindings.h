@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/uobject_locator_core.h"
+#include "game/runtime_build_profile.h"
 #include "pipeline/native_audio_artifacts.h"
 
 #include <array>
@@ -17,12 +18,6 @@ using MemoryReader = uobject_locator_core::MemoryReader;
 // Shared queue/group budget; native array capacity/field-width guards stay separate.
 inline constexpr std::size_t kNativeAudioEntryLimit = 256;
 
-// Structural contracts, not address discovery. RVAs remain catalog-owned.
-struct NativeAudioLayout {
-    std::string_view build_id;
-    std::size_t bgm_resource, scoreinfo_bgm;
-    std::size_t append_slot, backing_slot, serialized_interface_slot;
-};
 // Only the exact compiled executable profile can be selected.
 const NativeAudioLayout* native_audio_layout(std::string_view build_id) noexcept;
 
