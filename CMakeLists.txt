@@ -341,6 +341,7 @@ target_compile_definitions(native_proxy_forwarding_selftest PRIVATE WIN32_LEAN_A
 add_executable(native_proxy_startup_diagnostic_selftest
     src/tests/native_proxy_startup_diagnostic_selftest.cpp "${FF7RP_PROXY_PROFILE}")
 ff7rp_apply_cpp_policy(native_proxy_startup_diagnostic_selftest)
+ff7rp_use_generated_catalog(native_proxy_startup_diagnostic_selftest)
 target_include_directories(native_proxy_startup_diagnostic_selftest PRIVATE src "${FF7RP_PROXY_GENERATED_DIR}")
 target_compile_definitions(native_proxy_startup_diagnostic_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(native_proxy_startup_diagnostic_selftest PRIVATE
@@ -488,6 +489,42 @@ target_compile_definitions(release_hook_empty_catalog_selftest PRIVATE WIN32_LEA
 target_include_directories(release_hook_empty_catalog_selftest PRIVATE "src")
 target_link_libraries(release_hook_empty_catalog_selftest PRIVATE minhook)
 
+add_executable(hook_install_trace_selftest src/tests/hook_install_trace_selftest.cpp src/core/hooks.cpp src/core/pe_image.cpp)
+ff7rp_apply_cpp_policy(hook_install_trace_selftest)
+target_include_directories(hook_install_trace_selftest PRIVATE src)
+target_compile_definitions(hook_install_trace_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_link_libraries(hook_install_trace_selftest PRIVATE minhook)
+foreach(batch_test IN ITEMS owned_hook_batch_selftest owned_hook_batch_real_selftest)
+    add_executable(${batch_test} src/tests/${batch_test}.cpp src/core/hooks.cpp src/core/pe_image.cpp)
+    ff7rp_apply_cpp_policy(${batch_test})
+    target_include_directories(${batch_test} PRIVATE src)
+    target_compile_definitions(${batch_test} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_link_libraries(${batch_test} PRIVATE minhook)
+    add_test(NAME ${batch_test} COMMAND ${batch_test})
+    set_tests_properties(${batch_test} PROPERTIES TIMEOUT 30 LABELS "functional")
+endforeach()
+add_test(NAME owned_hook_batch_cancel_failure_selftest COMMAND owned_hook_batch_selftest cancel_failure)
+set_tests_properties(owned_hook_batch_cancel_failure_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
+foreach(prefix RANGE 0 11)
+    add_test(NAME owned_hook_batch_apply_failure_${prefix}_selftest
+        COMMAND owned_hook_batch_selftest apply_failure ${prefix})
+    set_tests_properties(owned_hook_batch_apply_failure_${prefix}_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
+endforeach()
+add_test(NAME owned_hook_batch_remove_failure_selftest COMMAND owned_hook_batch_selftest remove_failure)
+set_tests_properties(owned_hook_batch_remove_failure_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
+
+foreach(catalog IN LISTS FF7RP_CATALOG_BUILD_IDS)
+    string(REGEX REPLACE ".*-" "" suffix "${catalog}")
+    set(test_target "early_guard_validation_${suffix}_selftest")
+    add_executable(${test_target} src/tests/early_guard_validation_selftest.cpp
+        src/game/hook_specs.cpp src/core/pe_image.cpp src/core/logging.cpp)
+    ff7rp_apply_cpp_policy(${test_target})
+    target_compile_definitions(${test_target} PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_include_directories(${test_target} PRIVATE "src/generated/${catalog}" "src")
+    add_test(NAME ${test_target} COMMAND ${test_target})
+    set_tests_properties(${test_target} PROPERTIES TIMEOUT 30 LABELS "functional")
+endforeach()
+
 add_executable(piano_page_selection_guard_selftest
     src/tests/piano_page_selection_guard_selftest.cpp
     src/game/piano_page_selection_guard.cpp
@@ -527,6 +564,7 @@ add_executable(menu_session_authority_selftest
     src/game/menu_session_state.cpp
 )
 ff7rp_apply_cpp_policy(menu_session_authority_selftest)
+ff7rp_use_generated_catalog(menu_session_authority_selftest)
 target_compile_definitions(menu_session_authority_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(menu_session_authority_selftest PRIVATE "src")
 ff7rp_apply_cpp_policy(profile_list_coordinator_selftest)
@@ -734,6 +772,7 @@ add_executable(runtime_lifecycle_selftest
     src/game/song_registry.cpp
 )
 ff7rp_apply_cpp_policy(runtime_lifecycle_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(runtime_lifecycle_selftest)
 target_compile_definitions(runtime_lifecycle_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(runtime_lifecycle_selftest PRIVATE "src")
 target_link_libraries(runtime_lifecycle_selftest PRIVATE minhook)
@@ -1179,6 +1218,15 @@ if(FF7RP_BUILD_RUNTIME)
 add_test(NAME registry_selftest COMMAND registry_selftest)
 add_test(NAME catalog_adoption_selftest COMMAND catalog_adoption_selftest)
 add_test(NAME release_hook_empty_catalog_selftest COMMAND release_hook_empty_catalog_selftest)
+add_test(NAME hook_install_trace_selftest COMMAND hook_install_trace_selftest)
+set_tests_properties(hook_install_trace_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
+foreach(failure IN ITEMS native_failure early_guard_failure late_scope validation_failure feature_failure rollback_failure feature_exception live_retention)
+    add_test(NAME release_hook_${failure}_selftest COMMAND release_hook_empty_catalog_selftest ${failure})
+    set_tests_properties(release_hook_${failure}_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
+endforeach()
+add_test(NAME startup_phase_order_selftest
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/src/tests/startup_phase_order_selftest.py")
+set_tests_properties(startup_phase_order_selftest PROPERTIES TIMEOUT 30 LABELS "functional")
 add_test(NAME piano_page_selection_guard_selftest COMMAND piano_page_selection_guard_selftest)
 add_test(NAME list_catalog_transaction_selftest COMMAND list_catalog_transaction_selftest)
 add_test(NAME profile_list_coordinator_selftest COMMAND profile_list_coordinator_selftest)

@@ -68,9 +68,10 @@ bool initialize_owned_product(HMODULE,HMODULE) noexcept {assert(false);return fa
 namespace ff7rp::proxy {
 bool EntryScope::capture(EntryProof&) const noexcept {assert(false);return false;}
 EntryResult entry_bridge_status() noexcept {assert(false);return {};}
-EntryResult arm_process_start_entry(void*,std::uint32_t,const void*,const EntryProfile&,EntryInitializer,void*) noexcept {assert(false);return {};}
+EntryResult arm_process_start_entry(void*,std::uint32_t,const void*,const EntryProfile&,EntryInitializer,void*,EntryCompletionObserver) noexcept {assert(false);return {};}
 }
 namespace ff7r::piano::game::native_audio {
+void emit_native_install_diagnostic() noexcept {assert(false);}
 ProxyBootstrapSnapshot native_proxy_bootstrap_status() noexcept {assert(false);return {};}
 }
 

@@ -1700,6 +1700,9 @@ void overlapping_forward_regression() {
 // Fake MinHook preserves the actual RawRvaHook install/disable/remove control flow.
 MH_STATUS WINAPI MH_Initialize() { return MH_OK; }
 MH_STATUS WINAPI MH_Uninitialize() { return MH_OK; }
+MH_STATUS WINAPI MH_QueueEnableHook(LPVOID) { std::abort(); }
+MH_STATUS WINAPI MH_QueueDisableHook(LPVOID) { std::abort(); }
+MH_STATUS WINAPI MH_ApplyQueued() { std::abort(); }
 MH_STATUS WINAPI MH_CreateHook(LPVOID target, LPVOID, LPVOID* original) {
     if (++install_count == fail_install) return MH_ERROR_UNSUPPORTED_FUNCTION;
     const auto offset = reinterpret_cast<std::uintptr_t>(target) - reinterpret_cast<std::uintptr_t>(module);
@@ -1736,6 +1739,23 @@ int main() {
     prepare_catalog(); std::string error; require(core::initialize_hooks(error), "initialize fake MinHook");
     dynamic_source_regression(); matching_retirement_regression(); proof_phase_regression(); failed_restoration_retirement_regression(); passive_registration_regression(); passive_capture_reentry_regression(); bottom_attribute_regression(); routed_filter_regression(); subject_retirement_regression(); supported_properties(); owning_and_nesting(); filtering_reentry_cleanup(); retirement_and_stale_regressions(); overlapping_forward_regression(); property_feedback_regression(); direct_property_write_regression(); uncertain_property_regression(); faults_and_transaction();
     require(core::shutdown_hooks(), "shutdown fake MinHook");
+    require(core::initialize_hooks(error), "initialize retained MinHook");
+    ready(palette::configure(module, FF7RP_TARGET_BUILD_ID, {nullptr, &reader}), "configure retained palette");
+    fake_native_functions(); install_count = fail_install = 0;
+    core::retain_hook_trampolines_for_process_lifetime();
+    fail_enable = true;
+    require(!palette::install(), "enable failure retains locally published original");
+    fail_enable = false;
+    const auto retained_original = palette::state.originals[0];
+    require(retained_original && palette::state.hooks[0].installed() && installed.size() == 1,
+        "failed enable cannot remove owned trampoline or erase original");
+    const auto retained_cleanup = palette::uninstall();
+    require(!retained_cleanup && std::string_view(retained_cleanup.stage) == "process_lifetime_retained"
+        && palette::state.reader.current == &reader && palette::state.configured,
+        "retained palette keeps reader and configured module state");
+    require(!palette::state.hooks[0].remove() && !core::shutdown_hooks()
+        && palette::state.originals[0] == retained_original && installed.size() == 1,
+        "explicit remove and uninitialize cannot free retained originals");
     require(!palette_patch_writes, "color data projection never changes page protection or flushes executable code");
     std::cout << "menu_theme_palette_selftest passed\n";
 }

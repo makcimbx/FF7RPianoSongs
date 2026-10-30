@@ -289,7 +289,8 @@ bool validate(Scope& s,Address detour=0) {
         || std::memcmp(current.original.data(),contract.original.data(),current.original.size())
         || current.entry!=reinterpret_cast<Address>(s.exe)+contract.rva
         || (s.initial.image && !same_proof(s.initial,current)))return reject(ProxyBootstrapFailure::Context,"private_entry_scope");
-    if(!native_proxy_detail::cold_entry_ready(s.exe) || !entry_code(s,detour))return reject(ProxyBootstrapFailure::Cold,"cold_or_entry_ownership");
+    if(!native_proxy_detail::cold_entry_ready(s.exe))return reject(ProxyBootstrapFailure::Cold,"cold_entry_ready");
+    if(!entry_code(s,detour))return reject(ProxyBootstrapFailure::Cold,"entry_ownership");
     s.initial=current;return true;
 }
 #endif

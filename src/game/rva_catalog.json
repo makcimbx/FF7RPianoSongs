@@ -4532,7 +4532,7 @@
       "validation": {
         "policy": "call_site"
       },
-      "install_policy": "required_hook",
+      "install_policy": "optional_hook",
       "status": "production",
       "hook_owner": "piano_page_selection_guard",
       "consumers": [
@@ -4541,7 +4541,7 @@
       "hook_spec": {
         "name": "piano_page_selected_resolve_call",
         "order": 25,
-        "required_for_release_startup": true
+        "required_for_release_startup": false
       },
       "builds": {
         "ff7rebirth-steam-win64-6a16ced2": {

@@ -4,6 +4,8 @@
 #include "core/pe_image.h"
 #include "game/hook_specs.h"
 #include "game/module_hooks.h"
+#include "game/native_audio_bootstrap.h"
+#include "game/native_proxy_bootstrap.h"
 #include "game/rvas.h"
 #include "game/song_registry.h"
 
@@ -379,6 +381,11 @@ InstallResult install(HMODULE exe_module) noexcept
 {
     static_assert(rva::PianoPageVisibilityCall == rva::PianoPageSelectedResolveCall + 13);
     static_assert(rva::PianoPageNoSelectionContinuation == rva::PianoPageVisibilityCall + 5);
+    static bool attempted = false;
+    if (attempted || core::hook_trampolines_retained_for_process_lifetime()
+        || native_audio::bootstrap_detail::scope_present()
+            == native_audio::native_proxy_detail::scope_present()) return InstallResult::Unavailable;
+    attempted = true;
     try {
         if (!exe_module
             || !signature_matches(exe_module, "piano_page_selected_resolve_call")

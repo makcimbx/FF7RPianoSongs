@@ -10,6 +10,7 @@
 #include "game/extended_chart.h"
 #include "game/catalog_adoption.h"
 #include "game/runtime.h"
+#include "game/uobject_identity.h"
 #include "game/startup_cache_overlay.h"
 #include "game/title.h"
 #include "startup/music_repository_loader.h"
@@ -47,6 +48,7 @@ std::atomic<bool> g_completion_started{false};
 ff7r::piano::startup::NativeAudioStartupLatch g_native_startup;
 ff7r::piano::startup::StartupCacheProgress g_startup_cache_progress;
 std::wstring g_dll_dir;
+core::Config g_config;
 
 void catalog_readiness_changed(void* context, const game::CatalogReadinessEvent event,
     const std::size_t song_count) noexcept
@@ -156,6 +158,26 @@ DWORD WINAPI complete_startup(LPVOID) noexcept
 {
     return core::invoke_fail_closed<DWORD>(
         [] {
+            const auto exe = GetModuleHandleW(nullptr);
+            const auto& config = g_config;
+            game::initialize_uobject_identity(exe);
+            game::configure_autoplay_input(config.autoplay_function_key);
+            game::configure_song_preview(config.preview_mode, config.preview_function_key);
+            game::menu_theme_runtime::configure(exe, std::filesystem::path(g_dll_dir) / L"Themes",
+                g_dll_dir + L"\\FF7RPianoSongs.ini", config);
+            game::configure_extended_chart_capability(exe);
+            game::configure_catalog_readiness_observer(
+                {&g_startup_cache_progress, catalog_readiness_changed});
+            const bool transcription = ff7rp::transcription::register_muscriptor_transcriber(
+                std::filesystem::path(g_dll_dir) / ff7rp::transcription::kMuscriptorModelFileName,
+                config.transcription_threads, [](const std::string& line) { core::log(core::LogLevel::Info, line); });
+            core::log(core::LogLevel::Info, std::string("[transcription] model=") + (transcription ? "found" : "missing") +
+                " threads=" + std::to_string(config.transcription_threads));
+            if (!game::install_feature_hooks(exe)) {
+                g_startup_cache_progress.failed();
+                core::log(core::LogLevel::Error, "[startup] status=disabled_feature_install_failed native_protection=retained");
+                return DWORD{0};
+            }
             (void)game::install_startup_cache_overlay(GetModuleHandleW(nullptr),
                 g_startup_cache_progress);
             if (!game::start_title_input_service(GetModuleHandleW(nullptr))) {
@@ -209,13 +231,8 @@ DWORD startup_worker_body()
 
     const std::wstring ini_path = dll_dir + L"\\FF7RPianoSongs.ini";
     const core::Config config = core::load_config(ini_path);
-    game::configure_autoplay_input(config.autoplay_function_key);
+    g_config = config; // Published to the completion worker by the startup latch/thread creation.
     core::set_log_level(config.log_level);
-    const bool transcription = ff7rp::transcription::register_muscriptor_transcriber(
-        std::filesystem::path(dll_dir) / ff7rp::transcription::kMuscriptorModelFileName,
-        config.transcription_threads, [](const std::string& line) { core::log(core::LogLevel::Info, line); });
-    core::log(core::LogLevel::Info, std::string("[transcription] model=") + (transcription ? "found" : "missing") +
-        " threads=" + std::to_string(config.transcription_threads));
 
     core::log(core::LogLevel::Info,
         std::string("[startup] product=") + std::string(generated::kProduct) +
@@ -309,37 +326,13 @@ DWORD startup_worker_body()
         return 0;
     }
 
-    game::configure_song_preview(config.preview_mode, config.preview_function_key);
-    game::menu_theme_runtime::configure(exe, std::filesystem::path(dll_dir) / L"Themes", ini_path, config);
-    game::configure_extended_chart_capability(exe);
-    game::configure_catalog_readiness_observer(
-        {&g_startup_cache_progress, catalog_readiness_changed});
-
-    std::string error;
-    bool minhook_ready = core::initialize_hooks(error);
-    if (!minhook_ready) {
-        core::log(core::LogLevel::Info,
-            "[startup_overlay] status=disabled_minhook_unavailable error=" + error);
-    }
-
-    if (!minhook_ready) {
-        error.clear();
-        minhook_ready = core::initialize_hooks(error);
-        if (!minhook_ready) {
-            g_startup_cache_progress.failed();
-            core::log(core::LogLevel::Error,
-                "[startup] status=disabled_minhook_error error=" + error);
-            return 0;
-        }
-    }
-
-    if (!game::install_release_hooks(exe, native_initialized)) {
+    if (!game::install_native_protection_hooks(exe, native_initialized)) {
         g_startup_cache_progress.failed();
         core::log(core::LogLevel::Error, "[startup] status=disabled_hook_install_failed");
         return 0;
     }
     core::log(core::LogLevel::Info, "[startup] status=awaiting_native_initializer workers=not_started");
-    if (g_native_startup.hooks_installed()) start_completed_startup();
+    if (g_native_startup.native_barriers_published()) start_completed_startup();
     return 0;
 }
 
@@ -379,9 +372,11 @@ void initialize_proxy_inline() noexcept
 extern "C" __declspec(dllexport) void InitializeASI()
 {
     if (g_started.load(std::memory_order_acquire)) return;
-    if (game::native_audio::try_synchronous_native_audio_startup(
+    const bool invoked = game::native_audio::try_synchronous_native_audio_startup(
             GetModuleHandleW(nullptr), g_module, reinterpret_cast<std::uintptr_t>(_ReturnAddress()),
-            initialize_inline)) return;
+            initialize_inline);
+    game::native_audio::emit_native_install_diagnostic();
+    if (invoked) return;
     core::start_thread_once(g_started, worker_thread, nullptr, CreateThread, CloseHandle);
 }
 

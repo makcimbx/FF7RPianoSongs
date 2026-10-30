@@ -1,4 +1,7 @@
 #include "game/native_audio_runtime.h"
+#if defined(FF7RP_OWNED_PROXY)
+#include "proxy/entry_bridge.h"
+#endif
 #include "game/native_audio_bootstrap.h"
 #include "game/native_proxy_bootstrap.h"
 #include "game/native_audio_gate.h"
@@ -60,8 +63,11 @@ MemoryReader test_memory{};
 Address (*test_entry)(std::string_view)=nullptr;
 bool (*test_signature)(std::string_view)=nullptr;
 bool (*test_install_hook)(std::string_view)=nullptr;
+bool (*test_apply_hooks)()=nullptr;
+bool (*test_cancel_hooks)()=nullptr;
 bool (*test_disable_hook)(std::size_t)=nullptr;
 bool (*test_remove_hook)(std::size_t)=nullptr;
+bool (*test_hooks_retained)()=nullptr;
 Address test_updater_caller=0;
 void (*test_invalidation_entered)()=nullptr;
 // Same scalar-read/captured-call boundary as production; never native execution.
@@ -204,20 +210,68 @@ NameHelperFn original_name_helper=nullptr;
 std::array<core::RawRvaHook,12> g_hooks;
 std::size_t g_installed=0;
 
+bool install_hooks_retained() noexcept {
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+    if(test_hooks_retained)return test_hooks_retained();
+#endif
+    for(const auto& hook:g_hooks)if(hook.installed())return true;
+    return false;
+}
+
+NativeInstallDiagnostic g_install_diagnostic;
+std::atomic_flag g_install_diagnostic_claimed = ATOMIC_FLAG_INIT;
+std::atomic<bool> g_install_diagnostic_ready{false}, g_install_diagnostic_taken{false};
+thread_local NativeInstallDiagnostic* g_install_observation = nullptr;
+bool install_failed(bool failed, const char* predicate, const char* hook = nullptr, Address offset = 0) noexcept {
+    if (failed && g_install_observation && !g_install_observation->first_failure) {
+        g_install_observation->first_failure = predicate;
+        g_install_observation->failed_hook = hook;
+        g_install_observation->failed_rva = offset;
+    }
+    return failed;
+}
+struct InstallObservation {
+    bool owns = false;
+    InstallObservation() noexcept {
+        if (!g_install_diagnostic_claimed.test_and_set(std::memory_order_acq_rel)) {
+            owns = true;
+            g_install_observation = &g_install_diagnostic;
+            g_install_diagnostic.begin = core::hook_trace_ticks();
+            LARGE_INTEGER frequency{};
+            if (QueryPerformanceFrequency(&frequency)) g_install_diagnostic.frequency = frequency.QuadPart;
+        }
+    }
+    ~InstallObservation() {
+        if (!owns) return;
+        g_install_observation->end = core::hook_trace_ticks();
+        g_install_observation = nullptr;
+        g_install_diagnostic_ready.store(true, std::memory_order_release);
+    }
+};
+void capture_publication_failure() noexcept {
+    if (!g_install_observation) return;
+    const auto asi = native_audio_bootstrap_status();
+    const auto proxy = native_proxy_bootstrap_status();
+    g_install_observation->bootstrap_failure = static_cast<unsigned>(asi.failure);
+    g_install_observation->proxy_failure = static_cast<unsigned>(proxy.failure);
+    g_install_observation->proxy_predicate = proxy.predicate;
+}
+
 void invalidate(RuntimeFailure reason) noexcept {
     RuntimeFailure expected=RuntimeFailure::None;
     g_failure.compare_exchange_strong(expected,reason,std::memory_order_acq_rel);
 }
 bool cold_baseline(Address base=g_base) noexcept {
-    if constexpr(!rva::NativeAudioCrtState || !rva::NativeAudioInitialGuHeader || !rva::DataObjectNameMap)return false;
+    if constexpr(!rva::NativeAudioCrtState || !rva::NativeAudioInitialGuHeader || !rva::DataObjectNameMap)return !install_failed(true,"cold.layout");
     else {
     std::uint32_t crt=1; Address map=1,owner=1;
     std::array<unsigned char,48> bytes{};
-    if(!read(base+rva::NativeAudioCrtState,crt) || crt
-        || !read(base+rva::DataObjectNameMap,map) || map
-        || !read(base+rva::PackageStoreOwnerGlobal,owner) || owner)return false;
+    if(install_failed(!read(base+rva::NativeAudioCrtState,crt),"cold.crt.read") || install_failed(crt!=0,"cold.crt.nonzero")
+        || install_failed(!read(base+rva::DataObjectNameMap,map),"cold.name_map.read") || install_failed(map!=0,"cold.name_map.nonzero")
+        || install_failed(!read(base+rva::PackageStoreOwnerGlobal,owner),"cold.owner.read") || install_failed(owner!=0,"cold.owner.nonzero"))return false;
     for(auto rva:{rva::NativeAudioInitialGuHeader,rva::BgmListRegistry,rva::ScoreInfoRegistry,rva::PianoScoreRegistry}) {
-        if(!read(base+rva,bytes) || std::any_of(bytes.begin(),bytes.end(),[](auto b){return b!=0;}))return false;
+        if(install_failed(!read(base+rva,bytes),"cold.registry.read",nullptr,rva)
+            || install_failed(std::any_of(bytes.begin(),bytes.end(),[](auto b){return b!=0;}),"cold.registry.nonzero",nullptr,rva))return false;
     }
     return true;
     }
@@ -889,53 +943,67 @@ EntryContract entry_contract() noexcept {
 }
 bool cold_entry_ready(HMODULE module) noexcept {
     const auto base=reinterpret_cast<Address>(module);
-    if(!base || !cold_baseline(base))return false;
+    if(install_failed(!base,"cold.module") || !cold_baseline(base))return false;
     // Source-specific pre-CRT witnesses, not reconstructed post-initialization state.
     for(auto offset:{rva::PackageStoreGeneration,rva::NativeBootstrapHinstance,rva::NativeBootstrapTaskGraph,
         rva::NativeBootstrapPool,rva::NativeBootstrapBackgroundPool,
         rva::NativeBootstrapCrashProcess,rva::NativeBootstrapCrashResult,
         rva::NativeBootstrapCrashWorker,rva::NativeBootstrapCrashRequest,rva::NativeBootstrapCrashEvent,
         rva::NativeBootstrapSrwGmalloc,rva::NativeBootstrapSrwReserve,rva::NativeBootstrapSrwLock,rva::NativeBootstrapSrwOutput}) {
-        Address value=1;if(!offset || !read(base+offset,value) || value)return false;
+        Address value=1;if(install_failed(!offset,"cold.bootstrap.offset")
+            || install_failed(!read(base+offset,value),"cold.bootstrap.read",nullptr,offset)
+            || install_failed(value!=0,"cold.bootstrap.nonzero",nullptr,offset))return false;
     }
     std::uint32_t serial=1,guard=1;unsigned char pool=1;
     for(auto offset:{rva::NativeBootstrapCrashStop,rva::NativeBootstrapCrashComplete}){
-        std::uint32_t value=1;if(!offset || !read(base+offset,value) || value)return false;}
-    if(!rva::NativeBootstrapGuSerial || !read(base+rva::NativeBootstrapGuSerial,serial) || serial
-        || !rva::NativeBootstrapSrwGuard || !read(base+rva::NativeBootstrapSrwGuard,guard) || guard
-        || !rva::NativeBootstrapSrwPoolComplete || !read(base+rva::NativeBootstrapSrwPoolComplete,pool) || pool)return false;
-    if constexpr(rva::NativeBootstrapIoPool!=0){Address value=1;if(!read(base+rva::NativeBootstrapIoPool,value) || value)return false;}
+        std::uint32_t value=1;if(install_failed(!offset,"cold.crash.offset")
+            || install_failed(!read(base+offset,value),"cold.crash.read",nullptr,offset)
+            || install_failed(value!=0,"cold.crash.nonzero",nullptr,offset))return false;}
+    if(install_failed(!rva::NativeBootstrapGuSerial,"cold.gu_serial.offset")
+        || install_failed(!read(base+rva::NativeBootstrapGuSerial,serial),"cold.gu_serial.read") || install_failed(serial!=0,"cold.gu_serial.nonzero")
+        || install_failed(!rva::NativeBootstrapSrwGuard,"cold.srw_guard.offset")
+        || install_failed(!read(base+rva::NativeBootstrapSrwGuard,guard),"cold.srw_guard.read") || install_failed(guard!=0,"cold.srw_guard.nonzero")
+        || install_failed(!rva::NativeBootstrapSrwPoolComplete,"cold.srw_pool.offset")
+        || install_failed(!read(base+rva::NativeBootstrapSrwPoolComplete,pool),"cold.srw_pool.read") || install_failed(pool!=0,"cold.srw_pool.nonzero"))return false;
+    if constexpr(rva::NativeBootstrapIoPool!=0){Address value=1;if(install_failed(!read(base+rva::NativeBootstrapIoPool,value),"cold.io_pool.read")
+        || install_failed(value!=0,"cold.io_pool.nonzero"))return false;}
     return true;
 }
 }
 bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexcept {
+    InstallObservation observation;
     const bool synchronous=bootstrap_detail::scope_present();
     const bool proxy_entry=native_proxy_detail::scope_present();
+    if(g_install_observation) { g_install_observation->synchronous=synchronous; g_install_observation->proxy_entry=proxy_entry; }
     // A worker with CRT=0 could already be inside the cookie API: patching its
     // suspended AEP return is unsafe even if a later entry event never arrives.
     // The literal pre-AEP transaction remains exercised by its injected early
     // source harness, not offered as an unqualified production-worker fallback.
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
-    if((synchronous && proxy_entry) || (!synchronous && !proxy_entry && !test_install_hook))return false;
+    if(install_failed((synchronous && proxy_entry) || (!synchronous && !proxy_entry && !test_install_hook),"origin.scope"))return false;
 #else
-    if(synchronous==proxy_entry)return false;
+    if(install_failed(synchronous==proxy_entry,"origin.scope"))return false;
 #endif
-    if(g_base || !module || !services.identity || !services.scoreinfo_original
-        || !native_audio_layout(core::generated::kBuildId))return false;
+    if(install_failed(g_base!=0,"install.already_owned") || install_failed(!module,"install.module")
+        || install_failed(!services.identity,"install.identity_service") || install_failed(!services.scoreinfo_original,"install.scoreinfo_service")
+        || install_failed(!native_audio_layout(core::generated::kBuildId),"install.layout"))return false;
     core::PeIdentity identity{};
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
     if(test_install_hook)identity={core::generated::kExeTimestamp,core::generated::kSizeOfImage,core::generated::kPeChecksum};else
 #endif
     identity=core::pe_identity(module);
-    if(identity.timestamp!=core::generated::kExeTimestamp || identity.size_of_image!=core::generated::kSizeOfImage
-        || identity.checksum!=core::generated::kPeChecksum)return false;
+    if(install_failed(identity.timestamp!=core::generated::kExeTimestamp,"image.timestamp")
+        || install_failed(identity.size_of_image!=core::generated::kSizeOfImage,"image.extent")
+        || install_failed(identity.checksum!=core::generated::kPeChecksum,"image.checksum"))return false;
     g_base=reinterpret_cast<Address>(module);g_services=services;
     IMAGE_DOS_HEADER dos{}; IMAGE_NT_HEADERS64 nt{};
-    if(!read(g_base,dos) || dos.e_magic!=IMAGE_DOS_SIGNATURE || dos.e_lfanew<0
-        || static_cast<std::uint32_t>(dos.e_lfanew)>identity.size_of_image-sizeof(nt)
-        || !read(g_base+dos.e_lfanew,nt) || nt.Signature!=IMAGE_NT_SIGNATURE
-        || nt.OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC
-        || !rva::NativeAudioExeEntry || nt.OptionalHeader.AddressOfEntryPoint!=rva::NativeAudioExeEntry) {
+    if(install_failed(!read(g_base,dos),"image.dos.read") || install_failed(dos.e_magic!=IMAGE_DOS_SIGNATURE,"image.dos.magic")
+        || install_failed(dos.e_lfanew<0,"image.nt.negative_offset")
+        || install_failed(static_cast<std::uint32_t>(dos.e_lfanew)>identity.size_of_image-sizeof(nt),"image.nt.extent")
+        || install_failed(!read(g_base+dos.e_lfanew,nt),"image.nt.read") || install_failed(nt.Signature!=IMAGE_NT_SIGNATURE,"image.nt.signature")
+        || install_failed(nt.OptionalHeader.Magic!=IMAGE_NT_OPTIONAL_HDR64_MAGIC,"image.nt.magic")
+        || install_failed(!rva::NativeAudioExeEntry,"image.entry.offset")
+        || install_failed(nt.OptionalHeader.AddressOfEntryPoint!=rva::NativeAudioExeEntry,"image.entry.mismatch")) {
         g_base=0;return false;
     }
     struct Hook {const char* id;void* detour;void** original;};
@@ -949,44 +1017,83 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         HOOK("dataobject_name_helper",name_helper_hook,original_name_helper),HOOK("dataobject_group_reserve",reserve_hook,original_reserve),
         HOOK("native_audio_updater",updater_hook,original_updater)};
 #undef HOOK
-    if(!rva::FNameCtor){g_base=0;return false;}
+    if(install_failed(!rva::FNameCtor,"signature.fname.offset")){g_base=0;return false;}
     constexpr const char* calls[]={"io_dispatcher_mount","single_soft_path_request","bgmlist_append_bridge",
         "scoreinfo_append_bridge","pianoscore_append_bridge","bgmlist_accessor","pianoscore_accessor","package_store_mount_callback","native_audio_updater_return"};
-    for(auto id:calls)if(!signature(id)){g_base=0;return false;}
-    for(const auto& h:hooks)if(!find_hook_spec(h.id) || !signature(h.id)){g_base=0;return false;}
+    for(auto id:calls)if(install_failed(!signature(id),"signature.callable",id)){g_base=0;return false;}
+    for(const auto& h:hooks)if(install_failed(!find_hook_spec(h.id),"signature.hook_spec",h.id)
+        || install_failed(!signature(h.id),"signature.hook",h.id)){g_base=0;return false;}
     g_lookup_dispatch=lookup_dispatch_capability();
-    if(synchronous?!bootstrap_detail::begin_publication(module):proxy_entry?!native_proxy_detail::begin_publication(module):!cold_baseline()) {
+    if(install_failed(synchronous?!bootstrap_detail::begin_publication(module):proxy_entry?!native_proxy_detail::begin_publication(module):!cold_baseline(),"publication.begin")) {
+        capture_publication_failure();
         invalidate(RuntimeFailure::MissedInitializer);return false;
     }
     g_callbacks.open();
-    std::string error;
-    for(const auto& h:hooks) {
-        // The authenticated API continuation is already inside the AEP/CRT.
-        // Never patch its suspended prologue/return PC. The alternate source
-        // publishes origin only after every selected-operation barrier is live.
-        if(synchronous && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;
-        const auto* s=find_hook_spec(h.id);
-        bool installed=false;
+    bool activated=false, cancelled=true;
+    {
+        core::OwnedHookBatch batch;
+        bool prepared=batch.valid();
 #ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
-        if(test_install_hook)installed=test_install_hook(h.id);else
+        if(test_install_hook)prepared=true;
 #endif
-        installed=g_hooks[g_installed].install(module,s->rva,s->expected_prologue,h.detour,h.original,error);
-        if(!installed) {
-            if(synchronous)bootstrap_detail::abandon_publication(module);
-            if(proxy_entry)native_proxy_detail::abandon_publication(module);
-            invalidate(RuntimeFailure::Install);return shutdown_native_audio_runtime() && false;
+        install_failed(!prepared,"batch.acquire");
+        for(const auto& h:hooks) {
+            if(!prepared)break;
+            // ASI's authenticated continuation is already inside the AEP/CRT.
+            // Its suspended prologue/return PC must never be patched.
+            if(synchronous && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;
+            const auto* s=find_hook_spec(h.id);
+            core::HookInstallTrace* trace=nullptr;
+            if(g_install_observation) { trace=&g_install_observation->hooks[g_install_observation->count++]; trace->id=h.id; }
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+            if(test_install_hook)prepared=test_install_hook(h.id);else
+#endif
+            prepared=batch.prepare(g_hooks[g_installed],module,s->rva,s->expected_prologue,h.detour,h.original,trace);
+            if(install_failed(!prepared,"hook.prepare",h.id))break;
+            ++g_installed; // Includes every disabled trampoline, not only enabled hooks.
         }
-        ++g_installed;
+        auto* batch_trace=g_install_observation?&g_install_observation->batch:nullptr;
+        if(prepared) {
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+            if(test_install_hook)activated=!test_apply_hooks || test_apply_hooks();else
+#endif
+            activated=batch.apply(batch_trace);
+            install_failed(!activated,batch_trace && batch_trace->failed_queue_hook?"batch.queue":"batch.apply",
+                batch_trace?batch_trace->failed_queue_hook:nullptr);
+        }
+        if(!activated) {
+#ifdef FF7RP_NATIVE_AUDIO_RUNTIME_SELFTEST
+            if(test_install_hook)cancelled=!test_cancel_hooks || test_cancel_hooks();else
+#endif
+            cancelled=batch.cancel(batch_trace);
+        }
+    } // Release PME/MinHook serialization before native callback/lifetime teardown.
+    if(!activated) {
+        capture_publication_failure();
+        if(synchronous)bootstrap_detail::abandon_publication(module);
+        if(proxy_entry)native_proxy_detail::abandon_publication(module);
+        invalidate(RuntimeFailure::Install);
+        if(g_install_observation)g_install_observation->rollback_attempted=true;
+        const bool cleaned=shutdown_native_audio_runtime();
+        if(g_install_observation)g_install_observation->rollback_completed=cleaned && cancelled && !install_hooks_retained();
+        return false;
     }
     // If initializer returned during installation, its callback did not accept
     // capture. Never infer initialization from a later pointer observation.
-    if((synchronous?!bootstrap_detail::finish_publication(module):proxy_entry?
-            !native_proxy_detail::finish_publication(module,reinterpret_cast<Address>(&ordinary_entry_hook)):!cold_baseline())
-        || g_initializer_seen.load(std::memory_order_acquire) || g_callbacks.callbacks_in_flight()
-        || g_entry_seen.load(std::memory_order_acquire) || g_failure.load(std::memory_order_acquire)!=RuntimeFailure::None) {
+    if(install_failed(synchronous?!bootstrap_detail::finish_publication(module):proxy_entry?
+            !native_proxy_detail::finish_publication(module,reinterpret_cast<Address>(&ordinary_entry_hook)):!cold_baseline(),"publication.finish")
+        || install_failed(g_initializer_seen.load(std::memory_order_acquire),"publication.initializer_seen")
+        || install_failed(g_callbacks.callbacks_in_flight()!=0,"publication.callbacks_in_flight")
+        || install_failed(g_entry_seen.load(std::memory_order_acquire),"publication.entry_seen")
+        || install_failed(g_failure.load(std::memory_order_acquire)!=RuntimeFailure::None,"publication.runtime_failure")) {
+        capture_publication_failure();
         if(synchronous)bootstrap_detail::abandon_publication(module);
         if(proxy_entry)native_proxy_detail::abandon_publication(module);
-        invalidate(RuntimeFailure::MissedInitializer);return shutdown_native_audio_runtime() && false;
+        invalidate(RuntimeFailure::MissedInitializer);
+        if(g_install_observation)g_install_observation->rollback_attempted=true;
+        const bool cleaned=shutdown_native_audio_runtime();
+        if(g_install_observation)g_install_observation->rollback_completed=cleaned && !install_hooks_retained();
+        return cleaned && false;
     }
     g_accepting.store(true,std::memory_order_release);
     g_hooks_ready.store(true,std::memory_order_release);
@@ -994,7 +1101,56 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         g_updater_thread.store(GetCurrentThreadId(),std::memory_order_release);
         g_origin.store(true,std::memory_order_release);
     }
+    if(g_install_observation)g_install_observation->published=true;
     return true;
+}
+bool take_native_install_diagnostic(NativeInstallDiagnostic& out) noexcept {
+#if defined(FF7RP_OWNED_PROXY)
+    if(ff7rp::proxy::active_entry_scope())return false;
+#endif
+    if(bootstrap_detail::scope_present() || native_proxy_detail::scope_present()
+        || !g_install_diagnostic_ready.load(std::memory_order_acquire)
+        || g_install_diagnostic_taken.exchange(true,std::memory_order_acq_rel))return false;
+    out=g_install_diagnostic;
+    return true;
+}
+void emit_native_install_diagnostic() noexcept {
+    NativeInstallDiagnostic snapshot;
+    if(!take_native_install_diagnostic(snapshot))return;
+    // All new formatting/I/O is outside both authenticated private scopes and installer locks.
+    try {
+        std::ostringstream out;
+        out << "[native_install] boundary=" << (snapshot.proxy_entry?"entry_dispatch_completed":"asi_scope_closed")
+            << " continuation_executed=not_observed ticks=" << core::hook_trace_ticks()
+            << " frequency=" << snapshot.frequency << " begin=" << snapshot.begin << " end=" << snapshot.end
+            << " published=" << snapshot.published << " first_failure=" << (snapshot.first_failure?snapshot.first_failure:"none")
+            << " failed_hook=" << (snapshot.failed_hook?snapshot.failed_hook:"none") << " failed_rva=" << snapshot.failed_rva
+            << " asi_failure=" << snapshot.bootstrap_failure << " proxy_failure=" << snapshot.proxy_failure
+            << " proxy_predicate=" << (snapshot.proxy_predicate?snapshot.proxy_predicate:"none")
+            << " rollback_attempted=" << snapshot.rollback_attempted << " rollback_completed=" << snapshot.rollback_completed
+            << " apply_begin=" << snapshot.batch.apply.begin << " apply_end=" << snapshot.batch.apply.end
+            << " apply_returned=" << snapshot.batch.apply.returned << " apply_status=" << snapshot.batch.apply.status
+            << " cancellation_attempted=" << snapshot.batch.cancellation_attempted
+            << " cancellation_completed=" << snapshot.batch.cancellation_completed
+            << " batch_process_lifetime_retained=" << snapshot.batch.process_lifetime_retained;
+        core::log(core::LogLevel::Info,out.str());
+        for(std::size_t i=0;i<snapshot.count;++i) {
+            const auto& h=snapshot.hooks[i];
+            std::ostringstream row;
+            row << "[native_install_hook] index=" << i << " hook=" << h.id
+                << " create_begin=" << h.create.begin << " create_end=" << h.create.end
+                << " create_returned=" << h.create.returned << " create_status=" << h.create.status
+                << " enable_begin=" << h.enable.begin << " enable_end=" << h.enable.end
+                << " enable_returned=" << h.enable.returned << " enable_status=" << h.enable.status
+                << " queue_begin=" << h.queue.begin << " queue_end=" << h.queue.end
+                << " queue_returned=" << h.queue.returned << " queue_status=" << h.queue.status
+                << " cancel_begin=" << h.cancel.begin << " cancel_end=" << h.cancel.end
+                << " cancel_returned=" << h.cancel.returned << " cancel_status=" << h.cancel.status
+                << " outcome=" << static_cast<unsigned>(h.outcome) << " cleanup_attempted=" << h.cleanup_attempted
+                << " cleanup_status=" << h.cleanup_status << " cleanup_retained=" << h.cleanup_retained;
+            core::log(core::LogLevel::Info,row.str());
+        }
+    } catch (...) {} // Diagnostics cannot change entry continuation or fail-closed installation.
 }
 bool enqueue_native_audio(std::shared_ptr<PreparedNativeAudio> work) noexcept {
     if(!work || !g_accepting.load(std::memory_order_acquire) || g_failure.load(std::memory_order_acquire)!=RuntimeFailure::None)return false;

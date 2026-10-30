@@ -68,6 +68,7 @@ struct State {
     std::array<std::uint8_t,kEntryJumpBytes> jump{};
     DWORD original_protection=0;
     EntryInitializer initializer=nullptr;
+    EntryCompletionObserver observer=nullptr;
     void* context=nullptr;
     const EntryScope* scope=nullptr;
 };
@@ -139,7 +140,7 @@ EntryResult entry_bridge_status() noexcept {
             ?EntryRetention::ProcessLifetime:EntryRetention::Unreferenced};
 }
 EntryResult arm_process_start_entry(void* proxy,std::uint32_t reason,const void* reserved,
-    const EntryProfile& profile,EntryInitializer initializer,void* context) noexcept {
+    const EntryProfile& profile,EntryInitializer initializer,void* context,EntryCompletionObserver observer) noexcept {
     auto expected=EntryStage::Empty;
     if(!state.stage.compare_exchange_strong(expected,EntryStage::Arming,std::memory_order_acq_rel)) {
         auto out=entry_bridge_status();out.error=EntryError::Duplicate;return out;
@@ -164,7 +165,7 @@ EntryResult arm_process_start_entry(void* proxy,std::uint32_t reason,const void*
     state.proof.profile=profile;state.proof.image=image;state.proof.proxy=reinterpret_cast<std::uintptr_t>(proxy);
     state.proof.entry=entry;state.proof.attach_thread=api().thread();
     for(std::size_t i=0;i<kEntryJumpBytes;++i)state.proof.original[i]=profile.signature[i];
-    state.initializer=initializer;state.context=context;state.original_protection=code.protection;
+    state.initializer=initializer;state.observer=observer;state.context=context;state.original_protection=code.protection;
     state.jump[0]=0xff;state.jump[1]=0x25;
     const auto target=reinterpret_cast<std::uintptr_t>(&ff7rp_proxy_entry_thunk);
     for(std::size_t i=0;i<sizeof(target);++i)state.jump[6+i]=static_cast<std::uint8_t>(target>>(8*i));
@@ -238,6 +239,8 @@ std::uintptr_t EntryBridgeAccess::dispatch() noexcept {
         state.error.store(state.proof.callback_succeeded?EntryError::None:EntryError::Callback,std::memory_order_relaxed);
     } else state.error.store(EntryError::Stopped,std::memory_order_relaxed);
     state.stage.store(EntryStage::Completed,std::memory_order_release);
+    // Observation only: private authority is gone; original entry has not executed yet.
+    if(state.observer)state.observer();
     return state.proof.entry;
 }
 extern "C" std::uintptr_t ff7rp_proxy_entry_dispatch() noexcept {

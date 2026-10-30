@@ -345,7 +345,8 @@ core::HookShutdownResult shutdown_chord_voicing()
     const bool callback_removed = callback_hook.remove();
     const bool removed = copy_removed && callback_removed;
     if (removed) { original_callback = nullptr; ff7rp_chord_copy_original = nullptr; }
-    return {true, true, true, true, removed, removed};
+    return {true, true, true, true, removed, removed,
+        !removed && core::hook_trampolines_retained_for_process_lifetime()};
 }
 
 #ifdef FF7RP_CHORD_VOICING_SELFTEST

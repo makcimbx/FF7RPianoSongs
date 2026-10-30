@@ -84,8 +84,17 @@ authenticates its private entry scope. The alternative ASI authenticates its sup
 loader handoff and executable continuation outside `DllMain`. Protective hooks must
 publish within that qualified scope; a late worker or missed initializer cannot
 reconstruct the authority from live pointers.
-Repository preparation starts only after the genuine native initializer notification.
-Do not invent loader settings or retry through an unqualified startup path.
+Mandatory native protection and the direct piano-page call-site guard are published
+in that early phase. The direct guard is never installed or rolled back as a live
+feature patch. The early-protection and genuine native-initializer signals queue
+late GU/configuration preparation and feature
+installation once; repository preparation follows their successful completion.
+Failure of late feature startup retains early native protection with custom work
+unqueued. After live feature installation begins, disabled trampolines and their
+borrowed state remain owned until process exit; removal, MinHook uninitialization and
+live retry are forbidden. Recovery requires normal process exit, not DLL reload.
+Do not invent loader settings, a timed readiness delay, or a retry through an
+unqualified startup path.
 
 Artifact production and runtime readiness are separate gates: immutable files alone
 are not mounted metadata, completed retained acquisitions, authenticated registered

@@ -1,9 +1,79 @@
 # Current Status
 
-Updated 2026-10-29. This page describes the current implementation, release
+Updated 2026-10-30. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## PME-only startup coexistence — focused Debug accepted
+
+- The PME-only split keeps authenticated native protection and the direct CALL guard
+  early, deferring GU/configuration, themes, features and repository work. Live-hook
+  rollback retains borrowed trampolines for process lifetime. These reviewed changes
+  preserve cold/lifetime checks but did not fix the earlier UE4SS coexistence crashes.
+- Current batch candidate native owner:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261030T163254Z-0f063edaa85f486a91d1547d45a3311d/session.json`.
+  Installed proxy SHA-256:
+  `2546fef96dd2681c6eb7edd205fb6afc7a4c9a60fd3455c4b48999e358177792`.
+  Exact source/provenance, receipts, prior handoff and crash baseline are under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/pme-native-batch-20261030T163030Z-503eb12c29ca48cd9a261469f4b8a572`.
+  The reviewed candidate is Kept after a successful paired core-UE4SS run. Other
+  loaders and PME settings are unchanged. Game/bootstrap closure was checked
+  automatically; the tester launched and exercised the game.
+- Accepted paired UE4SS evidence owner, subsequently disabled at tester request:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/ue4ss-compat-20261030T163258Z-fa4b59fe3cdf4c5ca0fe60efcb0a1649`.
+  The pinned package DLL/settings/four signatures/VTableLayout were unchanged, no
+  third-party UE4SS mods were enabled, and both logs were absent before human launch.
+  This authorized trial went directly to UE4SS, without a standalone launch.
+  `paired-PME.log`, `paired-UE4SS.log`, `paired-assessment.json`, crash assessment and
+  `paired-disposition.json` retain the successful evidence. Native and external
+  runtime evidence was accepted; native disposition is Keep. After the tester no
+  longer needed UE4SS, its owned loader/tree were quarantined with the reviewed
+  closed-game rollback. `ue4ss-disabled-at-user-request.json` verifies no active
+  UE4SS, unchanged PME/settings/other loaders and preserved logs. This was requested
+  cleanup, not failed evidence; the successful pair remains valid historical evidence.
+- Runtime evidence: every selected original was prepared before activation; all
+  queue calls and the single observed batch apply succeeded. Final cold/publication
+  checks passed, with no failed predicate or rollback. Native installation measured
+  about 116 ms, including about 107 ms in apply; these are observations, not readiness
+  thresholds. Late hooks/repository initialized and the Believe Me (Steins;Gate)
+  cohort became ready before custom selection handoff, playback duration override
+  and HUD publication. This is gameplay evidence, not launch alone.
+- UE4SS accepted FName/FText/GUObjectArray and reached its event loop. Initial FName
+  validation misses resolved through existing retries; no fatal startup marker was
+  found. PME had no searched warning/error/terminal markers, and no new engine crash
+  folders or UE4SS dumps appeared. Tester: “Всё ок заработало, проверяй”. Individual
+  pause/resume events, complete-song completion and repeated-run stability are not
+  independently established by these logs. Other UE4SS mod collections are untested.
+- Earlier failed paired evidence and rolled-back external owner:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/ue4ss-compat-20261030T151406Z-003dd530c6d64e348286f5eb4476d843`.
+  Logs, dump, trace assessment and recovery are retained. Individual hook APIs had
+  succeeded, but final cold validation rejected a nonzero allocator witness. Unwind
+  evidence places FName/allocator/on-exit/`RtlSizeHeap` work while PME still held entry
+  in an individual enable. Actual CRT-table contents/corrupting write remain unproven;
+  separate PME-disabled game-worker crashes remain unexplained.
+- The current bounded Debug candidate batches owned early hook activation to remove repeated
+  thread enumeration, retaining complete authentication, cold/publication checks and
+  safe rollback. ASI/proxy development builds and focused batch/native/retention/
+  bootstrap/guard tests passed; lead verified every production input against the
+  retained build provenance. Independent review found a failed-apply lifetime issue:
+  MinHook can relocate a thread into a still-disabled suffix trampoline before an
+  earlier patch fails. The correction retains all potentially exposed trampolines
+  after an actual failed apply. The correction, canonical builds, focused tests,
+  production-input rehash and independent material re-review passed. The suffix
+  regression models a captured original, not real suspended-thread IP relocation.
+  The successful run supports this exact package/build combination, not universal
+  safety against arbitrary concurrent foreign engine calls.
+  The absent-source genuine ASI bootstrap selftest was not counted as passing.
+- Per tester request, subsequent candidates go directly to unchanged UE4SS trials;
+  do not repeat standalone launch controls by default. Prior acceptance is contextual,
+  not proof of a new artifact. Check closure automatically rather than asking the
+  tester to confirm it. Keep this successful PME installation and rollback
+  evidence. If full product rollback becomes necessary, collect first, roll back
+  owned UE4SS, then the native owner, and canonically prepare `last-good-receipt.json`
+  in the current batch source folder. That restores the prior standalone diagnostic,
+  not this paired acceptance; external rollback alone keeps the current batch.
+  No live unload, universal coexistence or Release claim follows from this run.
 
 ## Gameplay song card — Integration in progress
 

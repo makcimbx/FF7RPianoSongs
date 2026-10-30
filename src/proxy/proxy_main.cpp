@@ -3,6 +3,7 @@
 #include "native_proxy.h"
 #include "proxy/generated/native_proxy_profile.generated.h"
 #include "game/native_proxy_bootstrap.h"
+#include "game/native_audio_runtime.h"
 
 #include <windows.h>
 #include <cstdint>
@@ -210,6 +211,7 @@ BOOL ff7r::piano::proxy::attach_process_start(HMODULE module, DWORD reason, LPVO
     profile.signature_size = static_cast<std::uint8_t>(proxy::generated::kEntryBytes.size());
     static_assert(proxy::generated::kEntryBytes.size() <= bridge::kMaxEntrySignature);
     for (std::size_t i = 0; i < proxy::generated::kEntryBytes.size(); ++i) profile.signature[i] = proxy::generated::kEntryBytes[i];
-    const auto result = bridge::arm_process_start_entry(module, reason, reserved, profile, initialize_at_entry, nullptr);
+    const auto result = bridge::arm_process_start_entry(module, reason, reserved, profile, initialize_at_entry, nullptr,
+        ff7r::piano::game::native_audio::emit_native_install_diagnostic);
     return result.armed() || result.retention == bridge::EntryRetention::ProcessLifetime ? TRUE : FALSE;
 }

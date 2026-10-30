@@ -45,6 +45,7 @@ struct ProxyFixture : RuntimeFixture {
     std::wstring filename=L"d3d9.dll";
     void (*before)(ProxyFixture&)=nullptr;
     void (*during)(ProxyFixture&,unsigned)=nullptr;
+    void (*after_apply)(ProxyFixture&)=nullptr;
     void (*before_helper)(ProxyFixture&)=nullptr;
     static constexpr na::Address spans[]={rva::NativeAudioInitialGuHeader,rva::BgmListRegistry,rva::ScoreInfoRegistry,
         rva::PianoScoreRegistry,rva::DataObjectNameMap,rva::PackageStoreOwnerGlobal,rva::PackageStoreGeneration};
@@ -107,18 +108,34 @@ struct ProxyFixture : RuntimeFixture {
         pb::test.page=[](auto,HMODULE){return !active->bad_page;};
         bridge::test_gateway=&gateway;
         na::test_install_hook=[](std::string_view id){const auto i=active->installed;if(active->reject_hook==static_cast<int>(i))return false;
-            if(i==0){assert(id=="native_audio_exe_entry");const auto p=base+rva::NativeAudioExeEntry,relay=base+0x8000;
-                const auto detour=reinterpret_cast<na::Address>(&na::ordinary_entry_hook);std::vector<unsigned char> data={0xff,0x25,0,0,0,0};data.resize(14);
-                std::memcpy(data.data()+6,&detour,8);active->memory[relay]=data;auto patch=find_hook_spec(id)->expected_prologue;patch[0]=0xe9;
-                const auto displacement=static_cast<std::int32_t>(relay-p-5);std::memcpy(patch.data()+1,&displacement,4);active->memory[p]=patch;}
+            if(i==0)assert(id=="native_audio_exe_entry");
             ++active->installed;if(active->during)active->during(*active,i);
             if(active->enter_during&&i==1)na::ordinary_entry_hook();
             if(active->early_activity&&i==2)na::lookup_hook(reinterpret_cast<void*>(base+rva::BgmListRegistry),0,nullptr,nullptr);return true;};
+        na::test_apply_hooks=[]{
+            assert(++active->applies==1 && active->installed==12 && na::g_installed==12);
+            assert(na::g_services.identity && na::g_services.scoreinfo_original && !na::g_accepting && !na::g_hooks_ready);
+            const auto p=base+rva::NativeAudioExeEntry,relay=base+0x8000;
+            const auto detour=reinterpret_cast<na::Address>(&na::ordinary_entry_hook);
+            std::vector<unsigned char> data={0xff,0x25,0,0,0,0};data.resize(14);
+            std::memcpy(data.data()+6,&detour,8);active->memory[relay]=data;
+            auto patch=find_hook_spec("native_audio_exe_entry")->expected_prologue;patch[0]=0xe9;
+            const auto displacement=static_cast<std::int32_t>(relay-p-5);
+            std::memcpy(patch.data()+1,&displacement,4);active->memory[p]=patch;
+            if(active->after_apply)active->after_apply(*active);return true;
+        };
+        na::test_cancel_hooks=nullptr;
         na::test_disable_hook=[](std::size_t){++active->disabled;return true;};
         na::test_remove_hook=[](std::size_t i){++active->removed;if(i==0)active->memory[base+rva::NativeAudioExeEntry]=find_hook_spec("native_audio_exe_entry")->expected_prologue;return true;};
     }
     ~ProxyFixture(){assert(!pb::scope);assert(na::shutdown_native_audio_runtime());pb::test={};bridge::test_gateway=nullptr;active=nullptr;}
-    static void initialize() noexcept {++active->callbacks;if(active->before)active->before(*active);active->result=na::install_native_audio_runtime(reinterpret_cast<HMODULE>(base),na::g_services);}
+    static void initialize() noexcept {
+        na::NativeInstallDiagnostic snapshot;
+        assert(!na::take_native_install_diagnostic(snapshot));
+        ++active->callbacks;if(active->before)active->before(*active);
+        active->result=na::install_native_audio_runtime(reinterpret_cast<HMODULE>(base),na::g_services);
+        assert(!na::take_native_install_diagnostic(snapshot)); // Outer entry authority still active.
+    }
     static bool entered(const bridge::EntryScope&,void*) noexcept {if(active->before_helper)active->before_helper(*active);
         return na::try_owned_proxy_native_audio_startup(reinterpret_cast<HMODULE>(base),reinterpret_cast<HMODULE>(own),own+0x1205,&initialize);}
     bool arm(bool process_start=true){bridge::EntryProfile p{};p.timestamp=core::generated::kExeTimestamp;p.image_size=core::generated::kSizeOfImage;
@@ -176,7 +193,7 @@ int main(){
         rva::PackageStoreOwnerGlobal,rva::PackageStoreGeneration,rva::NativeBootstrapCrashComplete,rva::NativeBootstrapTaskGraph}){
         ProxyFixture f;f.put(base+r,std::uint32_t{1});f.reject();}
     for(unsigned i=0;i<12;++i){ProxyFixture f;f.reject_hook=static_cast<int>(i);assert(f.run()&&!f.result&&!na::g_origin&&f.installed==i&&f.removed==i);}
-    for(unsigned change=0;change<5;++change){ProxyFixture f;f.reject_hook=-2-static_cast<int>(change);f.during=[](ProxyFixture& x,unsigned i){if(i!=11)return;
+    for(unsigned change=0;change<5;++change){ProxyFixture f;f.reject_hook=-2-static_cast<int>(change);f.after_apply=[](ProxyFixture& x){
         switch(-x.reject_hook-2){case 0:x.changed=true;break;case 1:x.owner_thread++;break;case 2:bridge::state.proof.original[0]^=1;break;
         case 3:x.put(base+rva::NativeAudioCrtState,std::uint32_t{1});break;case 4:x.memory[base+rva::NativeAudioExeEntry][0]=0x90;break;}};
         assert(f.run()&&!f.result&&!na::g_origin&&f.installed==12&&f.removed==12&&!na::native_proxy_bootstrap_status().barriers_published);}

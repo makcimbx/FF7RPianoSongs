@@ -46,6 +46,7 @@ private:
     friend struct EntryBridgeAccess;
 };
 using EntryInitializer=bool (*)(const EntryScope&,void*) noexcept;
+using EntryCompletionObserver=void (*)() noexcept;
 const EntryScope* active_entry_scope() noexcept;
 
 // Initializer/context must remain valid until entry; the callback runs synchronously.
@@ -56,7 +57,8 @@ const EntryScope* active_entry_scope() noexcept;
 // Caller must retain this module for process lifetime whenever the result says so, even
 // on failure; returning FALSE from DllMain then would be unsafe.
 EntryResult arm_process_start_entry(void* proxy_module,std::uint32_t attach_reason,
-    const void* loader_reserved,const EntryProfile&,EntryInitializer,void* context) noexcept;
+    const void* loader_reserved,const EntryProfile&,EntryInitializer,void* context,
+    EntryCompletionObserver observer=nullptr) noexcept;
 EntryResult entry_bridge_status() noexcept;
 // Never unpatch/unload a published thunk. Stop-before-entry skips initialization
 // at the actual entry and still resumes restored original code; no waiting.

@@ -19,7 +19,7 @@ struct Fixture {
     std::uintptr_t base=reinterpret_cast<std::uintptr_t>(bytes.data());
     static constexpr std::uintptr_t proxy=0x60000000;
     p::EntryProfile profile{};
-    unsigned protects=0,writes=0,flushes=0,callbacks=0;
+    unsigned protects=0,writes=0,flushes=0,callbacks=0,completions=0;
     unsigned fail_protect=0,fail_write=0,corrupt_write=0,fail_flush=0,fail_read=0,reads=0;
     DWORD protection=PAGE_EXECUTE_READ,tid=91;
     bool callback_ok=true,reenter=false,mutate_on_protect=false,old_protection_drift=false,execute=false,stop_during_write=false;
@@ -51,7 +51,7 @@ struct Fixture {
     std::uintptr_t entry()const{return base+profile.entry_rva;}
     bool original()const{return std::memcmp(reinterpret_cast<void*>(entry()),profile.signature.data(),profile.signature_size)==0;}
     p::EntryResult arm(const void* reserved=reinterpret_cast<void*>(1),unsigned reason=DLL_PROCESS_ATTACH) {
-        const auto result=p::arm_process_start_entry(reinterpret_cast<void*>(proxy),reason,reserved,profile,initialize_callback,this);
+        const auto result=p::arm_process_start_entry(reinterpret_cast<void*>(proxy),reason,reserved,profile,initialize_callback,this,completed_observer);
         assert(!callbacks && !p::active_entry_scope());return result;
     }
     static void* image()noexcept{return reinterpret_cast<void*>(current->base);}
@@ -101,6 +101,12 @@ struct Fixture {
         if(f.reenter)assert(!p::ff7rp_proxy_entry_dispatch());
         if(f.execute)_mm_setcsr(_mm_getcsr()^0x6000u);
         return f.callback_ok;
+    }
+    static void completed_observer()noexcept {
+        assert(++current->completions==1);
+        assert(!p::active_entry_scope() && p::entry_bridge_status().stage==p::EntryStage::Completed);
+        p::EntryProof proof{};assert(p::completed_entry_proof(proof));
+        assert(current->original()); // Restored code has not been called by this dispatch yet.
     }
     inline static const p::Gateway gateway{image,thread,region,read,write,protect,flush};
 };
@@ -230,7 +236,7 @@ int main() {
      assert(!std::memcmp(reinterpret_cast<void*>(f.base+0x3100),reinterpret_cast<void*>(f.base+0x3900),2)); // x87 control.
      assert(!std::memcmp(reinterpret_cast<void*>(f.base+0x3118),reinterpret_cast<void*>(f.base+0x3918),8)); // MXCSR/mask.
      assert(!std::memcmp(reinterpret_cast<void*>(f.base+0x31a0),reinterpret_cast<void*>(f.base+0x39a0),256)); // XMM0..15.
-     assert(p::entry_bridge_status().stage==S::Completed);assert(VirtualFree(executable,0,MEM_RELEASE));}
+      assert(p::entry_bridge_status().stage==S::Completed && f.completions==1);assert(VirtualFree(executable,0,MEM_RELEASE));}
     std::puts("native proxy entry bridge selftest passed (synthetic image only)");
     return 0;
 }

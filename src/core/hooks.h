@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <array>
 
 #include <cstdint>
 #include <chrono>
@@ -9,6 +10,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include "core/hook_install_trace.h"
 
 namespace ff7r::piano::core {
 
@@ -21,13 +23,39 @@ public:
     RawRvaHook& operator=(RawRvaHook&& other) = delete;
     ~RawRvaHook() = default;
 
-    bool install(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue, void* detour, void** original, std::string& error);
+    bool install(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue, void* detour, void** original, std::string& error,
+        HookInstallTrace* trace = nullptr);
     bool disable();
     bool remove();
     bool installed() const { return target_ != nullptr; }
 
 private:
+    friend class OwnedHookBatch;
+    bool prepare(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue,
+        void* detour, void** original, HookInstallTrace* trace, std::string* error);
     void* target_ = nullptr;
+    bool queue_uncertain_ = false;
+    bool aborted_batch_ = false;
+};
+
+// One PME-owned queue epoch. Acquisition never waits; no callback drain occurs
+// while held. The caller releases this scope before lifetime-qualified rollback.
+class OwnedHookBatch {
+public:
+    OwnedHookBatch();
+    ~OwnedHookBatch();
+    bool valid() const;
+    bool prepare(RawRvaHook& hook, HMODULE module, uintptr_t rva,
+        const std::vector<uint8_t>& expected_prologue, void* detour, void** original,
+        HookInstallTrace* trace = nullptr);
+    bool apply(HookBatchTrace* trace = nullptr);
+    bool cancel(HookBatchTrace* trace = nullptr);
+private:
+    std::unique_lock<std::recursive_mutex> lock_;
+    struct Entry { RawRvaHook* hook; HookInstallTrace* trace; };
+    std::array<Entry, 12> entries_{};
+    std::size_t count_ = 0;
+    bool pending_ = false, cancellation_processed_ = false, prepare_failed_ = false;
 };
 
 class HookCallbackGate {
@@ -100,6 +128,7 @@ struct HookShutdownResult {
     bool native_state_restored = false;
     bool hooks_removed = false;
     bool state_cleared = false;
+    bool process_lifetime_retained = false;
 
     bool ok() const;
 };
@@ -135,5 +164,10 @@ bool aggregate_shutdown_results(const std::vector<HookShutdownResult>& results);
 
 bool initialize_hooks(std::string& error);
 bool shutdown_hooks();
+
+// Irreversible: live forwarding can already hold an uncounted original pointer.
+// After this boundary, disable is allowed, but removal/uninitialization is not.
+void retain_hook_trampolines_for_process_lifetime() noexcept;
+bool hook_trampolines_retained_for_process_lifetime() noexcept;
 
 } // namespace ff7r::piano::core

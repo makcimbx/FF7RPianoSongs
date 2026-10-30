@@ -57,6 +57,26 @@ readiness instructions. `NotObservable` means no first startup marker; `NotObser
 means the selected boundary was incomplete. Collection is immutable: use another
 prepared session, not overwritten logs. Record older or unrelated failures separately.
 
+## Focused Startup Coexistence Run
+
+Use the reviewed PME candidate with the selected unchanged external loader package.
+Do not repeat a standalone launch for every diagnostic iteration without a concrete
+isolation need. An existing standalone control is context, not acceptance of a new
+artifact. Retain each run's DLL identity, full logs, crash
+baseline and other-loader inventory; an unchanged extra loader is not a vanilla-game
+control. Do not alter external Lua signatures or add a compatibility bridge to qualify
+a PME-only startup change.
+
+Check early native/guard publication followed by queued late preparation and successful
+feature/service startup. Exercise immediate piano-menu input without a prescribed
+wait: an early stock session must remain usable, and custom authority must require a
+fresh observed opening rather than being synthesized into that session. On the fresh
+opening, play one admitted custom song, pause/resume immediately and exit normally.
+A launch-only success does not qualify this flow. Preserve any crash before another
+launch; compare its fault with prior PME-disabled failures instead of attributing it
+to coexistence solely by timing. Scope the result to the actual observed loader/mod
+configuration, not universal compatibility.
+
 ## Focused Native Audio Integration Run
 
 Use one prepared session after the native adapter's affected tests and safety

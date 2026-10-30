@@ -7,7 +7,7 @@ namespace ff7r::piano::startup {
 // Neither early hook publication nor a native initializer alone may start a worker.
 class NativeAudioStartupLatch {
 public:
-    bool hooks_installed() noexcept { return observe(1); }
+    bool native_barriers_published() noexcept { return observe(1); }
     bool native_initialized() noexcept { return observe(2); }
 
 private:

@@ -77,6 +77,24 @@ bridge scope, executable authentication and cold-state rereads gate protective
 hook publication; only subsequent genuine AEP execution establishes runtime origin.
 Export forwarding remains separate from optional product-startup acceptance.
 
+Early-install diagnostics capture bounded hook/API outcomes, monotonic boundaries
+and the first already-evaluated failed predicate without repeating native reads.
+The snapshot is projected once after private startup authority closes; a handoff
+marker does not itself prove that the original executable entry has executed.
+These observations confer no readiness or recovery authority.
+
+The selected early native hooks prepare their owned trampolines before activation,
+then queue owned targets for one serialized MinHook apply. Queue acceptance is not
+activation, and apply is not atomic: it may activate a prefix before failing.
+Aborted batches cancel pending owned enables before releasing serialization, then
+use the existing native-lifetime teardown rules. An unsuccessful actual apply must
+retain every prepared trampoline through process exit, even after successful queue
+cancellation: MinHook may already have relocated a suspended thread into a disabled
+suffix trampoline before patching failed. Pre-apply failures do not create that
+exposure. Uncertain cancellation or cleanup likewise retains ownership and forbids
+retry/uninitialization; unrelated targets are never included. Successful apply still
+requires the original final cold/publication checks.
+
 The alternative synchronous ASI export authenticates a supported early
 loader/executable continuation and its source-specific state before publishing
 protective hooks. DllMain does not start asynchronous product initialization.
@@ -84,10 +102,32 @@ Unsupported or missed origins remain unavailable; later pointer snapshots cannot
 reconstruct continuity. Exact per-build code/data contracts belong in the catalog
 and indexed bootstrap evidence, not duplicated RVAs here.
 
-Early publication performs no game constructors or worker startup. The ordinary
-hooks-published and genuine normal native-initializer signals meet in a once-only
-latch; only then do overlay, title input and repository services start. A missing
-window is Pending, not permission to repeat constructors or create another poller.
+Early publication performs no game constructors or worker startup. It retains the
+direct piano-page call-site guard in the authenticated entry-held phase: unlike
+MinHook installation, its transactional byte writer is not a live execution barrier.
+The guard's installer owns its signature/relative-target validation. Its original
+signature is excluded from late preflight because PME has already patched it; the
+guard remains a prerequisite for successful early startup, not an optional feature.
+Successful early protection and the genuine normal native-initializer notification meet in
+a once-only latch. Their conjunction queues background preparation; it is not full
+feature readiness or a durable native-owner lease. GU discovery, configuration
+consumers, theme preparation and feature hooks belong to that late phase. Feature
+targets are revalidated before installation; custom work stays unqueued until GU,
+ScoreInfo and the complete feature set are available. Overlay, title input and
+repository services follow successful feature installation. A missing window is
+Pending, not permission to repeat constructors or create another poller.
+
+Late feature-startup failure closes feature admission and disables owned feature
+hooks, retaining mandatory native lifecycle protection and borrowed resources.
+Once live feature installation begins, an irreversible process-lifetime boundary
+forbids trampoline removal and MinHook uninitialization, including installer-local
+rollback. Disabled hooks retain their original pointers and module state: admission
+drains cannot account for every stock forwarder already holding an original pointer.
+Early native-install rollback before that boundary remains transactional.
+Late failure does not retry or tear down the early native transaction. An already-open stock
+menu does not acquire synthetic custom authority when preparation finishes; a fresh
+observed session boundary remains necessary. This split reduces work while holding
+game entry; it does not certify arbitrary third-party pre-CRT engine calls as safe.
 
 The native runtime captures the initializer's persistent owner, subscription,
 dispatcher, PackageStore and generation. Replacement/destruction/shutdown invalidates

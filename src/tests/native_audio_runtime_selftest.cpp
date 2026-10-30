@@ -36,6 +36,9 @@ struct RuntimeFixture : Fixture {
     bool reenter_entry=false,stop_inside_entry=false;
     unsigned disabled=0,removed=0,installed=0;
     int fail_install=-1,entry_during_install=-1,activity_during_install=-1;
+    bool retained_failed_hook=false;
+    bool apply_failure=false,cancel_failure=false,cold_after_apply=false;
+    unsigned applies=0,cancels=0;
     bool stop_inside_mount=false;
     bool original_before_barrier=false;
     unsigned lookups=0;
@@ -112,6 +115,7 @@ struct RuntimeFixture : Fixture {
         assert(na::shutdown_native_audio_runtime());na::g_queue.fill({});work.reset();
         na::test_memory={};na::test_entry=nullptr;na::test_signature=nullptr;na::test_lookup_call=nullptr;na::g_lookup_dispatch=false;
         na::test_install_hook=nullptr;na::test_disable_hook=nullptr;na::test_remove_hook=nullptr;
+        na::test_hooks_retained=nullptr;
         na::test_entry_handoff=nullptr;
         std::filesystem::remove_all(directory);current=nullptr;
     }
@@ -284,6 +288,14 @@ struct RuntimeFixture : Fixture {
         na::test_remove_hook=[](std::size_t){++current->removed;return true;};
     }
     bool install_cold(bool missed=false) {
+        na::test_apply_hooks=[]{auto& f=*current;++f.applies;assert(f.installed==12 && na::g_installed==12);
+            assert(na::g_services.identity && na::g_services.scoreinfo_original && na::original_factory && na::original_updater);
+            assert(!na::g_accepting && !na::g_hooks_ready && !na::g_origin);
+            if(f.cold_after_apply)f.put(base+rva::NativeAudioCrtState,1u);
+            return !f.apply_failure;};
+        na::test_cancel_hooks=[]{++current->cancels;return !current->cancel_failure;};
+        na::g_install_diagnostic={};na::g_install_diagnostic_claimed.clear();
+        na::g_install_diagnostic_ready.store(false);na::g_install_diagnostic_taken.store(false);
         // The synthetic image is never executable. Only installation and original
         // forwarding doubles run; all baselines use the production bounded reader.
         memory[base].resize(4096);
@@ -299,20 +311,41 @@ struct RuntimeFixture : Fixture {
         na::g_accepting.store(false);na::g_failure.store(na::RuntimeFailure::None);
         if(missed)put(base+rva::NativeAudioCrtState,1u);
         na::test_install_hook=[](std::string_view id) {
+            na::NativeInstallDiagnostic unfinished;
+            assert(!na::take_native_install_diagnostic(unfinished));
             auto& f=*current;const auto index=f.installed++;
             if(!index)assert(id=="native_audio_exe_entry");
             if(index==1 && f.original_before_barrier) {
                 assert(na::ordinary_entry_hook()==17); // Actual AEP during partial installation.
                 lookup(reinterpret_cast<void*>(f.manager(0)),0,nullptr,nullptr); // Original not yet intercepted.
             }
-            if(static_cast<int>(index)==f.fail_install)return false;
+            if(static_cast<int>(index)==f.fail_install) {
+                na::g_install_observation->hooks[index].cleanup_retained=f.retained_failed_hook;
+                return false;
+            }
             if(static_cast<int>(index)==f.entry_during_install)assert(na::ordinary_entry_hook()==17);
             if(static_cast<int>(index)==f.activity_during_install)na::lookup_hook(reinterpret_cast<void*>(f.manager(0)),0,nullptr,nullptr);
             return true;
         };
         na::test_disable_hook=[](std::size_t){++current->disabled;return true;};
         na::test_remove_hook=[](std::size_t){++current->removed;return true;};
-        return na::install_native_audio_runtime(reinterpret_cast<HMODULE>(base),na::g_services);
+        na::test_hooks_retained=[]{return current->retained_failed_hook;};
+        const bool installed_ok=na::install_native_audio_runtime(reinterpret_cast<HMODULE>(base),na::g_services);
+        na::NativeInstallDiagnostic diagnostic;
+        assert(na::take_native_install_diagnostic(diagnostic));
+        assert(!na::take_native_install_diagnostic(diagnostic));
+        assert(diagnostic.count==installed && diagnostic.count<=12 && diagnostic.frequency>0
+            && diagnostic.begin>0 && diagnostic.end>=diagnostic.begin && diagnostic.published==installed_ok);
+        assert(installed_ok ? !diagnostic.first_failure : diagnostic.first_failure!=nullptr);
+        if(missed)assert(std::string_view(diagnostic.first_failure)=="cold.crt.nonzero" && !diagnostic.count);
+        if(fail_install>=0)assert(std::string_view(diagnostic.first_failure)=="hook.prepare"
+            && diagnostic.failed_hook && diagnostic.rollback_attempted
+            && diagnostic.rollback_completed==!retained_failed_hook);
+        if(apply_failure)assert(std::string_view(diagnostic.first_failure)=="batch.apply"
+            && diagnostic.rollback_attempted && diagnostic.rollback_completed==!cancel_failure && applies==1 && cancels==1);
+        if(cold_after_apply)assert(std::string_view(diagnostic.first_failure)=="cold.crt.nonzero"
+            && diagnostic.rollback_attempted && diagnostic.rollback_completed && applies==1 && !cancels);
+        return installed_ok;
     }
 };
 
@@ -546,6 +579,30 @@ void lookup_validation_tests() {
 #ifndef FF7RP_NATIVE_AUDIO_RUNTIME_FIXTURE_ONLY
 int main() {
     lookup_traversal_tests();lookup_validation_tests();
+    for(bool cancel_failure:{false,true}){RuntimeFixture f;f.apply_failure=true;f.cancel_failure=cancel_failure;
+        assert(!f.install_cold() && !na::g_accepting && !na::g_hooks_ready && !na::g_origin && f.removed==12);}
+    {RuntimeFixture f;f.cold_after_apply=true;assert(!f.install_cold() && !na::g_accepting && !na::g_hooks_ready && !na::g_origin);}
+    for(unsigned delayed_frames:{0u,3u})for(bool stale:{false,true}) {
+      RuntimeFixture f;
+      na::g_queue.fill({});na::g_count=na::g_next=0;
+      // Late GU/ScoreInfo preparation is absent during genuine capture and empty updates.
+      na::g_services={+[](gu::UObjectIdentityAccess&) noexcept -> bool {std::abort();},
+          +[](na::NativeAccessor*,std::uint64_t) -> na::NativeAccessor* {std::abort();},RuntimeFixture::initialized};
+      na::factory_hook();assert(f.notifications==1 && na::g_captured.load());
+      for(unsigned frame=0;frame<=delayed_frames;++frame)f.frame();
+      assert(!f.mounts && !f.acquires && !f.bridges && !f.name_calls);
+      na::g_services={RuntimeFixture::identity,RuntimeFixture::score,RuntimeFixture::initialized};
+      if(stale)f.put(f.base+rva::PackageStoreGeneration,2u);
+      f.immediate=true;assert(na::enqueue_native_audio(f.work));f.frame();
+      if(stale) {
+          assert(!f.mounts && !f.acquires && !f.bridges);
+          std::uint64_t selected=1;assert(!na::native_audio_selected_name(*f.work,41,selected) && !selected);
+          assert(na::native_audio_status(*f.work).failure==na::RuntimeFailure::Provenance);
+      } else {
+          f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);
+          assert(f.mounts==1 && f.acquires==3 && f.bridges==3);
+      }
+    }
     for(unsigned unrelated:{0u,2048u})for(bool immediate:{false,true}) {
       RuntimeFixture f;
       if(unrelated) {
@@ -1061,6 +1118,10 @@ int main() {
      RuntimeFixture f;f.fail_install=index;assert(!f.install_cold());assert(!na::g_origin.load());
      assert(f.disabled==static_cast<unsigned>(index) && f.removed==static_cast<unsigned>(index));
     }
+    {RuntimeFixture f;f.fail_install=4;f.retained_failed_hook=true;assert(!f.install_cold());
+     assert(f.disabled==4 && f.removed==4 && na::g_installed==0);
+     assert(na::g_install_diagnostic.hooks[4].cleanup_retained
+         && !na::g_install_diagnostic.rollback_completed);}
     {RuntimeFixture f;assert(f.install_cold());assert(!f.entry_calls && !na::g_entry_forwarding.load());
      assert(na::shutdown_native_audio_runtime());assert(f.disabled==12 && f.removed==12);}
     for(bool handoff:{false,true})for(bool failed_origin:{false,true}) {

@@ -746,6 +746,8 @@ Result uninstall(std::chrono::milliseconds timeout) noexcept
         return ok;
     }, timeout);
     if (!drained) return fail(Outcome::Busy, "disable_drain");
+    if (core::hook_trampolines_retained_for_process_lifetime())
+        return fail(Outcome::Busy, "process_lifetime_retained");
     // Clear registered subjects before the adapter can release validator contexts.
     {
         std::lock_guard lock(state.mutex);

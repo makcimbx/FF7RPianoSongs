@@ -2,11 +2,29 @@
 
 #include "game/native_audio_bindings.h"
 #include "game/native_audio_gate.h"
+#include "core/hook_install_trace.h"
 
 #include <windows.h>
 #include <memory>
 
 namespace ff7r::piano::game::native_audio {
+
+struct NativeInstallDiagnostic {
+    std::array<core::HookInstallTrace, 12> hooks{};
+    core::HookBatchTrace batch;
+    std::size_t count = 0;
+    std::int64_t begin = 0, end = 0, frequency = 0;
+    const char* first_failure = nullptr;
+    const char* failed_hook = nullptr;
+    const char* proxy_predicate = nullptr;
+    std::uintptr_t failed_rva = 0;
+    unsigned bootstrap_failure = 0, proxy_failure = 0;
+    bool synchronous = false, proxy_entry = false, published = false;
+    bool rollback_attempted = false, rollback_completed = false;
+};
+// Once-only snapshot, available only after the installer and private bootstrap scopes exit.
+bool take_native_install_diagnostic(NativeInstallDiagnostic& out) noexcept;
+void emit_native_install_diagnostic() noexcept;
 
 enum class RuntimeStage : unsigned char {
     Unavailable, AwaitingInitializer, AwaitingArtifacts, Queued, Mounting,

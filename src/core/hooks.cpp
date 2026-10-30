@@ -5,23 +5,70 @@
 #include <MinHook.h>
 
 #include <sstream>
+#include <atomic>
 #include <utility>
 
 namespace ff7r::piano::core {
 namespace {
 
 bool g_minhook_initialized = false;
+std::recursive_mutex g_minhook_operations;
+bool g_queue_uncertain = false;
+bool g_batch_active = false; // Accessed only under g_minhook_operations.
+std::size_t g_aborted_batch_hooks = 0;
+std::atomic<bool> g_process_lifetime_retention{false};
 
 } // namespace
 
-bool RawRvaHook::install(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue, void* detour, void** original, std::string& error)
+bool RawRvaHook::install(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue, void* detour, void** original, std::string& error,
+    HookInstallTrace* trace)
+{
+    std::unique_lock lock(g_minhook_operations, std::try_to_lock);
+    if (!lock.owns_lock() || g_batch_active) { error = "hook operation busy"; return false; }
+    if (!prepare(module, rva, expected_prologue, detour, original, trace, &error)) return false;
+    auto* target = target_;
+    if (trace) trace->enable.begin = hook_trace_ticks();
+    const MH_STATUS status = MH_EnableHook(target);
+    if (trace) { trace->enable.end = hook_trace_ticks(); trace->enable.status = status; trace->enable.returned = true; }
+    if (status != MH_OK) {
+        if (trace) trace->outcome = HookInstallOutcome::EnableFailed;
+        if (hook_trampolines_retained_for_process_lifetime()) {
+            if (trace) trace->cleanup_retained = true;
+            const bool disabled = disable();
+            error = std::string("enable failed: ") + MH_StatusToString(status)
+                + "; cleanup=process_lifetime_retained detour_disabled=" + (disabled ? "1" : "0");
+            return false;
+        }
+        const MH_STATUS remove_status = MH_RemoveHook(target);
+        if (trace) {
+            trace->cleanup_attempted = true; trace->cleanup_status = remove_status;
+            trace->cleanup_retained = remove_status != MH_OK && remove_status != MH_ERROR_NOT_CREATED;
+        }
+        if (remove_status == MH_OK || remove_status == MH_ERROR_NOT_CREATED) {
+            target_ = nullptr;
+            if (original) *original = nullptr;
+        }
+        std::ostringstream out;
+        out << "enable failed: " << MH_StatusToString(status);
+        if (target_) out << "; cleanup retained: " << MH_StatusToString(remove_status);
+        error = out.str();
+        return false;
+    }
+    if (trace) trace->outcome = HookInstallOutcome::Installed;
+    return true;
+}
+
+bool RawRvaHook::prepare(HMODULE module, uintptr_t rva, const std::vector<uint8_t>& expected_prologue,
+    void* detour, void** original, HookInstallTrace* trace, std::string* error)
 {
     if (!g_minhook_initialized) {
-        error = "MinHook is not initialized";
+        if (trace) trace->outcome = HookInstallOutcome::NotInitialized;
+        if (error) *error = "MinHook is not initialized";
         return false;
     }
     if (target_) {
-        error = "hook already installed";
+        if (trace) trace->outcome = HookInstallOutcome::AlreadyOwned;
+        if (error) *error = "hook already installed";
         return false;
     }
     if (original) {
@@ -29,43 +76,34 @@ bool RawRvaHook::install(HMODULE module, uintptr_t rva, const std::vector<uint8_
     }
     auto* target = reinterpret_cast<uint8_t*>(module) + rva;
     if (!bytes_equal(target, expected_prologue)) {
-        std::ostringstream out;
-        out << "prologue mismatch at rva=0x" << std::hex << rva;
-        error = out.str();
+        if (trace) trace->outcome = HookInstallOutcome::SignatureMismatch;
+        if (error) {
+            std::ostringstream out;
+            out << "prologue mismatch at rva=0x" << std::hex << rva;
+            *error = out.str();
+        }
         return false;
     }
+    if (trace) trace->create.begin = hook_trace_ticks();
     MH_STATUS status = MH_CreateHook(target, detour, original);
+    if (trace) { trace->create.end = hook_trace_ticks(); trace->create.status = status; trace->create.returned = true; }
     if (status != MH_OK) {
+        if (trace) trace->outcome = HookInstallOutcome::CreateFailed;
         if (original) {
             *original = nullptr;
         }
-        error = MH_StatusToString(status);
-        return false;
-    }
-    status = MH_EnableHook(target);
-    if (status != MH_OK) {
-        const MH_STATUS remove_status = MH_RemoveHook(target);
-        if (remove_status == MH_OK || remove_status == MH_ERROR_NOT_CREATED) {
-            if (original) {
-                *original = nullptr;
-            }
-        } else {
-            target_ = target;
-        }
-        std::ostringstream out;
-        out << "enable failed: " << MH_StatusToString(status);
-        if (remove_status != MH_OK && remove_status != MH_ERROR_NOT_CREATED) {
-            out << "; cleanup retained: " << MH_StatusToString(remove_status);
-        }
-        error = out.str();
+        if (error) *error = MH_StatusToString(status);
         return false;
     }
     target_ = target;
+    if (trace) trace->outcome = HookInstallOutcome::Prepared;
     return true;
 }
 
 bool RawRvaHook::disable()
 {
+    std::unique_lock lock(g_minhook_operations, std::try_to_lock);
+    if (!lock.owns_lock() || g_batch_active) return false;
     if (!target_) {
         return true;
     }
@@ -75,18 +113,99 @@ bool RawRvaHook::disable()
 
 bool RawRvaHook::remove()
 {
+    std::unique_lock lock(g_minhook_operations, std::try_to_lock);
+    if (!lock.owns_lock() || g_batch_active) return false;
     if (!target_) {
         return true;
     }
     if (!disable()) {
         return false;
     }
+    if (queue_uncertain_ || hook_trampolines_retained_for_process_lifetime()) return false;
     const MH_STATUS status = MH_RemoveHook(target_);
     if (status != MH_OK && status != MH_ERROR_NOT_CREATED) {
         return false;
     }
     target_ = nullptr;
+    if (aborted_batch_) { aborted_batch_ = false; --g_aborted_batch_hooks; }
     return true;
+}
+
+OwnedHookBatch::OwnedHookBatch() : lock_(g_minhook_operations, std::try_to_lock) {
+    if (lock_.owns_lock()) {
+        if (g_batch_active) lock_.unlock();
+        else g_batch_active = true;
+    }
+}
+OwnedHookBatch::~OwnedHookBatch() {
+    if (count_ && !cancellation_processed_) (void)cancel();
+    if (lock_.owns_lock()) g_batch_active = false;
+}
+bool OwnedHookBatch::valid() const { return lock_.owns_lock() && g_minhook_initialized && !g_queue_uncertain && !g_aborted_batch_hooks; }
+bool OwnedHookBatch::prepare(RawRvaHook& hook, HMODULE module, uintptr_t rva,
+    const std::vector<uint8_t>& expected, void* detour, void** original, HookInstallTrace* trace)
+{
+    if (!valid() || pending_ || cancellation_processed_ || prepare_failed_ || count_ == entries_.size()) return false;
+    if (!hook.prepare(module, rva, expected, detour, original, trace, nullptr)) { prepare_failed_ = true; return false; }
+    entries_[count_++] = {&hook, trace}; // Own every created target before another API can fail.
+    return true;
+}
+bool OwnedHookBatch::apply(HookBatchTrace* trace)
+{
+    if (!valid() || !count_ || pending_ || cancellation_processed_ || prepare_failed_) return false;
+    pending_ = true;
+    for (std::size_t i = 0; i < count_; ++i) {
+        const auto& entry = entries_[i];
+        if (entry.trace) entry.trace->queue.begin = hook_trace_ticks();
+        const auto status = MH_QueueEnableHook(entry.hook->target_);
+        if (entry.trace) {
+            entry.trace->queue.end = hook_trace_ticks(); entry.trace->queue.returned = true;
+            entry.trace->queue.status = status;
+            if (status != MH_OK) entry.trace->outcome = HookInstallOutcome::QueueFailed;
+        }
+        if (status != MH_OK) {
+            if (trace && entry.trace) trace->failed_queue_hook = entry.trace->id;
+            return false;
+        }
+    }
+    if (trace) trace->apply.begin = hook_trace_ticks();
+    const auto status = MH_ApplyQueued(); // May have enabled a prefix even on failure.
+    if (trace) { trace->apply.end = hook_trace_ticks(); trace->apply.returned = true; trace->apply.status = status; }
+    if (status != MH_OK) {
+        // Freeze may relocate IPs into disabled suffix trampolines before any patch fails.
+        retain_hook_trampolines_for_process_lifetime();
+        if (trace) trace->process_lifetime_retained = true;
+        return false;
+    }
+    pending_ = false;
+    cancellation_processed_ = true; // Successful queued state must not be cancelled on destruction.
+    for (std::size_t i = 0; i < count_; ++i)
+        if (entries_[i].trace) entries_[i].trace->outcome = HookInstallOutcome::Installed;
+    return true;
+}
+bool OwnedHookBatch::cancel(HookBatchTrace* trace)
+{
+    if (!lock_.owns_lock() || cancellation_processed_) return false;
+    cancellation_processed_ = true;
+    for (std::size_t i = 0; i < count_; ++i) {
+        entries_[i].hook->aborted_batch_ = true;
+        ++g_aborted_batch_hooks;
+    }
+    if (!pending_) return true;
+    if (trace) trace->cancellation_attempted = true;
+    bool ok = true;
+    for (std::size_t i = 0; i < count_; ++i) {
+        const auto& entry = entries_[i];
+        if (entry.trace) entry.trace->cancel.begin = hook_trace_ticks();
+        const auto status = MH_QueueDisableHook(entry.hook->target_);
+        if (entry.trace) {
+            entry.trace->cancel.end = hook_trace_ticks(); entry.trace->cancel.returned = true; entry.trace->cancel.status = status;
+        }
+        if (status != MH_OK) { entry.hook->queue_uncertain_ = true; g_queue_uncertain = true; ok = false; }
+    }
+    pending_ = false;
+    if (trace) trace->cancellation_completed = ok;
+    return ok;
 }
 
 HookCallbackGate::Lease::Lease(Lease&& other) noexcept
@@ -219,7 +338,7 @@ void HookCallbackGate::leave()
 bool HookShutdownResult::ok() const
 {
     return gate_closed && hooks_disabled && callbacks_drained && native_state_restored
-        && hooks_removed && state_cleared;
+        && hooks_removed && state_cleared && !process_lifetime_retained;
 }
 
 HookShutdownResult shutdown_gated_hooks(
@@ -230,6 +349,7 @@ HookShutdownResult shutdown_gated_hooks(
     std::chrono::milliseconds drain_timeout)
 {
     HookShutdownResult result;
+    result.process_lifetime_retained = hook_trampolines_retained_for_process_lifetime();
     gate.close();
     result.gate_closed = true;
 
@@ -245,6 +365,10 @@ HookShutdownResult shutdown_gated_hooks(
     if (!result.callbacks_drained) {
         return result;
     }
+
+    // Gate drain excludes stock forwarders paused before admission. Do not
+    // restore/clear module state or free originals they may still reference.
+    if (result.process_lifetime_retained) return result;
 
     result.native_state_restored = !restore_native_state || restore_native_state();
     if (!result.native_state_restored) {
@@ -314,6 +438,8 @@ bool aggregate_shutdown_results(const std::vector<HookShutdownResult>& results)
 
 bool initialize_hooks(std::string& error)
 {
+    std::unique_lock lock(g_minhook_operations, std::try_to_lock);
+    if (!lock.owns_lock() || g_batch_active) { error = "hook operation busy"; return false; }
     if (g_minhook_initialized) {
         return true;
     }
@@ -328,6 +454,9 @@ bool initialize_hooks(std::string& error)
 
 bool shutdown_hooks()
 {
+    std::unique_lock lock(g_minhook_operations, std::try_to_lock);
+    if (!lock.owns_lock() || g_batch_active || g_queue_uncertain || g_aborted_batch_hooks) return false;
+    if (hook_trampolines_retained_for_process_lifetime()) return false;
     if (!g_minhook_initialized) {
         return true;
     }
@@ -337,6 +466,16 @@ bool shutdown_hooks()
     }
     g_minhook_initialized = false;
     return true;
+}
+
+void retain_hook_trampolines_for_process_lifetime() noexcept
+{
+    g_process_lifetime_retention.store(true, std::memory_order_release);
+}
+
+bool hook_trampolines_retained_for_process_lifetime() noexcept
+{
+    return g_process_lifetime_retention.load(std::memory_order_acquire);
 }
 
 } // namespace ff7r::piano::core

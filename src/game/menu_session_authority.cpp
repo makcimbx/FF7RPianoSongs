@@ -368,7 +368,9 @@ bool install_menu_session_hooks(const HookInstallContext& context) {
         g_original_close = nullptr; g_original_open = nullptr; g_module = nullptr;
     } else {
         core::log(core::LogLevel::Error,
-            "[menu_session] rollback_failed ownership=retained");
+            core::hook_trampolines_retained_for_process_lifetime()
+                ? "[menu_session] rollback=retained reason=process_lifetime_policy"
+                : "[menu_session] rollback_failed ownership=retained");
     }
     return false;
 }
