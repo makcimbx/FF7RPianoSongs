@@ -39,11 +39,28 @@ assert install.index("scope_present()") < install.index("attempted = true") < in
 assert "attempted || core::hook_trampolines_retained_for_process_lifetime()" in install
 native = (root / "src/game/native_audio_runtime.cpp").read_text(encoding="utf-8")
 transaction = native.split("core::OwnedHookBatch batch;", 1)[1].split("void native_audio_updater_observed", 1)[0]
-# Both origins use the same prepare-all/apply-once path; ASI alone omits suspended AEP.
-omit = "if(synchronous && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;"
+# All origins use the same batch; ASI/post-CRT omit the already-held/passed AEP.
+omit = "if((synchronous || proxy_post_crt) && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;"
 assert transaction.index(omit) < transaction.index("batch.prepare(") < transaction.index("batch.apply(")
 assert transaction.count("batch.apply(") == 1
 assert transaction.index("batch.apply(") < transaction.index('"publication.finish"') < transaction.index("g_accepting.store(true")
 assert "Release PME/MinHook serialization before native callback/lifetime teardown" in transaction
 assert transaction.index("batch.cancel(") < transaction.index("shutdown_native_audio_runtime()")
+assert transaction.index("g_accepting.store(true") < transaction.index("if(synchronous || proxy_post_crt)") < transaction.index("g_origin.store(true")
+assert "active_entry_scope() || ff7rp::proxy::active_call_scope()" in native
+proxy = (root / "src/proxy/proxy_main.cpp").read_text(encoding="utf-8")
+entry = proxy.split("bool initialize_at_entry(", 1)[1].split("bool attach_process_start(", 1)[0]
+post = entry.split("if constexpr(proxy::generated::kOwnedCallEnabled)", 1)[1].split("if (!proxy::initialize_owned_product", 1)[0]
+assert entry.index("initialize_forwarding(self_module)") < entry.index("arm_owned_call(")
+assert "initialize_owned_product" not in post
+assert "return armed && status.stage==bridge::CallStage::Armed;" in post
+callback = proxy.split("bool initialize_at_call(", 1)[1].split("void entry_completed()", 1)[0]
+assert callback.index("scope.capture(proof)") < callback.index("initialize_owned_product(")
+assert "persist_startup_failure" not in callback and "emit_native_install_diagnostic" not in callback
+assert "persist_startup_failure" in proxy.split("void call_completed()", 1)[1].split("bool initialize_at_call", 1)[0]
+bootstrap = (root / "src/game/native_proxy_bootstrap.cpp").read_text(encoding="utf-8")
+post_validation = bootstrap.split("if(s.post)", 1)[1].split("for(unsigned i=0;i<n;++i)", 2)[0]
+assert "active_call_scope()" in post_validation and "held!=s.call_bridge" in post_validation
+assert "current.return_pc!=reinterpret_cast<Address>(s.exe)+call->rva+5" in post_validation
+assert '"post_crt_return_unwind"' in bootstrap and '"post_current_chain"' in bootstrap
 print("startup_phase_order_selftest: passed (source boundaries only)")

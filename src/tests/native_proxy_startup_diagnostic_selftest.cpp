@@ -67,6 +67,9 @@ bool initialize_owned_product(HMODULE,HMODULE) noexcept {assert(false);return fa
 }
 namespace ff7rp::proxy {
 bool EntryScope::capture(EntryProof&) const noexcept {assert(false);return false;}
+bool CallScope::capture(CallProof&) const noexcept {assert(false);return false;}
+bool arm_owned_call(const EntryScope&,const CallProfile&,CallInitializer,void*,EntryCompletionObserver) noexcept {assert(false);return false;}
+CallStatus owned_call_status() noexcept {assert(false);return {};}
 EntryResult entry_bridge_status() noexcept {assert(false);return {};}
 EntryResult arm_process_start_entry(void*,std::uint32_t,const void*,const EntryProfile&,EntryInitializer,void*,EntryCompletionObserver) noexcept {assert(false);return {};}
 }

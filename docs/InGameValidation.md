@@ -77,6 +77,25 @@ launch; compare its fault with prior PME-disabled failures instead of attributin
 to coexistence solely by timing. Scope the result to the actual observed loader/mod
 configuration, not universal compatibility.
 
+For an owned post-CRT handoff candidate, retain its actual source/consumption and
+publication outcome. Earlier entry-transport completion is not that authority, and
+CRT state 2 alone is not allocator or custom-audio readiness. Record the exact external
+settings, signatures and enabled native/Lua mods: a core-only run does not reproduce
+an author's larger profile. UE4SS acceptance requires successful FName/FText/GU
+discovery and its event loop, not merely a matched signature or the absence of a
+crash. Do not infer a captured allocator exception from callback prints alone.
+
+For window-input attachment changes, include a foreground launch and a launch left
+in the background with the same loader/mod configuration. Do not bring the game
+forward to assist initialization or prescribe a wait. Retain the selected window's
+class/thread/HWND and any Win32 error: auxiliary consoles/overlays must not become
+the input target. An absent game window is pending, not a terminal startup failure;
+its later appearance must attach without restarting the service. After returning
+focus, verify fresh piano-menu input and the custom-song flow above. Focus checks
+for actual input must remain in force; background initialization is not permission
+for background keyboard gestures. A single foreground success does not qualify
+background startup.
+
 ## Focused Native Audio Integration Run
 
 Use one prepared session after the native adapter's affected tests and safety

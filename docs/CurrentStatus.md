@@ -1,23 +1,127 @@
 # Current Status
 
-Updated 2026-10-30. This page describes the current implementation, release
+Updated 2026-10-31. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
-## PME-only startup coexistence — focused Debug accepted
+## Background startup window attachment — focused Integration accepted
+
+- Tester reports `window_hook_failed` when launching without foreground focus;
+  later native publication and UE4SS initialization had succeeded. The old log
+  omitted the HWND/class/Win32 error, so the exact failed window is not established.
+- The window selector now requires the current process's visible, ownerless
+  `UnrealWindow`, rather than the first visible auxiliary/console window. Attachment
+  does not require focus. Absent or destroyed-before-attachment windows remain
+  pending; genuine API failures retain terminal handling and exact diagnostics.
+- Proxy development build and the affected title-input test pass. Tests exercise
+  the real enumeration callback with mocked Win32 windows, focused/background and
+  reordered auxiliary windows, later appearance, disappearance and API failures.
+  Independent startup audit found no additional concrete issue; the separate
+  window-fix point-review found no concrete blocker. Affected title-input, startup
+  phase and documentation checks pass. Tester acknowledged the requested run as
+  successful; the retained latest log confirms the correct window, not independently
+  itemized foreground transitions or repeated-launch stability.
+- Authorized native-only replacement is installed and **Kept for the latest focused run** under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261031T190414Z-ae607ee1b8ba4f96a16c5771adfaf365/session.json`.
+  Proxy SHA-256: `00077297b3eee410894e3c3b896b73ceab357ed69e6a3694eba61395e75cf847`.
+  Exact source/provenance, prior handoff DLL/receipt, previous logs, crash baseline,
+  unchanged-file guards and postverification are retained under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/pme-window-input-20261031T190411Z-38b72cf2593f4f6487c7dcbcdaf49ed6`.
+  Automatic closure and canonical ownership checks passed; user console/config,
+  UE4SS/PianoAnywhere and other proxies were preserved. Retained `paired-PME.log`,
+  `paired-UE4SS.log`, `PianoAnywhere.log`, `paired-assessment.json` and the canonical
+  collection/Keep report confirm `window_hook_ready class=UnrealWindow`, native-audio
+  startup, 32-song settlement and Amadeus selection/playback/HUD in the latest run.
+  PME has no warning/terminal markers; UE4SS accepts FName/FText/GU and starts its
+  event loop, and PianoAnywhere reports ready. One earlier `DerefToInt32` diagnostic
+  does not prevent that UE4SS initialization. No agent launch. Recovery is canonical current-owner rollback then prepare that
+  folder's `last-good-receipt.json`, not an old external/addon rollback.
+- The tester manually removed `ConsoleEnablerMod` and the duplicate FFVIIHook
+  proxy. Do not restore those files or replay old addon/static-file expectations
+  without reconciling that requested state. PianoAnywhere readiness and custom-song
+  playback now coexist in this one run; full-song, pause and broader mod lifecycle
+  are not independently qualified.
+- A separate engine null-read crash at UTC 19:07:23 predates the successful log
+  beginning UTC 19:07:30.301. Its XML/dump and chronology are retained in the same
+  evidence folder under `earlier-crashes`/`paired-assessment.json`. Portable stack
+  matches the previously observed `game+222ad75` shape seen with PME disabled;
+  its cause and loaded-state attribution are not established by this comparison.
+  This is not a crash-free/repeatability or universal coexistence claim. The latest
+  successful window fix stays installed; earlier crash evidence is not discarded.
+
+## PME-only startup coexistence — owned handoff Debug investigation
+
+- The author's `PME_UE4SS_FINAL_AUTHOR_PACKET.zip` reproduces failure with the exact
+  retained batch DLL and source inputs. All early publication checks pass, but the
+  game's allocator becomes nonzero while UE4SS's separate cached allocator remains
+  null. FText signature matching succeeds; exact-binary validation allocates its
+  own FString before calling game FText, with a null-cache exception path. The
+  exception itself was not captured. This is not a general compatibility fix;
+  the successful core-only local run below remains artifact/profile-specific.
+- Static qualification supports the default build's owned Show CALL after CRT lock/TLS
+  handling and before WinMain. The isolated transport passed actual-thunk/current-
+  unwind and helper-result tests plus independent scoped review. Its synthetic
+  caller/root model is not game qualification. Full authentication and source-specific
+  native publication are now integrated and development builds/focused checks pass;
+  lead rehashed all production inputs and ran documentation/runtime-gate checks.
+   Independent integration review found no concrete blocker. The subsequent startup
+   trial observed the new CallScope source through full game authentication and
+   successful native publication; gameplay acceptance is still outstanding.
+  The original Show helper and actual result are preserved. The legacy ASI/UAL scope
+  is only a precedent, not a proxy dependency or transferable authority; CRT state 2
+  is not allocator readiness. The older build retains its existing entry-held route,
+  without new post-CRT qualification. Its necessary RVAs already exist and imported
+  call/ABI/order evidence agrees, but original-file hashing/byte equality remains
+  unestablished because Ghidra script execution is disabled; no new permission was granted.
+- Historical reviewed handoff proxy SHA-256:
+  `8fd0d9fddf9746c35764af273c5dd2550cc912d913365b366740f8db52f68b43`.
+  Development provenance is `build/bin/Release/FF7RPianoSongs.provenance.json`;
+  production input-set SHA-256:
+  `52fde1b9eabb0f375b275d15ee67b0bab89eb7670b854b48d70e3121e5214d84`.
+  These build/offline review results are not coexistence or Release acceptance.
+- Earlier handoff candidate was **Kept for startup only**, not gameplay-qualified;
+  its owner was rolled back for the window-fix candidate above:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261031T161757Z-f5e2475d117c4d76a6ef4fce8c584019/session.json`.
+  Exact source, provenance, receipt, previous accepted batch/receipt and crash baseline:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/pme-owned-handoff-20261031T161716Z-799495350d5e47e2b2a187aa40eb4048`.
+  Paired external owner:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/ue4ss-compat-20261031T161758Z-7c87c29ef2494c4792ad6184f52c410f`.
+  The author's baseline INI, VTableLayout and five Lua signatures are byte-identical;
+  loader/core DLLs are pinned. The initial startup trial had no probe overlays or
+  third-party UE4SS mods; this is not the complete author mod collection. The input-builder and unchanged
+  installation transaction were independently reviewed. Automatic closure, static
+  payload/ownership, unchanged PME INI/other loaders and absent fresh logs passed
+  before human launch. Tester subsequently reported successful launch, explicitly
+  without testing a song. Logs show `owned_proxy_pre_winmain`,
+  successful native publication with no first failure, late native-audio startup
+  and UE4SS `Event loop start`. Automatic closure checks then passed; both logs
+  were retained as `startup-PME.log`/`startup-UE4SS.log`, and the native session
+  finalized Keep with an explicitly startup-only assessment/report. Custom
+  playback and broader coexistence remain untested.
+  User authorized adding PianoAnywhere 1.2.0 content/Lua plus unchanged stock
+  `UEHelpers` and `ConsoleEnablerMod`. The absent-destination addon transaction
+  is installed under session
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/piano-anywhere-20261031T163347Z-291dde1335e046f1bb18f47a01e7e1d9`;
+  isolated install/partial-failure/rollback/conflict tests passed, independent
+  transaction review found no concrete blocker, and post-install static hashes,
+  canonical native ownership and unchanged PME/UE4SS settings passed while closed.
+   No PianoAnywhere gameplay acceptance has occurred. The tester subsequently removed
+   ConsoleEnabler and changed other proxies manually; the old addon/external static
+   expectations no longer describe that user-managed state. Do not replay those
+   rollbacks without reconciliation or restore the removed console mod.
 
 - The PME-only split keeps authenticated native protection and the direct CALL guard
   early, deferring GU/configuration, themes, features and repository work. Live-hook
   rollback retains borrowed trampolines for process lifetime. These reviewed changes
   preserve cold/lifetime checks but did not fix the earlier UE4SS coexistence crashes.
-- Current batch candidate native owner:
+- Historical earlier batch native owner, rolled back for the handoff trial:
   `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261030T163254Z-0f063edaa85f486a91d1547d45a3311d/session.json`.
-  Installed proxy SHA-256:
+  Retained proxy SHA-256:
   `2546fef96dd2681c6eb7edd205fb6afc7a4c9a60fd3455c4b48999e358177792`.
   Exact source/provenance, receipts, prior handoff and crash baseline are under
   `%LOCALAPPDATA%/FF7RPianoSongs/captures/pme-native-batch-20261030T163030Z-503eb12c29ca48cd9a261469f4b8a572`.
-  The reviewed candidate is Kept after a successful paired core-UE4SS run. Other
+  The reviewed candidate was Kept after a successful paired core-UE4SS run. Other
   loaders and PME settings are unchanged. Game/bootstrap closure was checked
   automatically; the tester launched and exercised the game.
 - Accepted paired UE4SS evidence owner, subsequently disabled at tester request:
@@ -52,7 +156,7 @@ limitations and tested artifacts. Public version history remains in
   evidence places FName/allocator/on-exit/`RtlSizeHeap` work while PME still held entry
   in an individual enable. Actual CRT-table contents/corrupting write remain unproven;
   separate PME-disabled game-worker crashes remain unexplained.
-- The current bounded Debug candidate batches owned early hook activation to remove repeated
+- The earlier bounded Debug candidate batches owned early hook activation to remove repeated
   thread enumeration, retaining complete authentication, cold/publication checks and
   safe rollback. ASI/proxy development builds and focused batch/native/retention/
   bootstrap/guard tests passed; lead verified every production input against the
@@ -68,11 +172,11 @@ limitations and tested artifacts. Public version history remains in
 - Per tester request, subsequent candidates go directly to unchanged UE4SS trials;
   do not repeat standalone launch controls by default. Prior acceptance is contextual,
   not proof of a new artifact. Check closure automatically rather than asking the
-  tester to confirm it. Keep this successful PME installation and rollback
-  evidence. If full product rollback becomes necessary, collect first, roll back
-  owned UE4SS, then the native owner, and canonically prepare `last-good-receipt.json`
-  in the current batch source folder. That restores the prior standalone diagnostic,
-  not this paired acceptance; external rollback alone keeps the current batch.
+  tester to confirm it. Preserve the accepted batch and rollback evidence. If the
+  current handoff trial fails, collect first, roll back its owned UE4SS and native
+  owner, then canonically prepare `last-good-receipt.json` in the handoff source
+  folder above. That restores the accepted batch, not its earlier fallback.
+  External rollback alone leaves the new handoff candidate installed.
   No live unload, universal coexistence or Release claim follows from this run.
 
 ## Gameplay song card — Integration in progress

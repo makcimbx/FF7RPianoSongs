@@ -1,4 +1,10 @@
 #include "game/native_proxy_bootstrap.h"
+#include "game/native_bootstrap_baseline.h"
+#include "game/hook_specs.h"
+#ifdef FF7RP_OWNED_PROXY
+#include "proxy/call_bridge.h"
+extern "C" void ff7rp_proxy_call_dispatch_return();
+#endif
 #ifdef FF7RP_OWNED_PROXY
 #include "proxy/entry_bridge.h"
 #endif
@@ -46,6 +52,7 @@ std::atomic<ProxyBootstrapFailure> failure{ProxyBootstrapFailure::None};
 std::atomic<const char*> predicate{nullptr};
 std::atomic<DWORD> observed_thread{0};
 std::atomic_bool invoked{false},published{false};
+std::atomic_bool observed_post_crt{false};
 bool reject(ProxyBootstrapFailure value,const char* why) noexcept {
     auto expected=ProxyBootstrapFailure::None;
     if(failure.compare_exchange_strong(expected,value,std::memory_order_acq_rel))predicate.store(why,std::memory_order_release);
@@ -228,6 +235,9 @@ struct Scope {
     HMODULE exe=nullptr,own=nullptr;Address caller=0,initialize=0;
     DWORD owner=0;File executable,self;
     const ff7rp::proxy::EntryScope* bridge=nullptr;
+    const ff7rp::proxy::CallScope* call_bridge=nullptr;
+    ff7rp::proxy::CallProof call_initial{};
+    bool post=false;
     ff7rp::proxy::EntryProof initial{};
     enum class Stage {Validating,Installing,Published,Failed} stage=Stage::Validating;
 };
@@ -267,6 +277,57 @@ bool validate(Scope& s,Address detour=0) {
         return reject(ProxyBootstrapFailure::Code,"callback_or_caller_code_unwind");
     std::array<Frame,32> frames{};const auto n=capture(frames);unsigned hits=0;
     if(!n || n>frames.size())return reject(ProxyBootstrapFailure::Frames,"capture");
+    if(s.post) {
+        ff7rp::proxy::CallProof current{};
+        const auto* held=ff7rp::proxy::active_call_scope();
+        const auto* call=find_rva_signature("native_bootstrap_show_to_winmain");
+        const auto* target=find_rva_signature("native_bootstrap_show");
+        const auto entry=native_proxy_detail::entry_contract();
+        const auto& root=s.call_initial.root;
+        if(!core::generated::kOwnedProxyPreWinMain || !held || held!=s.call_bridge || !held->capture(current)
+            || !same_proof(root,current.root) || current.return_pc!=s.call_initial.return_pc
+            || current.profile.call_rva!=s.call_initial.profile.call_rva || current.profile.target_rva!=s.call_initial.profile.target_rva
+            || current.profile.window_size!=s.call_initial.profile.window_size || current.profile.window!=s.call_initial.profile.window
+            || root.image!=reinterpret_cast<Address>(s.exe) || root.proxy!=reinterpret_cast<Address>(s.own)
+            || root.attach_thread!=s.owner || root.entry_thread!=s.owner || !root.restored || !root.callback_invoked
+            || root.profile.timestamp!=core::generated::kExeTimestamp || root.profile.image_size!=core::generated::kSizeOfImage
+            || root.profile.checksum!=core::generated::kPeChecksum || root.profile.entry_rva!=entry.rva
+            || root.profile.signature_size!=entry.original.size() || entry.original.size()<root.original.size()
+            || entry.original.size()>root.profile.signature.size()
+            || std::memcmp(root.original.data(),entry.original.data(),root.original.size())
+            || std::memcmp(root.profile.signature.data(),entry.original.data(),entry.original.size())
+            || !call || !target || current.profile.call_rva!=call->rva || current.profile.target_rva!=target->rva
+            || current.profile.window_size!=call->expected_prologue.size() || call->expected_prologue.size()<5
+            || call->expected_prologue.size()>current.profile.window.size()
+            || std::memcmp(current.profile.window.data(),call->expected_prologue.data(),call->expected_prologue.size())
+            || current.return_pc!=reinterpret_cast<Address>(s.exe)+call->rva+5)
+            return reject(ProxyBootstrapFailure::Context,"private_call_scope");
+        bool thunk=false,source=false;
+        for(unsigned i=0;i<n;++i) {
+            RUNTIME_FUNCTION row{};
+            if(thunk) {
+                if(frames[i].image!=reinterpret_cast<Address>(s.exe) || frames[i].pc!=current.return_pc
+                    || module_at(frames[i].pc)!=s.exe || !function(s.executable,frames[i],row)
+                    || row.BeginAddress>call->rva || row.EndAddress<=call->rva+5)
+                    return reject(ProxyBootstrapFailure::Frames,"post_crt_return_unwind");
+                source=true;break;
+            }
+            if(frames[i].image!=reinterpret_cast<Address>(s.own) || module_at(frames[i].pc)!=s.own
+                || !function(s.self,frames[i],row))return reject(ProxyBootstrapFailure::Frames,"post_own_frame");
+            if(frames[i].pc==s.caller)++hits;
+            if(frames[i].pc==reinterpret_cast<Address>(&ff7rp_proxy_call_dispatch_return))thunk=true;
+        }
+        if(hits!=1 || !source)return reject(ProxyBootstrapFailure::Frames,"post_current_chain");
+        if(!page(reinterpret_cast<Address>(s.exe)+call->rva,s.exe)
+            || !equal_bytes(s.executable,reinterpret_cast<Address>(s.exe),static_cast<DWORD>(call->rva),static_cast<DWORD>(call->expected_prologue.size()))
+            || !page(reinterpret_cast<Address>(s.exe)+target->rva,s.exe)
+            || !equal_bytes(s.executable,reinterpret_cast<Address>(s.exe),static_cast<DWORD>(target->rva),static_cast<DWORD>(target->expected_prologue.size())))
+            return reject(ProxyBootstrapFailure::Code,"restored_show_window");
+        const char* baseline_predicate=nullptr;
+        if(!baseline_facts::check(reinterpret_cast<Address>(s.exe),true,false,copy,&baseline_predicate))
+            return reject(ProxyBootstrapFailure::Cold,baseline_predicate);
+        return true;
+    }
     for(unsigned i=0;i<n;++i){
         RUNTIME_FUNCTION row{};
         if(frames[i].image!=reinterpret_cast<Address>(s.own) || module_at(frames[i].pc)!=s.own
@@ -298,7 +359,7 @@ bool validate(Scope& s,Address detour=0) {
 
 ProxyBootstrapSnapshot native_proxy_bootstrap_status() noexcept {
     using namespace proxy_bootstrap_impl;
-    return {failure.load(std::memory_order_acquire),predicate.load(std::memory_order_acquire),observed_thread.load(),invoked.load(),published.load()};
+    return {failure.load(std::memory_order_acquire),predicate.load(std::memory_order_acquire),observed_thread.load(),invoked.load(),published.load(),observed_post_crt.load()};
 }
 bool try_owned_proxy_native_audio_startup(HMODULE exe,HMODULE own,std::uintptr_t caller,NativeStartupCallback initialize) noexcept {
 #ifndef FF7RP_OWNED_PROXY
@@ -311,8 +372,13 @@ bool try_owned_proxy_native_audio_startup(HMODULE exe,HMODULE own,std::uintptr_t
         if(!exe || !own || !caller || !initialize || scope)return reject(ProxyBootstrapFailure::Attempt,"arguments_or_reentry");
         Scope current;current.exe=exe;current.own=own;current.caller=caller;current.initialize=reinterpret_cast<Address>(initialize);
         current.owner=thread();observed_thread.store(current.owner);
+        current.call_bridge=ff7rp::proxy::active_call_scope();
+        current.post=current.call_bridge!=nullptr;
+        observed_post_crt.store(current.post);
+        if(current.post && !current.call_bridge->capture(current.call_initial))
+            return reject(ProxyBootstrapFailure::Context,"no_private_call_scope");
         current.bridge=ff7rp::proxy::active_entry_scope();
-        if(!current.bridge)return reject(ProxyBootstrapFailure::Context,"no_private_entry_scope");
+        if(!current.post && !current.bridge)return reject(ProxyBootstrapFailure::Context,"no_private_entry_scope");
         if(!open(exe,current.executable) || !open(own,current.self))return reject(ProxyBootstrapFailure::Files,"open");
         const auto& nt=current.executable.nt;
         if(size(current.executable)!=core::generated::kExeFileSize || !hash_equal(current.executable.sha,core::generated::kExeSha256)
@@ -331,6 +397,7 @@ bool try_owned_proxy_native_audio_startup(HMODULE exe,HMODULE own,std::uintptr_t
 namespace native_proxy_detail {
 #ifdef FF7RP_OWNED_PROXY
 bool scope_present() noexcept {return proxy_bootstrap_impl::scope!=nullptr;}
+bool post_crt_scope_present() noexcept {auto* s=proxy_bootstrap_impl::scope;return s && s->post;}
 bool begin_publication(HMODULE exe) noexcept {
     using namespace proxy_bootstrap_impl;auto* s=scope;
     try {if(!s || s->exe!=exe || s->stage!=Scope::Stage::Validating || !validate(*s))return false;
@@ -338,7 +405,7 @@ bool begin_publication(HMODULE exe) noexcept {
 }
 bool finish_publication(HMODULE exe,std::uintptr_t detour) noexcept {
     using namespace proxy_bootstrap_impl;auto* s=scope;
-    try {if(!s || s->exe!=exe || s->stage!=Scope::Stage::Installing || !detour || !validate(*s,detour))return false;
+    try {if(!s || s->exe!=exe || s->stage!=Scope::Stage::Installing || (!s->post && !detour) || !validate(*s,detour))return false;
         s->stage=Scope::Stage::Published;published.store(true,std::memory_order_release);return true;
     }catch(...){return reject(ProxyBootstrapFailure::Exception,"finish_exception");}
 }
@@ -348,6 +415,7 @@ void abandon_publication(HMODULE exe) noexcept {
 }
 #else
 bool scope_present() noexcept {return false;}
+bool post_crt_scope_present() noexcept {return false;}
 bool begin_publication(HMODULE) noexcept {return false;}
 bool finish_publication(HMODULE,std::uintptr_t) noexcept {return false;}
 void abandon_publication(HMODULE) noexcept {}

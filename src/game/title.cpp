@@ -28,6 +28,7 @@
 #include <limits>
 #include <mutex>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 #include <Windows.h>
@@ -571,15 +572,23 @@ bool stop_difficulty_input_thread()
     return true;
 }
 
+struct GameWindowCandidate {
+    HWND window = nullptr;
+    DWORD thread = 0;
+};
+
 BOOL CALLBACK find_game_window(HWND window, LPARAM parameter)
 {
     DWORD process_id = 0;
-    GetWindowThreadProcessId(window, &process_id);
-    if (process_id == GetCurrentProcessId() && IsWindowVisible(window) && GetWindow(window, GW_OWNER) == nullptr) {
-        *reinterpret_cast<HWND*>(parameter) = window;
-        return FALSE;
-    }
-    return TRUE;
+    const DWORD thread = GetWindowThreadProcessId(window, &process_id);
+    if (!thread || process_id != GetCurrentProcessId() || !IsWindowVisible(window)
+        || GetWindow(window, GW_OWNER) != nullptr) return TRUE;
+    wchar_t window_class[64]{};
+    const int length = GetClassNameW(window, window_class, static_cast<int>(std::size(window_class)));
+    // Console and overlay windows can belong to this process too; foreground order is not game-window identity.
+    if (length <= 0 || std::wstring_view(window_class, length) != L"UnrealWindow") return TRUE;
+    *reinterpret_cast<GameWindowCandidate*>(parameter) = {window, thread};
+    return FALSE;
 }
 
 void update_raw_hid_dpad(LPARAM lparam)
@@ -699,18 +708,34 @@ LRESULT CALLBACK difficulty_window_proc(HWND window, UINT message, WPARAM wparam
 
 DifficultyWindowAttachment install_difficulty_window_hook()
 {
-    HWND window = nullptr;
-    EnumWindows(find_game_window, reinterpret_cast<LPARAM>(&window));
+    GameWindowCandidate candidate;
+    SetLastError(ERROR_SUCCESS);
+    const BOOL enumerated = EnumWindows(find_game_window, reinterpret_cast<LPARAM>(&candidate));
+    const DWORD enumeration_error = GetLastError();
+    const HWND window = candidate.window;
     if (!window) {
+        if (!enumerated && enumeration_error != ERROR_SUCCESS) {
+            core::log(core::LogLevel::Error,
+                "[title] difficulty_profile ui_refresh=window_enumeration_failed error="
+                + std::to_string(enumeration_error));
+            return DifficultyWindowAttachment::Failed;
+        }
         core::log(core::LogLevel::Debug,
             "[title] difficulty_profile ui_refresh=window_not_found status=pending");
         return DifficultyWindowAttachment::Pending;
     }
     SetLastError(ERROR_SUCCESS);
     const LONG_PTR previous = SetWindowLongPtrW(window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(difficulty_window_proc));
-    if (!previous && GetLastError() != ERROR_SUCCESS) {
-        core::log(core::LogLevel::Error, "[title] difficulty_profile ui_refresh=window_hook_failed");
-        return DifficultyWindowAttachment::Failed;
+    const DWORD hook_error = GetLastError();
+    if (!previous && hook_error != ERROR_SUCCESS) {
+        const bool disappeared = hook_error == ERROR_INVALID_WINDOW_HANDLE;
+        std::ostringstream out;
+        out << "[title] difficulty_profile ui_refresh="
+            << (disappeared ? "window_disappeared status=pending" : "window_hook_failed")
+            << " api=SetWindowLongPtrW error=" << hook_error
+            << " hwnd=" << window << " thread=" << candidate.thread << " class=UnrealWindow";
+        core::log(disappeared ? core::LogLevel::Debug : core::LogLevel::Error, out.str());
+        return disappeared ? DifficultyWindowAttachment::Pending : DifficultyWindowAttachment::Failed;
     }
     g_game_window = window;
     g_previous_window_proc = reinterpret_cast<WNDPROC>(previous);
@@ -728,7 +753,10 @@ DifficultyWindowAttachment install_difficulty_window_hook()
             "[title] difficulty_input status=raw_input_registered usages=joystick,gamepad");
     }
     g_theme_window.store(window, std::memory_order_release);
-    core::log(core::LogLevel::Info, "[title] difficulty_profile ui_refresh=window_hook_ready");
+    std::ostringstream out;
+    out << "[title] difficulty_profile ui_refresh=window_hook_ready hwnd=" << window
+        << " thread=" << candidate.thread << " class=UnrealWindow";
+    core::log(core::LogLevel::Info, out.str());
     return DifficultyWindowAttachment::Attached;
 }
 

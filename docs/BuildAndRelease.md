@@ -79,13 +79,17 @@ alongside the runtime-gate session. Do not overwrite an unknown companion or
 assume the ASI-only installer installed it. No third-party redistribution or
 Release packaging is authorized by this development procedure.
 
-The owned proxy restores the executable entry before internal initialization and
-authenticates its private entry scope. The alternative ASI authenticates its supported
-loader handoff and executable continuation outside `DllMain`. Protective hooks must
-publish within that qualified scope; a late worker or missed initializer cannot
-reconstruct the authority from live pointers.
+The owned proxy restores the executable entry and resolves genuine forwarding.
+Catalog-qualified post-CRT profiles arm an owned Show CALL there, then allow normal
+CRT startup to continue before full product authentication and installation. The
+actual consumed CALL and current CRT unwind establish a separate private main-thread
+scope; the original helper and its actual result are preserved. Other profiles keep
+their authenticated entry-held route. The alternative legacy ASI authenticates its
+own supported loader continuation outside `DllMain`; the proxy does not require it.
+Protective hooks must publish within the selected qualified scope; a late worker,
+CRT-state observation or missed initializer cannot reconstruct that authority.
 Mandatory native protection and the direct piano-page call-site guard are published
-in that early phase. The direct guard is never installed or rolled back as a live
+in that pre-engine phase. The direct guard is never installed or rolled back as a live
 feature patch. The early-protection and genuine native-initializer signals queue
 late GU/configuration preparation and feature
 installation once; repository preparation follows their successful completion.

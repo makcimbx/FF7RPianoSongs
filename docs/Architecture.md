@@ -71,11 +71,26 @@ paths and dependency handling are documented in [Build And Release](BuildAndRele
 The owned proxy and the legacy ASI are alternative product images, not two modules
 that must be installed together. The proxy's bounded process-attach bridge requires
 an actual normal import and the selected executable's exact entry profile. At the
-real entry, outside DllMain, it restores the temporary patch/protection/cache before
-resolving System32 forwarding and invoking internal startup. The private active
-bridge scope, executable authentication and cold-state rereads gate protective
-hook publication; only subsequent genuine AEP execution establishes runtime origin.
-Export forwarding remains separate from optional product-startup acceptance.
+real entry, outside DllMain, it restores the temporary patch/protection/cache and
+resolves System32 forwarding.
+
+For the catalog-qualified post-CRT profile, this entry scope arms a narrow owned
+Show CALL and returns control to normal executable startup, without running full
+product authentication, configuration or native-hook installation there. Actual
+same-thread execution of that CALL authenticates the current private-thunk-to-CRT
+unwind, restores the CALL, and creates a distinct private publication scope. Full
+executable/module authentication and initialized-empty post-CRT facts are revalidated
+before native publication. The original Show helper is then tail-jumped exactly
+once with its real return chain and WORD result preserved. Neither a copied entry
+proof nor CRT state 2 alone grants authority or establishes allocator readiness.
+This source omits the already-passed AEP hook; origin is published only after the
+complete source-specific native transaction succeeds.
+
+Profiles without that qualification retain the original entry-held route: its
+private active entry scope and pre-CRT cold-state rereads gate hook publication,
+and subsequent genuine AEP execution establishes origin. The proxy never borrows
+the legacy ASI loader's authority. Export forwarding remains separate from optional
+product-startup acceptance.
 
 Early-install diagnostics capture bounded hook/API outcomes, monotonic boundaries
 and the first already-evaluated failed predicate without repeating native reads.
@@ -103,7 +118,7 @@ reconstruct continuity. Exact per-build code/data contracts belong in the catalo
 and indexed bootstrap evidence, not duplicated RVAs here.
 
 Early publication performs no game constructors or worker startup. It retains the
-direct piano-page call-site guard in the authenticated entry-held phase: unlike
+direct piano-page call-site guard in the authenticated pre-engine main continuation: unlike
 MinHook installation, its transactional byte writer is not a live execution barrier.
 The guard's installer owns its signature/relative-target validation. Its original
 signature is excluded from late preflight because PME has already patched it; the
@@ -126,8 +141,9 @@ drains cannot account for every stock forwarder already holding an original poin
 Early native-install rollback before that boundary remains transactional.
 Late failure does not retry or tear down the early native transaction. An already-open stock
 menu does not acquire synthetic custom authority when preparation finishes; a fresh
-observed session boundary remains necessary. This split reduces work while holding
-game entry; it does not certify arbitrary third-party pre-CRT engine calls as safe.
+observed session boundary remains necessary. The qualified post-CRT route lets
+normal CRT startup advance before full product installation. Neither route certifies
+arbitrary third-party engine calls as safe or repairs a foreign allocator cache.
 
 The native runtime captures the initializer's persistent owner, subscription,
 dispatcher, PackageStore and generation. Replacement/destruction/shutdown invalidates

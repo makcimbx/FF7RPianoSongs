@@ -24,6 +24,34 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             render(self.catalog, self.catalog["builds"][0]["id"])
 
+    def test_per_build_phase_and_no_imported_promotion(self):
+        post = [b for b in self.catalog["builds"] if b["runtime_profile"]["owned_proxy"]["phase"] == "pre_winmain"]
+        legacy = [b for b in self.catalog["builds"] if b["runtime_profile"]["owned_proxy"]["phase"] == "entry"]
+        self.assertEqual((len(post), len(legacy)), (1, 1))
+        self.assertIn("kOwnedCallEnabled = true", render(self.catalog, post[0]["id"]))
+        self.assertIn("kOwnedCallEnabled = false", render(self.catalog, legacy[0]["id"]))
+        legacy[0]["runtime_profile"]["owned_proxy"] = copy.deepcopy(post[0]["runtime_profile"]["owned_proxy"])
+        with self.assertRaisesRegex(ValueError, "matching-disk"):
+            render(self.catalog, legacy[0]["id"])
+
+    def test_call_authority_exact_target_and_disk_contract(self):
+        build = next(b for b in self.catalog["builds"] if b["runtime_profile"]["owned_proxy"]["phase"] == "pre_winmain")
+        ident = build["id"]
+        row = next(a for a in self.catalog["addresses"] if a["id"] == "native_bootstrap_show_to_winmain")["builds"][ident]
+        original = copy.deepcopy(row)
+        for mutation in ("mask", "opcode", "displacement", "disk"):
+            row.clear(); row.update(copy.deepcopy(original))
+            if mutation == "mask": row["signature"]["mask"] = "?" * len(bytes.fromhex(row["signature"]["bytes"]))
+            elif mutation == "disk": row["evidence"] = []
+            else:
+                data = bytearray.fromhex(row["signature"]["bytes"])
+                data[0 if mutation == "opcode" else 1] ^= 1
+                row["signature"]["bytes"] = data.hex(" ")
+            with self.assertRaises(ValueError): render(self.catalog, ident)
+        row.clear(); row.update(original)
+        build["runtime_profile"]["owned_proxy"]["patch_bytes"] = 6
+        with self.assertRaises(ValueError): render(self.catalog, ident)
+
     def test_nonexact_or_outside_entry(self):
         address = next(a for a in self.catalog["addresses"] if a["id"] == "native_audio_exe_entry")
         build_id, entry = next(iter(address["builds"].items()))

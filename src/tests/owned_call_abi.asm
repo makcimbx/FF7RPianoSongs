@@ -1,0 +1,113 @@
+option casemap:none
+PUBLIC ff7rp_test_call_abi
+.code
+ff7rp_test_call_abi PROC FRAME
+    push rbp
+    .pushreg rbp
+    push rbx
+    .pushreg rbx
+    push rsi
+    .pushreg rsi
+    push rdi
+    .pushreg rdi
+    push r12
+    .pushreg r12
+    push r13
+    .pushreg r13
+    push r14
+    .pushreg r14
+    push r15
+    .pushreg r15
+    sub rsp,0d8h
+    .allocstack 0d8h
+    movdqu [rsp+20h],xmm6
+    .savexmm128 xmm6,20h
+    movdqu [rsp+30h],xmm7
+    .savexmm128 xmm7,30h
+    movdqu [rsp+40h],xmm8
+    .savexmm128 xmm8,40h
+    movdqu [rsp+50h],xmm9
+    .savexmm128 xmm9,50h
+    movdqu [rsp+60h],xmm10
+    .savexmm128 xmm10,60h
+    movdqu [rsp+70h],xmm11
+    .savexmm128 xmm11,70h
+    movdqu [rsp+80h],xmm12
+    .savexmm128 xmm12,80h
+    movdqu [rsp+90h],xmm13
+    .savexmm128 xmm13,90h
+    movdqu [rsp+0a0h],xmm14
+    .savexmm128 xmm14,0a0h
+    movdqu [rsp+0b0h],xmm15
+    .savexmm128 xmm15,0b0h
+    .endprolog
+    mov [rsp+0c0h],rcx
+    mov ebp,11
+    mov ebx,12
+    mov esi,13
+    mov edi,14
+    mov r12d,15
+    mov r13d,16
+    mov r14d,17
+    mov r15d,18
+    pcmpeqd xmm6,xmm6
+    movdqa xmm7,xmm6
+    movdqa xmm8,xmm6
+    movdqa xmm9,xmm6
+    movdqa xmm10,xmm6
+    movdqa xmm11,xmm6
+    movdqa xmm12,xmm6
+    movdqa xmm13,xmm6
+    movdqa xmm14,xmm6
+    movdqa xmm15,xmm6
+    call qword ptr [rsp+0c0h]
+    movzx eax,ax
+    mov [rsp+0c8h],eax
+    cmp rbp,11
+    jne abi_failed
+    cmp rbx,12
+    jne abi_failed
+    cmp rsi,13
+    jne abi_failed
+    cmp rdi,14
+    jne abi_failed
+    cmp r12,15
+    jne abi_failed
+    cmp r13,16
+    jne abi_failed
+    cmp r14,17
+    jne abi_failed
+    cmp r15,18
+    jne abi_failed
+    IRP reg,<xmm6,xmm7,xmm8,xmm9,xmm10,xmm11,xmm12,xmm13,xmm14,xmm15>
+        pmovmskb edx,reg
+        cmp edx,0ffffh
+        jne abi_failed
+    ENDM
+    jmp abi_restore
+abi_failed:
+    or dword ptr [rsp+0c8h],10000h
+abi_restore:
+    mov eax,[rsp+0c8h]
+    movdqu xmm6,[rsp+20h]
+    movdqu xmm7,[rsp+30h]
+    movdqu xmm8,[rsp+40h]
+    movdqu xmm9,[rsp+50h]
+    movdqu xmm10,[rsp+60h]
+    movdqu xmm11,[rsp+70h]
+    movdqu xmm12,[rsp+80h]
+    movdqu xmm13,[rsp+90h]
+    movdqu xmm14,[rsp+0a0h]
+    movdqu xmm15,[rsp+0b0h]
+    add rsp,0d8h
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rdi
+    pop rsi
+    pop rbx
+    pop rbp
+    ret
+ff7rp_test_call_abi ENDP
+END

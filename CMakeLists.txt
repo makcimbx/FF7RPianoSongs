@@ -217,6 +217,7 @@ FetchContent_GetProperties(ggml)
 set_source_files_properties(
     src/game/chord_voicing_bridge.asm src/game/chord_voicing_bridge_harness.asm
     src/proxy/entry_thunk.asm src/proxy/forwarding_thunks.asm
+    src/proxy/call_thunk.asm src/tests/owned_call_abi.asm
     PROPERTIES LANGUAGE ASM_MASM)
 if(FF7RP_BUILD_RUNTIME)
     # Packaged beside the DLL. A matching existing file is not downloaded again.
@@ -297,6 +298,7 @@ add_custom_command(OUTPUT "${FF7RP_PROXY_PROFILE}"
 add_library(FF7RPianoSongsProxy SHARED
     ${FF7RPIANOSONGS_SOURCES} src/game/chord_voicing_bridge.asm
     src/proxy/proxy_main.cpp src/proxy/entry_bridge.cpp src/proxy/entry_thunk.asm
+    src/proxy/call_bridge.cpp src/proxy/call_thunk.asm
     src/proxy/forwarding.cpp src/proxy/forwarding_thunks.asm src/proxy/forwarding.def
     "${FF7RP_PROXY_PROFILE}")
 add_dependencies(FF7RPianoSongsProxy check_rva_catalog)
@@ -330,6 +332,12 @@ ff7rp_use_generated_catalog(FF7RPianoSongs)
 
 add_executable(native_proxy_entry_bridge_selftest
     src/tests/native_proxy_entry_bridge_selftest.cpp src/proxy/entry_thunk.asm)
+add_executable(owned_call_bridge_selftest
+    src/tests/owned_call_bridge_selftest.cpp src/tests/owned_call_abi.asm
+    src/proxy/entry_thunk.asm src/proxy/call_thunk.asm)
+ff7rp_apply_cpp_policy(owned_call_bridge_selftest)
+target_include_directories(owned_call_bridge_selftest PRIVATE src)
+target_compile_definitions(owned_call_bridge_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 ff7rp_apply_cpp_policy(native_proxy_entry_bridge_selftest)
 target_include_directories(native_proxy_entry_bridge_selftest PRIVATE src)
 target_compile_definitions(native_proxy_entry_bridge_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -954,6 +962,7 @@ target_include_directories(native_audio_extended_composition_selftest PRIVATE "s
 target_link_libraries(native_audio_extended_composition_selftest PRIVATE ff7rp_pipeline minhook Psapi bcrypt)
 
 add_executable(native_proxy_bootstrap_selftest
+    src/proxy/call_bridge.cpp src/proxy/call_thunk.asm
     src/tests/native_proxy_bootstrap_selftest.cpp
     src/game/native_audio_bootstrap.cpp
     src/game/native_audio_bindings.cpp
@@ -1291,6 +1300,8 @@ add_test(NAME native_audio_decoder_selftest COMMAND native_audio_decoder_selftes
 add_test(NAME native_audio_bindings_selftest COMMAND native_audio_bindings_selftest)
 add_test(NAME native_audio_runtime_selftest COMMAND native_audio_runtime_selftest)
 add_test(NAME native_proxy_entry_bridge_selftest COMMAND native_proxy_entry_bridge_selftest)
+add_test(NAME owned_call_bridge_selftest COMMAND owned_call_bridge_selftest)
+set_tests_properties(owned_call_bridge_selftest PROPERTIES TIMEOUT 90 LABELS "functional")
 add_test(NAME native_proxy_forwarding_selftest COMMAND native_proxy_forwarding_selftest)
 add_test(NAME native_proxy_startup_diagnostic_selftest COMMAND native_proxy_startup_diagnostic_selftest)
 add_test(NAME native_proxy_bootstrap_selftest COMMAND native_proxy_bootstrap_selftest)

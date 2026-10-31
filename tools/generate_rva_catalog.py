@@ -22,7 +22,7 @@ BUILD_KEYS = {
     "id", "game_version", "pe_timestamp", "size_of_image", "pe_checksum", "file_size", "sha256",
     "runtime_profile",
 }
-RUNTIME_PROFILE_KEYS = {"native_audio", "extended_chart", "evidence"}
+RUNTIME_PROFILE_KEYS = {"native_audio", "extended_chart", "owned_proxy", "evidence"}
 NATIVE_AUDIO_LAYOUT_FIELDS = (
     "bgm_resource", "scoreinfo_bgm", "append_slot", "backing_slot", "serialized_interface_slot",
 )
@@ -287,6 +287,12 @@ def fixed_profile_bytes(value: object, count: int, context: str) -> list[int]:
 
 def validate_runtime_profile(value: object, image_size: int, context: str) -> None:
     profile = require_keys(value, RUNTIME_PROFILE_KEYS, context)
+    proxy = require_keys(profile["owned_proxy"], {"phase", "call_id", "target_id", "patch_bytes"}, f"{context}.owned_proxy")
+    if proxy not in (
+        {"phase":"entry", "call_id":None, "target_id":None, "patch_bytes":0},
+        {"phase":"pre_winmain", "call_id":"native_bootstrap_show_to_winmain", "target_id":"native_bootstrap_show", "patch_bytes":5},
+    ):
+        raise CatalogError(f"{context}.owned_proxy requires an explicit supported held-mutation contract")
     audio = require_keys(profile["native_audio"], set(NATIVE_AUDIO_LAYOUT_FIELDS),
                          f"{context}.native_audio")
     offsets = []
@@ -585,6 +591,7 @@ def render_build_identity(build: dict) -> bytes:
         "#pragma once", "", "#include <cstddef>", "#include <cstdint>", "#include <string_view>", "",
         "namespace ff7r::piano::core::generated {", "",
         f"inline constexpr std::string_view kBuildId = \"{build['id']}\";",
+        f"inline constexpr bool kOwnedProxyPreWinMain = {'true' if build['runtime_profile']['owned_proxy']['phase'] == 'pre_winmain' else 'false'};",
         f"inline constexpr uint32_t kExeTimestamp = {build['pe_timestamp']};",
         f"inline constexpr uint32_t kSizeOfImage = {build['size_of_image']};",
         f"inline constexpr uint32_t kPeChecksum = {build['pe_checksum']};",

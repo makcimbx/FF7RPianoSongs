@@ -14,8 +14,9 @@ struct ProxyBootstrapSnapshot {
     const char* predicate=nullptr;
     DWORD thread=0;
     bool callback_invoked=false,barriers_published=false;
+    bool post_crt=false;
 };
-// Only the linked owned proxy's private, restored actual-entry callback.
+// Only the linked owned proxy's actual private entry or admitted CALL scope.
 // Success is synchronous callback invocation, NOT origin or audio readiness.
 // Without FF7RP_OWNED_PROXY this API and its scope seams are unavailable.
 // Retain this single module and all published hooks until process exit or safe teardown.
@@ -29,6 +30,7 @@ struct EntryContract {std::uintptr_t rva=0;std::span<const std::uint8_t> origina
 EntryContract entry_contract() noexcept;
 bool cold_entry_ready(HMODULE exe) noexcept;
 bool scope_present() noexcept;
+bool post_crt_scope_present() noexcept;
 bool begin_publication(HMODULE exe) noexcept;
 bool finish_publication(HMODULE exe,std::uintptr_t owned_entry_detour) noexcept;
 void abandon_publication(HMODULE exe) noexcept;

@@ -1,4 +1,5 @@
 #include "game/native_audio_bootstrap.h"
+#include "game/native_bootstrap_baseline.h"
 #include "game/hook_specs.h"
 #include "game/rvas.h"
 #include "core/generated/build_identity.generated.h"
@@ -11,6 +12,49 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+
+namespace ff7r::piano::game::native_audio::baseline_facts {
+bool check(std::uintptr_t base,bool post,bool srw,Reader copy,const char** failure) noexcept {
+    const auto read=[&](std::uintptr_t address,auto& value){return copy(address,&value,sizeof(value));};
+    const auto failed=[&](bool value,const char* predicate) {
+        if(value && failure && !*failure)*failure=predicate;
+        return value;
+    };
+    std::uint32_t crt=~0u,serial=~0u,stop=~0u,generation=~0u;unsigned char complete=255;
+    std::array<unsigned char,48> gu{},expected{};
+    if(post){std::fill(expected.begin()+4,expected.begin()+8,static_cast<unsigned char>(0xff));expected[12]=1;}
+    if(failed(!read(base+rva::NativeAudioCrtState,crt) || crt!=(post?2u:srw?1u:0u),"baseline.crt")
+        || failed(!read(base+rva::NativeAudioInitialGuHeader,gu) || gu!=expected,"baseline.gu")
+        || failed(!read(base+rva::NativeBootstrapGuSerial,serial) || serial!=(post?1000u:0u),"baseline.gu_serial")
+        || failed(!read(base+rva::PackageStoreGeneration,generation) || generation,"baseline.generation")
+        || failed(!read(base+rva::NativeBootstrapCrashStop,stop) || stop,"baseline.crash_stop")
+        || failed(!read(base+rva::NativeBootstrapCrashComplete,complete) || complete!=(post?1:0),"baseline.crash_complete"))return false;
+    for(auto r:{rva::NativeBootstrapHinstance,rva::NativeBootstrapTaskGraph,rva::NativeBootstrapPool,
+        rva::NativeBootstrapBackgroundPool,rva::PackageStoreOwnerGlobal,rva::DataObjectNameMap,
+        rva::NativeBootstrapCrashProcess,rva::NativeBootstrapCrashResult}) {
+        std::uint64_t value=1;if(failed(!r || !read(base+r,value) || value,"baseline.absent_global"))return false;
+    }
+    if constexpr(rva::NativeBootstrapIoPool!=0) {
+        std::uint64_t value=1;if(failed(!read(base+rva::NativeBootstrapIoPool,value) || value,"baseline.io_pool"))return false;
+    }
+    for(auto r:{rva::BgmListRegistry,rva::ScoreInfoRegistry,rva::PianoScoreRegistry}) {
+        std::array<unsigned char,48> group{};
+        if(failed(!read(base+r,group) || group!=std::array<unsigned char,48>{},"baseline.registry"))return false;
+    }
+    for(auto r:{rva::NativeBootstrapCrashWorker,rva::NativeBootstrapCrashRequest,rva::NativeBootstrapCrashEvent}) {
+        std::uint64_t value=0;if(failed(!read(base+r,value) || (post?(!value || value==~0ull):value!=0),"baseline.crash_handle"))return false;
+    }
+    if(srw) {
+        std::uint32_t guard=~0u;unsigned char done=255;
+        if(failed(!read(base+rva::NativeBootstrapSrwGuard,guard) || guard,"baseline.srw_guard")
+            || failed(!read(base+rva::NativeBootstrapSrwPoolComplete,done) || done,"baseline.srw_complete"))return false;
+        for(auto r:{rva::NativeBootstrapSrwGmalloc,rva::NativeBootstrapSrwReserve,rva::NativeBootstrapSrwLock,rva::NativeBootstrapSrwOutput}) {
+            std::uint64_t value=1;if(failed(!r || !read(base+r,value) || value,"baseline.srw_global"))return false;
+        }
+    } else if(!post){std::uint64_t cookie=0;if(failed(!read(base+rva::NativeBootstrapCookieValue,cookie) || cookie!=0x2b992ddfa232ull,"baseline.cookie"))return false;}
+    return true;
+}
+}
 
 namespace ff7r::piano::game::native_audio {
 namespace bootstrap_impl {
@@ -380,40 +424,8 @@ bool code(const Scope& s) noexcept {
     return true;
 }
 bool baseline(const Scope& s) noexcept {
-    const auto base=reinterpret_cast<Address>(s.exe);const bool post=s.source==BootstrapSource::PreWinMain;
-    const bool srw=s.source==BootstrapSource::FirstSrw;
-    std::uint32_t crt=~0u,serial=~0u,stop=~0u,generation=~0u;unsigned char complete=255;
-    std::array<unsigned char,48> gu{},expected{};
-    if(post){std::fill(expected.begin()+4,expected.begin()+8,static_cast<unsigned char>(0xff));expected[12]=1;}
-    if(!read(base+rva::NativeAudioCrtState,crt) || crt!=(post?2u:srw?1u:0u)
-        || !read(base+rva::NativeAudioInitialGuHeader,gu) || gu!=expected
-        || !read(base+rva::NativeBootstrapGuSerial,serial) || serial!=(post?1000u:0u)
-        || !read(base+rva::PackageStoreGeneration,generation) || generation
-        || !read(base+rva::NativeBootstrapCrashStop,stop) || stop
-        || !read(base+rva::NativeBootstrapCrashComplete,complete) || complete!=(post?1:0))return false;
-    for(auto r:{rva::NativeBootstrapHinstance,rva::NativeBootstrapTaskGraph,rva::NativeBootstrapPool,
-        rva::NativeBootstrapBackgroundPool,rva::PackageStoreOwnerGlobal,rva::DataObjectNameMap,
-        rva::NativeBootstrapCrashProcess,rva::NativeBootstrapCrashResult}) {
-        std::uint64_t value=1;if(!r || !read(base+r,value) || value)return false;
-    }
-    if constexpr(rva::NativeBootstrapIoPool!=0) {
-        std::uint64_t value=1;if(!read(base+rva::NativeBootstrapIoPool,value) || value)return false;
-    }
-    for(auto r:{rva::BgmListRegistry,rva::ScoreInfoRegistry,rva::PianoScoreRegistry}) {
-        std::array<unsigned char,48> group{};if(!read(base+r,group) || group!=std::array<unsigned char,48>{})return false;
-    }
-    for(auto r:{rva::NativeBootstrapCrashWorker,rva::NativeBootstrapCrashRequest,rva::NativeBootstrapCrashEvent}) {
-        std::uint64_t value=0;if(!read(base+r,value) || (post?(!value || value==~0ull):value!=0))return false;
-    }
-    if(srw) {
-        std::uint32_t guard=~0u;unsigned char done=255;
-        if(!read(base+rva::NativeBootstrapSrwGuard,guard) || guard
-            || !read(base+rva::NativeBootstrapSrwPoolComplete,done) || done)return false;
-        for(auto r:{rva::NativeBootstrapSrwGmalloc,rva::NativeBootstrapSrwReserve,rva::NativeBootstrapSrwLock,rva::NativeBootstrapSrwOutput}) {
-            std::uint64_t value=1;if(!r || !read(base+r,value) || value)return false;
-        }
-    } else if(!post){std::uint64_t cookie=0;if(!read(base+rva::NativeBootstrapCookieValue,cookie) || cookie!=0x2b992ddfa232ull)return false;}
-    return true;
+    return baseline_facts::check(reinterpret_cast<Address>(s.exe),s.source==BootstrapSource::PreWinMain,
+        s.source==BootstrapSource::FirstSrw,copy);
 }
 bool unwind_record(Address image,const File& file,const RUNTIME_FUNCTION& disk,
     BootstrapFrameFailure& facts,RUNTIME_FUNCTION& parent,bool& chained) noexcept {

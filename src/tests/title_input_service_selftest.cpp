@@ -2,16 +2,26 @@
 #include <hidsdi.h>
 #include <hidpi.h>
 #include <cstring>
+#include <cwchar>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 #include <Xinput.h>
+#include <vector>
 
 namespace {
 bool deferred=false,fail_thread=false,fail_window=false,fail_raw=false,fail_restore=false,fail_names=false;
 bool fail_hook=false,stop_on_name=false;
 bool fail_trigger_names=false;
 bool window_available=true,fail_post=false,wrong_window_thread=false;
+bool fail_enumeration=false,disappear_on_attach=false;
+struct TestWindow { HWND handle; DWORD process; bool visible; HWND owner; const wchar_t* window_class; };
+std::vector<TestWindow> window_candidates;
+HWND last_hook_window=nullptr;
+const TestWindow* test_window(HWND window) {
+    for(const auto& candidate:window_candidates)if(candidate.handle==window)return &candidate;
+    return nullptr;
+}
 UINT posted_message=0; WPARAM posted_wparam=0; LPARAM posted_lparam=0; HWND posted_window=nullptr;
 unsigned posts=0,window_messages=0;
 void require(bool,const char*);
@@ -31,7 +41,19 @@ SHORT WINAPI async_key(int key) {return ((key==VK_CONTROL && ctrl)
     || (key==VK_F1+configured_key-1 && configured_key && function)
     || (theme_function && key==VK_F1+theme_function-1 && theme_function_held))?SHORT(-32768):0;}
 HWND WINAPI foreground_window(){return foreground?reinterpret_cast<HWND>(3):nullptr;}
-DWORD WINAPI window_process(HWND,LPDWORD process){*process=GetCurrentProcessId();return GetCurrentThreadId()+(wrong_window_thread?1:0);}
+DWORD WINAPI window_process(HWND window,LPDWORD process){
+    const auto* candidate=test_window(window);
+    *process=candidate?candidate->process:GetCurrentProcessId();
+    return GetCurrentThreadId()+(wrong_window_thread?1:0);
+}
+BOOL WINAPI window_visible(HWND window){const auto* candidate=test_window(window);return candidate && candidate->visible;}
+HWND WINAPI window_owner(HWND window,UINT){const auto* candidate=test_window(window);return candidate?candidate->owner:nullptr;}
+int WINAPI get_window_class(HWND window,LPWSTR output,int capacity){
+    const auto* candidate=test_window(window);
+    if(!candidate || !candidate->window_class || capacity<=0)return 0;
+    int length=0;while(candidate->window_class[length] && length<capacity-1){output[length]=candidate->window_class[length];++length;}
+    output[length]=0;return length;
+}
 DWORD WINAPI xinput(DWORD user,XINPUT_STATE* state){
     state->Gamepad.wButtons=controller_buttons[user];state->Gamepad.bLeftTrigger=controller_left_triggers[user];
     state->Gamepad.bRightTrigger=controller_right_triggers[user];return ERROR_SUCCESS;
@@ -42,9 +64,11 @@ HANDLE WINAPI create_thread(LPSECURITY_ATTRIBUTES,SIZE_T,LPTHREAD_START_ROUTINE,
 }
 DWORD WINAPI wait_thread(HANDLE,DWORD) {++waits;return WAIT_OBJECT_0;}
 BOOL WINAPI close_thread(HANDLE) {++closes;return TRUE;}
-BOOL WINAPI enum_windows(WNDENUMPROC,LPARAM output) {
+BOOL WINAPI enum_windows(WNDENUMPROC callback,LPARAM output) {
     require(deferred,"early window setup");++windows;
-    *reinterpret_cast<HWND*>(output)=window_available?reinterpret_cast<HWND>(3):nullptr;return TRUE;
+    if(fail_enumeration){SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    if(window_available)for(const auto& candidate:window_candidates)if(!callback(candidate.handle,output))return FALSE;
+    return TRUE;
 }
 BOOL WINAPI post_message(HWND window,UINT message,WPARAM wparam,LPARAM lparam){
     ++posts;if(fail_post)return FALSE;
@@ -64,7 +88,9 @@ UINT WINAPI raw_info(HANDLE,UINT,LPVOID output,PUINT size) {
 NTSTATUS NTAPI hat_value(HIDP_REPORT_TYPE,USAGE,USHORT,USAGE,PULONG value,PHIDP_PREPARSED_DATA,PCHAR,ULONG) {
     *value=raw_hat;return HIDP_STATUS_SUCCESS;
 }
-LONG_PTR WINAPI set_window(HWND,int,LONG_PTR value) {
+LONG_PTR WINAPI set_window(HWND window,int,LONG_PTR value) {
+    if(value!=1)last_hook_window=window;
+    if(value!=1 && disappear_on_attach){disappear_on_attach=false;SetLastError(ERROR_INVALID_WINDOW_HANDLE);return 0;}
     if((value!=1 && fail_window) || (value==1 && fail_restore)) {SetLastError(ERROR_ACCESS_DENIED);return 0;}
     const auto old=window_proc;window_proc=value;return old;
 }
@@ -92,10 +118,16 @@ BOOL WINAPI test_register_raw_devices(PCRAWINPUTDEVICE devices,UINT count,UINT) 
 #define GetAsyncKeyState async_key
 #define GetForegroundWindow foreground_window
 #define GetWindowThreadProcessId window_process
+#define IsWindowVisible window_visible
+#define GetWindow window_owner
+#define GetClassNameW get_window_class
 #include "game/title.cpp"
 #undef GetAsyncKeyState
 #undef GetForegroundWindow
 #undef GetWindowThreadProcessId
+#undef IsWindowVisible
+#undef GetWindow
+#undef GetClassNameW
 #undef CreateThread
 #undef WaitForSingleObject
 #undef CloseHandle
@@ -201,6 +233,8 @@ void reset() {
     std::memset(controller_left_triggers,0,sizeof(controller_left_triggers));
     std::memset(controller_right_triggers,0,sizeof(controller_right_triggers));
     window_available=true;posts=window_messages=0;raw_hat=6;
+    fail_enumeration=disappear_on_attach=false;last_hook_window=nullptr;
+    window_candidates={{reinterpret_cast<HWND>(3),GetCurrentProcessId(),true,nullptr,L"UnrealWindow"}};
     threads=waits=closes=windows=raw_adds=raw_removes=names=original_keys=hooks=0;window_proc=1;
     g_input_service_state.store(TitleInputServiceState::Uninstalled);g_exe_module=nullptr;
     g_difficulty_input_thread=nullptr;g_difficulty_input_thread_running=false;g_game_window=nullptr;
@@ -497,6 +531,49 @@ void preview_input_tests() {
     difficulty_window_proc(nullptr,WM_ACTIVATEAPP,FALSE,0);
     require(preview_cancels==prior+2,"synchronous preview focus cancellation");
 }
+void window_selection_tests() {
+    for(const bool focused:{true,false})for(const bool game_first:{true,false}) {
+        reset();install();deferred=true;foreground=focused;
+        const auto game=window_candidates.front();
+        window_candidates={
+            {reinterpret_cast<HWND>(10),GetCurrentProcessId(),true,nullptr,L"ConsoleWindowClass"},
+            {reinterpret_cast<HWND>(11),GetCurrentProcessId(),true,nullptr,L"UE4SSDebugConsole"},
+            {reinterpret_cast<HWND>(12),GetCurrentProcessId()+1,true,nullptr,L"UnrealWindow"},
+            {reinterpret_cast<HWND>(13),GetCurrentProcessId(),false,nullptr,L"UnrealWindow"},
+            {reinterpret_cast<HWND>(14),GetCurrentProcessId(),true,reinterpret_cast<HWND>(3),L"UnrealWindow"},
+            {reinterpret_cast<HWND>(15),GetCurrentProcessId(),true,nullptr,L"UnrealWindowOther"},
+            {reinterpret_cast<HWND>(16),GetCurrentProcessId(),true,nullptr,nullptr},
+        };
+        if(game_first)window_candidates.insert(window_candidates.begin(),game);
+        else window_candidates.push_back(game);
+        require(start_title_input_service(module()) && g_game_window==game.handle
+            && last_hook_window==game.handle && raw_adds==1,
+            "select actual engine window regardless of focus and auxiliary-window order");
+        require(shutdown_title().ok() && window_proc==1,"classified-window cleanup");
+    }
+    reset();install();deferred=true;foreground=false;
+    const auto game=window_candidates.front();
+    window_candidates={{reinterpret_cast<HWND>(10),GetCurrentProcessId(),true,nullptr,L"ConsoleWindowClass"}};
+    require(start_title_input_service(module()) && !g_game_window && !last_hook_window && !raw_adds,
+        "auxiliary-only startup remains pending without subclassing the console");
+    window_candidates.push_back(game);
+    require(make_profile_list_callbacks().post_refresh(1) && g_game_window==game.handle
+        && threads==1 && raw_adds==1,"actual late engine-window appearance attaches without focus or service restart");
+    require(shutdown_title().ok(),"pending engine-window cleanup");
+
+    reset();install();deferred=true;disappear_on_attach=true;
+    require(start_title_input_service(module()) && !g_game_window && !raw_adds && threads==1,
+        "window destroyed before subclass is pending, not a terminal startup failure");
+    require(make_profile_list_callbacks().post_refresh(1) && g_game_window && raw_adds==1 && threads==1,
+        "later attachment recovers from invalid HWND without restarting service");
+    require(shutdown_title().ok(),"disappeared-window cleanup");
+
+    reset();install();deferred=true;fail_enumeration=true;
+    require(!start_title_input_service(module()) && !last_hook_window && !raw_adds && !threads,
+        "actual EnumWindows failure remains terminal, not false readiness");
+    require(shutdown_title().ok(),"failed-enumeration cleanup");
+}
+
 void __fastcall result_consumer(void*) {
     auto* scope=AutoplayResultScope::active();require(scope && scope->suppress(),"outer shadow absent on rejected gate");
     std::array<std::uint8_t,16> record{};
@@ -510,6 +587,7 @@ int main() {
         theme_input_tests();
         continuation_scheduler_tests();
         controller_theme_input_tests();
+        window_selection_tests();
         reset();non_audio_hook_gate().close();g_original_detail_update=result_consumer;
         detail_update_detour(nullptr);require(!AutoplayResultScope::active(),"outer shadow leaked");
         reset();install();

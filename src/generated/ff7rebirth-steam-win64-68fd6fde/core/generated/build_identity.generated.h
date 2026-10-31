@@ -8,6 +8,7 @@
 namespace ff7r::piano::core::generated {
 
 inline constexpr std::string_view kBuildId = "ff7rebirth-steam-win64-68fd6fde";
+inline constexpr bool kOwnedProxyPreWinMain = false;
 inline constexpr uint32_t kExeTimestamp = 0x68fd6fde;
 inline constexpr uint32_t kSizeOfImage = 0x09bad000;
 inline constexpr uint32_t kPeChecksum = 0x07877c99;

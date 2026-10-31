@@ -1,6 +1,7 @@
 #include "game/native_audio_runtime.h"
 #if defined(FF7RP_OWNED_PROXY)
 #include "proxy/entry_bridge.h"
+#include "proxy/call_bridge.h"
 #endif
 #include "game/native_audio_bootstrap.h"
 #include "game/native_proxy_bootstrap.h"
@@ -974,7 +975,8 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
     InstallObservation observation;
     const bool synchronous=bootstrap_detail::scope_present();
     const bool proxy_entry=native_proxy_detail::scope_present();
-    if(g_install_observation) { g_install_observation->synchronous=synchronous; g_install_observation->proxy_entry=proxy_entry; }
+    const bool proxy_post_crt=native_proxy_detail::post_crt_scope_present();
+    if(g_install_observation) { g_install_observation->synchronous=synchronous; g_install_observation->proxy_entry=proxy_entry; g_install_observation->proxy_post_crt=proxy_post_crt; }
     // A worker with CRT=0 could already be inside the cookie API: patching its
     // suspended AEP return is unsafe even if a later entry event never arrives.
     // The literal pre-AEP transaction remains exercised by its injected early
@@ -1039,9 +1041,9 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
         install_failed(!prepared,"batch.acquire");
         for(const auto& h:hooks) {
             if(!prepared)break;
-            // ASI's authenticated continuation is already inside the AEP/CRT.
-            // Its suspended prologue/return PC must never be patched.
-            if(synchronous && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;
+            // ASI/post-CRT continuations have already entered the CRT.
+            // Never retroactively patch their AEP or invent an entry event.
+            if((synchronous || proxy_post_crt) && h.detour==reinterpret_cast<void*>(&ordinary_entry_hook))continue;
             const auto* s=find_hook_spec(h.id);
             core::HookInstallTrace* trace=nullptr;
             if(g_install_observation) { trace=&g_install_observation->hooks[g_install_observation->count++]; trace->id=h.id; }
@@ -1097,7 +1099,7 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
     }
     g_accepting.store(true,std::memory_order_release);
     g_hooks_ready.store(true,std::memory_order_release);
-    if(synchronous) {
+    if(synchronous || proxy_post_crt) {
         g_updater_thread.store(GetCurrentThreadId(),std::memory_order_release);
         g_origin.store(true,std::memory_order_release);
     }
@@ -1106,7 +1108,7 @@ bool install_native_audio_runtime(HMODULE module,RuntimeServices services) noexc
 }
 bool take_native_install_diagnostic(NativeInstallDiagnostic& out) noexcept {
 #if defined(FF7RP_OWNED_PROXY)
-    if(ff7rp::proxy::active_entry_scope())return false;
+    if(ff7rp::proxy::active_entry_scope() || ff7rp::proxy::active_call_scope())return false;
 #endif
     if(bootstrap_detail::scope_present() || native_proxy_detail::scope_present()
         || !g_install_diagnostic_ready.load(std::memory_order_acquire)
@@ -1120,8 +1122,9 @@ void emit_native_install_diagnostic() noexcept {
     // All new formatting/I/O is outside both authenticated private scopes and installer locks.
     try {
         std::ostringstream out;
-        out << "[native_install] boundary=" << (snapshot.proxy_entry?"entry_dispatch_completed":"asi_scope_closed")
-            << " continuation_executed=not_observed ticks=" << core::hook_trace_ticks()
+        out << "[native_install] boundary=" << (snapshot.proxy_post_crt?"owned_proxy_pre_winmain":snapshot.proxy_entry?"entry_dispatch_completed":"asi_scope_closed")
+            << (snapshot.proxy_post_crt?" original_show_executed=not_observed":" continuation_executed=not_observed")
+            << " ticks=" << core::hook_trace_ticks()
             << " frequency=" << snapshot.frequency << " begin=" << snapshot.begin << " end=" << snapshot.end
             << " published=" << snapshot.published << " first_failure=" << (snapshot.first_failure?snapshot.first_failure:"none")
             << " failed_hook=" << (snapshot.failed_hook?snapshot.failed_hook:"none") << " failed_rva=" << snapshot.failed_rva

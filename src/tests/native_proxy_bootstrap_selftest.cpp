@@ -22,6 +22,60 @@ int main(){
 #include "native_audio_runtime_selftest.cpp"
 #include <iostream>
 
+namespace post_facts_test {
+namespace rv=ff7r::piano::game::rva;
+static std::uintptr_t fault=0;
+static unsigned gu_byte=0,reads=0;
+static bool complete_shape=true,read_failure=false;
+static bool bad_handle=false;
+static std::uint64_t handle_value=0;
+static bool reader(std::uintptr_t address,void* out,std::size_t size) noexcept {
+    ++reads;std::memset(out,0,size);
+    if(read_failure && address==fault)return false;
+    auto store=[&](auto value){assert(sizeof(value)==size);std::memcpy(out,&value,size);};
+    if(address==rv::NativeAudioCrtState)store(std::uint32_t{2});
+    if(complete_shape) {
+        if(address==rv::NativeAudioInitialGuHeader) {
+            assert(size==48);auto* bytes=static_cast<unsigned char*>(out);
+            std::fill(bytes+4,bytes+8,static_cast<unsigned char>(255));bytes[12]=1;
+        } else if(address==rv::NativeBootstrapGuSerial)store(std::uint32_t{1000});
+        else if(address==rv::NativeBootstrapCrashComplete)store(static_cast<unsigned char>(1));
+        else if(address==rv::NativeBootstrapCrashWorker || address==rv::NativeBootstrapCrashRequest || address==rv::NativeBootstrapCrashEvent)store(address==fault && bad_handle?handle_value:std::uint64_t{1});
+    }
+    assert(address!=rv::NativeBootstrapSrwGmalloc); // CRT2 is not allocator readiness.
+    if(address==fault && !bad_handle)static_cast<unsigned char*>(out)[address==rv::NativeAudioInitialGuHeader?gu_byte:0]^=0x40;
+    return true;
+}
+static void run() {
+    using ff7r::piano::game::native_audio::baseline_facts::check;
+    const char* why=nullptr;assert(check(0,true,false,reader,&why) && !why);
+    for(unsigned i=0;i<48;++i) {
+        fault=rv::NativeAudioInitialGuHeader;gu_byte=i;why=nullptr;
+        assert(!check(0,true,false,reader,&why) && std::string_view(why)=="baseline.gu");
+    }
+    for(auto address:{rv::NativeAudioCrtState,rv::NativeBootstrapGuSerial,rv::PackageStoreGeneration,
+        rv::NativeBootstrapCrashComplete,rv::NativeBootstrapCrashStop,rv::PackageStoreOwnerGlobal,
+        rv::DataObjectNameMap,rv::BgmListRegistry,rv::ScoreInfoRegistry,rv::PianoScoreRegistry,
+        rv::NativeBootstrapHinstance,rv::NativeBootstrapTaskGraph,rv::NativeBootstrapPool}) {
+        fault=address;why=nullptr;assert(!check(0,true,false,reader,&why) && why);
+    }
+    bad_handle=true;
+    for(auto address:{rv::NativeBootstrapCrashWorker,rv::NativeBootstrapCrashRequest,rv::NativeBootstrapCrashEvent}) {
+        fault=address;
+        for(auto value:{std::uint64_t{0},~std::uint64_t{0}}) {
+            handle_value=value;why=nullptr;
+            assert(!check(0,true,false,reader,&why) && std::string_view(why)=="baseline.crash_handle");
+        }
+    }
+    bad_handle=false;
+    fault=rv::NativeAudioCrtState;read_failure=true;reads=0;why=nullptr;
+    assert(!check(0,true,false,reader,&why) && reads==1 && std::string_view(why)=="baseline.crt");
+    fault=0;read_failure=false;complete_shape=false;why=nullptr;
+    assert(!check(0,true,false,reader,&why) && std::string_view(why)=="baseline.gu");
+    complete_shape=true;why=nullptr;assert(check(0,true,false,reader,&why));
+}
+}
+
 // Data-only bridge gateways below never execute an entry thunk or a game image.
 namespace ff7rp::proxy {
 extern "C" void ff7rp_proxy_entry_thunk() {}
@@ -160,6 +214,7 @@ const bridge::Gateway ProxyFixture::gateway={
 }
 int main(){
     constexpr auto base=Fixture::base,own=ProxyFixture::own;
+    post_facts_test::run();
     {ProxyFixture f;assert(f.run()&&f.result&&f.callbacks==1&&f.installed==12&&!na::g_origin&&!na::g_captured);
         assert(na::native_proxy_bootstrap_status().barriers_published&&!f.mounts&&!f.acquires&&!f.name_calls);
         assert(na::ordinary_entry_hook()==17&&na::g_origin);f.resume();f.start(true);f.frame();assert(na::native_audio_status(*f.work).stage==na::RuntimeStage::Ready);

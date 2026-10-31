@@ -19,7 +19,7 @@ struct NativeInstallDiagnostic {
     const char* proxy_predicate = nullptr;
     std::uintptr_t failed_rva = 0;
     unsigned bootstrap_failure = 0, proxy_failure = 0;
-    bool synchronous = false, proxy_entry = false, published = false;
+    bool synchronous = false, proxy_entry = false, proxy_post_crt = false, published = false;
     bool rollback_attempted = false, rollback_completed = false;
 };
 // Once-only snapshot, available only after the installer and private bootstrap scopes exit.

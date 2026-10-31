@@ -1,4 +1,5 @@
 #include "entry_bridge.h"
+#include "call_bridge.h"
 #include "forwarding.h"
 #include "native_proxy.h"
 #include "proxy/generated/native_proxy_profile.generated.h"
@@ -61,11 +62,12 @@ bool persist_startup_failure(const ff7r::piano::game::native_audio::ProxyBootstr
         char record[1024]{};
         const int count = std::snprintf(record, sizeof(record),
             "[proxy_startup_failure] schema=1 outcome=owned_entry_startup_rejected readiness=unavailable\r\n"
-            "failure=%u predicate=%s predicate_at_limit=%u thread=%lu callback_invoked=%u barriers_published=%u\r\n"
+            "failure=%u predicate=%s predicate_at_limit=%u thread=%lu callback_invoked=%u barriers_published=%u source=%s\r\n"
             "bridge_stage=%u bridge_error=%u bridge_retention=%u restored=%u callback_invoked=%u callback_succeeded=%u "
             "attach_thread=%lu entry_thread=%lu entry_rva=0x%llx profile_timestamp=0x%lx profile_image_size=0x%lx profile_checksum=0x%lx\r\n",
             static_cast<unsigned>(status.failure), predicate, used == sizeof(predicate) - 1 ? 1u : 0u,
             status.thread, status.callback_invoked ? 1u : 0u, status.barriers_published ? 1u : 0u,
+            status.post_crt?"owned_proxy_pre_winmain":"owned_proxy_entry",
             static_cast<unsigned>(state.stage), static_cast<unsigned>(state.error), static_cast<unsigned>(state.retention),
             proof.restored ? 1u : 0u, proof.callback_invoked ? 1u : 0u, proof.callback_succeeded ? 1u : 0u,
             static_cast<unsigned long>(proof.attach_thread), static_cast<unsigned long>(proof.entry_thread),
@@ -169,6 +171,32 @@ bool prepare_location(HMODULE self, HMODULE exe) noexcept
     return true;
 }
 
+bridge::EntryProof call_root{};
+bool call_startup_ok=false;
+
+void call_completed() noexcept {
+    OutputDebugStringW(L"FF7RPianoSongs proxy: owned_proxy_pre_winmain consumed; callback scopes closed; original Show not yet forwarded\n");
+    ff7r::piano::game::native_audio::emit_native_install_diagnostic();
+    if(!call_startup_ok) {
+        const auto status=ff7r::piano::game::native_audio::native_proxy_bootstrap_status();
+        (void)persist_startup_failure(status,call_root,bridge::entry_bridge_status());
+    }
+}
+
+bool initialize_at_call(const bridge::CallScope& scope,void*) noexcept {
+    bridge::CallProof proof{};
+    if(!scope.capture(proof) || proof.root.proxy!=reinterpret_cast<std::uintptr_t>(self_module))return false;
+    call_root=proof.root;
+    call_startup_ok=proxy::initialize_owned_product(reinterpret_cast<HMODULE>(proof.root.image),self_module);
+    return call_startup_ok;
+}
+
+void entry_completed() noexcept {
+    if constexpr(proxy::generated::kOwnedCallEnabled) {
+        OutputDebugStringW(L"FF7RPianoSongs proxy: entry transport completed; native readiness not established\n");
+    } else ff7r::piano::game::native_audio::emit_native_install_diagnostic();
+}
+
 bool initialize_at_entry(const bridge::EntryScope& scope, void*) noexcept
 {
     bridge::EntryProof proof{};
@@ -184,6 +212,18 @@ bool initialize_at_entry(const bridge::EntryScope& scope, void*) noexcept
         OutputDebugStringW(L"FF7RPianoSongs proxy: System32 forwarding initialization failed\n");
         RaiseFailFastException(nullptr, nullptr, 0);
         return false;
+    }
+    if constexpr(proxy::generated::kOwnedCallEnabled) {
+        bridge::CallProfile profile{};
+        profile.call_rva=proxy::generated::kCallRva;
+        profile.target_rva=proxy::generated::kCallTargetRva;
+        profile.window_size=static_cast<std::uint8_t>(proxy::generated::kCallWindow.size());
+        static_assert(proxy::generated::kCallWindow.size()<=64);
+        for(std::size_t i=0;i<proxy::generated::kCallWindow.size();++i)profile.window[i]=proxy::generated::kCallWindow[i];
+        const bool armed=bridge::arm_owned_call(scope,profile,initialize_at_call,nullptr,call_completed);
+        const auto status=bridge::owned_call_status();
+        if(status.stage==bridge::CallStage::FailedRetained)RaiseFailFastException(nullptr,nullptr,0);
+        return armed && status.stage==bridge::CallStage::Armed;
     }
     if (!proxy::initialize_owned_product(reinterpret_cast<HMODULE>(proof.image), self_module)) {
         const auto status = ff7r::piano::game::native_audio::native_proxy_bootstrap_status();
@@ -212,6 +252,6 @@ BOOL ff7r::piano::proxy::attach_process_start(HMODULE module, DWORD reason, LPVO
     static_assert(proxy::generated::kEntryBytes.size() <= bridge::kMaxEntrySignature);
     for (std::size_t i = 0; i < proxy::generated::kEntryBytes.size(); ++i) profile.signature[i] = proxy::generated::kEntryBytes[i];
     const auto result = bridge::arm_process_start_entry(module, reason, reserved, profile, initialize_at_entry, nullptr,
-        ff7r::piano::game::native_audio::emit_native_install_diagnostic);
+        entry_completed);
     return result.armed() || result.retention == bridge::EntryRetention::ProcessLifetime ? TRUE : FALSE;
 }
