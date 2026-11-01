@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+## 0.4.2 - 2026-11-01
+
+### Fixes and improvements
+
+- Revised standalone-DLL startup on game 1.005 to publish early native protection
+  through an authenticated post-CRT handoff, then prepare features and songs later.
+  Early hooks are enabled as one batch; potentially borrowed trampolines remain
+  retained until process exit. This improves the tested UE4SS/PianoAnywhere setup,
+  not compatibility with every loader or mod collection.
+- Background launch no longer attaches piano shortcuts to an auxiliary window:
+  input initialization selects the game's own `UnrealWindow` without requiring
+  foreground focus and can recover when that window appears later.
+- Generated MIDI charts avoid a narrow rapid right-hand wheel detour and better
+  preserve the tracked melody when a selected root diverts into accompaniment.
+  Source pitches/onsets and required-input limits remain unchanged. Melody repair
+  preserves left-hand/dual rows; detour admission can reselect other passages.
+- Moved remaining native-audio and extended-chart layout assumptions into the
+  exact-build runtime profiles, keeping the two supported game builds separate.
+
+### Updating
+
+- Replace the standalone DLL for your game build; keep songs, settings, themes
+  and saved scores. Generated MIDI caches rebuild automatically for the revised
+  selection policy. Manual cache deletion and source-file conversion are unnecessary.
+
+### Validation limits
+
+- The owner reports the development changes checked and authorizes this release.
+  No additional Amadeus-specific change is included; its reported dense right-hand
+  passage remains a known arrangement limitation, not a fixed playability issue.
+- Exact release-archive gameplay and the full 1.004/1.005 manual matrix are not
+  established and are accepted unqualified limits for 0.4.2. Earlier visual,
+  chart-admission and lifecycle limitations still apply; see the version-scoped
+  disposition in `docs/CurrentStatus.md` in the source repository.
+
 ## 0.4.1 - 2026-10-29
 
 ### Fixes

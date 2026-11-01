@@ -5,7 +5,29 @@ limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
-## MIDI feedback corrections — Integration installed, human check pending
+## 0.4.2 release disposition (2026-11-01)
+
+- The owner reports the development changes checked and explicitly requests
+  publication: “Всё проверено, Amadeus отклонён, релизь”. This supersedes pending
+  owner feedback below, not the recorded artifact/session state. The Amadeus
+  investigation is closed without an additional generator change; its dense RH
+  passage remains a known arrangement limitation.
+- Scope: the exact-build layout refactor, early-hook batching and retained native
+  lifetime, the 1.005 owned post-CRT handoff, background-window attachment and MIDI
+  detour/melody corrections since the previous release. No loader-wide compatibility,
+  universal controller playability or crash-free repeatability claim is made.
+- For **0.4.2**, the owner accepts absent exact-release-archive gameplay and the full
+  per-build manual matrix after those gaps were explicitly presented. The broad
+  development confirmation has no supplied artifact hash or per-build scenario
+  inventory; it does not establish new 1.004 gameplay. Earlier song-card/theme,
+  chart-admission, preview and lifecycle limitations remain version-scoped unqualified
+  limits, not silently completed checks. Historical pending sections below retain
+  their original bounded evidence and recovery information.
+- Independent release review, complete automated Release checks, clean source
+  identity and transactional packaging remain required before publication. This
+  decision grants no game installation, launch or other live-process authority.
+
+## MIDI feedback corrections — development evidence before release confirmation
 
 - User authorized a combined development candidate for the Find the Flame rapid
   RH detour and the archive Melodies of Life melody diversion. Both changes remain
