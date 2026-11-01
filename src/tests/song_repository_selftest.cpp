@@ -1603,9 +1603,10 @@ int test_offline_artifact_goldens(const std::filesystem::path& root) {
     const auto selected_asset_identity =
         ff7rp::pipeline::test_target_native_assets().cache_identity();
     if (selected_asset_identity == assets_1004.cache_identity()) {
-        // Pipeline v49 adds preview identity; chart semantics remain unchanged.
-        expected_cache_key = 0x40cbf913db7e90eeull;
-        expected_normalized_manifest_digest = 0xb7098ffbe869d5f0ull;
+        // Generated-MIDI v27 invalidates v25 caches for sector detours and stream
+        // continuity; this one-note fixture keeps its chart semantics and size.
+        expected_cache_key = 0xb65b35801a40f7c3ull;
+        expected_normalized_manifest_digest = 0xbe59335cab820aa3ull;
     } else {
         return fail("offline artifact golden has no expectation for selected native-asset identity: " +
             std::string(selected_asset_identity));
