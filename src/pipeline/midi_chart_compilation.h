@@ -35,6 +35,7 @@ struct MidiChartCompilationResult {
     std::vector<Note> notes;
     MidiChartStats stats;
     MidiRepresentativeRootRepair representative_repair;
+    std::size_t stream_continuity_replacements = 0; // Offline-only, not serialized.
 };
 
 MidiChartCompilationResult compile_normalized_midi_chart(

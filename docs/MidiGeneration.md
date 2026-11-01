@@ -128,6 +128,29 @@ identical Lv4/Lv5/Lv6 actions, so the step widens with the label. This is a stoc
 authoring rule over source pitch, not recovered stick geometry, and applies
 wherever RH spacing is checked.
 
+Selection additionally rejects a narrow rapid three-root sector detour. Both
+successive RH gaps must be below 0.25 s in source time or native-frame distance;
+one leg must cross four sectors, the other at least two, and the final root must
+return within two sectors of the first. Source pitch must reverse direction at
+the middle root and continue to a different pitch one or two semitones from the
+first. Exact-return wide trills, monotonic source runs, and wider endpoint
+continuations remain allowed even when their sectors match. Sector order follows the decoded native
+KeyAssign letters and the visible wheel in the supplied 2026-11-01 gameplay:
+C, D, E, F, G, A, B, high/alternate C clockwise. Sharp and flat identities retain
+their own letter sector (C-sharp and D-flat are not collapsed). This targets an
+isolated opposite-sector excursion such as alternate C -> F -> D-flat, not all
+fast jumps. Neighboring trills, smooth sector runs, and slower jumps are not
+rejected by this rule. It is an empirical arrangement policy, not a proven human
+safety threshold or controller torque model. It may omit a salient root to avoid
+the detour; no replacement pitch or onset is invented. LH interleaving does not
+reset RH context, dual rows participate on their RH side, and automatic followers
+do not participate. Mandatory future dual tails reserve the same context before
+beam pruning. Representative repair retains its lossless coverage contract and
+cannot reintroduce a rejected detour. Density targets and pairwise fast-jump
+limits are unchanged. Admission inside the beam can reselect roots elsewhere in
+the chart; this is not a strictly local post-selection edit. Real-song and focused
+in-game validation remain required.
+
 After beam selection, a bounded representative-root repair may replace **one**
 internal, unprotected RH-only input with an already admitted fresh RH candidate.
 It preserves required-action count, boundary inputs, first/last RH inputs, all
@@ -158,6 +181,28 @@ veto: that primary may later fail timing or reduction. Alternatives instead
 compete at actual frame/spacing selection with the existing fallback evidence and
 salience penalties favoring the tracked melody. This is bounded source-backed
 competition, not arbitrary accompaniment filling or a new melody tracker.
+
+After the coverage repair, a separate count-neutral **cross-stream diversion
+repair** considers internal consecutive runs of two through eight unprotected
+RH-only fallback roots. Both surrounding RH roots must share one MIDI
+track/channel, different from every root in the run; the boundary roots need not
+themselves be tracked roots (their exact-stream followers may carry the melody).
+Every replaced root must have an admitted nonfallback tracked RH-only candidate
+from that surrounding stream at the **same native frame and exact source tick**.
+The complete run is substituted or retained unchanged. No LH/dual/protected or
+first/last RH input is replaced, and no onset or required action is added.
+
+The pass scans chronologically and validates at most eight complete proposals per
+profile. Highest candidate salience wins, then immutable source identity breaks
+ties. Each proposal must preserve source/native spacing and sector-detour policy,
+pass the coherent full-route validator, and compile with exact followers and
+native row/event limits before commit. Final strain/skill metrics are recomputed.
+This deliberately permits a local salience/switch-cost tradeoff, unlike the
+unchanged lossless coverage repair. Its empirical assumption is that a short
+foreign-stream fallback diversion between same-stream boundaries can obscure a
+tracked phrase; it is not universal voice recognition, nor a requirement to
+restore all omitted melody onsets. Global density, scoring, and tracking remain
+unchanged. The internal replacement count is not serialized.
 
 Retained melody and fallback selection use humanized onset context, then restore authoritative
 source-event timing before timing-domain filtering, prominence measurement, and
@@ -213,7 +258,7 @@ whole-through-sixteenth value keeps precedence. Nonmatching or heterogeneous
 lengths use that side's legacy fallback from the generated row `duration_beats`.
 Integer tick-ratio comparisons are deterministic; no floating-point duration
 guessing is used. This derivation is covered by
-`midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right:v25`.
+`midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right+rapid_sector_detours+stream_continuity:v27`.
 The policy identity rebuilds generated MIDI caches without changing authored JSON
 semantics or the binary cache layout. Complete enriched rows pass the existing
 compiler and event-plan topology/physical limits; oversized profiles are omitted,
@@ -221,8 +266,9 @@ never truncated or reduced to an unsafe playable prefix. Same-time native group
 followers may sound on the next game frame. This Integration experiment still
 requires focused in-game sound, scoring, and full-tail verification, including
 generated dual rows with automatic followers. Offline route feasibility is not
-human playability qualification: RH movement/reversals use a MIDI-pitch proxy,
-not stick geometry; fatigue uses per-hand decayed action counts. Current route
+human playability qualification: route RH movement/reversals still use a MIDI-pitch
+proxy, while the separate narrow sector-detour policy uses visible wheel ordering,
+not a calibrated effort model; fatigue uses per-hand decayed action counts. Current route
 margins permit one-handed charts and do not impose mandatory recovery rests.
 The old partial summaries describe a modded corpus, not stock charts, and remain
 historical regression evidence rather than a validated controller or

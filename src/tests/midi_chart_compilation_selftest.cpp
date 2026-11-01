@@ -6,7 +6,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -304,11 +306,12 @@ struct PhysicalFrame {
 
 std::vector<unsigned char> physical_frame_midi_bytes(
     const std::vector<PhysicalFrame>& frames,
-    const std::vector<std::pair<int, int>>& meter_changes = {}) {
+    const std::vector<std::pair<int, int>>& meter_changes = {}, const bool flat_key = false) {
     constexpr int base_tick = 1920;
     constexpr int ticks_per_frame = 16;
     std::vector<MidiEvent> melody;
     melody.push_back({0, 0, {0xff, 0x51, 0x03, 0x07, 0xa1, 0x20}});
+    if (flat_key) melody.push_back({0, 0, {0xff, 0x59, 0x02, 0xfe, 0x00}});
     if (std::none_of(meter_changes.begin(), meter_changes.end(),
             [](const auto& change) { return change.first == 0; })) {
         melody.push_back({0, 0, {0xff, 0x58, 0x04, 0x04, 0x02, 24, 8}});
@@ -704,6 +707,126 @@ int test_native_frame_spacing(const std::filesystem::path& root) {
     return 0;
 }
 
+int test_rapid_sector_detours(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    const auto run = [&](const std::string& name, const std::vector<PhysicalFrame>& frames) {
+        const auto path = root / (name + ".mid");
+        const auto bytes = physical_frame_midi_bytes(frames, {}, true);
+        std::ofstream stream(path, std::ios::binary);
+        stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); stream.close();
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0.0;
+        return std::unique_ptr<Observation>(new Observation(generate(path, WavAudio{}, config)));
+    };
+    const auto roots = [](const Observation& result) {
+        std::vector<Note> output;
+        std::uint8_t previous_group = 0;
+        for (const auto& note : result.notes) {
+            const bool follower = note.group_index && note.group_index == previous_group;
+            previous_group = note.group_index;
+            if (!follower && !note.pitch.empty()) output.push_back(note);
+        }
+        return output;
+    };
+    const auto has_frame = [](const std::vector<Note>& notes, const int frame) {
+        return std::any_of(notes.begin(), notes.end(), [&](const auto& note) {
+            return std::llround(note.beat * 30.0) == frame + 120;
+        });
+    };
+    // Find the Flame's decoded Lv6 burst, chart frames 2295..2381, translated
+    // without changing its native gaps or pitches. Slow anchors supply density headroom.
+    constexpr std::array<int, 9> frames{0,11,22,32,43,54,64,75,86};
+    constexpr std::array<int, 9> pitches{61,60,58,60,53,61,60,58,61};
+    std::vector<PhysicalFrame> motif{{-120,{61},110,8}};
+    for (std::size_t i = 0; i < frames.size(); ++i) motif.push_back({frames[i],{pitches[i]},110,8});
+    motif.push_back({240,{61},110,8});
+    const auto selected_owner = run("rapid-sector-detour", motif);
+    const auto repeated_owner = run("rapid-sector-detour-repeat", motif);
+    const auto& selected = *selected_owner;
+    const auto& repeated = *repeated_owner;
+    const auto selected_roots = roots(selected);
+    if (!selected.status.ok() || selected.stats.source_pitch_witness_failures ||
+        selected_roots.size() != 10 || !has_frame(selected_roots, 240) ||
+        (has_frame(selected_roots, 32) && has_frame(selected_roots, 43) && has_frame(selected_roots, 54)) ||
+        canonical_note_bytes(selected.notes) != canonical_note_bytes(repeated.notes) ||
+        !validate_midi_difficulty_route(selected.notes, 120.0, 6).feasible ||
+        std::none_of(selected_roots.begin(), selected_roots.end(), [](const auto& note) {
+            return note.pitch == "C4" && note.alternate_monotone;
+        }))
+        return fail("rapid native-sector detour survived, lost its source/alternate/tail, or over-thinned: " +
+            selected.status.message + " roots=" + std::to_string(selected_roots.size()));
+
+    // Equal-density neighboring trills and smooth runs, and the exact slower motif.
+    for (int control = 0; control < 3; ++control) {
+        auto input = motif;
+        if (control == 2) {
+            // Keep the leading anchor at MIDI tick zero; doubling it would encode a negative delta.
+            for (auto& frame : input) if (frame.frame >= 0) frame.frame *= 2;
+        } else {
+            const std::array<int, 9> smooth{60,62,64,65,67,69,71,72,74};
+            for (std::size_t i = 0; i < frames.size(); ++i)
+                input[i + 1].pitches = {control == 0 ? 60 + static_cast<int>(i % 2) * 2 : smooth[i]};
+            input.front().pitches = input[1].pitches;
+            input.back().pitches = input[input.size() - 2].pitches;
+        }
+        const auto result_owner = run("sector-control-" + std::to_string(control), input);
+        const auto& result = *result_owner;
+        if (!result.status.ok() || roots(result).size() != input.size() || result.stats.source_pitch_witness_failures)
+            return fail("sector policy thinned neighboring trill, smooth run, or slow motif: " +
+                std::to_string(control) + " " + result.status.message + " roots=" + std::to_string(roots(result).size()));
+    }
+    // All three controls match the former geometry-only predicate (alternate C
+    // -> F -> Db/C/A), but are not a source reversal with stepwise continuation.
+    constexpr std::array<int, 3> endpoints{49,60,57};
+    for (std::size_t control = 0; control < endpoints.size(); ++control) {
+        const auto result_owner = run("sector-source-control-" + std::to_string(control),
+            {{-120,{58},110,8}, {0,{60},110,8}, {11,{53},110,8},
+             {22,{endpoints[control]},110,8}, {240,{control == 1 ? 58 : endpoints[control]},110,8}});
+        const auto& result = *result_owner;
+        const auto source_roots = roots(result);
+        if (!result.status.ok() || result.stats.source_pitch_witness_failures || source_roots.size() != 5 ||
+            std::none_of(source_roots.begin(), source_roots.end(), [](const auto& note) {
+                return std::llround(note.beat * 30.0) == 120 && note.pitch == "C4" && note.alternate_monotone;
+            }))
+            return fail("sector policy thinned monotonic source run, exact-return trill, or wider continuation: " +
+                std::to_string(control) + " " + result.status.message + " roots=" + std::to_string(source_roots.size()));
+    }
+    // Higher preceding context keeps C normal: sector 0 -> 3 -> 1 is not the
+    // alternate-C opposite-sector excursion, despite identical final MIDI pitches.
+    const auto normal_owner = run("sector-normal-c", {{-120,{65},110,8}, {0,{60},110,8},
+        {11,{53},110,8}, {22,{61},110,8}, {240,{61},110,8}});
+    const auto& normal = *normal_owner;
+    const auto normal_roots = roots(normal);
+    if (!normal.status.ok() || normal_roots.size() != 5 ||
+        std::none_of(normal_roots.begin(), normal_roots.end(), [](const auto& note) {
+            return note.pitch == "C4" && !note.alternate_monotone;
+        })) return fail("sector policy collapsed normal and alternate C identity");
+
+    auto enriched = motif;
+    enriched.push_back({32,{48},1,8}); // Exact same-stream automatic follower, not a new RH action.
+    enriched.push_back({43,{48},1,8});
+    enriched.push_back({38,{36,40,43},100,8,0,1}); // LH between the relevant RH roots.
+    const auto interleaved_owner = run("sector-follower-left-interleaving", enriched);
+    const auto& interleaved = *interleaved_owner;
+    const auto interleaved_roots = roots(interleaved);
+    if (!interleaved.status.ok() || interleaved.stats.source_pitch_witness_failures ||
+        interleaved.stats.left_events == 0 ||
+        std::none_of(interleaved.notes.begin(), interleaved.notes.end(), [](const auto& note) { return note.group_index != 0; }) ||
+        !has_frame(interleaved_roots, 240) ||
+        (has_frame(interleaved_roots, 32) && has_frame(interleaved_roots, 43) && has_frame(interleaved_roots, 54)))
+        return fail("follower/LH interleaving bypassed sector context or stranded tail");
+
+    const auto dual_tail_owner = run("sector-protected-dual-tail", {{-120,{58},110,8}, {0,{60},110,8},
+        {11,{53},110,8}, {22,{61},110,8}, {22,{36,40,43},100,8,0,1}});
+    const auto& dual_tail = *dual_tail_owner;
+    const auto dual_roots = roots(dual_tail);
+    if (!dual_tail.status.ok() || dual_tail.stats.source_pitch_witness_failures || dual_roots.size() != 3 ||
+        std::none_of(dual_roots.begin(), dual_roots.end(), [](const auto& note) {
+            return std::llround(note.beat * 30.0) == 142 && note.pitch == "Db4" && !note.chord_id.empty();
+        })) return fail("sector context stranded a mandatory future dual tail");
+    return 0;
+}
+
 int test_representative_root_repair(const std::filesystem::path& root) {
     using namespace ff7rp::pipeline;
     const auto run = [&](const char* name, const std::vector<PhysicalFrame>& frames,
@@ -907,6 +1030,71 @@ int test_salient_reduction(const std::filesystem::path& root) {
     failures += run("alternate-lead-in.mid", {{0, {84}, 110, 480}, {1, {79}, 100, 480, -2},
             {120, {84}, 110, 480}}, 2.01, "G5", 1);
     return failures == 0 ? 0 : 1;
+}
+
+int test_stream_continuity(const std::filesystem::path& root) {
+    using namespace ff7rp::pipeline;
+    const auto run = [&](const char* name, const int diversions, const bool matching,
+                         const bool same_stream, const double minimum_lead = 0.0,
+                         const bool mismatched_tick = false, const bool dual = false) {
+        std::vector<MidiEvent> melody{{0, 0, {0xff, 0x51, 3, 0x07, 0xa1, 0x20}}}, other;
+        for (int i = 0; i < 8; ++i) {
+            const int tick = 1920 + i * 960 + (i == 2 ? 240 : 0);
+            if (matching || i < 3 || i >= 3 + diversions)
+                add_note(&melody, tick + (mismatched_tick && i == 4 ? 1 : 0), 480, 75 + i % 3, 60);
+            if (i >= 3 && i < 3 + diversions) {
+                add_note(same_stream ? &melody : &other, tick, 900, 67 + i % 3, 127);
+                if (dual) for (int pitch : {48,52,55}) add_note(&other, tick, 900, pitch, 110);
+            }
+        }
+        std::vector<unsigned char> bytes{'M','T','h','d',0,0,0,6};
+        append_u16(&bytes, 1); append_u16(&bytes, 2); append_u16(&bytes, 480);
+        append_midi_track(&bytes, std::move(melody)); append_midi_track(&bytes, std::move(other));
+        const auto path = root / (std::string(name) + ".mid");
+        std::ofstream file(path, std::ios::binary);
+        file.write(reinterpret_cast<const char*>(bytes.data()), bytes.size()); file.close();
+        NormalizedMidiSource source;
+        if (!normalize_midi_source(path.string(), &source).ok()) throw std::runtime_error("stream fixture normalization");
+        const auto voice = track_midi_melody_voice(build_onset_clusters(source.notes,
+            source.ticks_per_quarter, source.tempos, source.meters, nullptr, nullptr));
+        if (matching) {
+            for (int i = 3; i < 3 + diversions; ++i) {
+                if (std::none_of(voice.attacks.begin(), voice.attacks.end(), [&](const auto& a) {
+                    return a.event.source.track == 0 &&
+                        a.event.source.tick == 1920 + i * 960 + (mismatched_tick && i == 4 ? 1 : 0) &&
+                        a.event.source.pitch == 75 + i % 3;
+                })) throw std::runtime_error("stream fixture melody not tracked");
+            }
+        }
+        auto config = config_for(6);
+        config.midi_audio_alignment_seconds = config.midi_audio_offset_seconds = 0;
+        config.midi_minimum_lead_in_seconds = minimum_lead;
+        return compile_normalized_midi_chart({source, WavAudio{}, config, nullptr, 0, test_target_native_assets()});
+    };
+    const auto selected = run("stream-diversion", 2, true, false);
+    if (!selected.status.ok() || selected.stream_continuity_replacements != 2 ||
+        selected.stats.selected_actions != 8 || selected.stats.source_pitch_witness_failures != 0)
+        return fail("cross-stream diversion was not repaired count-neutrally: " + selected.status.message +
+            " replacements=" + std::to_string(selected.stream_continuity_replacements));
+    for (int i : {3,4}) {
+        if (std::none_of(selected.notes.begin(), selected.notes.end(), [&](const Note& n) {
+            return std::llround(n.beat * 30) == 120 + i * 60 && n.pitch == (i == 3 ? "D#5" : "E5");
+        })) return fail("cross-stream repair lost exact same-onset melody");
+    }
+    const auto repeat = run("stream-diversion-repeat", 2, true, false);
+    if (canonical_note_bytes(selected.notes) != canonical_note_bytes(repeat.notes))
+        return fail("cross-stream repair is nondeterministic");
+    for (const auto& control : {run("stream-single", 1, true, false),
+            run("stream-no-melody", 2, false, false), run("stream-same", 2, true, true),
+            run("stream-boundary", 2, true, false, 5.0), run("stream-wrong-tick", 2, true, false, 0, true)}) {
+        if (!control.status.ok() || control.stream_continuity_replacements != 0)
+            return fail("cross-stream repair changed excluded control: " + control.status.message);
+    }
+    const auto dual = run("stream-dual", 2, true, false, 0, false, true);
+    if (!dual.status.ok() || dual.stream_continuity_replacements != 0 ||
+        std::none_of(dual.notes.begin(), dual.notes.end(), [](const Note& n) { return !n.chord_id.empty(); }))
+        return fail("cross-stream repair changed dual roots or dual control lost LH");
+    return 0;
 }
 
 int test_simultaneous_groups(const std::filesystem::path& root) {
@@ -1268,7 +1456,7 @@ int test_exact_note_values(const std::filesystem::path& root) {
                     std::to_string(ppq) + " row " + std::to_string(index));
         }
     }
-    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v25"))
+    if (!std::string_view(kGeneratedMidiGenerationIdentity).ends_with(":v27"))
         return fail("new exact MIDI notation did not invalidate generated policy caches");
     return 0;
 }
@@ -1378,7 +1566,8 @@ int main(int argc, char** argv) {
     if (test_graded_fast_right_leaps(temporary.path()) != 0) return 1;
     if (test_representative_root_repair(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--repair-only") return 0;
-    if (test_assignment_switch_penalty() != 0 || test_native_frame_spacing(temporary.path()) != 0 ||
+    if (test_stream_continuity(temporary.path()) != 0 || test_rapid_sector_detours(temporary.path()) != 0 ||
+        test_assignment_switch_penalty() != 0 || test_native_frame_spacing(temporary.path()) != 0 ||
         test_switch_utility_selection(temporary.path()) != 0) return 1;
     if (argc == 2 && std::string_view(argv[1]) == "--switch-only") return 0;
     if (test_exact_note_values(temporary.path()) != 0) return 1;
@@ -2122,7 +2311,7 @@ int main(int argc, char** argv) {
 
     ff7rp::pipeline::configure_chart_row_limit(true, true);
     if (std::string_view(ff7rp::pipeline::kGeneratedMidiGenerationIdentity)
-        != "midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right:v25") {
+        != "midi_generation=independent_roots+exact_simultaneous_groups+exact_dual_actions:key_signature_spelling+exact_note_values+exclude_unsupported_pitches+soft_density_growth+bounded_feasible_beam+salient_alternates+exact_lh_voicing+reduced_bass_carriers+native_frame_spacing+assignment_switch_utility+bounded_lossless_representatives+root_context_carriers+stock_spacing_floors+graded_near_fast_right+rapid_sector_detours+stream_continuity:v27") {
         return fail("generated MIDI semantic identity did not invalidate legacy selection");
     }
     const Observation physical_ambiguous_easy = generate(ambiguous_path, no_audio, config_for(1));

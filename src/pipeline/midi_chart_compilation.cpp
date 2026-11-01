@@ -1782,6 +1782,68 @@ struct IncrementalCandidate {
 using IncrementalRow = std::pair<long long, const OutputRow*>;
 using IncrementalRows = std::vector<IncrementalRow>;
 
+int right_assignment_sector(const std::string_view id) {
+    if (id.empty()) return -1;
+    if (id == "Cn7" || id.ends_with("_2")) return 7;
+    // Decoded KeyAssign letters, including the distinct flat and sharp wheels.
+    switch (id.front()) {
+    case 'C': return 0;
+    case 'D': return 1;
+    case 'E': return 2;
+    case 'F': return 3;
+    case 'G': return 4;
+    case 'A': return 5;
+    case 'B': return 6;
+    default: return -1;
+    }
+}
+
+bool right_detours_permitted(const IncrementalRows& rows,
+    const IncrementalCandidate* candidate = nullptr, const IncrementalCandidate* final_right = nullptr) {
+    std::array<IncrementalRow, 2> previous{};
+    const auto add = [&](const long long frame, const OutputRow& row) {
+        if (!row.has_right) return true;
+        const auto [a_frame, a] = previous[0];
+        const auto [b_frame, b] = previous[1];
+        if (a && b &&
+            !action_spacing_permitted(a->right.start, b->right.start, a_frame, b_frame, kFastRightSeconds) &&
+            !action_spacing_permitted(b->right.start, row.right.start, b_frame, frame, kFastRightSeconds)) {
+            const int a_sector = right_assignment_sector(a->right_assignment_id);
+            const int b_sector = right_assignment_sector(b->right_assignment_id);
+            const int c_sector = right_assignment_sector(row.right_assignment_id);
+            if (a_sector >= 0 && b_sector >= 0 && c_sector >= 0) {
+                const auto distance = [](const int x, const int y) {
+                    const int gap = std::abs(x - y);
+                    return std::min(gap, 8 - gap);
+                };
+                const int incoming = distance(a_sector, b_sector), outgoing = distance(b_sector, c_sector);
+                const int incoming_pitch = b->right.event.source.pitch - a->right.event.source.pitch;
+                const int outgoing_pitch = row.right.event.source.pitch - b->right.event.source.pitch;
+                const int continuation = std::abs(incoming_pitch + outgoing_pitch);
+                // Empirical isolated detour policy, not a controller effort/safety model.
+                if (std::max(incoming, outgoing) == 4 && std::min(incoming, outgoing) >= 2 &&
+                    distance(a_sector, c_sector) <= 2 && incoming_pitch * outgoing_pitch < 0 &&
+                    continuation >= 1 && continuation <= 2) return false;
+            }
+        }
+        previous[0] = previous[1];
+        previous[1] = {frame, &row};
+        return true;
+    };
+    bool inserted = candidate == nullptr;
+    for (const auto& [frame, row] : rows) {
+        if (!inserted && candidate->frame < frame) {
+            if (!add(candidate->frame, candidate->row)) return false;
+            inserted = true;
+        }
+        if (!add(frame, *row)) return false;
+    }
+    if (!inserted && !add(candidate->frame, candidate->row)) return false;
+    // A mandatory future dual tail is not in the baseline; reserve its RH context too.
+    return !final_right || (previous[1].second && previous[1].first >= final_right->frame) ||
+        add(final_right->frame, final_right->row);
+}
+
 double assignment_switch_penalty(const IncrementalRows& rows, const IncrementalCandidate* candidate = nullptr) {
     AssignmentSwitchPenalty result;
     const auto add = [&](const long long frame, const OutputRow& row) {
@@ -1881,7 +1943,7 @@ InsertionSemantics analyze_incremental_insertion(
     const IncrementalRows& rows,
     const IncrementalCandidate& candidate,
     const Profile& profile,
-    const std::size_t current_action_count) {
+    const std::size_t current_action_count, const IncrementalCandidate* final_right) {
     InsertionSemantics result;
     const auto insertion = std::lower_bound(rows.begin(), rows.end(), candidate.frame,
         [](const IncrementalRow& row, const long long frame) { return row.first < frame; });
@@ -1910,6 +1972,7 @@ InsertionSemantics analyze_incremental_insertion(
             break;
         }
     }
+    if (candidate.row.has_right && !right_detours_permitted(rows, &candidate, final_right)) return result;
     result.action_count = current_action_count + static_cast<std::size_t>(candidate.row.has_right)
         + static_cast<std::size_t>(candidate.row.has_left);
     result.permitted = true;
@@ -2066,6 +2129,13 @@ bool insertion_obeys_profile_spacing(
             }
         }
     }
+    if (candidate.row.has_right) {
+        IncrementalRows retained;
+        retained.reserve(rows.size());
+        for (const auto& [frame, row] : rows)
+            if (&row != removed) retained.emplace_back(frame, &row);
+        return right_detours_permitted(retained, &candidate);
+    }
     return true;
 }
 
@@ -2120,6 +2190,10 @@ IncrementalSelection select_incremental_rows(
         const SourceIdentity& b_source = b.row.has_right ? b.row.right.event.source : b.row.left.event.source;
         return a_source < b_source;
     });
+
+    const auto final_candidate = std::find_if(candidates.begin(), candidates.end(),
+        [](const auto& candidate) { return candidate.final_right; });
+    const IncrementalCandidate* final_right = final_candidate == candidates.end() ? nullptr : &*final_candidate;
 
     constexpr std::size_t maximum_beam_width = 384;
     constexpr std::size_t states_per_route_and_row_count = 10;
@@ -2260,7 +2334,7 @@ IncrementalSelection select_incremental_rows(
                 contains_frame(*state.rows, candidates[begin].frame)) continue;
             for (std::size_t index = begin; index < end; ++index) {
                 const InsertionSemantics insertion = analyze_incremental_insertion(
-                    *state.rows, candidates[index], profile, state.row_count);
+                    *state.rows, candidates[index], profile, state.row_count, final_right);
                 if (!insertion.permitted) continue;
                 spacing_eligible[index - begin] = true;
                 IncrementalState added = state;
@@ -2553,6 +2627,62 @@ std::vector<long long> source_coverage_vector(const IncrementalRows& rows,
     }
     std::sort(result.begin(), result.end(), std::greater<long long>());
     return result;
+}
+
+template<class CanPublish>
+std::size_t repair_cross_stream_diversions(std::map<long long, OutputRow>* rows,
+    const std::vector<IncrementalCandidate>& candidates, const Profile& profile,
+    const double bpm, const int difficulty, const CanPublish& can_publish) {
+    IncrementalRows right;
+    for (const auto& [frame, row] : *rows) if (row.has_right) right.emplace_back(frame, &row);
+    const auto stream = [](const OutputRow& row) {
+        return std::pair{row.right.event.source.track, row.right.event.source.channel};
+    };
+    std::size_t repaired = 0, proposals = 0;
+    for (std::size_t anchor = 0; anchor + 3 < right.size() && proposals < 8; ++anchor) {
+        const auto surrounding = stream(*right[anchor].second);
+        std::size_t end = anchor + 1;
+        while (end < right.size() && stream(*right[end].second) != surrounding) {
+            const auto& row = *right[end].second;
+            if (row.has_left || row.protected_action || !row.right.fallback) break;
+            ++end;
+        }
+        const std::size_t count = end - anchor - 1;
+        if (count < 2 || count > 8 || end == right.size() || stream(*right[end].second) != surrounding) continue;
+        std::vector<const IncrementalCandidate*> replacements;
+        for (std::size_t index = anchor + 1; index < end; ++index) {
+            const auto& [frame, row] = right[index];
+            const IncrementalCandidate* best = nullptr;
+            const auto first = std::lower_bound(candidates.begin(), candidates.end(), frame,
+                [](const auto& candidate, const long long value) { return candidate.frame < value; });
+            for (auto it = first; it != candidates.end() && it->frame == frame; ++it) {
+                const auto& candidate = *it;
+                if (!candidate.row.has_right || candidate.row.has_left ||
+                    candidate.row.protected_action || candidate.final_right || candidate.row.right.fallback ||
+                    candidate.row.right.event.source.tick != row->right.event.source.tick ||
+                    stream(candidate.row) != surrounding) continue;
+                if (!best || candidate.salience > best->salience + kComparisonEpsilon ||
+                    (std::fabs(candidate.salience - best->salience) <= kComparisonEpsilon &&
+                        candidate.row.right.event.source < best->row.right.event.source)) best = &candidate;
+            }
+            if (!best) break;
+            replacements.push_back(best);
+        }
+        anchor = end - 1;
+        if (replacements.size() != count) continue;
+        ++proposals;
+        auto trial = *rows;
+        for (const auto* candidate : replacements) trial.at(candidate->frame) = candidate->row;
+        if (std::any_of(replacements.begin(), replacements.end(), [&](const auto* candidate) {
+            return !insertion_obeys_profile_spacing(trial, *candidate, profile, &trial.at(candidate->frame));
+        })) continue;
+        const auto proposed = incremental_rows_from_map(trial);
+        if (!validate_midi_difficulty_route(notes_from_rows(proposed, profile), bpm, difficulty).feasible ||
+            !can_publish(proposed)) continue;
+        for (const auto* candidate : replacements) rows->at(candidate->frame) = candidate->row;
+        repaired += count;
+    }
+    return repaired;
 }
 
 template<class CanPublish>
@@ -3279,18 +3409,21 @@ MidiChartCompilationResult compile_normalized_midi_chart(
         }
         return notes;
     };
+    const auto can_publish = [&](const IncrementalRows& proposed) {
+        SongConfig trial = config;
+        trial.bpm = chart_bpm;
+        trial.notes = materialize_chart_rows(proposed);
+        if (trial.notes.size() > chart_row_limit) return false;
+        CompiledChart compiled;
+        DiagnosticChartRetention tail;
+        return compile_chart(trial, request.native_assets, &compiled, &tail, chart_row_limit).ok();
+    };
     // A rejected repair never replaces an already publishable complete profile.
     result.representative_repair = repair_representative_root(&rows, incremental_candidates,
-        profile, chart_bpm, config.difficulty, [&](const IncrementalRows& proposed) {
-            SongConfig trial = config;
-            trial.bpm = chart_bpm;
-            trial.notes = materialize_chart_rows(proposed);
-            if (trial.notes.size() > chart_row_limit) return false;
-            CompiledChart compiled;
-            DiagnosticChartRetention tail;
-            return compile_chart(trial, request.native_assets, &compiled, &tail, chart_row_limit).ok();
-        });
-    if (result.representative_repair.applied) {
+        profile, chart_bpm, config.difficulty, can_publish);
+    result.stream_continuity_replacements = repair_cross_stream_diversions(&rows, incremental_candidates,
+        profile, chart_bpm, config.difficulty, can_publish);
+    if (result.representative_repair.applied || result.stream_continuity_replacements != 0) {
         joint_strain = calculate_joint_strain(notes_from_rows(rows, profile), chart_bpm, true).metrics;
         local_skills = validate_midi_difficulty_route(notes_from_rows(rows, profile), chart_bpm, config.difficulty).metrics;
         selection.retained_actions = 0;

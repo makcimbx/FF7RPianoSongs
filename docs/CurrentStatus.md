@@ -1,11 +1,53 @@
 # Current Status
 
-Updated 2026-10-31. This page describes the current implementation, release
+Updated 2026-11-01. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
-## Background startup window attachment — focused Integration accepted
+## MIDI feedback corrections — Integration installed, human check pending
+
+- User authorized a combined development candidate for the Find the Flame rapid
+  RH detour and the archive Melodies of Life melody diversion. Both changes remain
+  offline; runtime hooks, source formats and binary layouts are unchanged. The
+  generated MIDI policy is documented in [MIDI Generation](MidiGeneration.md).
+- The proxy development build, provenance validation and both affected MIDI
+  selftests pass. Nine-song comparisons cover all six profiles. The melody repair
+  preserves required timestamps, action counts and LH/dual rows; the preceding
+  detour admission can reselect other passages, including substantial changes in
+  Weight of the World Lv6. These checks do not establish controller playability.
+- Installed through canonical current-owner rollback and exclusive prepare under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261101T124940Z-0739c5f443a64aa3ac7613a377aaa484/session.json`.
+  The session is **Prepared, not collected or Kept**. Proxy SHA-256:
+  `74be3332f3a56e317a5cb9ea7e8ddd65c1a79915d912a0d3416f4fdd2088e2b2`.
+- Reviewed source patch, build provenance, frozen candidate, previous accepted
+  DLL/restoration receipt, prior logs and before/after file verification are retained
+  under `%LOCALAPPDATA%/FF7RPianoSongs/captures/piano-generation-20261101T124632Z-9b84b3a6fd98434689ce9aef34faa686`.
+  Independent artifact/transaction review found no blocker. Closure, canonical
+  ownership, installed bytes and all 141 existing-file guards passed. Existing
+  songs, settings and other proxies/mods were preserved; no agent launch occurred.
+- Added archive-identical MIDI/MP3 plus minimal metadata as
+  `Music/Melodies Of Life (FFIX) [Feedback]`, without generated caches. The existing
+  Melodies source differs and was not overwritten. Archive My Lady and Yuna's Theme
+  were added earlier, also without replacing existing songs.
+- Human check: Find the Flame Lv6 at roughly 38–40 seconds of the song (the supplied
+  video's 44-second region), and Feedback Melodies Lv6 at roughly 88–90 seconds.
+  The Find burst has one fewer required root; the Melodies passage substitutes two
+  melody roots without adding inputs. Cache invalidation is automatic. Collect and
+  decide Keep only after the human run; broader musical/lifecycle checks remain open.
+- Tester now reports Find the Flame Lv6 feels substantially better and playable.
+  Melodies acceptance is still unreported; collection/Keep is deferred while the
+  game remains running. A separate Amadeus Lv6 video exposes a dense RH bass
+  arpeggio while the upper MIDI voice sustains: nine required roots over 1.5 seconds,
+  with consecutive wheel targets three sectors apart. Read-only analysis confirms
+  the tracker follows the bass through that passage, not an automatic-follower
+  display issue. This is a selection/playability investigation, not proof that the
+  pattern is impossible; no additional generator change has been made for it.
+- Recovery is canonical rollback of this current session, then prepare the retained
+  `restoration-receipt.json` to restore the previously accepted window-fix proxy.
+  Do not replay historical addon/configuration restoration or force-copy DLLs.
+
+## Background startup window attachment — previous focused Integration accepted
 
 - Tester reports `window_hook_failed` when launching without foreground focus;
   later native publication and UE4SS initialization had succeeded. The old log
@@ -22,7 +64,7 @@ limitations and tested artifacts. Public version history remains in
   phase and documentation checks pass. Tester acknowledged the requested run as
   successful; the retained latest log confirms the correct window, not independently
   itemized foreground transitions or repeated-launch stability.
-- Authorized native-only replacement is installed and **Kept for the latest focused run** under
+- The previous native-only replacement was **Kept for its focused run** under
   `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261031T190414Z-ae607ee1b8ba4f96a16c5771adfaf365/session.json`.
   Proxy SHA-256: `00077297b3eee410894e3c3b896b73ceab357ed69e6a3694eba61395e75cf847`.
   Exact source/provenance, prior handoff DLL/receipt, previous logs, crash baseline,
@@ -35,8 +77,9 @@ limitations and tested artifacts. Public version history remains in
   startup, 32-song settlement and Amadeus selection/playback/HUD in the latest run.
   PME has no warning/terminal markers; UE4SS accepts FName/FText/GU and starts its
   event loop, and PianoAnywhere reports ready. One earlier `DerefToInt32` diagnostic
-  does not prevent that UE4SS initialization. No agent launch. Recovery is canonical current-owner rollback then prepare that
-  folder's `last-good-receipt.json`, not an old external/addon rollback.
+  does not prevent that UE4SS initialization. No agent launch. That trial retained
+  its own prior receipt; use the current MIDI-candidate recovery instructions above,
+  not this historical trial's fallback or an old external/addon rollback.
 - The tester manually removed `ConsoleEnablerMod` and the duplicate FFVIIHook
   proxy. Do not restore those files or replay old addon/static-file expectations
   without reconciling that requested state. PianoAnywhere readiness and custom-song
@@ -47,8 +90,9 @@ limitations and tested artifacts. Public version history remains in
   evidence folder under `earlier-crashes`/`paired-assessment.json`. Portable stack
   matches the previously observed `game+222ad75` shape seen with PME disabled;
   its cause and loaded-state attribution are not established by this comparison.
-  This is not a crash-free/repeatability or universal coexistence claim. The latest
-  successful window fix stays installed; earlier crash evidence is not discarded.
+  This is not a crash-free/repeatability or universal coexistence claim. The accepted
+  window-fix artifact is retained for rollback from the MIDI candidate above;
+  earlier crash evidence is not discarded.
 
 ## PME-only startup coexistence — owned handoff Debug investigation
 
