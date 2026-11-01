@@ -576,6 +576,7 @@ ff7rp_use_generated_catalog(menu_session_authority_selftest)
 target_compile_definitions(menu_session_authority_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(menu_session_authority_selftest PRIVATE "src")
 ff7rp_apply_cpp_policy(profile_list_coordinator_selftest)
+ff7rp_use_generated_catalog(profile_list_coordinator_selftest)
 target_compile_definitions(profile_list_coordinator_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_definitions(profile_list_coordinator_selftest PRIVATE FF7RP_COORDINATOR_SELFTEST=1)
 target_include_directories(profile_list_coordinator_selftest PRIVATE "src")
@@ -818,6 +819,7 @@ add_executable(selection_substrate_policy_selftest
     src/tests/selection_substrate_policy_selftest.cpp
 )
 ff7rp_apply_cpp_policy(selection_substrate_policy_selftest OMIT_FP_PRECISE)
+ff7rp_use_generated_catalog(selection_substrate_policy_selftest)
 target_compile_definitions(selection_substrate_policy_selftest PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(selection_substrate_policy_selftest PRIVATE "src")
 add_executable(bgm_playback_aggregate_policy_selftest
@@ -1106,6 +1108,7 @@ foreach(preview_test IN ITEMS song_preview_policy_selftest preview_audio_selftes
     target_include_directories(${preview_test} PRIVATE "src")
 endforeach()
 target_sources(song_preview_runtime_selftest PRIVATE src/game/song_registry.cpp)
+ff7rp_use_generated_catalog(song_preview_runtime_selftest)
 add_executable(preview_game_volume_selftest src/tests/preview_game_volume_selftest.cpp
     src/game/preview_game_volume.cpp src/core/pe_image.cpp src/core/version_gate.cpp)
 ff7rp_apply_cpp_policy(preview_game_volume_selftest)
