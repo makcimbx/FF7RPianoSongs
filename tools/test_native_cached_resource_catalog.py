@@ -167,7 +167,7 @@ class NativeCachedResourceCatalogTest(unittest.TestCase):
         self.assertEqual({entry["id"] for entry in entries.values()
                           if entry["hook_owner"] == "native_audio_runtime"},
                          {identifier for identifier, _ in hooks})
-        for order, (identifier, rva) in enumerate(hooks, 30):
+        for order, (identifier, rva) in enumerate(hooks, 29):
             with self.subTest(identifier=identifier):
                 entry = entries[identifier]
                 self.assertEqual(set(entry["builds"]), expected_builds(identifier))
