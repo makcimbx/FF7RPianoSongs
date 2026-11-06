@@ -2,12 +2,28 @@
 
 ## Unreleased
 
+## 0.4.3 - 2026-11-06
+
 ### Fixes
 
 - Removed unsafe direct title-widget rewriting after piano results and list
   population. Titles now use the existing converter and native owned-string copy
   path, avoiding a controller-layout mismatch at song completion and freeing
   borrowed C++ string storage through the game allocator.
+
+### Updating
+
+- Replace the standalone DLL for your game build; keep songs, settings, themes
+  and saved scores. No cache deletion or score reset is required.
+
+### Validation limits
+
+- Two completed songs, results and list return were observed on the 1.005
+  development build without recurrence of the reported crash. This is not a
+  universal crash-free claim or reproduction of the original player's setup.
+- The owner explicitly accepts absent exact-release-archive gameplay and the
+  full manual matrix for both builds. Older-build gameplay and actual title
+  appearance remain unqualified; earlier lifecycle/visual limitations still apply.
 
 ## 0.4.2 - 2026-11-01
 

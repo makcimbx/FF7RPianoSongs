@@ -5,7 +5,21 @@ limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
 
-## Result-title crash correction — Integration
+## 0.4.3 release disposition (2026-11-06)
+
+- Owner explicitly requests commit, push and GitHub publication, and accepts
+  absent exact-release-archive gameplay and the full per-build manual matrix for
+  this version if complete automated release checks pass. The scoped 1.005 run
+  below is development evidence, not evidence for the new archive or 1.004.
+- Scope is the result-title layout/owned-string correction for both supported
+  builds. Actual title appearance, complete-library readiness, pause/resume,
+  repeated-launch stability, remote reporter reproduction and older-build gameplay
+  remain version-scoped unqualified limits, not completed checks.
+- Publication remains conditional on independent Release review and complete
+  canonical build/test/audit/package validation. No new game installation or
+  process operation is authorized by publication.
+
+## Result-title crash correction — development evidence
 
 - Investigation of a player completion crash found post-result code treating the
   piano controller as a list of title widgets. The same direct setter also passed
@@ -19,9 +33,31 @@ limitations and tested artifacts. Public version history remains in
   hook/setter consumers and their generated catalog entries are removed.
 - Production proxy builds and title-input, score-overlay producer, autoplay-progress
   and documentation checks pass for both supported catalogs. Generator unit tests
-  also pass. The default catalog is restored; no game installation was performed.
-  Natural completion, result title/rank/score and immediate list return/reselection
-  still require focused in-game validation; this is not a release qualification.
+  also pass. The default catalog is restored. These are offline checks, not a
+  release qualification; focused runtime evidence follows below.
+- On owner authorization, installed the reviewed default-build proxy through the
+  canonical closed-game transaction. Session is **Collected and Kept for the bounded run below**:
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/native-proxy-20261106T080354Z-a6efbcf47db94e8c86c09a5a4f43f905/session.json`.
+  Installed SHA-256: `eb242c48c0729a5e7169b5f517619a16f52cd3b3878cada7db5ba7139a7d8b10`.
+  Full build provenance, exact executable identity and installed bytes passed checks.
+  Previous owner was collected Unassessed and canonically rolled back; prior proxy,
+  log, source patch, candidate/provenance and restoration receipt are retained under
+  `%LOCALAPPDATA%/FF7RPianoSongs/captures/result-title-install-20261106T080312Z-2c3292cef00f45d28e451dd08317bdfe`.
+  Recover the previous proxy by rolling back this current session, then preparing
+  that folder's `restoration-receipt.json`; rollback alone restores the prior ASI.
+  No agent game launch or song/settings edits occurred.
+- Owner's subsequent run completed Alicia Lv6 and Hacking to the Gate Lv6 through
+  results and list return, including reselection between plays; no warning/error
+  messages or result-publication rejection appear in the collected log. The former
+  completion crash did not recur on these two paths. Alicia's best/last score is
+  30510. Hacking's latest 13890 is C (B threshold 14300), while its pre-existing best
+  15070 remains B: log and saved INI agree on LastScore/HighScore. The list ranks the
+  best, not the latest attempt; no score repair was necessary. Assessment, manual
+  report and score snapshot are retained in the installation evidence folder above.
+  All 31 observed songs/cohorts reached loaded/ready, but no repository-settled
+  marker is present. Complete-library readiness, actual title appearance, pause/
+  resume, repeated-launch stability, remote reproduction and older-build gameplay
+  remain unqualified; Keep is not a broad crash-free or Release claim.
 
 ## 0.4.2 release disposition (2026-11-01)
 
