@@ -11,7 +11,6 @@
 #include "game/module_hooks.h"
 #include "game/hook_specs.h"
 #include "game/rvas.h"
-#include "game/runtime_layouts.h"
 #include "game/scoreinfo_overlay.h"
 #include "game/ue_types.h"
 
@@ -77,23 +76,17 @@ HWND g_game_window = nullptr;
 WNDPROC g_previous_window_proc = nullptr;
 // Publication only; message authority additionally checks the actual live subclass.
 std::atomic<HWND> g_theme_window{nullptr};
-std::atomic<void*> g_last_title_population_context{nullptr};
 
 enum class DifficultyWindowAttachment { Pending, Attached, Failed };
 DifficultyWindowAttachment install_difficulty_window_hook();
-void apply_detail_title(void* context, const char* source);
 
 using PianoDetailUpdateFn = void(__fastcall*)(void* context);
-using PianoTitlePopulationFn = uint8_t(__fastcall*)(void* context);
 using TitleViewConverterFn = uint64_t*(__fastcall*)(void* wrapper, uint64_t* out_view, void* arg3);
-using SetStringTextFn = uintptr_t(__fastcall*)(void* text_widget, void* text);
 
 core::RawRvaHook g_detail_update_hook;
-core::RawRvaHook g_title_population_hook;
 core::RawRvaHook g_title_converter_hook;
 core::RawRvaHook g_player_input_key_hook;
 PianoDetailUpdateFn g_original_detail_update = nullptr;
-PianoTitlePopulationFn g_original_title_population = nullptr;
 TitleViewConverterFn g_original_title_converter = nullptr;
 PlayerInputInputKeyFn g_original_player_input_key = nullptr;
 void (*g_theme_entry)() noexcept = nullptr;
@@ -128,8 +121,6 @@ void theme_callback_entered() noexcept {
 bool (*g_test_install_title_hook)(const char*,void**)=nullptr;
 FNameCtorFn g_test_fname_ctor=nullptr;
 #endif
-
-using FStringView = runtime_layouts::FString;
 
 bool install_named_hook(const HookInstallContext& context, const char* name, core::RawRvaHook& hook, void* detour, void** original)
 {
@@ -347,34 +338,6 @@ bool __fastcall player_input_key_detour(void* player_input, const void* key, int
     return g_original_player_input_key
         ? g_original_player_input_key(player_input, key, event_type, amount, gamepad)
         : false;
-}
-
-SetStringTextFn resolve_set_string_text_helper()
-{
-    if (!g_exe_module) {
-        return nullptr;
-    }
-    const RvaSignatureSpec* spec = find_rva_signature("set_string_text");
-    auto* address = reinterpret_cast<uint8_t*>(g_exe_module) + rva::SetStringText;
-    if (!spec || spec->rva != rva::SetStringText
-        || !core::bytes_equal(address, spec->expected_prologue)) {
-        static std::atomic_bool s_logged{false};
-        if (!s_logged.exchange(true, std::memory_order_relaxed)) {
-            std::ostringstream out;
-            out << "[title] detail_title_helper status=disabled reason="
-                << (spec ? "prologue_mismatch" : "missing_hook_spec")
-                << " rva=0x" << std::hex << rva::SetStringText;
-            core::log(core::LogLevel::Error, out.str());
-        }
-        return nullptr;
-    }
-    return reinterpret_cast<SetStringTextFn>(address);
-}
-
-FStringView make_fstring_view(const OwnedTitleText& title)
-{
-    const int32_t num_with_null = static_cast<int32_t>(title.storage.size() + 1);
-    return {title.storage.c_str(), num_with_null, num_with_null};
 }
 
 void resolve_xinput_get_state()
@@ -795,11 +758,6 @@ const OwnedTitleText* refresh_live_title_locked(
     return &g_live_title;
 }
 
-PlaybackSnapshot playback_title_snapshot()
-{
-    return registry().playback_snapshot();
-}
-
 struct ActivationSelectionTitleDiagnostic final {
     ActivationSelectionTitleFailure failure =
         ActivationSelectionTitleFailure::None;
@@ -885,67 +843,6 @@ void log_activation_selection_title(
     }
 }
 
-SelectionSnapshot menu_title_snapshot()
-{
-    if (!custom_audio_route_idle_for_menu_input()) return {};
-    return registry().selection_snapshot();
-}
-
-void apply_detail_title(void* context, const char* source)
-{
-    if (!context) {
-        return;
-    }
-    auto* set_text = resolve_set_string_text_helper();
-    if (!set_text) {
-        return;
-    }
-
-    int32_t slot_count = 0;
-    core::safe_read_field(context, 0x1b0, slot_count);
-    if (slot_count <= 0 || slot_count > 8) {
-        slot_count = 1;
-    }
-
-    int applied_count = 0;
-    std::wstring title_snapshot;
-    {
-        std::lock_guard<std::mutex> lock(g_title_text_mutex);
-        const PlaybackSnapshot playback = playback_title_snapshot();
-        const SelectionSnapshot menu = playback.song ? SelectionSnapshot{} : menu_title_snapshot();
-        const OwnedTitleText* title = refresh_live_title_locked(
-            playback.song ? playback.song : menu.song,
-            playback.song ? playback.profile : menu.profile);
-        if (!title) {
-            return;
-        }
-        title_snapshot = title->storage;
-        FStringView view = make_fstring_view(*title);
-        for (int32_t slot = 0; slot < slot_count; ++slot) {
-            void* title_widget = nullptr;
-            if (core::safe_read_field(reinterpret_cast<uint8_t*>(context) + 0x38 + static_cast<uintptr_t>(slot) * sizeof(void*), 0, title_widget)
-                && title_widget) {
-                set_text(title_widget, &view);
-                ++applied_count;
-            }
-        }
-    }
-
-    static std::atomic_int s_detail_title_logs{0};
-    const int log_index = s_detail_title_logs.fetch_add(1, std::memory_order_relaxed);
-    if (log_index < 32) {
-        std::ostringstream out;
-        out << "[title] detail_title_helper status=" << (applied_count > 0 ? "applied" : "missing_title_widgets")
-            << " source=" << (source ? source : "?")
-            << " context=0x" << std::hex << reinterpret_cast<uintptr_t>(context)
-            << std::dec
-            << " slot_count=" << slot_count
-            << " applied_count=" << applied_count
-            << " title=\"" << core::narrow(title_snapshot) << "\"";
-        core::log(core::LogLevel::Debug, out.str());
-    }
-}
-
 void __fastcall detail_update_detour(void* context)
 {
     auto callback = non_audio_hook_gate().try_enter();
@@ -955,26 +852,7 @@ void __fastcall detail_update_detour(void* context)
         AutoplayResultScope autoplay_result_scope(autoplay_assisted());
         g_original_detail_update(context);
     }
-    if (!callback) return;
-    const PlaybackSnapshot playback = playback_title_snapshot();
-    const SelectionSnapshot menu = playback.song ? SelectionSnapshot{} : menu_title_snapshot();
-    if (playback.song || menu.song) {
-        apply_detail_title(context, "detail_update");
-    }
-}
-
-uint8_t __fastcall title_population_detour(void* context)
-{
-    auto callback = non_audio_hook_gate().try_enter();
-    if (!callback) return g_original_title_population ? g_original_title_population(context) : 0;
-    g_last_title_population_context.store(context, std::memory_order_release);
-    const uint8_t result = g_original_title_population ? g_original_title_population(context) : 0;
-    const PlaybackSnapshot playback = playback_title_snapshot();
-    const SelectionSnapshot menu = playback.song ? SelectionSnapshot{} : menu_title_snapshot();
-    if (playback.song || menu.song) {
-        apply_detail_title(context, "title_population");
-    }
-    return result;
+    // Native callers copy the converter's borrowed view and publish widgets when ready.
 }
 
 uint64_t* __fastcall title_converter_detour(void* wrapper, uint64_t* out_view, void* arg3)
@@ -1342,9 +1220,7 @@ bool install_title_hooks(const HookInstallContext& context)
     if(!context.exe_module || g_input_service_state.load()!=TitleInputServiceState::Uninstalled)return false;
     g_exe_module = context.exe_module;
     const bool ok = install_named_hook(context, "piano_detail_update", g_detail_update_hook,
-                        reinterpret_cast<void*>(&detail_update_detour), reinterpret_cast<void**>(&g_original_detail_update))
-        && install_named_hook(context, "piano_title_population", g_title_population_hook,
-            reinterpret_cast<void*>(&title_population_detour), reinterpret_cast<void**>(&g_original_title_population));
+                        reinterpret_cast<void*>(&detail_update_detour), reinterpret_cast<void**>(&g_original_detail_update));
 
     bool converter_ok = false;
     bool native_input_ok = false;
@@ -1369,8 +1245,7 @@ bool install_title_hooks(const HookInstallContext& context)
 
     std::ostringstream out;
     out << "[title] status=" << (ok ? "live_hooks_installed" : "install_failed")
-        << " seam=detail_title_helper title_view_converter=" << (converter_ok ? "enabled_source_validated" : "disabled")
-        << " detail_title_helper=" << (resolve_set_string_text_helper() ? "available" : "disabled")
+        << " seam=native_title_copy title_view_converter=" << (converter_ok ? "enabled_source_validated" : "disabled")
         << " custom_songs=" << registry().custom_count();
     core::log(ok ? core::LogLevel::Info : core::LogLevel::Error, out.str());
     auto expected=TitleInputServiceState::Uninstalled;
@@ -1413,7 +1288,6 @@ core::HookShutdownResult shutdown_title()
     return core::shutdown_gated_hooks(non_audio_hook_gate(), {
         core::teardown_operation(g_player_input_key_hook),
         core::teardown_operation(g_title_converter_hook),
-        core::teardown_operation(g_title_population_hook),
         core::teardown_operation(g_detail_update_hook),
     }, [preview_stopped] {
         if (!stop_difficulty_input_thread()) return false;
@@ -1432,8 +1306,6 @@ core::HookShutdownResult shutdown_title()
         g_native_thumb_logged.store(false, std::memory_order_release);
         for (auto& direction : g_native_piano_direction_names) direction.store(0, std::memory_order_release);
         g_original_title_converter = nullptr;
-        g_original_title_population = nullptr;
-        g_last_title_population_context.store(nullptr, std::memory_order_release);
         g_original_detail_update = nullptr;
         g_difficulty_input_state.reset();
         g_autoplay_input_edge = {};

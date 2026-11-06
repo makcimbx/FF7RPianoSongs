@@ -47,7 +47,7 @@ ALLOWED_VALIDATION_POLICIES = {"signature", "build_identity", "call_site", "data
 ALLOWED_INSTALL_POLICIES = {"required_hook", "optional_hook", "signature_only", "callable", "data_only"}
 ALLOWED_STATUSES = {"production", "diagnostic", "research"}
 REQUIRED_SIGNATURE_IDS = {
-    "set_string_text", "piano_score_parser", "piano_event_deep_copy",
+    "piano_score_parser", "piano_event_deep_copy",
     "piano_event_construct", "piano_event_link", "piano_event_destruct",
     "create_package", "static_construct_object", "bgm_slot_setup", "piano_audio_request",
 }

@@ -152,6 +152,10 @@ unsigned theme_focus_losses=0;
 std::uint64_t theme_sequence=0,theme_pending=0;
 bool theme_preparation=false;
 bool continuation_work=false;
+unsigned result_scope_depth=0,result_calls=0,converter_calls=0;
+void* expected_result_context=nullptr;
+const void* expected_title_row=nullptr;
+std::wstring copied_result_title;
 }
 // Unrelated UI/audio paths must not be reached by this startup/entry test.
 namespace ff7r::piano::game {
@@ -201,9 +205,11 @@ bool same_menu_session(const MenuSessionSnapshot& a,const MenuSessionSnapshot& b
 }
 MenuSessionSnapshot capture_menu_callback_session() noexcept {std::abort();}
 bool menu_session_generation_exact(std::uint64_t,bool) noexcept {std::abort();}
-ScoreInfoPianoDetailUpdateScope::ScoreInfoPianoDetailUpdateScope() noexcept {}
-ScoreInfoPianoDetailUpdateScope::~ScoreInfoPianoDetailUpdateScope(){}
-bool scoreinfo_overlay_row_matches_playback(const void*,const PlaybackSnapshot&){std::abort();}
+ScoreInfoPianoDetailUpdateScope::ScoreInfoPianoDetailUpdateScope() noexcept {++result_scope_depth;}
+ScoreInfoPianoDetailUpdateScope::~ScoreInfoPianoDetailUpdateScope(){--result_scope_depth;}
+bool scoreinfo_overlay_row_matches_playback(const void* row,const PlaybackSnapshot& playback){
+    return row && row==expected_title_row && playback.song && playback.token.valid();
+}
 bool refresh_active_scoreinfo_overlay_profile(){std::abort();}
 }
 namespace ff7r::piano::core {
@@ -220,6 +226,7 @@ void* __fastcall name_ctor(FNameValue* output,const wchar_t* text,int32_t find) 
     *output={(fail_names || (fail_trigger_names && trigger))?0u:100u+names,0};return output;
 }
 bool install_hook(const char* name,void** original) {
+    require(std::string_view(name)!="piano_title_population","native list population must not be post-rewritten");
     ++hooks;*original=std::string_view(name)=="player_input_input_key"
         ?reinterpret_cast<void*>(&original_key):reinterpret_cast<void*>(1);return !fail_hook;
 }
@@ -261,7 +268,7 @@ void reset() {
 }
 void install() {
     require(install_title_hooks({module()}),"hook publication");
-    require(hooks==4 && !names && !threads && !windows && !raw_adds,"early install performed service work");
+    require(hooks==3 && !names && !threads && !windows && !raw_adds,"early install performed service work");
 }
 int theme_key() noexcept {return theme_function;}
 void theme_focus_lost() noexcept {++theme_focus_losses;theme_pending=0;}
@@ -574,10 +581,56 @@ void window_selection_tests() {
     require(shutdown_title().ok(),"failed-enumeration cleanup");
 }
 
-void __fastcall result_consumer(void*) {
+void __fastcall result_consumer(void* context) {
+    ++result_calls;
+    require(context==expected_result_context && result_scope_depth==1,"result context/scoring scope changed");
     auto* scope=AutoplayResultScope::active();require(scope && scope->suppress(),"outer shadow absent on rejected gate");
     std::array<std::uint8_t,16> record{};
     require(scope->redirect(record.data())!=record.data(),"outer result shadow aliases record");
+}
+uint64_t* __fastcall original_title_converter(void*,uint64_t* output,void*) {
+    ++converter_calls;
+    output[0]=reinterpret_cast<uint64_t>(L"Native title");output[1]=12;
+    return output;
+}
+void __fastcall custom_result_consumer(void* context) {
+    result_consumer(context);
+    push_title_resolver_token({registry().playback_snapshot(),expected_title_row});
+    uint64_t wrapper[]{0,reinterpret_cast<uint64_t>(expected_title_row)},view[2]{};
+    require(title_converter_detour(wrapper,view,nullptr)==view,"native converter result changed");
+    copied_result_title.assign(reinterpret_cast<const wchar_t*>(view[0]),static_cast<uint32_t>(view[1]));
+}
+void result_title_tests() {
+    reset();install();
+    std::array<uint8_t,0x1b8> controller{};
+    const uint64_t non_widget=0x3c951c00;
+    std::memcpy(controller.data()+0x38,&non_widget,sizeof(non_widget));
+    const auto unchanged=controller;
+    expected_result_context=controller.data();result_calls=converter_calls=0;
+    g_original_detail_update=result_consumer;
+    // An admitted result must not inspect controller fields as a widget array,
+    // even before a custom playback/title source is available.
+    detail_update_detour(controller.data());
+    require(result_calls==1 && controller==unchanged && !result_scope_depth
+        && !AutoplayResultScope::active(),"result forwarding touched controller storage or leaked scopes");
+
+    SongDescriptor song;song.id="ResultTitle";song.visible_index=7;song.title=L"Custom title";
+    SongDifficultyProfile profile;profile.difficulty=4;profile.title=L"Custom \u03a9 [Lv.4]";song.profiles.push_back(profile);
+    registry().replace({song});registry().set_active_selection(7,0);
+    const auto selected=registry().selection_snapshot();
+    require(registry().publish_playback(selected,{selected.generation,2,3,4}),"result playback fixture");
+    expected_title_row=&song;
+    g_original_detail_update=custom_result_consumer;g_original_title_converter=original_title_converter;
+    for(int repeat=0;repeat<2;++repeat) {
+        detail_update_detour(controller.data());
+        require(copied_result_title==profile.title && !pending_title_resolver_tokens()
+            && controller==unchanged && !result_scope_depth && !AutoplayResultScope::active(),
+            "native result copy lost custom title, consumed storage, changed controller, or leaked authority");
+    }
+    require(result_calls==3 && converter_calls==2,"result/converter original must run exactly once per entry");
+    require(registry().revoke_playback(registry().playback_snapshot().token),"retire result playback");
+    registry().replace({});expected_title_row=nullptr;expected_result_context=nullptr;
+    require(shutdown_title().ok(),"result title cleanup");
 }
 }
 int main() {
@@ -588,6 +641,7 @@ int main() {
         continuation_scheduler_tests();
         controller_theme_input_tests();
         window_selection_tests();
+        result_title_tests();
         reset();non_audio_hook_gate().close();g_original_detail_update=result_consumer;
         detail_update_detour(nullptr);require(!AutoplayResultScope::active(),"outer shadow leaked");
         reset();install();

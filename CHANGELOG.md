@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixes
+
+- Removed unsafe direct title-widget rewriting after piano results and list
+  population. Titles now use the existing converter and native owned-string copy
+  path, avoiding a controller-layout mismatch at song completion and freeing
+  borrowed C++ string storage through the game allocator.
+
 ## 0.4.2 - 2026-11-01
 
 ### Fixes and improvements

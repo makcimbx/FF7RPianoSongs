@@ -1,9 +1,27 @@
 # Current Status
 
-Updated 2026-11-01. This page describes the current implementation, release
+Updated 2026-11-06. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## Result-title crash correction — Integration
+
+- Investigation of a player completion crash found post-result code treating the
+  piano controller as a list of title widgets. The same direct setter also passed
+  borrowed C++ string storage to a native consuming-string API.
+- The correction removes that manual rewrite and its list-population-only hook.
+  Result scoring/autoplay scopes remain; custom titles use the existing validated
+  converter followed by native string copying and readiness-controlled UI setup.
+- Independent Ghidra recovery confirms the native copy/readiness route in both
+  supported builds; older import identity is PE-correlated, not whole-file hashed
+  or runtime-qualified. Independent source review found no blocker. Retired title
+  hook/setter consumers and their generated catalog entries are removed.
+- Production proxy builds and title-input, score-overlay producer, autoplay-progress
+  and documentation checks pass for both supported catalogs. Generator unit tests
+  also pass. The default catalog is restored; no game installation was performed.
+  Natural completion, result title/rank/score and immediate list return/reselection
+  still require focused in-game validation; this is not a release qualification.
 
 ## 0.4.2 release disposition (2026-11-01)
 
