@@ -18,7 +18,7 @@ bool preserved_table(const Bytes& source,const Bytes& output,NativeAudioPackageR
     if(!inspect_native_zen_package(source,role,s).ok()||!inspect_native_zen_package(output,role,p).ok()) return false;
     using Fixups=std::map<std::size_t,std::string>;
     auto decode=[](const Bytes& b,const NativeZenPackage& z,Bytes& content,Fixups& fixups) {
-        auto size=get(b,z.body_at+6); content.assign(b.begin()+z.body_at+32,b.begin()+z.body_at+32+size);
+        auto size=get(b,z.body_at+((get(b,16)&0x2000)?6:12)); content.assign(b.begin()+z.body_at+32,b.begin()+z.body_at+32+size);
         auto at=z.body_at+32+size; auto groups=get(b,at+8); at+=12;
         for(std::size_t g=0;g<groups;++g) {
             auto ni=get(b,at),number=get(b,at+4),count=get(b,at+8);at+=12;
@@ -59,11 +59,37 @@ int main(int argc,char** argv) {
     if(build_native_audio_cohort(r).status.ok()) return fail("Empty request accepted");
     r.build_id="ff7rebirth-steam-win64-6a16ced2"; r.identity="cohort-selftest"; r.base_score_name="Journey";
     if(build_native_audio_cohort(r).status.ok()) return fail("Missing provenance accepted");
-    if(argc==7) {
-        for(std::size_t i=0;i<4;++i) r.source_zen[i]=read(argv[i+1]); r.mabf=read(argv[5]);
+    const bool stock_1004=argc==8&&std::string_view(argv[1])=="--stock-1004";
+    if(argc==7||stock_1004) {
+        const auto source_arg=stock_1004?2:1;
+        for(std::size_t i=0;i<4;++i) r.source_zen[i]=read(argv[source_arg+i]); r.mabf=read(argv[source_arg+4]);
         MabfArtifactMetadata timing; auto ts=validate_structural_mabf(r.mabf,&timing); if(!ts.ok()) return fail(ts.message);
         r.timing={timing.logical_source_frames,timing.sample_rate,double(timing.logical_source_frames)/timing.sample_rate};
-        auto root=std::filesystem::absolute(argv[6]);
+        auto root=std::filesystem::absolute(argv[source_arg+5]);
+        if(stock_1004) {
+            r.build_id="ff7rebirth-steam-win64-68fd6fde";
+            const char* carriers[]{"Journey","TifasTheme","BarretTheme","SyncoDeChocobo","DifficultToStandOnTwoLegs","AerithsTheme","Fighters","OneWingedAngel"};
+            for(auto carrier:carriers) {
+                r.base_score_name=carrier;
+                auto b=build_native_audio_cohort(r);
+                if(!b.status.ok()) return fail(std::string(carrier)+": "+b.status.message);
+                if(get(b.packages[0].zen,16)!=0x80802200) return fail("Generated 1.004 Music must use its unversioned schema");
+                for(std::size_t i=1;i<4;++i) {
+                    if(get(b.packages[i].zen,16)!=0x80800200||
+                       !preserved_table(r.source_zen[i],b.packages[i].zen,NativeAudioPackageRole(i),i==1?b.bgm_key:b.score_name,
+                           i==1?b.music_name:i==2?b.bgm_key:"")) return fail("Stock 1.004 table flags/row/fixup preservation");
+                }
+            }
+            NativeAudioArtifactSet set; auto status=prepare_native_audio_cohort(r,root,set);
+            if(status.ok()) status=verify_native_audio_cohort(r,set);
+            if(!status.ok()) return fail(status.message);
+            r.source_zen[0].back()^=1;
+            auto refused=build_native_audio_cohort(r);
+            if(refused.status.ok()||!refused.container.ucas.empty()||
+               !refused.status.message.contains("Unrecognized tagged 1.004 Music source SHA256"))
+                return fail("Changed tagged 1.004 Music source was not rejected at the SHA256 gate");
+            std::cout<<"Stock 1.004: all eight carriers built, cohort publication verified\n"; return 0;
+        }
         auto built=build_native_audio_cohort(r); if(!built.status.ok()) return fail(built.status.message);
         auto again=build_native_audio_cohort(r); if(!again.status.ok()||again.container.utoc!=built.container.utoc||again.container.ucas!=built.container.ucas) return fail("Cohort determinism");
         const char* objects[]{"","BGMList","PianoScoreInfo","PianoScore"};
@@ -104,6 +130,23 @@ int main(int argc,char** argv) {
             original_music.export_name,original_music.names,old_body,older.source_zen[0]);
         auto old_native=build_native_audio_cohort(older);
         if(!os.ok()||!valid_old(old_native)||old_native.content_id==old_donor.content_id) return fail("Explicit older reflected fixture validation/identity");
+        auto alternate=older;
+        for(std::size_t role=1;role<4;++role) {
+            auto& source=alternate.source_zen[role]; NativeZenPackage p;
+            put(source,16,0x80800200);
+            if(!inspect_native_zen_package(source,NativeAudioPackageRole(role),p).ok()) return fail("Tagged wrapper fixture inspection");
+            auto none=std::find(p.names.begin(),p.names.end(),"None");
+            if(none==p.names.end()) return fail("Tagged wrapper fixture None");
+            auto size=get(source,p.body_at+6);
+            std::fill_n(source.begin()+p.body_at,32,std::uint8_t{0});
+            put(source,p.body_at,none-p.names.begin()); put(source,p.body_at+12,size);
+            put(source,p.body_at+16,0x10000); put(source,p.body_at+20,16,2); put(source,p.body_at+22,8,2);
+        }
+        auto alternate_native=build_native_audio_cohort(alternate);
+        if(!valid_old(alternate_native)||alternate_native.content_id==old_native.content_id)
+            return fail("Older alternate source flags cohort: "+alternate_native.status.message);
+        for(std::size_t role=1;role<4;++role)
+            if(get(alternate_native.packages[role].zen,16)!=0x80800200) return fail("Older table source flags not preserved");
         auto source40=older;auto body40=old_body;body40.resize(body40.size()-8);body40[body40.size()-20]^=0x20;
         if(!rebuild_native_zen_package(r.source_zen[0],NativeAudioPackageRole::Music,original_music.package_name,original_music.export_name,
             original_music.names,body40,source40.source_zen[0]).ok()) return fail("Older suffix40 source fixture");
@@ -142,16 +185,30 @@ int main(int argc,char** argv) {
             auto b=build_native_audio_cohort(input);NativeAudioArtifactSet refused;auto path=root/"malformed-old-must-not-publish";
             return !b.status.ok()&&b.container.ucas.empty()&&!prepare_native_audio_cohort(input,path,refused).ok()&&refused.identity.empty()&&!std::filesystem::exists(path);
         };
-        auto malformed=older; malformed.source_zen[0].back()=1;
+        auto malformed=alternate;
+        put(malformed.source_zen[1],16,0x80802201);
+        put(malformed.source_zen[2],16,0x80800201);
+        auto metadata=build_native_audio_cohort(malformed).status;
+        if(!rejected_before_archive(malformed)||
+           !metadata.message.contains("role=BGMList sha256="+hex(native_sha256(malformed.source_zen[1])))||
+           !metadata.message.contains("role=PianoScoreInfo sha256="+hex(native_sha256(malformed.source_zen[2])))||
+           !metadata.message.contains("flags=0x80802201 expected_flags=0x80802200")||
+           !metadata.message.contains("flags=0x80800201 expected_flags=0x80802200"))
+            return fail("Older flags rejection diagnostics: "+metadata.message);
+        malformed=alternate; malformed.source_zen[0].back()=1;
         if(!rejected_before_archive(malformed)) return fail("Unknown older cooked suffix accepted");
         malformed=r;malformed.build_id=older.build_id;malformed.source_zen[0].back()^=1;
         if(!rejected_before_archive(malformed)) return fail("Failed current donor SHA fell back to older semantic acceptance");
+        put(malformed.source_zen[0],16,0x80800200);
+        if(!rejected_before_archive(malformed)) return fail("Alternate flags bypassed current Music donor SHA");
         for(std::size_t role=1;role<4;++role) {
             NativeZenPackage p; if(!inspect_native_zen_package(older.source_zen[role],NativeAudioPackageRole(role),p).ok()) return fail("Old fixture table inspection");
             const auto content=p.body_at+32;
             const auto props=content+56+(get(older.source_zen[role],content+56,8)>>1);
-            malformed=older; put(malformed.source_zen[role],props+8,9);
+            malformed=alternate; put(malformed.source_zen[role],props+8,9);
             if(!rejected_before_archive(malformed)) return fail("Older same-stride wrong member type accepted");
+            malformed=alternate; put(malformed.source_zen[role],p.body_at+4,1);
+            if(!rejected_before_archive(malformed)) return fail("Older numbered None terminator accepted");
             malformed=older; const auto fewer=get(malformed.source_zen[role],content+64)-1;
             put(malformed.source_zen[role],content+64,fewer);put(malformed.source_zen[role],content+68,fewer);
             if(!rejected_before_archive(malformed)) return fail("Older missing mandatory member accepted");
@@ -222,6 +279,6 @@ int main(int argc,char** argv) {
         if(!verify_native_audio_cohort(r,set).ok()) return fail("Unrelated retained cohort changed");
         std::filesystem::remove_all(corrupt.container_prefix.parent_path()); // Test-only, never mounted.
         std::cout<<"Offline cohort prefix: "<<set.container_prefix.string()<<'\n';
-    } else if(argc!=1) return fail("Usage: native_audio_cohort_selftest [stock-music stock-bgmlist stock-scoreinfo stock-pianoscore mabf cache-root]");
+    } else if(argc!=1) return fail("Usage: native_audio_cohort_selftest [[--stock-1004] stock-music stock-bgmlist stock-scoreinfo stock-pianoscore mabf cache-root]");
     std::cout<<"native_audio_cohort_selftest passed\n"; return 0;
 }

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 namespace ff7r::piano::game::runtime_layouts {
 
@@ -93,10 +94,39 @@ struct PianoMusicList {
     static constexpr uintptr_t count = 0x420;
     static constexpr uintptr_t capacity = 0x424;
     static constexpr uintptr_t selection_map = 0x428;
+    static constexpr uintptr_t saved_selection_name = 0x478;
     static constexpr uintptr_t selected_index = 0x480;
     static constexpr uintptr_t visible_count = 0x570;
     static constexpr int32_t vanilla_count = 5;
     static constexpr int32_t maximum_count = 128;
+};
+
+// RebirthBuild1004RvaEvidence-20260808: SelectedEntryGetterActivationReturn.
+struct PianoActivationGetterFrame {
+    static constexpr std::size_t output_from_return_slot(std::string_view build) noexcept
+    {
+        // The activation caller uses LEA RDX,[RSP+48h/28h] before CALL pushes the return address.
+        if (build == "ff7rebirth-steam-win64-68fd6fde") return 0x48 + 8;
+        if (build == "ff7rebirth-steam-win64-6a16ced2") return 0x28 + 8;
+        return 0;
+    }
+
+    static constexpr bool matches_local_output(
+        std::size_t offset, uintptr_t return_slot, uintptr_t output, uintptr_t native_result) noexcept
+    {
+        return offset && return_slot && output > return_slot
+            && output - return_slot == offset && native_result == output;
+    }
+};
+
+// PianoMenuSessionEvidence-20260729: controller-embedded list, not its widget.
+struct PianoListSession {
+    static constexpr std::ptrdiff_t controller_list_member = 0x6f0;
+    static constexpr uintptr_t widget_weak_handle = 0x7a0;
+    static constexpr uintptr_t active_word = 0x7d8;
+    static constexpr uint16_t inactive = 0x0000;
+    static constexpr uint16_t open = 0x0001;
+    static constexpr uint16_t closing = 0x0100;
 };
 
 struct PianoScoreWrapper {
@@ -104,6 +134,34 @@ struct PianoScoreWrapper {
     static constexpr uintptr_t copied_row_count = 0x88;
     static constexpr uintptr_t final_group_index = 0xa3;
     static constexpr uintptr_t controller_capture = 0x118;
+};
+
+// Playable513ReserveEvidence: byte offsets in the native event vector element.
+struct PianoScoreEvent {
+    static constexpr std::size_t size = 0x90;
+    static constexpr std::size_t chart = 0x00;
+    static constexpr std::size_t side = 0x08;
+    static constexpr std::size_t group_root = 0x10;
+    static constexpr std::size_t group_chain = 0x18;
+    static constexpr std::size_t ordinal = 0x20;
+    static constexpr std::size_t time = 0x24;
+    static constexpr std::size_t strength = 0x28;
+    static constexpr std::size_t name = 0x2c;
+    static constexpr std::size_t ignore_sound_data = 0x38;
+    static constexpr std::size_t ignore_sound_count = 0x40;
+    static constexpr std::size_t ignore_sound_capacity = 0x44;
+    static constexpr std::size_t assignment = 0x48;
+    static constexpr std::size_t assignment_path = 0x49;
+    static constexpr std::size_t result_state = 0x4a;
+    static constexpr std::size_t note_type = 0x4b;
+    static constexpr std::size_t dot_type = 0x4c;
+    static constexpr std::size_t activation_state = 0x4d;
+    static constexpr std::size_t callback = 0x50;
+    static constexpr std::size_t callback_zero_word = 0x60;
+    static constexpr std::size_t callback_vtable = 0x70;
+    static constexpr std::size_t callback_chart = 0x78;
+    static constexpr std::size_t callback_size = size - callback;
+    static constexpr uint8_t unresolved_assignment = 8;
 };
 
 struct PianoChartController {
@@ -158,6 +216,23 @@ struct PianoAudioOwner {
     static constexpr uintptr_t state = 0x08;
     static constexpr uintptr_t packed_key = 0x50;
     static constexpr uintptr_t request_index = 0x7c;
+};
+
+// ChartAdmissionReadOnlyLookupEvidence-20261023. Provider getter slots are
+// build-specific and remain in NativeAudioLayout.
+struct DataObjectProvider {
+    static constexpr uintptr_t backing_mode = 0x54;
+    static constexpr uintptr_t backing = 0x58;
+    static constexpr uint8_t serialized_mode = 1;
+};
+
+struct DataObjectBacking {
+    static constexpr uintptr_t serialized_interface = 0x58;
+};
+
+struct DataObjectLookupInterface {
+    static constexpr uintptr_t readiness_slot = 0x08;
+    static constexpr uintptr_t lookup_slot = 0x28;
 };
 
 } // namespace ff7r::piano::game::runtime_layouts

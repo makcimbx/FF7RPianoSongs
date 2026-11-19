@@ -1,5 +1,7 @@
 #pragma once
 
+#include "game/runtime_layouts.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -14,6 +16,8 @@ std::uintptr_t dispatch_native_lookup(Access& access,std::uintptr_t manager,std:
     std::uint64_t* association,unsigned char* mode,std::uintptr_t gu_chunks,std::uintptr_t gu_count,
     std::size_t backing_slot,std::size_t serialized_interface_slot) {
     using Address=std::uintptr_t;
+    using runtime_layouts::DataObjectLookupInterface;
+    using runtime_layouts::DataObjectProvider;
     const auto resolve=[&](Address entry)->Address {
         const auto serial=access.template load<std::int32_t>(entry+4);
         if(!serial)return 0;
@@ -34,20 +38,21 @@ std::uintptr_t dispatch_native_lookup(Access& access,std::uintptr_t manager,std:
             const auto provider=resolve(entry);
             // Native invalid weak entries deliberately fault here, never skip.
             const auto vtable=access.template load<Address>(provider);
-            const auto slot=access.template load<unsigned char>(provider+0x54) ? serialized_interface_slot : backing_slot;
+            const auto slot=access.template load<unsigned char>(provider+DataObjectProvider::backing_mode)
+                ? serialized_interface_slot : backing_slot;
             const auto getter=access.template load<Address>(vtable+slot);
             const auto receiver=access.getter(getter,provider);
-            const auto ready=access.template load<Address>(access.template load<Address>(receiver)+8);
+            const auto ready=access.template load<Address>(access.template load<Address>(receiver)+DataObjectLookupInterface::readiness_slot);
             if(!access.ready(ready,receiver))continue;
             // Readiness may replace the vtable. Keep receiver, reload target.
-            const auto lookup=access.template load<Address>(access.template load<Address>(receiver)+0x28);
+            const auto lookup=access.template load<Address>(access.template load<Address>(receiver)+DataObjectLookupInterface::lookup_slot);
             const auto row=access.lookup(lookup,receiver,key);
             if(!row)continue;
             const auto offset=static_cast<Address>(index)*16;
             *association=access.template load<std::uint64_t>(access.template load<Address>(header)+offset+8);
             // Hit-time weak resolution uses a NEW data load after output write.
             const auto hit_provider=resolve(access.template load<Address>(header)+offset);
-            *mode=access.template load<unsigned char>(hit_provider+0x54);
+            *mode=access.template load<unsigned char>(hit_provider+DataObjectProvider::backing_mode);
             return row;
         }
     }

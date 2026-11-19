@@ -132,6 +132,53 @@ struct Functions {
 };
 using Object = detail::ObjectSnapshot;
 using Target = detail::TargetState;
+
+// Native widget/slot fields (MenuThemeContainment, MenuThemeClasses and
+// MenuThemeCursor evidence). Same numeric offsets need not describe the same field.
+struct UserWidget { static constexpr Address widget_tree = 0x1d8; };
+struct WidgetTree { static constexpr Address root_widget = 0x28; };
+struct Widget { static constexpr Address slot = 0x28; };
+struct PanelSlot { static constexpr Address parent = 0x28, content = 0x30; };
+struct PanelWidget {
+    static constexpr Address slots = 0x108, slot_count = 0x110, slot_capacity = 0x114;
+};
+struct PianoMusicListWidget {
+    static constexpr Address song_list_weak = 0x3c8, speed_list_weak = 0x410;
+};
+struct EndVirtualScrollBox {
+    static constexpr Address content_widgets = 0x8d8, cursor_widget = 0x8f8;
+};
+struct EndListBox { static constexpr Address content_widgets = 0x188; };
+
+// MenuThemeStyles-20261021 and MenuThemeNative-OlderBuild-20261020.
+struct SlateBrush {
+    static constexpr std::size_t size = kOriginalCaptureByteCharge;
+    static constexpr Address tint = 0x20;
+    static constexpr std::size_t tint_size = 0x28;
+    static constexpr Address resource = 0x48, uv = 0x68, cache = 0x70, cache_owner = 0x78;
+};
+struct EndImage {
+    static constexpr Address brush = 0x108, slate = 0x1d8, slate_owner = 0x1e0;
+    static constexpr Address brush_resource = brush + SlateBrush::resource;
+};
+struct EndPieImage { static constexpr Address brush = 0x108, slate = 0x1f0; };
+struct EndTiledImage { static constexpr Address brush = 0x110, slate = 0x208; };
+struct EndImageSet {
+    static constexpr Address images = 0x108, image_count = 0x110, image_capacity = 0x114;
+    static constexpr Address selected_index = 0x13c, slate = 0x160;
+};
+struct EndImageSetEntry {
+    static constexpr Address size = 0xb0, geometry = 0x88;
+    static constexpr std::size_t geometry_size = size - geometry;
+};
+struct ButtonStyle {
+    static constexpr std::size_t size = 0x278;
+    static constexpr Address normal = 0x08, hovered = 0x90, pressed = 0x118, disabled = 0x1a0;
+};
+struct EndButton { static constexpr Address style = 0x120, slate = 0x448; };
+using BrushFacts = std::array<std::uint8_t, SlateBrush::size>;
+using ImageSetEntryGeometry = std::array<std::uint8_t, EndImageSetEntry::geometry_size>;
+
 enum class RecordKind { Prepared, Original, Composed, Tinted };
 // Canonical native EndImage size in both profiles; each retained record owns one.
 constexpr std::uint64_t kRootedCarrierBytes = 0x1e8;
@@ -143,7 +190,7 @@ struct Record {
     // their Outer is unrestricted. Prepared/Composed resources stay transient.
     Object package{}, holder{}, texture{};
     Object package_class{}, holder_class{}, texture_class{};
-    alignas(8) std::array<std::uint8_t, kOriginalCaptureByteCharge> local_brush{};
+    alignas(8) BrushFacts local_brush{};
     bool bound = false, published = false;
     DWORD creation_thread = 0;
     std::uint32_t width = 0, height = 0;
@@ -292,7 +339,7 @@ struct State {
     Names carrier_names{}; // FName values only; package/class/owner facts are always fresh.
     std::optional<std::deque<RowBinding, LedgerAllocator<RowBinding>>> rows;
     std::uint64_t row_nonce = 0;
-    alignas(8) std::array<std::uint8_t, 0x278> style_scratch{};
+    alignas(8) std::array<std::uint8_t, ButtonStyle::size> style_scratch{};
     bool style_charged = false;
 };
 State state; // Native roots are deliberately never released, including at C++ destruction.
@@ -505,9 +552,9 @@ bool graph_valid_sequence(const Functions& f, const objects::UObjectIdentityAcce
         && record.holder.outer == record.package.pointer
         && (record.kind == RecordKind::Original || record.kind == RecordKind::Tinted
             || record.texture.outer == record.package.pointer)
-        && read(record.holder.pointer, 0x1d8, slate) && !slate
-        && read(record.holder.pointer, 0x1e0, slate_owner) && !slate_owner
-        && read(record.holder.pointer, 0x150, resource) && resource == record.texture.pointer;
+        && read(record.holder.pointer, EndImage::slate, slate) && !slate
+        && read(record.holder.pointer, EndImage::slate_owner, slate_owner) && !slate_owner
+        && read(record.holder.pointer, EndImage::brush_resource, resource) && resource == record.texture.pointer;
 }
 bool graph_valid(const Functions& f, const objects::UObjectIdentityAccess& access,
     const Record& record) noexcept
@@ -613,9 +660,9 @@ Result sequence(Work& w) noexcept
     void* slate = nullptr;
     void* owner = nullptr;
     void* resource = nullptr;
-    if (!read(r.holder.pointer, 0x1d8, slate) || slate
-        || !read(r.holder.pointer, 0x1e0, owner) || owner
-        || !read(r.holder.pointer, 0x150, resource) || resource)
+    if (!read(r.holder.pointer, EndImage::slate, slate) || slate
+        || !read(r.holder.pointer, EndImage::slate_owner, owner) || owner
+        || !read(r.holder.pointer, EndImage::brush_resource, resource) || resource)
         return {Outcome::Holder, w.result.stage};
     w.result.stage = "construct_local_brush";
     auto* brush = r.local_brush.data();
@@ -623,10 +670,10 @@ Result sequence(Work& w) noexcept
     w.brush_constructed = true;
     if (constructed != brush) return {Outcome::Holder, w.result.stage};
     std::uint8_t uv = 1;
-    if (!read(brush, 0x48, resource) || resource
-        || !read(brush, 0x68, uv) || uv
-        || !read(brush, 0x70, slate) || slate
-        || !read(brush, 0x78, owner) || owner)
+    if (!read(brush, SlateBrush::resource, resource) || resource
+        || !read(brush, SlateBrush::uv, uv) || uv
+        || !read(brush, SlateBrush::cache, slate) || slate
+        || !read(brush, SlateBrush::cache_owner, owner) || owner)
         return {Outcome::Holder, w.result.stage};
     w.result.stage = "create_and_bind_texture";
     if (!admitted(*w.authority) || !package_same(f, w.access, r.package)
@@ -813,11 +860,11 @@ bool owner_valid(const objects::UObjectIdentityAccess& access,
                 && t.receiver.live.internal_index == a.session.widget_identity.internal_index
                 && t.receiver.live.serial_number == a.session.widget_identity.serial_number)
         && unchanged(access, t.receiver)
-        && read(t.receiver.pointer, 0x1d8, tree) && tree == t.tree.pointer
+        && read(t.receiver.pointer, UserWidget::widget_tree, tree) && tree == t.tree.pointer
         && unchanged(access, t.tree) && t.tree.outer == t.receiver.pointer
         && unchanged(access, t.tree_class)
         && (!t.generic || generic_owner_type_valid(access, t))
-        && read(t.tree.pointer, 0x28, root) && root == t.root.pointer
+        && read(t.tree.pointer, WidgetTree::root_widget, root) && root == t.root.pointer
         && unchanged(access, t.root);
     // Zero tree/root serials are diagnostic membership only. These current
     // strong forward edges explain their retention, NOT target containment.
@@ -936,12 +983,12 @@ bool edge_unchanged(const objects::UObjectIdentityAccess& access, const Containm
     std::int32_t count = 0, capacity = 0;
     return unchanged(access, e.child) && unchanged(access, e.slot) && unchanged(access, e.parent)
         && ancestry_unchanged(access, e.slot_type) && ancestry_unchanged(access, e.parent_type)
-        && read(e.child.pointer, 0x28, slot) && slot == e.slot.pointer
-        && read(e.slot.pointer, 0x28, parent) && parent == e.parent.pointer
-        && read(e.slot.pointer, 0x30, content) && content == e.child.pointer
-        && read(e.parent.pointer, 0x108, slots) && slots == e.slots
-        && read(e.parent.pointer, 0x110, count) && count == e.count
-        && read(e.parent.pointer, 0x114, capacity) && capacity == e.capacity
+        && read(e.child.pointer, Widget::slot, slot) && slot == e.slot.pointer
+        && read(e.slot.pointer, PanelSlot::parent, parent) && parent == e.parent.pointer
+        && read(e.slot.pointer, PanelSlot::content, content) && content == e.child.pointer
+        && read(e.parent.pointer, PanelWidget::slots, slots) && slots == e.slots
+        && read(e.parent.pointer, PanelWidget::slot_count, count) && count == e.count
+        && read(e.parent.pointer, PanelWidget::slot_capacity, capacity) && capacity == e.capacity
         && read(slots, static_cast<Address>(e.index) * sizeof(void*), entry) && entry == slot;
 }
 
@@ -971,14 +1018,14 @@ bool target_valid_sequence(const objects::UObjectIdentityAccess& access,
         void* slot = nullptr;
         void* parent = nullptr;
         void* content = nullptr;
-        if (!unchanged(access, child) || !read(child.pointer, 0x28, slot)
+        if (!unchanged(access, child) || !read(child.pointer, Widget::slot, slot)
             || !capture(access, slot, e.slot) || !ancestry(access, e.slot, bases.slot, bases, e.slot_type)
-            || !read(slot, 0x28, parent) || !capture(access, parent, e.parent)
+            || !read(slot, PanelSlot::parent, parent) || !capture(access, parent, e.parent)
             || !ancestry(access, e.parent, bases.panel, bases, e.parent_type)
-            || !read(slot, 0x30, content) || content != child.pointer
-            || !read(parent, 0x108, e.slots) || !e.slots
-            || !read(parent, 0x110, e.count) || e.count <= 0 || e.count > kPanelSlots
-            || !read(parent, 0x114, e.capacity) || e.capacity < e.count || e.capacity > kPanelSlots
+            || !read(slot, PanelSlot::content, content) || content != child.pointer
+            || !read(parent, PanelWidget::slots, e.slots) || !e.slots
+            || !read(parent, PanelWidget::slot_count, e.count) || e.count <= 0 || e.count > kPanelSlots
+            || !read(parent, PanelWidget::slot_capacity, e.capacity) || e.capacity < e.count || e.capacity > kPanelSlots
             || reinterpret_cast<Address>(e.slots) > std::numeric_limits<Address>::max()
                 - static_cast<Address>(e.count) * sizeof(void*)) return false;
         for (std::int32_t i = 0; i < e.count; ++i) {
@@ -1146,7 +1193,7 @@ bool same_array(void* owner, Address offset, const PointerArray& expected) noexc
 }
 bool current_list(const objects::UObjectIdentityAccess& access, void* main, RowKind kind, Object& out) noexcept
 {
-    const Address offset = kind == RowKind::Song ? 0x3c8 : 0x410;
+    const Address offset = kind == RowKind::Song ? PianoMusicListWidget::song_list_weak : PianoMusicListWidget::speed_list_weak;
     objects::UObjectLiveHandle weak{};
     Address pointer = 0;
     return read(main, offset, weak.internal_index) && read(main, offset + 4, weak.serial_number)
@@ -1161,12 +1208,12 @@ bool speed_tree(const objects::UObjectIdentityAccess& access, const Object& row,
 {
     void* pointer = nullptr; void* again = nullptr;
     return row.live.serial_number > 0 && unchanged(access, row)
-        && read(row.pointer, 0x1d8, pointer) && capture(access, pointer, tree)
+        && read(row.pointer, UserWidget::widget_tree, pointer) && capture(access, pointer, tree)
         && tree.outer == row.pointer && typed_object(access, tree, NativeClass::WidgetTree)
-        && read(tree.pointer, 0x28, pointer) && capture(access, pointer, root)
+        && read(tree.pointer, WidgetTree::root_widget, pointer) && capture(access, pointer, root)
         && root.outer == tree.pointer && unchanged(access, row) && unchanged(access, tree)
-        && unchanged(access, root) && read(row.pointer, 0x1d8, again) && again == tree.pointer
-        && read(tree.pointer, 0x28, again) && again == root.pointer;
+        && unchanged(access, root) && read(row.pointer, UserWidget::widget_tree, again) && again == tree.pointer
+        && read(tree.pointer, WidgetTree::root_widget, again) && again == root.pointer;
 }
 bool cursor_owner_valid(const objects::UObjectIdentityAccess& access, const CallbackAuthority& a,
     const Target& t, bool facts_only) noexcept
@@ -1182,11 +1229,11 @@ bool cursor_owner_valid(const objects::UObjectIdentityAccess& access, const Call
         && list.pointer == t.cursor_list.pointer && unchanged(access, t.cursor_list)
         && list.live.internal_index == t.cursor_list.live.internal_index
         && list.live.serial_number == t.cursor_list.live.serial_number
-        && read(list.pointer, 0x8f8, cursor) && cursor == t.receiver.pointer
+        && read(list.pointer, EndVirtualScrollBox::cursor_widget, cursor) && cursor == t.receiver.pointer
         && t.receiver.live.serial_number > 0 && unchanged(access, t.receiver)
         && current_list(access, main.pointer, RowKind::Song, again)
         && again.pointer == list.pointer && unchanged(access, list)
-        && read(list.pointer, 0x8f8, reread) && reread == cursor
+        && read(list.pointer, EndVirtualScrollBox::cursor_widget, reread) && reread == cursor
         && unchanged(access, main) && authority_current(a, facts_only);
 }
 bool row_member(const objects::UObjectIdentityAccess& access, const RowBinding& r) noexcept
@@ -1194,7 +1241,7 @@ bool row_member(const objects::UObjectIdentityAccess& access, const RowBinding& 
     perf::Stamp stamp{}; perf::begin(stamp, perf::Metric::RowMembership);
     perf::count(perf::Counter::RowMembershipChecks);
     const bool result = [&]() noexcept {
-    const Address offset = r.association.kind == RowKind::Song ? 0x8d8 : 0x188;
+    const Address offset = r.association.kind == RowKind::Song ? EndVirtualScrollBox::content_widgets : EndListBox::content_widgets;
     PointerArray array{}; std::int32_t position = -1;
     if (!pointer_array(r.list.pointer, offset, array)) return false;
     const auto speed_valid = [&]() noexcept {
@@ -1249,7 +1296,7 @@ void* target_brush(const Target& t) noexcept
 {
     if (!t.brush_selected) return nullptr;
     if (t.generic && t.kind == SubjectKind::ImageSet)
-        return reinterpret_cast<void*>(t.images + static_cast<Address>(t.image_index) * 0xb0);
+        return reinterpret_cast<void*>(t.images + static_cast<Address>(t.image_index) * EndImageSetEntry::size);
     return static_cast<std::uint8_t*>(t.target.pointer) + t.brush_offset;
 }
 bool member_valid(const Target& t) noexcept
@@ -1260,11 +1307,11 @@ bool member_valid(const Target& t) noexcept
     if (t.kind != SubjectKind::Image && !state.generic.styles) return false;
     if (t.kind != SubjectKind::ImageSet) return target_brush(t) != nullptr;
     void* data = nullptr; std::int32_t count = 0, capacity = 0;
-    return read(t.target.pointer, 0x108, data) && reinterpret_cast<Address>(data) == t.images
-        && read(t.target.pointer, 0x110, count) && count == t.image_count
-        && read(t.target.pointer, 0x114, capacity) && capacity == t.image_capacity
+    return read(t.target.pointer, EndImageSet::images, data) && reinterpret_cast<Address>(data) == t.images
+        && read(t.target.pointer, EndImageSet::image_count, count) && count == t.image_count
+        && read(t.target.pointer, EndImageSet::image_capacity, capacity) && capacity == t.image_capacity
         && t.image_index >= 0 && t.image_index < count && capacity >= count && capacity <= 256
-        && t.images && t.images <= std::numeric_limits<Address>::max() - static_cast<Address>(capacity) * 0xb0;
+        && t.images && t.images <= std::numeric_limits<Address>::max() - static_cast<Address>(capacity) * EndImageSetEntry::size;
     }();
     perf::finish(stamp, result);
     return result;
@@ -1273,20 +1320,20 @@ bool select_member(Target& t, BrushSelection selection) noexcept
 {
     t.brush_selected = true;
     switch (t.kind) {
-    case SubjectKind::Image: t.brush_offset = 0x108; return selection.index == 0;
-    case SubjectKind::PieImage: t.brush_offset = 0x108; return selection.index == 0 && state.generic.styles;
-    case SubjectKind::TiledImage: t.brush_offset = 0x110; return selection.index == 0 && state.generic.styles;
+    case SubjectKind::Image: t.brush_offset = EndImage::brush; return selection.index == 0;
+    case SubjectKind::PieImage: t.brush_offset = EndPieImage::brush; return selection.index == 0 && state.generic.styles;
+    case SubjectKind::TiledImage: t.brush_offset = EndTiledImage::brush; return selection.index == 0 && state.generic.styles;
     case SubjectKind::Button: {
-        constexpr Address offsets[] = {0x128, 0x1b0, 0x238, 0x2c0};
+        constexpr Address offsets[] = {ButtonStyle::normal, ButtonStyle::hovered, ButtonStyle::pressed, ButtonStyle::disabled};
         const auto i = static_cast<unsigned>(selection.button);
         if (i >= 4 || selection.index != 0 || !state.generic.styles) return false;
-        t.brush_offset = offsets[i]; return true;
+        t.brush_offset = EndButton::style + offsets[i]; return true;
     }
     case SubjectKind::ImageSet: {
         void* data = nullptr;
-        if (!state.generic.styles || !read(t.target.pointer, 0x108, data)
-            || !read(t.target.pointer, 0x110, t.image_count)
-            || !read(t.target.pointer, 0x114, t.image_capacity)) return false;
+        if (!state.generic.styles || !read(t.target.pointer, EndImageSet::images, data)
+            || !read(t.target.pointer, EndImageSet::image_count, t.image_count)
+            || !read(t.target.pointer, EndImageSet::image_capacity, t.image_capacity)) return false;
         t.images = reinterpret_cast<Address>(data); t.image_index = selection.index;
         return member_valid(t);
     }
@@ -1294,14 +1341,13 @@ bool select_member(Target& t, BrushSelection selection) noexcept
     }
 }
 
-using BrushFacts = std::array<std::uint8_t, 0x88>;
 bool read_brush(const void* brush, BrushFacts& out) noexcept
 {
     return brush && core::safe_copy_bytes(brush, out.data(), out.size());
 }
 bool brush_facts(void* owner, BrushFacts& out) noexcept
 {
-    return core::safe_copy_bytes(static_cast<std::uint8_t*>(owner) + 0x108, out.data(), out.size());
+    return core::safe_copy_bytes(static_cast<std::uint8_t*>(owner) + EndImage::brush, out.data(), out.size());
 }
 bool same_object(const Object& a, const Object& b) noexcept
 {
@@ -1448,25 +1494,25 @@ struct MemberFrame {
     void* slate = nullptr;
     void* original_resource = nullptr;
     std::size_t properties_size = 0;
-    std::array<std::uint8_t, 0x278> properties{};
-    std::array<std::uint8_t, 0x28> entry_geometry{};
+    std::array<std::uint8_t, ButtonStyle::size> properties{};
+    ImageSetEntryGeometry entry_geometry{};
 };
 bool member_frame(const Target& t, MemberFrame& f) noexcept
 {
     switch (t.kind) {
-    case SubjectKind::Image: f.slate_offset = 0x1d8; break;
-    case SubjectKind::PieImage: f.slate_offset = 0x1f0; f.properties_offset = 0x190; f.properties_size = 0x60; break;
-    case SubjectKind::TiledImage: f.slate_offset = 0x208; f.properties_offset = 0x198; f.properties_size = 0x70; break;
-    case SubjectKind::ImageSet: f.slate_offset = 0x160; f.properties_offset = 0x13c; f.properties_size = 0x24; break;
-    case SubjectKind::Button: f.slate_offset = 0x448; f.properties_offset = 0x120; f.properties_size = 0x278; break;
+    case SubjectKind::Image: f.slate_offset = EndImage::slate; break;
+    case SubjectKind::PieImage: f.slate_offset = EndPieImage::slate; f.properties_offset = 0x190; f.properties_size = 0x60; break;
+    case SubjectKind::TiledImage: f.slate_offset = EndTiledImage::slate; f.properties_offset = 0x198; f.properties_size = 0x70; break;
+    case SubjectKind::ImageSet: f.slate_offset = EndImageSet::slate; f.properties_offset = EndImageSet::selected_index; f.properties_size = 0x24; break;
+    case SubjectKind::Button: f.slate_offset = EndButton::slate; f.properties_offset = EndButton::style; f.properties_size = ButtonStyle::size; break;
     default: return false;
     }
     return member_valid(t) && read(t.target.pointer, f.slate_offset, f.slate)
-        && read(target_brush(t), 0x48, f.original_resource)
+        && read(target_brush(t), SlateBrush::resource, f.original_resource)
         && (!f.properties_size || core::safe_copy_bytes(static_cast<std::uint8_t*>(t.target.pointer)
             + f.properties_offset, f.properties.data(), f.properties_size))
         && (t.kind != SubjectKind::ImageSet || core::safe_copy_bytes(
-            static_cast<std::uint8_t*>(target_brush(t)) + 0x88, f.entry_geometry.data(), f.entry_geometry.size()));
+            static_cast<std::uint8_t*>(target_brush(t)) + EndImageSetEntry::geometry, f.entry_geometry.data(), f.entry_geometry.size()));
 }
 bool member_frame_valid(const TargetWork& w, const MemberFrame& f, bool assigned) noexcept
 {
@@ -1478,7 +1524,8 @@ bool member_frame_valid(const TargetWork& w, const MemberFrame& f, bool assigned
         || now.entry_geometry != f.entry_geometry) return false;
     for (std::size_t i = 0; i < f.properties_size; ++i) {
         if (w.target.kind == SubjectKind::Button && assigned
-            && i >= w.target.brush_offset - 0x120 && i < w.target.brush_offset - 0x120 + 0x88) continue;
+            && i >= w.target.brush_offset - EndButton::style
+            && i < w.target.brush_offset - EndButton::style + SlateBrush::size) continue;
         if (now.properties[i] != f.properties[i]) return false;
     }
     return true;
@@ -1492,7 +1539,7 @@ Result apply_generic(TargetWork& w) noexcept
     MemberFrame before{};
     if (!member_frame(t, before) || (!w.prevalidated && !member_frame_valid(w, before, false)))
         return {Outcome::Identity, "brush_member_frame"};
-    auto* source = static_cast<std::uint8_t*>(w.record->holder.pointer) + 0x108;
+    auto* source = static_cast<std::uint8_t*>(w.record->holder.pointer) + EndImage::brush;
     bool assigned = false;
     const auto check = [&]() noexcept { return member_frame_valid(w, before, assigned); };
     if (t.kind == SubjectKind::Image) {
@@ -1516,11 +1563,11 @@ Result apply_generic(TargetWork& w) noexcept
         if (constructed != style || !check()) return {Outcome::NativeFault, w.stage};
         w.stage = "button_style_copy";
         w.native_inflight = true;
-        const auto copied = measured_native(perf::Metric::NativeStyleCopy, g.style_assign, style, static_cast<std::uint8_t*>(t.target.pointer) + 0x120);
+        const auto copied = measured_native(perf::Metric::NativeStyleCopy, g.style_assign, style, static_cast<std::uint8_t*>(t.target.pointer) + EndButton::style);
         w.native_inflight = false;
         if (copied != style || !check()) return {Outcome::NativeFault, w.stage};
         w.stage = "button_style_replace_brush";
-        auto* destination = static_cast<std::uint8_t*>(style) + t.brush_offset - 0x120;
+        auto* destination = static_cast<std::uint8_t*>(style) + t.brush_offset - EndButton::style;
         w.native_inflight = true;
         const auto brush = measured_native(perf::Metric::NativeBrushAssign, g.brush_assign, destination, source);
         w.native_inflight = false;
@@ -1580,7 +1627,7 @@ struct BatchWork {
     std::size_t count = 0;
     MemberFrame before{};
     std::array<BrushFacts, kSubjectTraversalLimit> brushes{};
-    std::array<std::array<std::uint8_t, 0x28>, kSubjectTraversalLimit> geometry{};
+    std::array<ImageSetEntryGeometry, kSubjectTraversalLimit> geometry{};
     ApplyProgress progress{};
     const char* stage = "batch_begin";
 };
@@ -1588,7 +1635,7 @@ void* batch_brush(const BatchWork& w, const BatchMember& m) noexcept
 {
     return w.target.kind == SubjectKind::Button
         ? static_cast<std::uint8_t*>(w.target.target.pointer) + m.offset
-        : reinterpret_cast<void*>(w.target.images + static_cast<Address>(m.index) * 0xb0);
+        : reinterpret_cast<void*>(w.target.images + static_cast<Address>(m.index) * EndImageSetEntry::size);
 }
 bool batch_check(const BatchWork& w) noexcept
 {
@@ -1601,22 +1648,23 @@ bool batch_check(const BatchWork& w) noexcept
         for (std::size_t j = 0; j < i; ++j) if (w.members[j].source == m.source) duplicate = true;
         if (!duplicate && !graph_valid(state.functions, w.access, *m.source)) return false;
         void* resource = nullptr;
-        if (!read(batch_brush(w, m), 0x48, resource)
+        if (!read(batch_brush(w, m), SlateBrush::resource, resource)
             || resource != (m.written ? m.source->texture.pointer : m.original_resource)) return false;
     }
     for (std::size_t i = 0; i < now.properties_size; ++i) {
         bool changed = false;
         if (w.target.kind == SubjectKind::Button) for (std::size_t j = 0; j < w.count; ++j) {
             const auto& m = w.members[j];
-            if (m.written && i >= m.offset - 0x120 && i < m.offset - 0x120 + 0x88) changed = true;
+            if (m.written && i >= m.offset - EndButton::style
+                && i < m.offset - EndButton::style + SlateBrush::size) changed = true;
         }
         if (!changed && now.properties[i] != w.before.properties[i]) return false;
     }
     if (w.target.kind == SubjectKind::ImageSet) {
         for (std::int32_t i = 0; i < w.target.image_count; ++i) {
-            const auto* brush = reinterpret_cast<const std::uint8_t*>(w.target.images + static_cast<Address>(i) * 0xb0);
-            std::array<std::uint8_t, 0x28> geometry{};
-            if (!core::safe_copy_bytes(brush + 0x88, geometry.data(), geometry.size())
+            const auto* brush = reinterpret_cast<const std::uint8_t*>(w.target.images + static_cast<Address>(i) * EndImageSetEntry::size);
+            ImageSetEntryGeometry geometry{};
+            if (!core::safe_copy_bytes(brush + EndImageSetEntry::geometry, geometry.data(), geometry.size())
                 || geometry != w.geometry[static_cast<std::size_t>(i)]) return false;
             bool changed = false;
             for (std::size_t j = 0; j < w.count; ++j)
@@ -1645,13 +1693,13 @@ Result batch_sequence(BatchWork& w) noexcept
         const auto constructed = measured_native(perf::Metric::NativeStyleConstruct, g.style_construct, style);
         if (constructed != style || !batch_check(w)) return {Outcome::NativeFault, w.stage};
         w.stage = "batch_style_copy";
-        const auto copied = measured_native(perf::Metric::NativeStyleCopy, g.style_assign, style, static_cast<std::uint8_t*>(w.target.target.pointer) + 0x120);
+        const auto copied = measured_native(perf::Metric::NativeStyleCopy, g.style_assign, style, static_cast<std::uint8_t*>(w.target.target.pointer) + EndButton::style);
         if (copied != style || !batch_check(w)) return {Outcome::NativeFault, w.stage};
         for (std::size_t i = 0; i < w.count; ++i) {
             const auto& m = w.members[i];
-            auto* destination = static_cast<std::uint8_t*>(style) + m.offset - 0x120;
+            auto* destination = static_cast<std::uint8_t*>(style) + m.offset - EndButton::style;
             w.stage = "batch_style_member";
-            const auto assigned = measured_native(perf::Metric::NativeBrushAssign, g.brush_assign, destination, static_cast<std::uint8_t*>(m.source->holder.pointer) + 0x108);
+            const auto assigned = measured_native(perf::Metric::NativeBrushAssign, g.brush_assign, destination, static_cast<std::uint8_t*>(m.source->holder.pointer) + EndImage::brush);
             if (assigned != destination || !batch_check(w)) return {Outcome::NativeFault, w.stage};
         }
         w.stage = "batch_set_style";
@@ -1670,7 +1718,7 @@ Result batch_sequence(BatchWork& w) noexcept
             void* destination = batch_brush(w, m);
             w.stage = "batch_image_member";
             ++w.progress.attempted_members;
-            const auto assigned = measured_native(perf::Metric::NativeBrushAssign, g.brush_assign, destination, static_cast<std::uint8_t*>(m.source->holder.pointer) + 0x108);
+            const auto assigned = measured_native(perf::Metric::NativeBrushAssign, g.brush_assign, destination, static_cast<std::uint8_t*>(m.source->holder.pointer) + EndImage::brush);
             m.written = true;
             if (assigned != destination || !batch_check(w)) return {Outcome::NativeFault, w.stage};
             ++w.progress.completed_members;
@@ -1708,9 +1756,9 @@ Result target_sequence(TargetWork& w) noexcept
             || t.receiver.live.serial_number <= 0
             || t.receiver.live.internal_index != a.session.widget_identity.internal_index
             || t.receiver.live.serial_number != a.session.widget_identity.serial_number
-            || !read(t.receiver.pointer, 0x1d8, tree) || !capture(w.access, tree, t.tree)
+            || !read(t.receiver.pointer, UserWidget::widget_tree, tree) || !capture(w.access, tree, t.tree)
             || !capture(w.access, t.tree.klass, t.tree_class)
-            || !read(tree, 0x28, root) || !capture(w.access, root, t.root)
+            || !read(tree, WidgetTree::root_widget, root) || !capture(w.access, root, t.root)
             || !owner_valid(w.access, a, t)) return {Outcome::Identity, w.stage};
         std::uint64_t tree_name = 0, class_name = 0, image_name = 0, leaf_name = 0;
         const wchar_t* texts[] = {L"WidgetTree", L"Class", L"EndImage", w.leaf.data(),
@@ -1790,13 +1838,13 @@ Result target_sequence(TargetWork& w) noexcept
         void* resource = nullptr;
         if (!capture(w.access, r.holder.pointer, r.holder) || !rooted(w.access, r.holder)
             || r.holder.klass != r.holder_class.pointer || r.holder.outer != r.package.pointer
-            || !read(r.holder.pointer, 0x1d8, slate) || slate
-            || !read(r.holder.pointer, 0x1e0, slate_owner) || slate_owner
-            || !read(r.holder.pointer, 0x150, resource) || resource)
+            || !read(r.holder.pointer, EndImage::slate, slate) || slate
+            || !read(r.holder.pointer, EndImage::slate_owner, slate_owner) || slate_owner
+            || !read(r.holder.pointer, EndImage::brush_resource, resource) || resource)
             return {Outcome::Holder, w.stage};
         w.stage = "original_source_resource";
         if (!sources_valid(w)) return {Outcome::NativeFault, w.stage};
-        void* source_brush = w.source ? static_cast<std::uint8_t*>(w.source->holder.pointer) + 0x108 : target_brush(t);
+        void* source_brush = w.source ? static_cast<std::uint8_t*>(w.source->holder.pointer) + EndImage::brush : target_brush(t);
         BrushFacts now{};
         if (!read_brush(source_brush, now) || now != w.source_facts
             || !resource_valid(w.access, w.source_resource, w.source_class))
@@ -1816,9 +1864,9 @@ Result target_sequence(TargetWork& w) noexcept
             // This is an owned native brush in a rooted holder, not copied C++
             // shared-owner storage. Invalidate UV; let the native setter release
             // cached owners, even if the original already used this texture.
-            auto* brush = static_cast<std::uint8_t*>(r.holder.pointer) + 0x108;
+            auto* brush = static_cast<std::uint8_t*>(r.holder.pointer) + EndImage::brush;
             w.stage = "compose_invalidate_uv";
-            if (!core::safe_write_field(brush, 0x68, std::uint8_t{0}))
+            if (!core::safe_write_field(brush, SlateBrush::uv, std::uint8_t{0}))
                 return {Outcome::NativeFault, w.stage};
             if (r.texture.pointer) {
                 w.stage = "compose_clear_resource_cache";
@@ -1835,29 +1883,30 @@ Result target_sequence(TargetWork& w) noexcept
             std::uint8_t uv = 1;
             void* cache = nullptr;
             void* cache_owner = nullptr;
-            if (!graph_valid(f, w.access, r) || !read(brush, 0x68, uv) || uv
-                || !read(brush, 0x70, cache) || cache
-                || !read(brush, 0x78, cache_owner) || cache_owner)
+            if (!graph_valid(f, w.access, r) || !read(brush, SlateBrush::uv, uv) || uv
+                || !read(brush, SlateBrush::cache, cache) || cache
+                || !read(brush, SlateBrush::cache_owner, cache_owner) || cache_owner)
                 return {Outcome::NativeFault, "post_composition"};
             return {Outcome::Ready, "composed_brush_retained"};
         }
         if (w.operation == TargetOperation::Tint) {
             // Same ABI as the existing palette's specified constant: initialized
             // scalar value, mode zero, NO shared controller to copy/destroy.
-            alignas(8) std::array<std::uint8_t, 0x28> constant{};
+            alignas(8) std::array<std::uint8_t, SlateBrush::tint_size> constant{};
             std::memcpy(constant.data(), w.tint_rgba.data(), sizeof(float) * 4);
-            auto* brush = static_cast<std::uint8_t*>(r.holder.pointer) + 0x108;
+            auto* brush = static_cast<std::uint8_t*>(r.holder.pointer) + EndImage::brush;
             w.stage = "own_brush_tint";
             w.native_inflight = true;
-            const auto assigned = measured_native(perf::Metric::NativeColorAssign, state.generic.color_assign, brush + 0x20, constant.data());
+            const auto assigned = measured_native(perf::Metric::NativeColorAssign, state.generic.color_assign, brush + SlateBrush::tint, constant.data());
             w.native_inflight = false;
-            if (!sources_valid(w) || assigned != brush + 0x20 || !graph_valid(f, w.access, r)
+            if (!sources_valid(w) || assigned != brush + SlateBrush::tint || !graph_valid(f, w.access, r)
                 || !read_brush(brush, now)) return {Outcome::NativeFault, "post_brush_tint"};
             for (std::size_t i = 0; i < now.size(); ++i) {
                 // Setter payload contract, not a semantic dedup mask: native
                 // SlateColor assignment does not promise padding contents.
                 if (i >= 0x31 && i < 0x38) continue;
-                const auto expected = i >= 0x20 && i < 0x48 ? constant[i - 0x20] : w.source_facts[i];
+                const auto expected = i >= SlateBrush::tint && i < SlateBrush::tint + constant.size()
+                    ? constant[i - SlateBrush::tint] : w.source_facts[i];
                 if (now[i] != expected) return {Outcome::NativeFault, "brush_tint_or_shape_drift"};
             }
             return {Outcome::Ready, "tinted_brush_retained"};
@@ -1871,12 +1920,12 @@ Result target_sequence(TargetWork& w) noexcept
         if (!target_valid(w.access, a, t)) return {Outcome::Identity, w.stage};
     }
     if (t.generic) return apply_generic(w);
-    measured_native(perf::Metric::NativeBrushPublish, f.set_brush, t.target.pointer, static_cast<std::uint8_t*>(r.holder.pointer) + 0x108);
+    measured_native(perf::Metric::NativeBrushPublish, f.set_brush, t.target.pointer, static_cast<std::uint8_t*>(r.holder.pointer) + EndImage::brush);
     w.stage = "post_brush_assignment";
     if (!target_valid(w.access, a, t) || !graph_valid(f, w.access, r))
         return {Outcome::NativeFault, w.stage};
     void* resource = nullptr;
-    if (!read(t.target.pointer, 0x150, resource) || resource != r.texture.pointer)
+    if (!read(t.target.pointer, EndImage::brush_resource, resource) || resource != r.texture.pointer)
         return {Outcome::NativeFault, w.stage};
     perf::count(perf::Counter::PublishedMembers);
     return {Outcome::Ready, "native_brush_assigned"};
@@ -1917,7 +1966,7 @@ Result find_subject_sequence(std::wstring_view leaf, SubjectKind kind, std::uint
         t.cursor_owner = true;
         if (row_id || !main_identity(access, a, t.cursor_main)
             || !current_list(access, t.cursor_main.pointer, RowKind::Song, t.cursor_list)
-            || !read(t.cursor_list.pointer, 0x8f8, receiver) || !receiver)
+            || !read(t.cursor_list.pointer, EndVirtualScrollBox::cursor_widget, receiver) || !receiver)
             return {Outcome::Identity, "subject_current_cursor"};
     } else if (row_id) {
         const auto* binding = row_binding(row_id);
@@ -1927,10 +1976,10 @@ Result find_subject_sequence(std::wstring_view leaf, SubjectKind kind, std::uint
     void* tree = nullptr; void* root = nullptr;
     if (!capture(access, receiver, t.receiver) || t.receiver.live.serial_number <= 0
         || !typed_object(access, t.receiver, NativeClass::UserWidget)
-        || !read(receiver, 0x1d8, tree) || !capture(access, tree, t.tree)
+        || !read(receiver, UserWidget::widget_tree, tree) || !capture(access, tree, t.tree)
         || !typed_object(access, t.tree, NativeClass::WidgetTree)
         || !capture(access, t.tree.klass, t.tree_class)
-        || !read(tree, 0x28, root) || !capture(access, root, t.root) || !owner_valid(access, a, t))
+        || !read(tree, WidgetTree::root_widget, root) || !capture(access, root, t.root) || !owner_valid(access, a, t))
         return {Outcome::Identity, "subject_receiver_tree"};
     std::uint64_t name = 0;
     measured_native(perf::Metric::NativeFindName, state.functions.fname, &name, text.data(), 0);
@@ -1961,17 +2010,17 @@ Result find_subject_sequence(std::wstring_view leaf, SubjectKind kind, std::uint
         Ancestry panel{};
         if (!ancestry(access, node, bases.panel, bases, panel)) continue;
         PointerArray slots{};
-        if (!pointer_array(node.pointer, 0x108, slots)) return {Outcome::Identity, "subject_slots_header"};
+        if (!pointer_array(node.pointer, PanelWidget::slots, slots)) return {Outcome::Identity, "subject_slots_header"};
         for (std::int32_t i = 0; i < slots.count; ++i) {
             void* slot_pointer = nullptr; void* child_pointer = nullptr; void* parent = nullptr; void* child_slot = nullptr;
             Object slot{}, child{}; Ancestry slot_type{};
             if (!read(slots.data, static_cast<Address>(i) * sizeof(void*), slot_pointer)
                 || !capture(access, slot_pointer, slot) || !ancestry(access, slot, bases.slot, bases, slot_type)
-                || !read(slot_pointer, 0x28, parent) || parent != node.pointer
-                || !read(slot_pointer, 0x30, child_pointer) || !capture(access, child_pointer, child)
-                || !read(child_pointer, 0x28, child_slot) || child_slot != slot_pointer
+                || !read(slot_pointer, PanelSlot::parent, parent) || parent != node.pointer
+                || !read(slot_pointer, PanelSlot::content, child_pointer) || !capture(access, child_pointer, child)
+                || !read(child_pointer, Widget::slot, child_slot) || child_slot != slot_pointer
                 || !unchanged(access, slot) || !unchanged(access, child)
-                || !ancestry_unchanged(access, slot_type) || !same_array(node.pointer, 0x108, slots))
+                || !ancestry_unchanged(access, slot_type) || !same_array(node.pointer, PanelWidget::slots, slots))
                 return {Outcome::Identity, "subject_strong_edge"};
             void* again = nullptr;
             if (!read(slots.data, static_cast<Address>(i) * sizeof(void*), again) || again != slot_pointer
@@ -2249,7 +2298,7 @@ Result borrow_brush(const OwnedImage& image, const CallbackAuthority& authority,
     if (state.retained[image.slot_].kind != RecordKind::Prepared
         && (!image.target_bound_ || !target_valid(access, authority, image.affinity_)))
         return {Outcome::Identity, "borrow_original_target"};
-    brush = static_cast<const std::uint8_t*>(state.retained[image.slot_].holder.pointer) + 0x108;
+    brush = static_cast<const std::uint8_t*>(state.retained[image.slot_].holder.pointer) + EndImage::brush;
     return {Outcome::Ready, "borrow_owned_brush"};
 }
 
@@ -2296,7 +2345,7 @@ Result capture_original(const ImageTarget& target, const CallbackAuthority& a, O
         return {Outcome::Identity, "original_target"};
     if (!read_brush(target_brush(w.target), w.source_facts)) return {Outcome::Memory, "original_brush_facts"};
     void* resource = nullptr;
-    std::memcpy(&resource, w.source_facts.data() + 0x48, sizeof(resource));
+    std::memcpy(&resource, w.source_facts.data() + SlateBrush::resource, sizeof(resource));
     if (resource && (!capture(w.access, resource, w.source_resource)
         || !capture(w.access, w.source_resource.klass, w.source_class)))
         return {Outcome::Identity, "original_resource_facts"};
@@ -2531,7 +2580,7 @@ static Result bind_row_impl(RowKind kind, void* row, std::int32_t logical_index,
         return {Outcome::Identity, "current_strong_row"};
     if (uniform_speed) {
         PointerArray array{};
-        if (!pointer_array(candidate.list.pointer, 0x188, array)
+        if (!pointer_array(candidate.list.pointer, EndListBox::content_widgets, array)
             || !speed_tree(access, candidate.row, candidate.speed_tree, candidate.speed_root))
             return {Outcome::Identity, "speed_row_tree"};
         candidate.speed_members = array.data;
@@ -2545,7 +2594,7 @@ static Result bind_row_impl(RowKind kind, void* row, std::int32_t logical_index,
     // Reuse bindings from replaced lists/rows, not just same-pointer setup calls.
     // This is one bounded current-list projection, not a retained-row quota.
     PointerArray members{};
-    const Address member_offset = kind == RowKind::Song ? 0x8d8 : 0x188;
+    const Address member_offset = kind == RowKind::Song ? EndVirtualScrollBox::content_widgets : EndListBox::content_widgets;
     std::array<void*, kSubjectTraversalLimit> current{};
     if (!pointer_array(candidate.list.pointer, member_offset, members))
         return {Outcome::Identity, "row_members_projection"};
@@ -2603,7 +2652,7 @@ Result read_speed_rows(const CallbackAuthority& a, SpeedRowsSnapshot& out) noexc
     objects::UObjectIdentityAccess access{}; Object main{}, list{}, again{}; PointerArray array{};
     if (!capture_current_uobject_identity_access(access) || !main_identity(access, a, main)
         || !current_list(access, main.pointer, RowKind::Speed, list)
-        || !pointer_array(list.pointer, 0x188, array)) return {Outcome::Identity, "speed_row_list"};
+        || !pointer_array(list.pointer, EndListBox::content_widgets, array)) return {Outcome::Identity, "speed_row_list"};
     SpeedRowsSnapshot copied{};
     std::array<Object, 256> rows{}, trees{}, roots{};
     for (std::int32_t i = 0; i < array.count; ++i) {
@@ -2621,7 +2670,7 @@ Result read_speed_rows(const CallbackAuthority& a, SpeedRowsSnapshot& out) noexc
             || root.pointer != roots[i].pointer || !unchanged(access, trees[i]) || !unchanged(access, roots[i]))
             return {Outcome::Identity, "speed_row_member_reread"};
     }
-    if (!same_array(list.pointer, 0x188, array) || !unchanged(access, main) || !unchanged(access, list)
+    if (!same_array(list.pointer, EndListBox::content_widgets, array) || !unchanged(access, main) || !unchanged(access, list)
         || !current_list(access, main.pointer, RowKind::Speed, again) || again.pointer != list.pointer || !admitted(a))
         return {Outcome::Identity, "speed_row_list_reread"};
     copied.count = static_cast<std::size_t>(array.count);
@@ -2778,14 +2827,14 @@ Result apply_members(const Subject& subject, std::span<const BrushAssignment> as
         for (std::size_t j = 0; j < i; ++j) if (w.members[j].source == m.source) duplicate = true;
         if (!duplicate && !graph_valid(state.functions, w.access, *m.source))
             return latch({Outcome::NativeFault, "batch_source_graph"});
-        if (!read(batch_brush(w, m), 0x48, m.original_resource)) return {Outcome::Memory, "batch_member_resource"};
+        if (!read(batch_brush(w, m), SlateBrush::resource, m.original_resource)) return {Outcome::Memory, "batch_member_resource"};
     }
     if (!member_frame(w.target, w.before)) return {Outcome::Memory, "batch_member_frame"};
     if (!button) for (std::int32_t i = 0; i < w.target.image_count; ++i) {
-        const auto* brush = reinterpret_cast<const std::uint8_t*>(w.target.images + static_cast<Address>(i) * 0xb0);
+        const auto* brush = reinterpret_cast<const std::uint8_t*>(w.target.images + static_cast<Address>(i) * EndImageSetEntry::size);
         auto& geometry = w.geometry[static_cast<std::size_t>(i)];
         if (!read_brush(brush, w.brushes[static_cast<std::size_t>(i)])
-            || !core::safe_copy_bytes(brush + 0x88, geometry.data(), geometry.size()))
+            || !core::safe_copy_bytes(brush + EndImageSetEntry::geometry, geometry.data(), geometry.size()))
             return {Outcome::Memory, "batch_entry_frame"};
     }
     // No native helper/allocation separated selection, exact affinity checks and
@@ -2846,7 +2895,7 @@ Result capture_original_members(const Subject& subject, std::span<const BrushSel
         auto& m = members[i];
         if (!read_brush(target_brush(target_for(m)), m.facts)) return {Outcome::Memory, "capture_member_facts"};
         void* resource = nullptr;
-        std::memcpy(&resource, m.facts.data() + 0x48, sizeof(resource));
+        std::memcpy(&resource, m.facts.data() + SlateBrush::resource, sizeof(resource));
         if (resource && (!capture(access, resource, m.resource) || !capture(access, m.resource.klass, m.klass)))
             return {Outcome::Identity, "capture_member_resource"};
     }
@@ -2923,7 +2972,7 @@ Result resolve_record(TargetWork& w, RecordKind kind, std::size_t source_slot,
     if (kind == RecordKind::Original) {
         if (!read_brush(target_brush(w.target), w.source_facts)) return {Outcome::Memory, "resolve_capture_facts"};
         void* resource = nullptr;
-        std::memcpy(&resource, w.source_facts.data() + 0x48, sizeof(resource));
+        std::memcpy(&resource, w.source_facts.data() + SlateBrush::resource, sizeof(resource));
         if (resource && (!capture(w.access, resource, w.source_resource)
             || !capture(w.access, w.source_resource.klass, w.source_class))) return {Outcome::Identity, "resolve_capture_resource"};
     } else {
@@ -3324,14 +3373,14 @@ bool hud_path(const objects::UObjectIdentityAccess& access, const Target& t,
         for (std::size_t i=0;i<count;++i) if (path[i].child.pointer==child.pointer) return false;
         auto& e=path[count++]; e.child=child; e.index=-1;
         void* slot=nullptr; void* parent=nullptr; void* content=nullptr;
-        if (!unchanged(access,child) || !read(child.pointer,0x28,slot)
+        if (!unchanged(access,child) || !read(child.pointer,Widget::slot,slot)
             || !capture(access,slot,e.slot) || !ancestry(access,e.slot,bases.slot,bases,e.slot_type)
-            || !read(slot,0x28,parent) || !capture(access,parent,e.parent)
+            || !read(slot,PanelSlot::parent,parent) || !capture(access,parent,e.parent)
             || !ancestry(access,e.parent,bases.panel,bases,e.parent_type)
-            || !read(slot,0x30,content) || content!=child.pointer
-            || !read(parent,0x108,e.slots) || !e.slots
-            || !read(parent,0x110,e.count) || e.count<=0 || e.count>kPanelSlots
-            || !read(parent,0x114,e.capacity) || e.capacity<e.count || e.capacity>kPanelSlots) return false;
+            || !read(slot,PanelSlot::content,content) || content!=child.pointer
+            || !read(parent,PanelWidget::slots,e.slots) || !e.slots
+            || !read(parent,PanelWidget::slot_count,e.count) || e.count<=0 || e.count>kPanelSlots
+            || !read(parent,PanelWidget::slot_capacity,e.capacity) || e.capacity<e.count || e.capacity>kPanelSlots) return false;
         for (std::int32_t i=0;i<e.count;++i) {
             void* item=nullptr;
             if (!read(e.slots,static_cast<Address>(i)*sizeof(void*),item)) return false;
@@ -3354,9 +3403,9 @@ bool hud_title(const objects::UObjectIdentityAccess& access, void* receiver,
         || owner.receiver.live.serial_number!=identity.serial_number
         || owner.receiver.live.internal_index!=identity.internal_index
         || !typed_object(access,owner.receiver,NativeClass::UserWidget)
-        || !read(receiver,0x1d8,pointer) || !capture(access,pointer,owner.tree)
+        || !read(receiver,UserWidget::widget_tree,pointer) || !capture(access,pointer,owner.tree)
         || owner.tree.outer!=receiver || !typed_object(access,owner.tree,NativeClass::WidgetTree)
-        || !read(pointer,0x28,pointer) || !capture(access,pointer,owner.root)
+        || !read(pointer,WidgetTree::root_widget,pointer) || !capture(access,pointer,owner.root)
         || owner.root.outer!=owner.tree.pointer) return false;
     PanelBases bases{};
     if (!panel_bases(access,owner,bases)) return false;
@@ -3378,25 +3427,25 @@ bool hud_title(const objects::UObjectIdentityAccess& access, void* receiver,
         Ancestry type{};
         if (!ancestry(access,node,bases.panel,bases,type)) continue;
         PointerArray slots{};
-        if (!pointer_array(node.pointer,0x108,slots)) return false;
+        if (!pointer_array(node.pointer,PanelWidget::slots,slots)) return false;
         for (std::int32_t i=0;i<slots.count;++i) {
             void* slot_pointer=nullptr; void* child_pointer=nullptr; void* parent=nullptr; void* child_slot=nullptr;
             Object slot{},child{}; Ancestry slot_type{};
             if (n==pending.size() || !read(slots.data,static_cast<Address>(i)*sizeof(void*),slot_pointer)
                 || !capture(access,slot_pointer,slot) || !ancestry(access,slot,bases.slot,bases,slot_type)
-                || !read(slot_pointer,0x28,parent) || parent!=node.pointer
-                || !read(slot_pointer,0x30,child_pointer) || !capture(access,child_pointer,child)
-                || !read(child_pointer,0x28,child_slot) || child_slot!=slot_pointer
+                || !read(slot_pointer,PanelSlot::parent,parent) || parent!=node.pointer
+                || !read(slot_pointer,PanelSlot::content,child_pointer) || !capture(access,child_pointer,child)
+                || !read(child_pointer,Widget::slot,child_slot) || child_slot!=slot_pointer
                 || !unchanged(access,slot) || !ancestry_unchanged(access,slot_type)
-                || !same_array(node.pointer,0x108,slots)) return false;
+                || !same_array(node.pointer,PanelWidget::slots,slots)) return false;
             pending[n++]=child;
         }
         if (!ancestry_unchanged(access,type)) return false;
     }
     void* tree=nullptr; void* root=nullptr;
     return title.target.pointer && panel.target.pointer && hud_path(access,title,bases) && hud_path(access,panel,bases)
-        && read(receiver,0x1d8,tree) && tree==owner.tree.pointer
-        && read(tree,0x28,root) && root==owner.root.pointer;
+        && read(receiver,UserWidget::widget_tree,tree) && tree==owner.tree.pointer
+        && read(tree,WidgetTree::root_widget,root) && root==owner.root.pointer;
 }
 }
 
@@ -3423,8 +3472,8 @@ Result draw_song_hud(const OwnedImage* image, void* root, const UObjectLiveHandl
             return current() && panel_bases(access,title,bases)
                 && unchanged(access,title.target) && unchanged(access,panel.target)
                 && hud_path(access,title,bases) && hud_path(access,panel,bases)
-                && read(root,0x1d8,tree) && tree==title.tree.pointer
-                && read(tree,0x28,root_widget) && root_widget==title.root.pointer;
+                && read(root,UserWidget::widget_tree,tree) && tree==title.tree.pointer
+                && read(tree,WidgetTree::root_widget,root_widget) && root_widget==title.root.pointer;
         };
         PreviewSelectedRowBounds bounds{}; PreviewAnchorPresentation presentation{};
         const PreviewAnchorRead reader=[](std::uintptr_t p,void* out,std::size_t bytes) {

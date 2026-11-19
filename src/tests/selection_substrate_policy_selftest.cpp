@@ -2,6 +2,7 @@
 #include "game/canonical_substrate_policy.h"
 #include "game/audio_setup_publication_policy.h"
 #include "game/audio_sead.h"
+#include "game/runtime_layouts.h"
 
 #include <array>
 #include <cstdint>
@@ -121,6 +122,18 @@ void test_selection_substrate_policy()
             && !selection_activation_getter_return_exact(
                 0x039a1210, activation_getter_return),
         "activation handoff admitted a call instruction or unrelated getter");
+    using Frame = runtime_layouts::PianoActivationGetterFrame;
+    constexpr auto older_offset = Frame::output_from_return_slot("ff7rebirth-steam-win64-68fd6fde");
+    constexpr auto current_offset = Frame::output_from_return_slot("ff7rebirth-steam-win64-6a16ced2");
+    constexpr uintptr_t return_slot = 0x1000, older_output = 0x1050, current_output = 0x1030;
+    require(Frame::matches_local_output(older_offset, return_slot, older_output, older_output)
+            && Frame::matches_local_output(current_offset, return_slot, current_output, current_output)
+            && !Frame::matches_local_output(older_offset, return_slot, current_output, current_output)
+            && !Frame::matches_local_output(current_offset, return_slot, older_output, older_output)
+            && !Frame::matches_local_output(older_offset, return_slot, older_output, 0)
+            && !Frame::matches_local_output(Frame::output_from_return_slot("unknown"),
+                return_slot, older_output, older_output),
+        "activation getter accepted a foreign stack slot, unsupported build or wrong native return");
     SelectionActivationHandoffFacts handoff_facts{
         true, true, true, true, true,
         15, 16,

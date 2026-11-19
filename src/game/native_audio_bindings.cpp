@@ -1,5 +1,6 @@
 #include "game/native_audio_bindings.h"
 #include "game/rvas.h"
+#include "game/runtime_layouts.h"
 #include "core/generated/build_identity.generated.h"
 
 #include <cstring>
@@ -337,14 +338,17 @@ BindingResult CohortBindings::read_record(const gu::UObjectIdentityAccess& acces
             facts.node = 0; facts.index = saved[0].index; facts.serial = saved[0].serial;
             facts.serial_observed = true;
             std::uint8_t mode = 0; Address backing = 0, vtable = 0, iface = 0, lookup = 0;
-            if (!c.get(o[0] + 84, mode) || !c.get(o[0] + 88, backing) || !backing || backing % 8
-                || !c.get(backing, vtable) || !c.get(backing + 88, iface)
-                || !c.get(image_base_ + p.interface_vtable + 40, lookup)) return fail(Failure::Read);
-            if (mode != 1 || vtable != image_base_ + p.backing_vtable
+            using namespace runtime_layouts;
+            if (!c.get(o[0] + DataObjectProvider::backing_mode, mode)
+                || !c.get(o[0] + DataObjectProvider::backing, backing) || !backing || backing % 8
+                || !c.get(backing, vtable) || !c.get(backing + DataObjectBacking::serialized_interface, iface)
+                || !c.get(image_base_ + p.interface_vtable + DataObjectLookupInterface::lookup_slot, lookup))
+                return fail(Failure::Read);
+            if (mode != DataObjectProvider::serialized_mode || vtable != image_base_ + p.backing_vtable
                 || iface != image_base_ + p.interface_vtable || lookup != image_base_ + p.lookup)
                 return fail(Failure::Backing);
-            // Both qualified builds use these exact leaf bodies, at different
-            // virtual slots. Validate without calling a borrowed native getter.
+            // Pin complete leaf semantics at the captured slots, without
+            // requiring the generic lookup catalog RVAs or calling the getters.
             Address getter=0,serialized=0;
             std::array<unsigned char,5> backing_code{};
             std::array<unsigned char,9> serialized_code{};

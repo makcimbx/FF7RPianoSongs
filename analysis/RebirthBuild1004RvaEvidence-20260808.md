@@ -82,6 +82,21 @@ confirm the address table; they do not confirm the signatures.
 | `0x143c56d55` | `weak_object_resolver` | `0x01905998` |
 | `0x143c56d62` | `widget_visibility_setter` | `0x00861e94` |
 
+### Selected-entry activation output
+
+| Build | Caller passes `RDX` | Getter return | Output relative to the return-address slot |
+| --- | --- | --- | --- |
+| Steam 1.004 | `0x143c4640e`: `LEA RDX,[RSP+0x48]` | `0x143c46418` | `+0x50` |
+| Steam 1.005 | `0x14399f416`: `LEA RDX,[RSP+0x28]` | `0x14399f420` | `+0x30` |
+
+`CALL` pushes an eight-byte return address. Both original getters write an
+eight-byte name to `RDX` and return that pointer in `RAX`; both callers then
+dereference `RAX` unconditionally. The old shared `+0x30` test rejected the
+1.004 output after the selection handoff, and the detour returned zero. The
+1.004 tester's null-read address matches `MOV RCX,[RAX]` at RVA `0x03c4641d`.
+`PianoActivationGetterFrame` keeps the caller-local output check specific to
+the selected executable build; the activation return RVAs did not change.
+
 ### Compile-time adjacency invariants
 
 Three production `static_assert`/offset relations are checked against the

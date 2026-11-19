@@ -3,6 +3,7 @@
 #include "core/hooks.h"
 #include "game/song_registry.h"
 #include "game/catalog_adoption.h"
+#include "game/runtime_layouts.h"
 #include "game/uobject_lifetime.h"
 
 #include <cstdint>
@@ -75,7 +76,7 @@ constexpr bool should_restore_list_after_cancel_close(
     const MenuListOwnership ownership) noexcept
 {
     return original_returned && exact_session_finished && active_word_read
-        && active_word == 0x0100 && ownership != MenuListOwnership::Unmanaged;
+        && active_word == runtime_layouts::PianoListSession::closing && ownership != MenuListOwnership::Unmanaged;
 }
 
 struct MenuSessionSnapshot final {

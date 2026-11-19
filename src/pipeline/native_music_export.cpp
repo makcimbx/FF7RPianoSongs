@@ -35,6 +35,44 @@ constexpr std::size_t kArtifactBytes = kBankBytes + kTailBytes;
 constexpr std::size_t kExportBytes = kBankOffset + kArtifactBytes;
 static_assert(kBankOffset == 144 && kExportBytes == 11228128);
 
+// Source maps and nested SoundIndexInfo have the same extent in both profiles.
+constexpr std::size_t kSourceMaps = 0x0a;
+constexpr std::size_t kSourceSoundIndexInfoDuration = 0x5d;
+constexpr std::size_t kSourcePs5Streaming = 0x61;
+constexpr std::size_t kSourceXsxStreaming = 0x62;
+
+// Reflected fields (NativeMusicExportProfile-20261016; OlderBuild profile).
+namespace current_sound {
+constexpr std::size_t sw2_streaming = 0x63;
+constexpr std::size_t volume = 0x64;
+constexpr std::size_t duration = 0x68;
+}
+namespace older_source_sound {
+constexpr std::size_t volume = 0x63;
+constexpr std::size_t duration = 0x67;
+}
+
+// Mapped image wrapper and the root at the start of its signed-size payload.
+constexpr std::size_t kMappedBankRootBytes = 16;
+namespace source_mapped_bank {
+constexpr std::size_t current_image_size = 0x70;
+constexpr std::size_t older_image_size = 0x6f;
+constexpr std::size_t older_padding_length = 0x79;
+constexpr std::size_t older_padding_end = 0x7f;
+constexpr std::size_t count = 0x88;
+constexpr std::size_t capacity = 0x8c;
+}
+
+// The older target's selected cooked branch consumes only the first 40 bytes.
+namespace older_cooked_suffix {
+constexpr std::size_t vtable_and_script_name_fixups = 0;
+constexpr std::size_t memory_image_name_fixups = 8;
+constexpr std::size_t cooked = 12;
+constexpr std::size_t compressed_format_count = 16;
+constexpr std::size_t mapped_source_discriminator = 36;
+constexpr std::size_t consumed_bytes = 40;
+}
+
 Status invalid(const char* message) {
     return Status::error(StatusCode::InvalidArgument, message);
 }
@@ -85,8 +123,9 @@ Status validate_inputs(const std::vector<std::uint8_t>& source,
 
 std::vector<std::uint8_t> older_prefix() {
     std::vector<std::uint8_t> b(kQualifiedPrefix,kQualifiedPrefix+kBankOffset);
-    b[5]=4; b.erase(b.begin()+0x63); b.insert(b.begin()+0x7f,0);
-    native_binary::put(b,0x79,5,2); return b;
+    b[5]=4; b.erase(b.begin()+current_sound::sw2_streaming);
+    b.insert(b.begin()+source_mapped_bank::older_padding_end,0);
+    native_binary::put(b,source_mapped_bank::older_padding_length,5,2); return b;
 }
 
 struct OlderSource { std::size_t tail=0,volume=0; };
@@ -95,25 +134,35 @@ Status validate_older_inputs(const std::vector<std::uint8_t>& source,
     using namespace native_binary;
     if(source.size()>=10&&std::memcmp(source.data(),kQualifiedPrefix,10)==0) {
         auto status=validate_inputs(source,replacement,false,&metadata);
-        if(status.ok()) layout={source.size()-kTailBytes,0x64}; return status;
+        if(status.ok()) layout={source.size()-kTailBytes,current_sound::volume}; return status;
     }
-    if(source.size()<kBankOffset+40||source.size()>64*1024*1024) return invalid("Older Music source extent");
+    if(source.size()<kBankOffset+older_cooked_suffix::consumed_bytes||source.size()>64*1024*1024)
+        return invalid("Older Music source extent");
     auto expected=older_prefix();
     if(get(source,0x26)==14) for(auto at:{0x26,0x32,0x3e}) put(expected,at,get(expected,at)-1);
     for(std::size_t i=0;i<kBankOffset;++i) {
-        const bool variable=(i>=0x5d&&i<0x61)||(i>=0x67&&i<0x6b)||
-            (i>=0x6f&&i<0x73)||(i>=0x88&&i<0x90);
+        const bool variable=(i>=kSourceSoundIndexInfoDuration&&i<kSourceSoundIndexInfoDuration+4)
+            ||(i>=older_source_sound::duration&&i<older_source_sound::duration+4)
+            ||(i>=source_mapped_bank::older_image_size&&i<source_mapped_bank::older_image_size+4)
+            ||(i>=source_mapped_bank::count&&i<source_mapped_bank::capacity+4);
         if(!variable&&source[i]!=expected[i]) return invalid("Unsupported older Music reflected/maps/wrapper profile");
     }
-    const auto duration=std::bit_cast<float>(std::uint32_t(get(source,0x5d)));
-    if(!std::isfinite(duration)||duration<=0||get(source,0x5d)!=get(source,0x67)) return invalid("Older Music source durations");
-    const auto n=get(source,0x88);
-    if(!n||n>std::uint64_t(std::numeric_limits<std::int32_t>::max())-16||get(source,0x8c)!=n||
-       get(source,0x6f)!=n+16||(source.size()!=kBankOffset+n+40&&source.size()!=kBankOffset+n+48)) return invalid("Older Music mapped image/count/capacity");
+    const auto duration=std::bit_cast<float>(std::uint32_t(get(source,kSourceSoundIndexInfoDuration)));
+    if(!std::isfinite(duration)||duration<=0||get(source,kSourceSoundIndexInfoDuration)!=get(source,older_source_sound::duration))
+        return invalid("Older Music source durations");
+    const auto n=get(source,source_mapped_bank::count);
+    if(!n||n>std::uint64_t(std::numeric_limits<std::int32_t>::max())-kMappedBankRootBytes
+       ||get(source,source_mapped_bank::capacity)!=n||get(source,source_mapped_bank::older_image_size)!=n+kMappedBankRootBytes
+       ||(source.size()!=kBankOffset+n+older_cooked_suffix::consumed_bytes&&source.size()!=kBankOffset+n+kTailBytes))
+        return invalid("Older Music mapped image/count/capacity");
     const auto tail=std::size_t(kBankOffset+n);
-    if(get(source,tail,8)||get(source,tail+8)||get(source,tail+12)!=1||get(source,tail+16)||
-       get(source,tail+36)!=1||(source.size()-tail==48&&get(source,tail+40,8))) return invalid("Unsupported older Music cooked suffix branch");
-    layout={tail,0x63};
+    if(get(source,tail+older_cooked_suffix::vtable_and_script_name_fixups,8)
+       ||get(source,tail+older_cooked_suffix::memory_image_name_fixups)
+       ||get(source,tail+older_cooked_suffix::cooked)!=1||get(source,tail+older_cooked_suffix::compressed_format_count)
+       ||get(source,tail+older_cooked_suffix::mapped_source_discriminator)!=1
+       ||(source.size()-tail==kTailBytes&&get(source,tail+older_cooked_suffix::consumed_bytes,8)))
+        return invalid("Unsupported older Music cooked suffix branch");
+    layout={tail,older_source_sound::volume};
     // The native bank ends before cooked serialization. The sidecar validator
     // expects its own scaffold tail, not the source export's cooked GUID.
     std::vector<std::uint8_t> bank(source.begin()+kBankOffset,source.begin()+tail);
@@ -129,7 +178,7 @@ float native_music_fixed_gain() noexcept {
     // Decode the same pinned bytes the exporter/bank builder preserve.
     const std::span<const std::uint8_t> prefix(
         reinterpret_cast<const std::uint8_t*>(kQualifiedPrefix), kBankOffset);
-    const auto asset = std::bit_cast<float>(std::uint32_t(native_binary::get(prefix, 0x64)));
+    const auto asset = std::bit_cast<float>(std::uint32_t(native_binary::get(prefix, current_sound::volume)));
     const auto music = std::bit_cast<float>(std::uint32_t(native_binary::get(
         ff7r::piano::pipeline::mabf_scaffold::kHeader, 0x98)));
     return asset * music;
@@ -159,7 +208,7 @@ NativeMusicExportResult build_native_music_export(const std::vector<std::uint8_t
         result.status=invalid("Native Music logical cue frames/rate/duration disagree with validated MABF"); return result;
     }
     const auto bank=replacement.size()-kTailBytes;
-    if(bank>std::size_t(std::numeric_limits<std::int32_t>::max())-16 ||
+    if(bank>std::size_t(std::numeric_limits<std::int32_t>::max())-kMappedBankRootBytes ||
        bank>std::numeric_limits<std::size_t>::max()-kBankOffset-kTailBytes) {
         result.status=invalid("Native Music mapped image exceeds signed serialized bounds"); return result;
     }
@@ -167,27 +216,33 @@ NativeMusicExportResult build_native_music_export(const std::vector<std::uint8_t
         // NativeAudioAssetProfile-OlderBuild: explicit fields select the cooked
         // nonstreaming/channel branch; StoreEntry exponent zero adds no padding.
         constexpr std::uint8_t header[]{0x00,0x04,0x0d,0x02,0x01,0x04,0x06,0x02,0x01,0x02,0x0a,0x02,0x01,0x02,0x0e,0x03};
-        result.bytes.assign(160,0); std::copy(std::begin(header),std::end(header),result.bytes.begin());
-        std::copy(source.begin()+0x0a,source.begin()+0x61,result.bytes.begin()+0x10);
-        result.bytes[0x67]=source[0x61]; result.bytes[0x68]=source[0x62];
-        result.bytes[0x69]=0; result.bytes[0x6a]=4;
-        native_binary::put(result.bytes,0x6b,native_binary::get(source,older.volume));
-        native_binary::put(result.bytes,0x63,std::bit_cast<std::uint32_t>(serialized));
-        native_binary::put(result.bytes,0x73,std::bit_cast<std::uint32_t>(serialized));
-        native_binary::put(result.bytes,0x7b,bank+16); native_binary::put(result.bytes,0x7f,0x10000);
-        native_binary::put(result.bytes,0x83,16,2); native_binary::put(result.bytes,0x85,9,2);
-        native_binary::put(result.bytes,0x90,0x21,8); native_binary::put(result.bytes,0x98,bank); native_binary::put(result.bytes,0x9c,bank);
+        constexpr std::size_t maps = sizeof(header), sound_index_info_duration = 0x63;
+        constexpr std::size_t ps5_streaming = 0x67, xsx_streaming = 0x68;
+        constexpr std::size_t streaming = 0x69, loading_behavior = 0x6a, volume = 0x6b, duration = 0x73;
+        constexpr std::size_t image_size = 0x7b, version = 0x7f, alignment = 0x83, padding_length = 0x85;
+        constexpr std::size_t frozen_pointer = 0x90, count = 0x98, capacity = 0x9c, bank_offset = 0xa0;
+        result.bytes.assign(bank_offset,0); std::copy(std::begin(header),std::end(header),result.bytes.begin());
+        std::copy(source.begin()+kSourceMaps,source.begin()+kSourcePs5Streaming,result.bytes.begin()+maps);
+        result.bytes[ps5_streaming]=source[kSourcePs5Streaming]; result.bytes[xsx_streaming]=source[kSourceXsxStreaming];
+        result.bytes[streaming]=0; result.bytes[loading_behavior]=4;
+        native_binary::put(result.bytes,volume,native_binary::get(source,older.volume));
+        native_binary::put(result.bytes,sound_index_info_duration,std::bit_cast<std::uint32_t>(serialized));
+        native_binary::put(result.bytes,duration,std::bit_cast<std::uint32_t>(serialized));
+        native_binary::put(result.bytes,image_size,bank+kMappedBankRootBytes); native_binary::put(result.bytes,version,0x10000);
+        native_binary::put(result.bytes,alignment,16,2); native_binary::put(result.bytes,padding_length,9,2);
+        native_binary::put(result.bytes,frozen_pointer,0x21,8);
+        native_binary::put(result.bytes,count,bank); native_binary::put(result.bytes,capacity,bank);
         result.bytes.insert(result.bytes.end(),replacement.begin(),replacement.end()-kTailBytes);
-        result.bytes.insert(result.bytes.end(),source.begin()+older.tail,source.begin()+older.tail+40);
+        result.bytes.insert(result.bytes.end(),source.begin()+older.tail,source.begin()+older.tail+older_cooked_suffix::consumed_bytes);
         return result;
     }
     result.bytes.assign(source.begin(),source.begin()+kBankOffset);
     // Reflected profile: nested SoundIndexInfo Duration and inherited SoundBase
     // Duration; all fragment/mask/map/streaming/volume/GUID bytes stay unchanged.
-    native_binary::put(result.bytes,0x5d,std::bit_cast<std::uint32_t>(serialized));
-    native_binary::put(result.bytes,0x68,std::bit_cast<std::uint32_t>(serialized));
-    native_binary::put(result.bytes,0x70,bank+16);
-    native_binary::put(result.bytes,0x88,bank); native_binary::put(result.bytes,0x8c,bank);
+    native_binary::put(result.bytes,kSourceSoundIndexInfoDuration,std::bit_cast<std::uint32_t>(serialized));
+    native_binary::put(result.bytes,current_sound::duration,std::bit_cast<std::uint32_t>(serialized));
+    native_binary::put(result.bytes,source_mapped_bank::current_image_size,bank+kMappedBankRootBytes);
+    native_binary::put(result.bytes,source_mapped_bank::count,bank); native_binary::put(result.bytes,source_mapped_bank::capacity,bank);
     result.bytes.insert(result.bytes.end(),replacement.begin(),replacement.end()-kTailBytes);
     result.bytes.insert(result.bytes.end(),source.end()-kTailBytes,source.end());
     return result;

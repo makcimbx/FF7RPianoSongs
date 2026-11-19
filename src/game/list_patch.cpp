@@ -901,7 +901,8 @@ bool menu_focus_identity_exact(const MenuOpenFocusContext& context) noexcept
     return context.target
         && menu_session_matches(opening.generation, opening.widget, opening.widget_identity, false)
         && validate_list_identity(opening.widget, opening.widget_identity)
-        && core::safe_read_field(opening.list, 0x7d8, word) && word == 1
+        && core::safe_read_field(opening.list, runtime_layouts::PianoListSession::active_word, word)
+        && word == runtime_layouts::PianoListSession::open
         && resolve_piano_menu_widget_binding(opening.list, widget, identity)
         && widget == opening.widget && same_list_identity(identity, opening.widget_identity)
         && registry().try_registry_snapshot(current)
@@ -964,7 +965,7 @@ bool finish_last_played_menu_focus(const MenuOpenFocusContext& context) noexcept
         int32_t selected = -1;
         bool synchronized = context.result == MenuFocusRestoreResult::Applied
             && context.original_entered && menu_focus_identity_exact(context)
-            && core::safe_read_field(opening.widget, 0x480, selected)
+            && core::safe_read_field(opening.widget, runtime_layouts::PianoMusicList::selected_index, selected)
             && selected == target.visible_index;
         if (synchronized) {
             synchronized = synchronize_restored_menu_selection(opening.widget,

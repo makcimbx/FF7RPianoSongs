@@ -70,20 +70,22 @@ template<class Validate, class Read, class Write, class Restore>
 MenuFocusRestoreResult restore_menu_focus_fields(int32_t index,
     Validate validate, Read read, Write write, Restore restore) noexcept
 {
+    using runtime_layouts::PianoMusicList;
     uint64_t saved = 0;
-    if (!validate() || !read(0x478, saved)) return MenuFocusRestoreResult::NotApplied;
-    if (!write(0x478, uint64_t{0})) return MenuFocusRestoreResult::Failed;
+    if (!validate() || !read(PianoMusicList::saved_selection_name, saved)) return MenuFocusRestoreResult::NotApplied;
+    if (!write(PianoMusicList::saved_selection_name, uint64_t{0})) return MenuFocusRestoreResult::Failed;
     bool applied = false;
     try {
-        if (write(0x480, index)) {
+        if (write(PianoMusicList::selected_index, index)) {
             restore();
             int32_t selected = -1;
-            applied = validate() && read(0x480, selected) && selected == index;
+            applied = validate() && read(PianoMusicList::selected_index, selected) && selected == index;
         }
     } catch (...) {}
     uint64_t current = 1;
-    if (!validate() || !read(0x478, current) || current != 0
-        || !write(0x478, saved) || !read(0x478, current) || current != saved)
+    if (!validate() || !read(PianoMusicList::saved_selection_name, current) || current != 0
+        || !write(PianoMusicList::saved_selection_name, saved)
+        || !read(PianoMusicList::saved_selection_name, current) || current != saved)
         return MenuFocusRestoreResult::Failed;
     return applied ? MenuFocusRestoreResult::Applied : MenuFocusRestoreResult::Failed;
 }

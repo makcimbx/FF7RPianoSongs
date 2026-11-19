@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "mode": "Debug",
-  "scope": "Static asset-serialization contracts only; independent of bootstrap/Oodle work",
-  "outcome": "Closed the target StoreEntry/Zen archive gap: independently recovered request-to-task-to-UObject serialization, registered Dev-Framework37 selection, package flag projection and StoreEntry-controlled export-end alignment. Implementation-ready bounded converted-current Music profile explicitly selects nonstreaming/channel fields and emits40 suffix bytes with StoreEntry alignment exponent0 and exact serial extent160+N+40; do not copy the donor's final8 bytes as a Sound field. Frozen BGM/ScoreInfo/PianoScore layouts remain132/120/176; BGM resource+0x60, prior+0x50 observation was FinishSectionName. This is static imported1.004 serialization proof, not executed asset validation, codec acceptance or older playback. Current source hashes remain current, not fabricated older receipts.",
+  "scope": "Static asset-serialization contracts and later tester stock-byte receipts; independent of bootstrap/Oodle work",
+  "outcome": "Recovered target StoreEntry/Zen serialization and later obtained the four tagged 1.004 stock sources. The generated unversioned Music profile explicitly selects nonstreaming/channel fields and emits40 suffix bytes with StoreEntry alignment exponent0 and exact serial extent160+N+40; do not copy the donor's final8 bytes as a Sound field. Frozen BGM/ScoreInfo/PianoScore layouts remain132/120/176; BGM resource+0x60, prior+0x50 observation was FinishSectionName. Static findings and raw-chunk receipts do not establish in-game loading or playback.",
   "executable": {
     "catalog_build_id": "ff7rebirth-steam-win64-68fd6fde",
     "catalog_version": "1.004",
@@ -29,12 +29,12 @@
   },
   "affected_catalog_ids": ["dataobject_manager_lookup", "bgmlist_object_vtable", "scoreinfo_object_vtable", "pianoscore_object_vtable", "scoreinfo_backing_vtable", "scoreinfo_interface_vtable", "pianoscore_backing_vtable", "pianoscore_interface_vtable", "scoreinfo_typed_lookup", "pianoscore_typed_lookup", "bgmlist_accessor", "pianoscore_accessor", "bgmlist_registry", "scoreinfo_registry", "pianoscore_registry", "bgm_prepare"],
   "canonical_carriers": {
-    "provenance": "Names and chunk IDs are existing source-consumer identities, NOT proof that old installed chunks were extracted or are equal to current hashes. Chunk IDs identify canonical package/index/type, not content version. A source receipt still needs exact container/chunk bytes and executable identity.",
+    "provenance": "Older SHA-256 receipts are the four raw chunks extracted from the tester's Steam 1.004 installation. They match the digests logged by the mod on that installation. Chunk IDs identify canonical package/index/type, not content version.",
     "entries": [
-      {"role":"Music", "package":"/Game/Sound/BGM/bgm_piano_01", "object":"bgm_piano_01", "class":"/Script/SQEXSEAD.SQEXSEADMusic", "chunk_id_hex":"80bd4180ba7f81e100000002", "current_container_hint":"pakchunk8-WindowsNoEditor.utoc", "current_source_sha256":"707fcad468b95724d09031fdfe83c2103c1e7a7aa1330822e8bc973992f53559", "old_source_sha256":null},
-      {"role":"BGMList", "package":"/Game/DataObject/Resident/BGMList", "object":"BGMList", "class":"/Script/EndDataObject.EndDataObjectBGMList", "chunk_id_hex":"7a8041d31d691a3d00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"6d7ce8582def003fe46e76b653b0e9f0294e25eff7ac9bb8dcb77d98976d580e", "old_source_sha256":null},
-      {"role":"ScoreInfo", "package":"/Game/DataObject/Resident/PianoScoreInfo", "object":"PianoScoreInfo", "class":"/Script/EndDataObject.EndDataObjectPianoScoreInfo", "chunk_id_hex":"773d97220ebde22600000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"b7184b8520c1eae265dd30ba5c6f4f072ec0b160516d7770caca9f22f96f5dad", "old_source_sha256":null},
-      {"role":"PianoScore", "package":"/Game/DataObject/Resident/PianoScore", "object":"PianoScore", "class":"/Script/EndDataObject.EndDataObjectPianoScore", "chunk_id_hex":"ed313fea776e3add00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"a2dc74150a2d50f8f2e33e35c898fe64a370dc06a3ee0714c817ffa0aebfeffa", "old_source_sha256":null}
+      {"role":"Music", "package":"/Game/Sound/BGM/bgm_piano_01", "object":"bgm_piano_01", "class":"/Script/SQEXSEAD.SQEXSEADMusic", "chunk_id_hex":"80bd4180ba7f81e100000002", "current_container_hint":"pakchunk8-WindowsNoEditor.utoc", "current_source_sha256":"707fcad468b95724d09031fdfe83c2103c1e7a7aa1330822e8bc973992f53559", "old_source_sha256":"e1ffc7dff5f330d7f0e31dc162a208ebd22aaa7a521b9d48469fff0943090621"},
+      {"role":"BGMList", "package":"/Game/DataObject/Resident/BGMList", "object":"BGMList", "class":"/Script/EndDataObject.EndDataObjectBGMList", "chunk_id_hex":"7a8041d31d691a3d00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"6d7ce8582def003fe46e76b653b0e9f0294e25eff7ac9bb8dcb77d98976d580e", "old_source_sha256":"4c494aa0d2710109da325e45db7dc017565a346e39da50e7ca3265dcc50b8afa"},
+      {"role":"ScoreInfo", "package":"/Game/DataObject/Resident/PianoScoreInfo", "object":"PianoScoreInfo", "class":"/Script/EndDataObject.EndDataObjectPianoScoreInfo", "chunk_id_hex":"773d97220ebde22600000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"b7184b8520c1eae265dd30ba5c6f4f072ec0b160516d7770caca9f22f96f5dad", "old_source_sha256":"aba14e0416b7e74af42b655b7616d0726c7f7604f4f48b3b78a9e149234d0b9e"},
+      {"role":"PianoScore", "package":"/Game/DataObject/Resident/PianoScore", "object":"PianoScore", "class":"/Script/EndDataObject.EndDataObjectPianoScore", "chunk_id_hex":"ed313fea776e3add00000002", "current_container_hint":"pakchunk3-WindowsNoEditor.utoc", "current_source_sha256":"a2dc74150a2d50f8f2e33e35c898fe64a370dc06a3ee0714c817ffa0aebfeffa", "old_source_sha256":"c7b99a427e01117836ee52cc1e917c2792b8dd1e230fbfd22174955f0f08f699"}
     ]
   },
   "frozen_dataobjects": {
@@ -65,6 +65,7 @@
       "version":"Reader compares serialized version against virtual+0x270 return OR 0x10000; DataObject vtable+0x270 points to zero-return leaf0x140d8a5b0, so supported version0x10000",
       "loaded_storage":"Object+0x38 receives allocated/copied or archive-mapped image; +0x31 marks loaded image and +0x30 records archive mapping bit. Allocation ownership and mapping lifetime must remain with the native owner. Version mismatch clears image.",
       "current_source_body":"Existing source's 0x100 reflected prefix at0, zero GUID u16 at4, image_size at6, version at10, alignment at14, padding at16, image start32 is a source-byte profile, not recovered old asset bytes. The native reader starts at the image_size field, not the export beginning.",
+      "stock_1004_source_body":"All three tester tables use summary flags 0x80800200: eight-byte None FName at0, zero GUID presence DWORD at8, image_size at12, version at16, alignment at20, padding length8 at22, image start32. For each role the bytes from image start through fixups and tail are identical to the corresponding stock 1.005 sample. Preserve the tagged prefix and flags on output.",
       "alignment":"Image begins after serialized padding; preserve complete source prefix or recompute the padding for the new archive position. A row stride132 must not be rounded to136.",
       "fixup_reader":"0x1408d9ec0",
       "fixup_counts_order":["vtable_groups","script_name_groups","memory_image_name_groups"],
@@ -137,6 +138,12 @@
     }
   },
   "music": {
+    "stock_1004_tagged_source": {
+      "provenance":"Exact Music SHA-256 in canonical_carriers; summary flags 0x80800200, compiled older source has no SW2 field. This source is not the synthetic compact unversioned control.",
+      "maps":"Export-relative serialized section map at 0x29 (20 bytes), mode map at 0x66 (44 bytes), sound map header/key at 0xbb (16 bytes). Cue FName stays (3,0); the 28-name profile includes Mode0/1/2 at slots 14/15/16.",
+      "properties":"SoundIndex and VoicedSectionAdjustmentTime are zero. Nested duration at 0x101, PS5/XSX bytes at 0x142/0x15c, volume at 0x177, inherited duration at 0x194, zero GUID-presence DWORD at 0x1a0.",
+      "image_and_suffix":"Mapped image header at 0x1a4, root at 0x1b0, bank at 0x1c0 of length 0xab5320. The 48-byte suffix equals the known current suffix. Normalize into the already validated compact input layout before using the controlled unversioned target writer; do not relabel tagged stock bytes as unversioned."
+    },
     "class_chain":[
       {"class":"SQEXSEADMusic","getter":"0x142b41a58","constructed_getter":"0x142ddd620","class_params":"0x145c4d190","properties":"0x146102c40","property_parameter_count":6,"top_level_count":2},
       {"class":"SQEXSEADSound","getter":"0x142b3ff5c","class_params":"0x145c4d140","properties":"0x1461028e0","property_parameter_count":20,"top_level_count":18},

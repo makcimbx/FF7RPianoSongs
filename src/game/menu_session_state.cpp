@@ -27,7 +27,8 @@ MenuSessionSnapshot MenuSessionAuthority::begin_open(void* controller, void* lis
     MenuListOwnership list_ownership) noexcept {
     std::lock_guard lock(mutex_);
     if (disabled_ || !controller || !list || !widget || identity.internal_index < 0
-        || identity.serial_number <= 0 || (word != 0 && word != 0x0100)
+        || identity.serial_number <= 0 || (word != runtime_layouts::PianoListSession::inactive
+            && word != runtime_layouts::PianoListSession::closing)
         || generation_ == std::numeric_limits<uint64_t>::max()) {
         if (generation_ == std::numeric_limits<uint64_t>::max()) {
             disabled_ = true; current_.phase = MenuSessionPhase::Failed;
@@ -47,7 +48,7 @@ MenuSessionSnapshot MenuSessionAuthority::begin_open(void* controller, void* lis
 bool MenuSessionAuthority::publish_ready(const MenuSessionSnapshot& opening,
     uint16_t word, void* widget, UObjectLiveHandle identity) noexcept {
     std::lock_guard lock(mutex_);
-    if (disabled_ || word != 1 || current_.phase != MenuSessionPhase::Opening
+    if (disabled_ || word != runtime_layouts::PianoListSession::open || current_.phase != MenuSessionPhase::Opening
         || !same_menu_session(current_, opening, false) || widget != current_.widget
         || !handles_equal(identity, current_.widget_identity)) return false;
     current_.phase = MenuSessionPhase::Ready;
@@ -69,10 +70,10 @@ bool MenuSessionAuthority::finish_close(const MenuSessionSnapshot& closing,
     std::lock_guard lock(mutex_);
     if (!same_menu_session(current_, closing, false)
         || current_.phase != MenuSessionPhase::Closing) return false;
-    if (word == 0x0100) {
+    if (word == runtime_layouts::PianoListSession::closing) {
         current_ = {};
         if (this == &g_authority) g_active_generation.store(0, std::memory_order_release);
-    } else if (word == 1) {
+    } else if (word == runtime_layouts::PianoListSession::open) {
         current_.phase = MenuSessionPhase::Ready;
         if (this == &g_authority)
             g_ready_generation.store(current_.generation, std::memory_order_release);

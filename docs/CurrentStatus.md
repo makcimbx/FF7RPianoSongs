@@ -1771,7 +1771,7 @@ limitations and tested artifacts. Public version history remains in
 | Build | Current disposition | What is not established |
 | --- | --- | --- |
 | 1.005 | Development ASI accepted/kept after native audio, distinct-song chart and extended-chart scenarios; the later shared-code regression exercised the embedded executable decoder successfully. The owned `D3DCOMPILER_43.dll` also has a positive user report with native startup and two distinct song plans recorded. | Other proxy basenames, exhaustive songs/profiles/notes, separately witnessed pause/retry/stock transitions on the latest artifact, and complete lifecycle or Release qualification. |
-| 1.004 | Separate bootstrap/runtime/asset profiles implemented; experimental ASI and full-product proxy archives built with affected offline/mapped tests passing. | Authentic older installed-asset validation, real startup, decoder interoperability and gameplay. Friend testing is pending. |
+| 1.004 | All four [stock chunk receipts](../analysis/NativeAudioAssetProfile-OlderBuild-20261017.json) match the tester's logs. Offline generation from those chunks passed for all eight stock base scores. The tester then loaded all 29 custom cohorts and heard song previews. Custom confirmation crashed after the activation getter rejected the 1.004 output slot using the 1.005 displacement. The development fix uses the [per-build caller layout](../analysis/RebirthBuild1004RvaEvidence-20260808.md#selected-entry-activation-output). | In-game confirmation, chart entry and custom playback with the activation fix. |
 
 Exact executable identities, addresses and signatures remain in the
 [RVA catalog](../src/game/rva_catalog.json). Older profiles were recovered from

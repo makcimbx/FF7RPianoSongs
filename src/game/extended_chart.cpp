@@ -29,12 +29,13 @@
 namespace ff7r::piano::game {
 namespace {
 
-constexpr std::size_t kEventSize = 0x90;
+using runtime_layouts::PianoScoreEvent;
+constexpr std::size_t kEventSize = PianoScoreEvent::size;
 constexpr std::size_t kNativeEventCount = ff7rp::pipeline::kMaxChartRows;
 // Extended transport never accepts storage beyond the canonical product bound.
 constexpr int32_t kMaximumEventCapacity =
     static_cast<int32_t>(ff7rp::pipeline::kExperimentalMaxChartRows);
-constexpr std::size_t kHeaderOffset = 0x80;
+constexpr std::size_t kHeaderOffset = runtime_layouts::PianoScoreWrapper::event_header;
 constexpr std::size_t kMaxTimeOffset = 0x30;
 constexpr std::size_t kFrameRateOffset = 0x48;
 constexpr std::size_t kRightSideOffset = 0x18;
@@ -322,24 +323,25 @@ bool resolve_name(const std::string& text, uint64_t& packed) {
 bool callback_valid(const void* event) {
     const uintptr_t base = reinterpret_cast<uintptr_t>(g_module);
     uintptr_t callback = 0, zero = 1, vtable = 0, chart = 0;
-    return read_at(event, 0x50, callback) && read_at(event, 0x60, zero)
-        && read_at(event, 0x70, vtable) && read_at(event, 0x78, chart)
+    return read_at(event, PianoScoreEvent::callback, callback) && read_at(event, PianoScoreEvent::callback_zero_word, zero)
+        && read_at(event, PianoScoreEvent::callback_vtable, vtable) && read_at(event, PianoScoreEvent::callback_chart, chart)
         && callback == base + rva::PianoEventResultCallback && zero == 0
         && vtable == base + rva::PianoEventCallbackVtable;
 }
 
 bool callback_empty(const void* event) {
-    std::array<uint8_t, 0x40> state{};
-    std::array<uint8_t, 0x40> zero{};
-    return core::safe_copy_bytes(static_cast<const uint8_t*>(event) + 0x50,
+    std::array<uint8_t, PianoScoreEvent::callback_size> state{};
+    std::array<uint8_t, PianoScoreEvent::callback_size> zero{};
+    return core::safe_copy_bytes(static_cast<const uint8_t*>(event) + PianoScoreEvent::callback,
         state.data(), state.size()) && state == zero;
 }
 
 bool ignore_sounds_valid(const void* event, const EventPlan& plan) {
     uintptr_t data = 0;
     int32_t count = -1, capacity = -1;
-    if (!read_at(event, 0x38, data) || !read_at(event, 0x40, count)
-        || !read_at(event, 0x44, capacity)
+    if (!read_at(event, PianoScoreEvent::ignore_sound_data, data)
+        || !read_at(event, PianoScoreEvent::ignore_sound_count, count)
+        || !read_at(event, PianoScoreEvent::ignore_sound_capacity, capacity)
         || count != static_cast<int32_t>(plan.ignore_sound_count) || capacity < count)
         return false;
     if (!count) return data == 0 && capacity == 0;
@@ -352,9 +354,9 @@ bool ignore_sounds_valid(const void* event, const EventPlan& plan) {
 
 bool ignore_sounds_empty(const void* event) {
     uintptr_t data = 1; int32_t count = -1, capacity = -1;
-    return read_at(event, 0x38, data) && data == 0
-        && read_at(event, 0x40, count) && count == 0
-        && read_at(event, 0x44, capacity) && capacity == 0;
+    return read_at(event, PianoScoreEvent::ignore_sound_data, data) && data == 0
+        && read_at(event, PianoScoreEvent::ignore_sound_count, count) && count == 0
+        && read_at(event, PianoScoreEvent::ignore_sound_capacity, capacity) && capacity == 0;
 }
 
 bool event_valid(const void* event, void* chart, void* side,
@@ -363,25 +365,26 @@ bool event_valid(const void* event, void* chart, void* side,
     void* event_chart = nullptr; void* event_side = nullptr; uintptr_t parent = 1, successor = 1;
     uint32_t actual_ordinal = 0; float actual_time = -1.0f, strength = -1.0f;
     uint64_t actual_fname = 0;
-    uint8_t assignment = 8, lookup_path = 2, state = 1, note_type = 0, dot_type = 0; uint8_t trailing[3]{};
-    return read_at(event, 0x00, event_chart) && event_chart == chart
-        && read_at(event, 0x08, event_side) && event_side == side
-        && read_at(event, 0x10, parent) && read_at(event, 0x18, successor)
+    uint8_t assignment = PianoScoreEvent::unresolved_assignment, lookup_path = 2, state = 1, note_type = 0, dot_type = 0;
+    uint8_t trailing[3]{};
+    return read_at(event, PianoScoreEvent::chart, event_chart) && event_chart == chart
+        && read_at(event, PianoScoreEvent::side, event_side) && event_side == side
+        && read_at(event, PianoScoreEvent::group_root, parent) && read_at(event, PianoScoreEvent::group_chain, successor)
         && (!require_null_links || (parent == 0 && successor == 0))
-        && read_at(event, 0x20, actual_ordinal) && actual_ordinal == plan.entry.ordinal
-        && read_at(event, 0x24, actual_time) && std::isfinite(actual_time) && actual_time == plan.time
-        && read_at(event, 0x28, strength) && strength == 0.0f
-        && read_at(event, 0x2c, actual_fname) && actual_fname == plan.fname
+        && read_at(event, PianoScoreEvent::ordinal, actual_ordinal) && actual_ordinal == plan.entry.ordinal
+        && read_at(event, PianoScoreEvent::time, actual_time) && std::isfinite(actual_time) && actual_time == plan.time
+        && read_at(event, PianoScoreEvent::strength, strength) && strength == 0.0f
+        && read_at(event, PianoScoreEvent::name, actual_fname) && actual_fname == plan.fname
         && (require_complete_ignore_sounds
             ? ignore_sounds_valid(event, plan) : ignore_sounds_empty(event))
-        && read_at(event, 0x48, assignment) && assignment != 8
-        && read_at(event, 0x49, lookup_path) && lookup_path <= 1
-        && read_at(event, 0x4a, state) && state == 0
-        && read_at(event, 0x4b, note_type) && note_type == plan.note_type
-        && read_at(event, 0x4c, dot_type) && dot_type == plan.dot_type
-        && read_at(event, 0x4d, trailing) && trailing[0] == 0 && trailing[1] == 0 && trailing[2] == 0
+        && read_at(event, PianoScoreEvent::assignment, assignment) && assignment != PianoScoreEvent::unresolved_assignment
+        && read_at(event, PianoScoreEvent::assignment_path, lookup_path) && lookup_path <= 1
+        && read_at(event, PianoScoreEvent::result_state, state) && state == 0
+        && read_at(event, PianoScoreEvent::note_type, note_type) && note_type == plan.note_type
+        && read_at(event, PianoScoreEvent::dot_type, dot_type) && dot_type == plan.dot_type
+        && read_at(event, PianoScoreEvent::activation_state, trailing) && trailing[0] == 0 && trailing[1] == 0 && trailing[2] == 0
         && (require_callback
-            ? (callback_valid(event) && [&] { uintptr_t captured = 0; return read_at(event, 0x78, captured) && captured == reinterpret_cast<uintptr_t>(chart); }())
+            ? (callback_valid(event) && [&] { uintptr_t captured = 0; return read_at(event, PianoScoreEvent::callback_chart, captured) && captured == reinterpret_cast<uintptr_t>(chart); }())
             : callback_empty(event));
 }
 
@@ -433,12 +436,12 @@ bool expected_event_capacity(const int32_t target, int32_t& capacity,
 
 bool event_assignment(const void* event, uint8_t& assignment)
 {
-    return read_at(event, 0x48, assignment) && assignment != 8;
+    return read_at(event, PianoScoreEvent::assignment, assignment) && assignment != PianoScoreEvent::unresolved_assignment;
 }
 
 bool event_lookup_path(const void* event, uint8_t& lookup_path)
 {
-    return read_at(event, 0x49, lookup_path) && lookup_path <= 1;
+    return read_at(event, PianoScoreEvent::assignment_path, lookup_path) && lookup_path <= 1;
 }
 
 bool exact_header_state(const Transaction& tx, const int32_t count, EventHeader& header)
@@ -1192,7 +1195,7 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             return reject("tail_constructor_validation");
         }
         for (std::size_t ignored = 0; ignored < plan.ignore_sound_count; ++ignored) {
-            const uint32_t inserted = g_api.ignore_sound_insert(tail + 0x38,
+            const uint32_t inserted = g_api.ignore_sound_insert(tail + PianoScoreEvent::ignore_sound_data,
                 &plan.ignore_sounds[ignored]);
             if (inserted != ignored) {
                 if (!cleanup_slot(i) || !cleanup_constructed())
@@ -1209,8 +1212,8 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             return reject("ignore_sound_vector_validation", compact);
         }
         void* captured = wrapper;
-        g_api.callback_build(tail + 0x50, &captured);
-        uint8_t assignment = 8, lookup_path = 2;
+        g_api.callback_build(tail + PianoScoreEvent::callback, &captured);
+        uint8_t assignment = PianoScoreEvent::unresolved_assignment, lookup_path = 2;
         if (!event_valid(tail, wrapper, side, plan, true, true, true)
             || !event_assignment(tail, assignment)
             || !event_lookup_path(tail, lookup_path)
@@ -1281,19 +1284,19 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             if (!event_pointer(entry.root_index, expected_count, root)
                 || !event_pointer(entry.child_index, expected_count, child)) return false;
             uintptr_t current_head = 0, current_parent = 0, current_next = 0;
-            if (!read_at(root, 0x18, current_head)
+            if (!read_at(root, PianoScoreEvent::group_chain, current_head)
                 || current_head != reinterpret_cast<uintptr_t>(child)
-                || !read_at(child, 0x10, current_parent)
+                || !read_at(child, PianoScoreEvent::group_root, current_parent)
                 || current_parent != reinterpret_cast<uintptr_t>(root)
-                || !read_at(child, 0x18, current_next)
+                || !read_at(child, PianoScoreEvent::group_chain, current_next)
                 || current_next != reinterpret_cast<uintptr_t>(entry.root_head)) return false;
-            write_at(root, 0x18, entry.root_head);
-            write_at(child, 0x10, entry.child_parent);
-            write_at(child, 0x18, entry.child_next);
+            write_at(root, PianoScoreEvent::group_chain, entry.root_head);
+            write_at(child, PianoScoreEvent::group_root, entry.child_parent);
+            write_at(child, PianoScoreEvent::group_chain, entry.child_next);
             uintptr_t root_head = 1, child_parent = 1, child_next = 1;
-            if (!read_at(root, 0x18, root_head) || root_head != reinterpret_cast<uintptr_t>(entry.root_head)
-                || !read_at(child, 0x10, child_parent) || child_parent != reinterpret_cast<uintptr_t>(entry.child_parent)
-                || !read_at(child, 0x18, child_next) || child_next != reinterpret_cast<uintptr_t>(entry.child_next))
+            if (!read_at(root, PianoScoreEvent::group_chain, root_head) || root_head != reinterpret_cast<uintptr_t>(entry.root_head)
+                || !read_at(child, PianoScoreEvent::group_root, child_parent) || child_parent != reinterpret_cast<uintptr_t>(entry.child_parent)
+                || !read_at(child, PianoScoreEvent::group_chain, child_next) || child_next != reinterpret_cast<uintptr_t>(entry.child_next))
                 return false;
             tx.link_journal.pop_back();
         }
@@ -1330,8 +1333,8 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             if (parent_index >= 0 && !event_pointer(parent_index, expected_count, parent_ptr)) return false;
             if (successor_index >= 0 && !event_pointer(successor_index, expected_count, successor_ptr)) return false;
             uintptr_t parent = 1, successor = 1;
-            if (!read_at(event, 0x10, parent) || parent != reinterpret_cast<uintptr_t>(parent_ptr)
-                || !read_at(event, 0x18, successor)
+            if (!read_at(event, PianoScoreEvent::group_root, parent) || parent != reinterpret_cast<uintptr_t>(parent_ptr)
+                || !read_at(event, PianoScoreEvent::group_chain, successor)
                 || successor != reinterpret_cast<uintptr_t>(successor_ptr)) return false;
         }
         return true;
@@ -1353,9 +1356,9 @@ bool finish_extended_chart_transaction(void* wrapper, void* chart_row, uintptr_t
             || !event_pointer(link.child_event_index, tx.prefix_event_count, child))
             return unresolved("link_slot_identity");
         LinkJournalEntry journal{link.root_event_index, link.child_event_index};
-        if (!read_at(root, 0x18, journal.root_head)
-            || !read_at(child, 0x10, journal.child_parent)
-            || !read_at(child, 0x18, journal.child_next))
+        if (!read_at(root, PianoScoreEvent::group_chain, journal.root_head)
+            || !read_at(child, PianoScoreEvent::group_root, journal.child_parent)
+            || !read_at(child, PianoScoreEvent::group_chain, journal.child_next))
             return unresolved("link_prestate");
         void* prior_head = nullptr;
         const int32_t prior_head_index = tx.expected_next[link.child_event_index];

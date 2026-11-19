@@ -3,6 +3,7 @@
 #include "game/menu_ui_refresh.h"
 
 #include "core/hooks.h"
+#include "core/generated/build_identity.generated.h"
 #include "core/logging.h"
 #include "game/menu_theme_runtime.h"
 #include "game/menu_theme_metrics.h"
@@ -33,6 +34,9 @@ using SelectedEntryGetterFn = uintptr_t(__fastcall*)(void* context, void* out_en
 using ActionStateQueryFn = bool(__fastcall*)(void* action_ref);
 
 using PianoListEntry = runtime_layouts::PianoListEntry;
+using PianoActivationGetterFrame = runtime_layouts::PianoActivationGetterFrame;
+constexpr auto kActivationOutputOffset =
+    PianoActivationGetterFrame::output_from_return_slot(core::generated::kBuildId);
 
 struct PianoListArrayView {
     PianoListEntry* data = nullptr;
@@ -609,8 +613,9 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
     if(activation_getter) {
         const auto current=registry().selection_snapshot();
         std::uint64_t selected_name=0;
-        const bool local_output=result==reinterpret_cast<uintptr_t>(out_entry)
-            && out_entry==reinterpret_cast<std::uint8_t*>(_AddressOfReturnAddress())+0x30;
+        const bool local_output=PianoActivationGetterFrame::matches_local_output(
+            kActivationOutputOffset, reinterpret_cast<uintptr_t>(_AddressOfReturnAddress()),
+            reinterpret_cast<uintptr_t>(out_entry), result);
         const bool qualified=handoff_published && alias_applied && alias_restored && local_output
             && current.generation==published_handoff_generation && current.song==descriptor.song
             && current.storage==descriptor.storage
@@ -625,6 +630,12 @@ uintptr_t __fastcall selected_entry_getter_detour(void* context, void* out_entry
         if(!written || !qualified) {
             revoke_selection_audio_activation();latch_activation_denial(current);
             block_custom_audio_route_for_unresolved_chart_mutation();
+            try {
+                const char* predicate = !local_output ? "caller_local_output"
+                    : !written ? "output_write_or_readback" : "activation_authority";
+                core::log(core::LogLevel::Error,
+                    std::string("[selection] activation_getter status=rejected predicate=") + predicate);
+            } catch (...) {}
             if(!written)result=0;
         }
     }
@@ -885,6 +896,7 @@ bool synchronize_restored_menu_selection(void* context, const int visible_index,
 
 bool install_selection_hooks(const HookInstallContext& context)
 {
+    if (!kActivationOutputOffset) return false;
     g_selection_exe_base = reinterpret_cast<uintptr_t>(context.exe_module);
     if (!install_raw_hook(
             context,

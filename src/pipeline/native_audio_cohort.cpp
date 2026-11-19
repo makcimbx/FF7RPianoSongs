@@ -1,4 +1,5 @@
 #include "native_audio_cohort.h"
+#include "native_audio_zen_profile.h"
 #include "native_asset_hash.h"
 #include "native_music_export.h"
 #include <algorithm>
@@ -7,10 +8,13 @@
 #include <set>
 #include <bit>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 
 namespace ff7rp::pipeline {
 using namespace native_binary;
 namespace {
+using namespace native_audio_zen_profile;
 constexpr const char* kCurrentBuild="ff7rebirth-steam-win64-6a16ced2";
 constexpr const char* kOlderBuild="ff7rebirth-steam-win64-68fd6fde";
 Status bad(const char* s) { return Status::error(StatusCode::InvalidArgument,s); }
@@ -41,13 +45,33 @@ constexpr Member kScoreMembers[]{
     {"TimeStr_Array",10,0},{"IgnoreSound_Array",11,16},{"MonotoneID_Array",11,32},{"ChordID_Array",11,48},
     {"ChordNoteType_Array",2,64},{"ChordDotType_Array",2,80},{"MonotoneNoteType_Array",2,96},
     {"MonotoneDotType_Array",2,112},{"Strength_Array",2,128},{"CameraSwitchTiming_Array",2,144},{"GroupIndex_Array",2,160}};
+namespace frozen_wrapper {
+// Both observed wrappers reach the same aligned image start. The 1.004
+// tagged prefix is a None FName followed by a zero object-GUID marker;
+// the unversioned control uses a six-byte reflected prefix instead.
+constexpr std::size_t kTaggedImageSize=12,kUnversionedImageSize=6,kImageStart=32;
+constexpr std::size_t kVersion=4,kAlignment=8,kPaddingLength=10,kHeaderBytes=12;
+constexpr std::uint32_t kVersionWithLayout=0x10000,kMemoryImageAlignment=16;
+constexpr std::uint32_t kEmptyUnversionedProperties=0x100;
+}
 Status frozen(const Bytes& zen,const NativeZenPackage& p,Frozen& f,bool validate_payloads=false) {
+    using namespace frozen_wrapper;
     auto body=std::span(zen).subspan(p.body_at);
-    if(body.size()<44 || get(body,0,4)!=0x100 || get(body,4,2)!=0 || get(body,10)!=0x10000 || get(body,14,2)!=16 || get(body,16,2)!=14) return bad("Unqualified DataObject frozen wrapper");
-    for(std::size_t i=18;i<32;++i) if(body[i]) return bad("Frozen wrapper padding");
-    auto size=get(body,6); if(size<88 || !range(body,32,size+12)) return bad("Frozen content extent");
-    f.prefix=Bytes(body.begin(),body.begin()+32); f.content=Bytes(body.begin()+32,body.begin()+32+size);
-    auto at=std::size_t(32+size); if(get(body,at)||get(body,at+4)) return bad("Frozen vtable/script fixups unsupported"); auto groups=get(body,at+8); at+=12;
+    if(body.size()<kImageStart+12) return bad("Truncated DataObject frozen wrapper");
+    const bool tagged=!(get(zen,kSummaryFlagsOffset)&kUnversionedPropertiesFlag);
+    const auto image_size=tagged?kTaggedImageSize:kUnversionedImageSize;
+    const auto padding=image_size+kHeaderBytes;
+    if(tagged) {
+        const auto none=get(body,0);
+        if(none>=p.names.size()||p.names[none]!="None"||get(body,4)||get(body,8))
+            return bad("Unsupported DataObject tagged property terminator/GUID");
+    } else if(get(body,0,4)!=kEmptyUnversionedProperties||get(body,4,2)) return bad("Unsupported DataObject unversioned property prefix");
+    if(get(body,image_size+kVersion)!=kVersionWithLayout||get(body,image_size+kAlignment,2)!=kMemoryImageAlignment||
+       get(body,image_size+kPaddingLength,2)!=kImageStart-padding) return bad("Unsupported DataObject frozen version/alignment/padding length");
+    for(auto i=padding;i<kImageStart;++i) if(body[i]) return bad("Frozen wrapper padding");
+    auto size=get(body,image_size); if(size<88 || !range(body,kImageStart,size+12)) return bad("Frozen content extent");
+    f.prefix=Bytes(body.begin(),body.begin()+kImageStart); f.content=Bytes(body.begin()+kImageStart,body.begin()+kImageStart+size);
+    auto at=std::size_t(kImageStart+size); if(get(body,at)||get(body,at+4)) return bad("Frozen vtable/script fixups unsupported"); auto groups=get(body,at+8); at+=12;
     if(groups==0||groups>8192) return bad("Frozen name fixup groups");
     for(std::size_t g=0;g<groups;++g) {
         if(!range(body,at,12)) return bad("Truncated frozen fixup");
@@ -178,8 +202,25 @@ Status older_source_metadata(const Bytes& b,const NativeZenPackage& p,std::size_
     constexpr const char* packages[]{"/Game/Sound/BGM/bgm_piano_01","/Game/DataObject/Resident/BGMList",
         "/Game/DataObject/Resident/PianoScoreInfo","/Game/DataObject/Resident/PianoScore"};
     constexpr const char* objects[]{"bgm_piano_01","BGMList","PianoScoreInfo","PianoScore"};
-    if(p.package_name!=packages[role]||p.export_name!=objects[role]||get(b,4)||get(b,p.export_at+20)||
-       get(b,16)!=0x80802200) return bad("Older source canonical package/object/flags profile");
+    const auto package_number=get(b,4),export_number=get(b,p.export_at+20),flags=get(b,kSummaryFlagsOffset);
+    const bool source_flags_match=flags==kOlderFlagsWithUnversionedProperties||
+        flags==kOlderFlagsWithoutUnversionedProperties;
+    const char* field=package_number?"package_number":export_number?"export_number":
+        p.package_name!=packages[role]?"package_name":p.export_name!=objects[role]?"export_name":
+        !source_flags_match?"summary_flags":nullptr;
+    if(field) {
+        std::ostringstream detail;
+        detail<<"Older source canonical package/object/flags profile field="<<field
+              <<" package="<<std::quoted(std::string_view(p.package_name).substr(0,160))
+              <<" expected_package="<<std::quoted(packages[role])
+              <<" package_number="<<package_number<<" expected_package_number=0"
+              <<" export="<<std::quoted(std::string_view(p.export_name).substr(0,160))
+              <<" expected_export="<<std::quoted(objects[role])
+              <<" export_number="<<export_number<<" expected_export_number=0"
+              <<" flags=0x"<<std::hex<<flags<<" expected_flags=0x"<<kOlderFlagsWithUnversionedProperties
+              <<"|0x"<<kOlderFlagsWithoutUnversionedProperties;
+        return Status::error(StatusCode::InvalidArgument,detail.str());
+    }
     std::set<std::uint64_t> expected{native_object_index(p.class_path,1),
         native_object_index(p.class_path.substr(0,p.class_path.find('.'))+".Default__"+p.class_path.substr(p.class_path.find('.')+1),1),
         native_object_index(p.class_path.substr(0,p.class_path.find('.')),1)};
@@ -211,6 +252,30 @@ Status older_music_names(const NativeZenPackage& p,const Bytes& body) {
         if(index>=p.names.size()||get(body,at+4)||p.names[std::size_t(index)]!="Mode"+std::to_string(i)) return bad("Older Music mode key/NameMap mismatch");
     }
     return Status::ok_status();
+}
+// Exact tagged 1.004 source receipt; see the older asset profile, music.stock_1004_tagged_source.
+constexpr std::string_view kTaggedMusicSha256="e1ffc7dff5f330d7f0e31dc162a208ebd22aaa7a521b9d48469fff0943090621";
+Bytes normalize_pinned_tagged_music(std::span<const std::uint8_t> body) {
+    constexpr std::size_t section_map=0x29,mode_map=0x66,sound_map=0xbb;
+    constexpr std::size_t nested_duration=0x101,ps5_streaming=0x142,xsx_streaming=0x15c,
+        volume=0x177,duration=0x194,object_guid_present=0x1a0,image_header=0x1a4,image_start=0x1b0;
+    constexpr std::size_t compact_image_start=0x80,wrapper_padding_length=10;
+    // Emit the already qualified compact input schema (not the final shipping
+    // schema). The exact full-Zen digest qualifies these fixed source positions.
+    Bytes compact{0x00,0x04,0x0d,0x02,0x01,0x04,0x13,0x02,0x10,0x03};
+    auto copy=[&](std::size_t offset,std::size_t size) { append(compact,body.subspan(offset,size)); };
+    copy(section_map,20); copy(mode_map,44); copy(sound_map,16);
+    // SoundIndex and VoicedSectionAdjustmentTime are zero in this source.
+    constexpr std::uint8_t sound_index_fragment[]{0x80,0x07,0x05};
+    append(compact,sound_index_fragment); copy(nested_duration,4);
+    copy(ps5_streaming,1); copy(xsx_streaming,1); copy(volume,4); copy(duration,4);
+    copy(object_guid_present,4);
+    const auto compact_image_header=compact.size();
+    copy(image_header,image_start-image_header);
+    put(compact,compact_image_header+wrapper_padding_length,compact_image_start-compact.size(),2);
+    compact.resize(compact_image_start);
+    append(compact,body.subspan(image_start));
+    return compact;
 }
 Status single_row(const Bytes& source,const NativeZenPackage& p,const Frozen& original,const std::string& old_key,
     const std::string& new_key,const std::string& resource,const std::string& package,Bytes& output) {
@@ -296,15 +361,29 @@ NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest
     Bytes identity; string(identity,older?"FF7RP-native-cohort-old1004-forced-nonstreaming-suffix40-v2-20261017":"FF7RP-native-cohort-v3-canonical-bgm-cue-20261016"); string(identity,request.build_id); string(identity,request.identity); string(identity,request.base_score_name);
     add(identity,request.timing.logical_source_frames,8); add(identity,request.timing.sample_rate,4);
     if(request.mabf.size()>64*1024*1024) { result.status=bad("Native cohort MABF size"); return result; }
+    constexpr const char* roles[]{"Music","BGMList","PianoScoreInfo","PianoScore"};
+    std::string rejected_sources;
+    std::string music_sha;
     for(std::size_t i=0;i<4;++i) {
         if(source_zen[i].size()>64*1024*1024) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
         const auto digest=native_sha256(source_zen[i]);
-        if(!older&&hex(digest)!=hashes[i]) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
-        result.status=inspect_native_zen_package(source_zen[i],NativeAudioPackageRole(i),p[i]); if(!result.status.ok()) return result;
-        if(older) { result.status=older_source_metadata(source_zen[i],p[i],i); if(!result.status.ok()) return result; }
+        if(!older||!i) {
+            auto sha=hex(digest);
+            if(!older&&sha!=hashes[i]) { result.status=bad("Native template SHA256 provenance mismatch"); return result; }
+            if(!i) music_sha=std::move(sha);
+        }
+        auto status=inspect_native_zen_package(source_zen[i],NativeAudioPackageRole(i),p[i]);
+        if(status.ok()&&older) status=older_source_metadata(source_zen[i],p[i],i);
+        if(status.ok()&&i) status=frozen(source_zen[i],p[i],f[i-1],true);
+        if(!status.ok()) {
+            if(!older) { result.status=std::move(status); return result; }
+            if(!rejected_sources.empty()) rejected_sources+="; ";
+            rejected_sources+=std::string("role=")+roles[i]+" sha256="+hex(digest)+" "+status.message;
+            continue;
+        }
         append(identity,digest);
-        if(i) { result.status=frozen(source_zen[i],p[i],f[i-1],true); if(!result.status.ok()) return result; }
     }
+    if(!rejected_sources.empty()) { result.status=Status::error(StatusCode::InvalidArgument,std::move(rejected_sources)); return result; }
     if(older) { result.status=older_rows(f,p); if(!result.status.ok()) return result; }
     auto digest=native_sha256(request.mabf); append(identity,digest); result.content_id=hex(native_sha256(identity));
     result.music_name="bgm_native_"+result.content_id; result.bgm_key="bgm_"+result.content_id; result.score_name="score_"+result.content_id;
@@ -313,8 +392,11 @@ NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest
     if(selected==f[1].keys.end()||!f[1].properties.contains("BGMName")) { result.status=bad("Requested base score absent from supported stock template"); return result; }
     auto row=f[1].starts[4]+f[1].key_rows[std::size_t(selected-f[1].keys.begin())]*f[1].stride;
     auto bgm=fname(f[1],p[2],row+f[1].properties.at("BGMName"));
-    Bytes music_body(source_zen[0].begin()+p[0].body_at,source_zen[0].end());
-    if(older&&music_body.size()>=10&&music_body[5]==6&&hex(native_sha256(source_zen[0]))!=hashes[0]) { result.status=bad("Only SHA-pinned current Music may be transformed to the older schema"); return result; }
+    const auto raw_music=std::span(source_zen[0]).subspan(p[0].body_at);
+    const bool tagged_music=older&&get(source_zen[0],kSummaryFlagsOffset)==kOlderFlagsWithoutUnversionedProperties;
+    if(tagged_music&&music_sha!=kTaggedMusicSha256) { result.status=bad("Unrecognized tagged 1.004 Music source SHA256"); return result; }
+    auto music_body=tagged_music?normalize_pinned_tagged_music(raw_music):Bytes(raw_music.begin(),raw_music.end());
+    if(older&&music_body.size()>=10&&music_body[5]==6&&music_sha!=hashes[0]) { result.status=bad("Only SHA-pinned current Music may be transformed to the older schema"); return result; }
     if(older) { result.status=older_music_names(p[0],music_body); if(!result.status.ok()) return result; }
     auto music=build_native_music_export(music_body,request.mabf,request.timing,
         older?NativeMusicExportProfile::Older1004:NativeMusicExportProfile::Current1005); if(!music.status.ok()) { result.status=music.status; return result; }
@@ -329,7 +411,8 @@ NativeAudioCohortResult build_native_audio_cohort(const NativeAudioCohortRequest
     names[0]=music_package; names[3]=result.music_name;
     for(std::size_t i=0;i<4;++i) result.packages[i].role=NativeAudioPackageRole(i);
     result.status=rebuild_native_zen_package(source_zen[0],NativeAudioPackageRole::Music,music_package,result.music_name,names,music.bytes,result.packages[0].zen); if(!result.status.ok()) return result;
-    if(older) put(result.packages[0].zen,16,get(source_zen[0],16)|0x80802200);
+    if(older) put(result.packages[0].zen,kSummaryFlagsOffset,
+        get(source_zen[0],kSummaryFlagsOffset)|kOlderFlagsWithUnversionedProperties);
     const std::string objects[]{"","BGMList","PianoScoreInfo","PianoScore"};
     for(std::size_t i=1;i<4;++i) {
         result.status=single_row(source_zen[i],p[i],f[i-1],i==1?bgm:request.base_score_name,i==1?result.bgm_key:result.score_name,i==1?result.music_name:i==2?result.bgm_key:"",ns+objects[i],result.packages[i].zen);

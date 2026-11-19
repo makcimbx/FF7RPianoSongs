@@ -25,9 +25,7 @@
 namespace ff7r::piano::game {
 namespace {
 
-constexpr ptrdiff_t kListMemberOffset = 0x6f0;
-constexpr ptrdiff_t kWidgetWeakHandleOffset = 0x7a0;
-constexpr ptrdiff_t kActiveWordOffset = 0x7d8;
+using runtime_layouts::PianoListSession;
 constexpr uintptr_t kOpenReturnRva = rva::PianoMenuListOpenCall + 5;
 constexpr uintptr_t kListCloseReturnRva = rva::PianoMenuListCancelCloseCall + 5;
 
@@ -51,7 +49,7 @@ bool resolve_list_identity(void* list, void*& widget, UObjectLiveHandle& identit
     widget = nullptr;
     struct WeakHandle { int32_t index; int32_t serial; } weak{};
     runtime_layouts::GUObjectArrayView objects{};
-    if (!list || !core::safe_read_field(list, kWidgetWeakHandleOffset, weak)
+    if (!list || !core::safe_read_field(list, PianoListSession::widget_weak_handle, weak)
         || weak.index < 0 || weak.serial <= 0 || !read_list_guobject_array(objects)
         || !read_list_uobject_item_object(objects, weak.index, widget) || !widget)
         return false;
@@ -60,7 +58,7 @@ bool resolve_list_identity(void* list, void*& widget, UObjectLiveHandle& identit
 }
 
 bool read_active_word(void* list, uint16_t& word) noexcept {
-    return list && core::safe_read_field(list, kActiveWordOffset, word);
+    return list && core::safe_read_field(list, PianoListSession::active_word, word);
 }
 
 SelectionActivationTerminalResult terminate_terminal_audio(const MenuSessionSnapshot& session,
@@ -157,7 +155,7 @@ void __fastcall open_detour(void* list, uint64_t selected) noexcept {
     CatalogAdoptionResult adoption = CatalogAdoptionResult::NoPending;
     try {
         uint16_t word = 0; void* widget = nullptr; UObjectLiveHandle identity{};
-        void* controller = static_cast<uint8_t*>(list) - kListMemberOffset;
+        void* controller = static_cast<uint8_t*>(list) - PianoListSession::controller_list_member;
         (void)reclaim_selection_audio_activation_for_controller(
             controller, SelectionActivationTerminalReason::Reopen);
         (void)resolve_piano_menu_widget_binding(list, widget, identity);
@@ -277,7 +275,7 @@ void __fastcall close_detour(void* list) noexcept {
     const bool after_read = read_active_word(list, word);
     if (!closing) {
         log_list_close(selection_activation_list_close_classification(
-                after_read && word == 0x0100, false, result.decision),
+                after_read && word == PianoListSession::closing, false, result.decision),
             before_read, word_before, after_read, word, result);
         return;
     }
@@ -292,7 +290,7 @@ void __fastcall close_detour(void* list) noexcept {
     }
     void* post_close_widget = nullptr;
     UObjectLiveHandle post_close_identity{};
-    if (word == 0x0100) {
+    if (word == PianoListSession::closing) {
         if (closing.list_ownership != MenuListOwnership::Unmanaged) {
             (void)resolve_piano_menu_widget_binding(
                 list, post_close_widget, post_close_identity);
@@ -310,7 +308,7 @@ void __fastcall close_detour(void* list) noexcept {
             closing, post_close_widget, post_close_identity);
     }
     log_list_close(selection_activation_list_close_classification(
-            word == 0x0100, true, result.decision),
+            word == PianoListSession::closing, true, result.decision),
         before_read, word_before, true, word, result);
 }
 

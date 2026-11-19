@@ -41,7 +41,7 @@ Status inspect_native_zen_package(const Bytes& b,NativeAudioPackageRole role,Nat
         std::string s(b.begin()+at,b.begin()+at+n); if(!ascii(s)) return bad("Non-ASCII Zen template name");
         p.names.push_back(s); at+=n;
     }
-    if(std::set<std::string>(p.names.begin(),p.names.end()).size()!=p.names.size() || hash_size!=8*(p.names.size()+1) || get(b,std::size_t(hash),8)!=0xc1640000) return bad("Zen NameMap hash geometry");
+    if(std::set<std::string>(p.names.begin(),p.names.end()).size()!=p.names.size() || hash_size!=8*(p.names.size()+1) || get(b,std::size_t(hash),8)!=kNativeNameMapHashAlgorithmId) return bad("Zen NameMap hash geometry");
     for(std::size_t i=0;i<p.names.size();++i) if(get(b,std::size_t(hash)+8+i*8,8)!=native_name_hash(p.names[i])) return bad("Zen name hash mismatch");
     for(auto at=64+size;at<hash;++at) if(b[std::size_t(at)]) return bad("Zen NameMap padding");
     p.package_name=mapped(b,0,p.names); p.export_name=mapped(b,std::size_t(exp)+16,p.names);
@@ -75,7 +75,7 @@ Status rebuild_native_zen_package(const Bytes& source,NativeAudioPackageRole rol
         if(!ascii(n)||n.size()>32767) { output.clear(); return bad("Zen rebuild name encoding"); }
         b.push_back(std::uint8_t(n.size()>>8)); b.push_back(std::uint8_t(n.size())); b.insert(b.end(),n.begin(),n.end());
     }
-    put(b,28,b.size()-64); b.resize((b.size()+7)&~std::size_t(7)); put(b,32,b.size()); put(b,36,8*(names.size()+1)); add(b,0xc1640000,8);
+    put(b,28,b.size()-64); b.resize((b.size()+7)&~std::size_t(7)); put(b,32,b.size()); put(b,36,8*(names.size()+1)); add(b,kNativeNameMapHashAlgorithmId,8);
     for(const auto& n:names) add(b,native_name_hash(n),8);
     put(b,40,b.size()); append(b,std::span(source).subspan(p.import_at,24)); put(b,44,b.size()); auto e=b.size(); append(b,std::span(source).subspan(p.export_at,72));
     put(b,e,0,8); put(b,e+8,body.size(),8); put(b,e+16,oi-names.begin()); put(b,e+20,0); put(b,e+56,native_object_index(package+"."+object,2),8);

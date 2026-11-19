@@ -42,7 +42,7 @@ Bytes directory(const std::array<NativeZenPackage,4>& packages) {
     add(b,names.size()); for(auto& s:names) string(b,s); return b;
 }
 Bytes store_header(std::uint64_t id,const std::array<NativeZenPackage,4>& packages,const std::array<NativeIoStorePackageInput,4>& inputs) {
-    Bytes b; add(b,id,8); add(b,4); add(b,0); add(b,0); add(b,8); add(b,0xc1640000,8);
+    Bytes b; add(b,id,8); add(b,4); add(b,0); add(b,0); add(b,8); add(b,kNativeNameMapHashAlgorithmId,8);
     std::map<std::uint64_t,std::size_t> order; for(std::size_t i=0;i<4;++i) order.emplace(packages[i].package_id,i);
     add(b,4); for(auto [pid,i]:order) { (void)i; add(b,pid,8); }
     add(b,4*32);
