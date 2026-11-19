@@ -1,9 +1,19 @@
 # Current Status
 
-Updated 2026-11-06. This page describes the current implementation, release
+Updated 2026-11-19. This page describes the current implementation, release
 limitations and tested artifacts. Public version history remains in
 [CHANGELOG](../CHANGELOG.md); commands and acceptance procedures belong in
 [Build And Release](BuildAndRelease.md) and [In-Game Validation](InGameValidation.md).
+
+## 0.4.3 Steam 1.004 replacement (2026-11-19)
+
+- The replacement fixes stock sidecar preparation and the song-confirmation
+  crash on Steam 1.004. The owner reports successful testing of the 1.004
+  activation-fix development DLL.
+- The owner explicitly accepts publication after the automated release gates
+  pass without a separate in-game run of the final 1.004 ZIP or the full
+  gameplay matrix. Both remain unqualified for this replacement. Version and
+  tag stay at 0.4.3; the published Steam 1.005 assets are unchanged.
 
 ## 0.4.3 release disposition (2026-11-06)
 
@@ -1771,7 +1781,7 @@ limitations and tested artifacts. Public version history remains in
 | Build | Current disposition | What is not established |
 | --- | --- | --- |
 | 1.005 | Development ASI accepted/kept after native audio, distinct-song chart and extended-chart scenarios; the later shared-code regression exercised the embedded executable decoder successfully. The owned `D3DCOMPILER_43.dll` also has a positive user report with native startup and two distinct song plans recorded. | Other proxy basenames, exhaustive songs/profiles/notes, separately witnessed pause/retry/stock transitions on the latest artifact, and complete lifecycle or Release qualification. |
-| 1.004 | All four [stock chunk receipts](../analysis/NativeAudioAssetProfile-OlderBuild-20261017.json) match the tester's logs. Offline generation from those chunks passed for all eight stock base scores. The tester then loaded all 29 custom cohorts and heard song previews. Custom confirmation crashed after the activation getter rejected the 1.004 output slot using the 1.005 displacement. The development fix uses the [per-build caller layout](../analysis/RebirthBuild1004RvaEvidence-20260808.md#selected-entry-activation-output). | In-game confirmation, chart entry and custom playback with the activation fix. |
+| 1.004 | All four [stock chunk receipts](../analysis/NativeAudioAssetProfile-OlderBuild-20261017.json) match the tester's logs. Offline generation from those chunks passed for all eight stock base scores. The tester then loaded all 29 custom cohorts and heard song previews. Custom confirmation crashed after the activation getter rejected the 1.004 output slot using the 1.005 displacement. The owner reports a successful test of the development fix using the [per-build caller layout](../analysis/RebirthBuild1004RvaEvidence-20260808.md#selected-entry-activation-output). | Gameplay on the final replacement ZIP and the full manual matrix. |
 
 Exact executable identities, addresses and signatures remain in the
 [RVA catalog](../src/game/rva_catalog.json). Older profiles were recovered from
